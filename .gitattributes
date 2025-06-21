@@ -1,0 +1,94 @@
+# Git attributes for Firewalla MCP Server
+
+# Set default behavior to automatically normalize line endings
+* text=auto
+
+# Explicitly declare text files you want to always be normalized and converted
+# to native line endings on checkout
+*.ts text
+*.js text
+*.json text
+*.md text
+*.txt text
+*.yml text
+*.yaml text
+*.xml text
+*.html text
+*.css text
+*.scss text
+*.sass text
+*.less text
+*.sql text
+*.sh text eol=lf
+*.bat text eol=crlf
+
+# Declare files that will always have CRLF line endings on checkout
+*.bat text eol=crlf
+
+# Declare files that will always have LF line endings on checkout
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.conf text eol=lf
+
+# Denote all files that are truly binary and should not be modified
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.mov binary
+*.mp4 binary
+*.mp3 binary
+*.flv binary
+*.fla binary
+*.swf binary
+*.gz binary
+*.zip binary
+*.7z binary
+*.ttf binary
+*.eot binary
+*.woff binary
+*.woff2 binary
+*.pyc binary
+*.pdf binary
+*.ez binary
+*.bz2 binary
+*.swp binary
+*.jar binary
+*.class binary
+*.tar binary
+*.tgz binary
+
+# Security sensitive files should never be stored in Git
+*.env filter=git-crypt diff=git-crypt
+*.key filter=git-crypt diff=git-crypt
+*.pem filter=git-crypt diff=git-crypt
+*.crt filter=git-crypt diff=git-crypt
+*.p12 filter=git-crypt diff=git-crypt
+*secret* filter=git-crypt diff=git-crypt
+*credential* filter=git-crypt diff=git-crypt
+*token* filter=git-crypt diff=git-crypt
+*password* filter=git-crypt diff=git-crypt
+
+# Linguist language detection overrides
+*.ts linguist-language=TypeScript
+*.js linguist-language=JavaScript
+*.md linguist-documentation
+docs/** linguist-documentation
+*.example linguist-language=Text
+
+# Mark generated files
+dist/** linguist-generated=true
+build/** linguist-generated=true
+coverage/** linguist-generated=true
+*.min.js linguist-generated=true
+*.bundle.js linguist-generated=true
+
+# Export ignore (files not included in git archive)
+.github export-ignore
+.vscode export-ignore
+tests export-ignore
+docs export-ignore
+*.md export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore

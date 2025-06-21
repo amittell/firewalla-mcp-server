@@ -1,0 +1,39 @@
+{
+  "name": "firewalla_mcp",
+  "version": "1.0.0",
+  "description": "A Model Context Protocol (MCP) server that enables Claude to access and analyze your Firewalla firewall data in real-time.",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "nodemon --exec ts-node src/server.ts",
+    "start": "node dist/server.js",
+    "mcp:start": "ts-node src/server.ts",
+    "mcp:test": "echo 'Testing MCP server connection...' && npm run mcp:start",
+    "mcp:debug": "DEBUG=mcp:* ts-node src/server.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "format": "prettier --write src/**/*.ts"
+  },
+  "keywords": ["mcp", "firewalla", "firewall", "security", "model-context-protocol"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.13.0",
+    "@types/node": "^24.0.3",
+    "axios": "^1.10.0",
+    "dotenv": "^16.5.0",
+    "typescript": "^5.8.3"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.34.1",
+    "@typescript-eslint/parser": "^8.34.1",
+    "eslint": "^9.29.0",
+    "jest": "^30.0.2",
+    "nodemon": "^3.1.10",
+    "prettier": "^3.5.3",
+    "ts-node": "^10.9.2"
+  }
+}

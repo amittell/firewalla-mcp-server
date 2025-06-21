@@ -1,0 +1,262 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+lib/
+out/
+
+# Environment files - NEVER COMMIT THESE!
+.env
+.env.*
+!.env.example
+.env.local
+.env.production
+.env.development
+.env.staging
+.env.test
+
+# Credentials and secrets
+credentials.json
+secrets.json
+auth.json
+*.pem
+*.key
+*.crt
+*.p12
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npm
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+.nyc_output
+
+# Test results
+test-results/
+junit.xml
+
+# Cache directories
+.cache/
+.parcel-cache/
+.npm
+.eslintcache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# Docker
+.dockerignore
+
+# IDE and editor files
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Backup files
+*.backup
+*.bak
+*.orig
+*.rej
+*~
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+temp/
+
+# MCP specific files
+.claude-code/
+mcp_servers.json
+test_credentials.js
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Production configs (keep examples)
+docker-compose.yml
+!docker-compose.example.yml
+k8s-deployment.yml
+!k8s-deployment.example.yml
+
+# Monitoring and profiling
+profile/
+*.prof
+*.heapprofile
+*.heapsnapshot
+
+# Lock files (optional - uncomment if you want to ignore them)
+# package-lock.json
+# yarn.lock
+
+# Local development
+dev.js
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# System files
+*.lnk
+*.url
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Visual Studio Code
+.history/
+
+# Vim
+*.swp
+*.swo
+Session.vim
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# SublimeText
+*.tmlanguage.cache
+*.tmPreferences.cache
+*.stTheme.cache
+*.sublime-workspace
+*.sublime-project
+
+# Markdown generated files
+*.html
+
+# Documentation build outputs
+docs/_build/
+docs/build/
+
+# MacOS
+.AppleDouble
+.LSOverride
+Icon
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# Security - additional protection for sensitive files
+*.env*
+!.env.example
+*secret*
+*token*
+*password*
+*credential*
+api-key*
+private-key*
+*.private
+.secrets/
+secrets/
+
+# Firewalla MCP specific
+firewalla-config.json
+msp-token.txt
+box-id.txt
+
+# Git
+.git/
+.gitconfig
