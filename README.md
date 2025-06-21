@@ -177,6 +177,23 @@ For issues and questions:
 - Review the [technical specifications](SPEC.md)
 - Open an issue on GitHub
 
+
+
 ---
 
 Made with ❤️ for the Firewalla community
+## GitHub Repository
+
+🔗 **Repository**: [https://github.com/amittell/firewalla-mcp](https://github.com/amittell/firewalla-mcp)
+
+### Quick Links
+- 📋 [Issues](https://github.com/amittell/firewalla-mcp/issues)
+- 🔀 [Pull Requests](https://github.com/amittell/firewalla-mcp/pulls)
+- 📈 [Actions](https://github.com/amittell/firewalla-mcp/actions)
+- 🛡️ [Security](https://github.com/amittell/firewalla-mcp/security)
+
+### Repository Stats
+[![GitHub issues](https://img.shields.io/github/issues/amittell/firewalla-mcp)](https://github.com/amittell/firewalla-mcp/issues)
+[![GitHub stars](https://img.shields.io/github/stars/amittell/firewalla-mcp)](https://github.com/amittell/firewalla-mcp/stargazers)
+[![GitHub license](https://img.shields.io/github/license/amittell/firewalla-mcp)](https://github.com/amittell/firewalla-mcp/blob/main/LICENSE)
+
