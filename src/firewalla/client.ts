@@ -23,8 +23,8 @@ export class FirewallaClient {
   constructor(private config: FirewallaConfig) {
     this.cache = new Map();
     
-    // Use mspBaseUrl if provided, otherwise construct from mspId
-    const baseURL = config.mspBaseUrl || `https://${config.mspId}.firewalla.net`;
+    // Use mspBaseUrl if provided, otherwise construct from mspId  
+    const baseURL = config.mspBaseUrl || `https://${config.mspId}.firewalla.net/v2`;
     
     this.api = axios.create({
       baseURL,
@@ -163,15 +163,11 @@ export class FirewallaClient {
 
   async getActiveAlarms(severity?: string, limit = 20): Promise<Alarm[]> {
     const params: Record<string, unknown> = {
-      status: 'active',
       limit,
+      query: `status:active box:${this.config.boxId}${severity ? ` severity:${severity}` : ''}`,
     };
-    
-    if (severity) {
-      params.severity = severity;
-    }
 
-    return this.request<Alarm[]>('GET', `/v2/gid/${this.config.boxId}/alarms`, params);
+    return this.request<Alarm[]>('GET', `/alarms`, params);
   }
 
   async getFlowData(
@@ -193,7 +189,7 @@ export class FirewallaClient {
       params.end_time = endTime;
     }
 
-    return this.request<FlowData>('GET', `/v2/gid/${this.config.boxId}/flows`, params);
+    return this.request<FlowData>('GET', `/flows`, params);
   }
 
   async getDeviceStatus(deviceId?: string, includeOffline = true): Promise<Device[]> {
@@ -205,7 +201,7 @@ export class FirewallaClient {
       params.device_id = deviceId;
     }
 
-    return this.request<Device[]>('GET', `/v2/gid/${this.config.boxId}/devices`, params);
+    return this.request<Device[]>('GET', `/devices`, params);
   }
 
   async getBandwidthUsage(period: string, top = 10): Promise<BandwidthUsage[]> {
@@ -214,7 +210,7 @@ export class FirewallaClient {
       top,
     };
 
-    return this.request<BandwidthUsage[]>('GET', `/v2/gid/${this.config.boxId}/bandwidth`, params);
+    return this.request<BandwidthUsage[]>('GET', `/bandwidth`, params);
   }
 
   async getNetworkRules(ruleType?: string, activeOnly = true): Promise<NetworkRule[]> {
@@ -226,7 +222,7 @@ export class FirewallaClient {
       params.rule_type = ruleType;
     }
 
-    const rawRules = await this.request<any[]>('GET', `/v2/gid/${this.config.boxId}/rules`, params);
+    const rawRules = await this.request<any[]>('GET', `/rules`, params);
     
     // Transform raw API response to match NetworkRule interface with comprehensive mapping
     // This handles cases where the API returns raw rule data with different field names
@@ -426,7 +422,7 @@ export class FirewallaClient {
 
     return this.request<{ success: boolean; message: string }>(
       'POST',
-      `/v2/gid/${this.config.boxId}/rules/pause`,
+      `/rules/pause`,
       params,
       false
     );
@@ -439,7 +435,7 @@ export class FirewallaClient {
       params.list_type = listType;
     }
 
-    return this.request<TargetList[]>('GET', `/v2/gid/${this.config.boxId}/target_lists`, params);
+    return this.request<TargetList[]>('GET', `/target-lists`, params);
   }
 
   async getFirewallSummary(): Promise<{
@@ -451,7 +447,7 @@ export class FirewallaClient {
     blocked_attempts: number;
     last_updated: string;
   }> {
-    return this.request('GET', `/v2/gid/${this.config.boxId}/summary`, undefined, true);
+    return this.request('GET', `/summary`, undefined, true);
   }
 
   async getSecurityMetrics(): Promise<{
@@ -462,7 +458,7 @@ export class FirewallaClient {
     threat_level: 'low' | 'medium' | 'high' | 'critical';
     last_threat_detected: string;
   }> {
-    return this.request('GET', `/v2/gid/${this.config.boxId}/security_metrics`, undefined, true);
+    return this.request('GET', `/metrics/security`, undefined, true);
   }
 
   async getNetworkTopology(): Promise<{
@@ -479,7 +475,7 @@ export class FirewallaClient {
       bandwidth: number;
     }>;
   }> {
-    return this.request('GET', `/v2/gid/${this.config.boxId}/topology`, undefined, true);
+    return this.request('GET', `/topology`, undefined, true);
   }
 
   async getRecentThreats(hours = 24): Promise<Array<{
@@ -491,7 +487,7 @@ export class FirewallaClient {
     severity: string;
   }>> {
     const params = { hours };
-    return this.request('GET', `/v2/gid/${this.config.boxId}/threats/recent`, params, true);
+    return this.request('GET', `/threats/recent`, params, true);
   }
 
   async resumeRule(ruleId: string): Promise<{ success: boolean; message: string }> {
@@ -501,7 +497,7 @@ export class FirewallaClient {
 
     return this.request<{ success: boolean; message: string }>(
       'POST',
-      `/v2/gid/${this.config.boxId}/rules/resume`,
+      `/rules/resume`,
       params,
       false
     );
@@ -516,17 +512,17 @@ export class FirewallaClient {
     location?: string;
     type?: string;
   }>> {
-    return this.request('GET', `/v2/boxes`, undefined, true);
+    return this.request('GET', `/boxes`, undefined, true);
   }
 
   async getSpecificAlarm(alarmId: string): Promise<Alarm> {
-    return this.request<Alarm>('GET', `/v2/gid/${this.config.boxId}/alarms/${alarmId}`);
+    return this.request<Alarm>('GET', `/alarms/${alarmId}`);
   }
 
   async deleteAlarm(alarmId: string): Promise<{ success: boolean; message: string }> {
     return this.request<{ success: boolean; message: string }>(
       'DELETE',
-      `/v2/gid/${this.config.boxId}/alarms/${alarmId}`,
+      `/alarms/${alarmId}`,
       undefined,
       false
     );
