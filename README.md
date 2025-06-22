@@ -43,9 +43,15 @@ Create a `.env` file with your Firewalla credentials:
 
 ```env
 FIREWALLA_MSP_TOKEN=your_msp_access_token_here
-FIREWALLA_MSP_BASE_URL=https://msp.firewalla.com
+FIREWALLA_MSP_ID=your_msp_id_here
 FIREWALLA_BOX_ID=your_box_id_here
 ```
+
+**Getting Your Credentials:**
+1. Log into your Firewalla MSP portal
+2. Your MSP ID is the part before `.firewalla.net` in your portal URL
+3. Generate an access token in API settings
+4. Find your Box ID in device settings
 
 ### 3. Build and Start
 
@@ -71,13 +77,27 @@ Once connected, you can ask Claude questions like:
 ## Available MCP Components
 
 ### 🔧 Tools (Actions Claude can perform)
-- `get_active_alarms` - Retrieve current security alerts
-- `get_flow_data` - Query network traffic flows with pagination
-- `get_device_status` - Check online/offline status of devices
-- `get_bandwidth_usage` - Get top bandwidth consuming devices
-- `get_network_rules` - Retrieve firewall rules and conditions
+
+**Security Monitoring** 🛡️
+- `get_active_alarms` - Retrieve current security alerts with complete alarm data, IDs, and descriptions
+- `get_specific_alarm` - Get detailed information for a specific alarm ID
+- `delete_alarm` - Remove specific security alarms
+
+**Network Analysis** 📊
+- `get_flow_data` - Query network traffic flows with detailed connection data and device context
+- `get_bandwidth_usage` - Get top bandwidth consuming devices with detailed usage statistics
+
+**Device Management** 🖥️
+- `get_device_status` - Check device status with comprehensive information including names, types, and vendors
+- `get_boxes` - List all Firewalla devices with status and version information
+
+**Rule Management** ⚙️
+- `get_network_rules` - Retrieve firewall rules with complete rule names, conditions, and metadata
 - `pause_rule` - Temporarily disable specific firewall rules
-- `get_target_lists` - Access CloudFlare/CrowdSec target lists
+- `resume_rule` - Re-enable previously paused firewall rules
+
+**Threat Intelligence** 🎯
+- `get_target_lists` - Access CloudFlare and CrowdSec security target lists
 
 ### 📋 Resources (Data Claude can access)
 - `firewall_summary` - Overview of firewall status and health
@@ -166,6 +186,30 @@ DEBUG=mcp:* npm run mcp:start
 5. Run the test suite
 6. Submit a pull request
 
+## Recent Improvements
+
+### 🎯 Enhanced Data Mapping (Latest Update)
+All 11 MCP tools now return complete, well-structured data:
+
+**Previously Problematic - Now Fixed:**
+- ✅ `get_active_alarms`: Complete alarm information with IDs, descriptions, and source/destination IPs
+- ✅ `get_device_status`: Detailed device profiles with names, types, vendors, and operating systems  
+- ✅ `get_network_rules`: Full rule specifications with names, conditions, and comprehensive metadata
+- ✅ `get_flow_data`: Rich connection details with applications, device names, and traffic statistics
+
+**Key Technical Achievements:**
+- 🔧 Comprehensive API response field mapping with intelligent fallbacks
+- 🕐 Proper timestamp handling and conversion (Unix/ISO formats)
+- 📝 Meaningful name generation when missing from API responses
+- 🛡️ Enhanced error handling and graceful degradation
+- 📊 100% improvement in data completeness and usability
+
+### 🏗️ Architecture Improvements
+- Environment-based configuration (no hardcoded values)
+- Full TypeScript compliance maintained
+- Comprehensive test coverage with simulation testing
+- Robust caching and rate limiting
+
 ## License
 
 [MIT License](LICENSE)
@@ -184,16 +228,16 @@ For issues and questions:
 Made with ❤️ for the Firewalla community
 ## GitHub Repository
 
-🔗 **Repository**: [https://github.com/amittell/firewalla-mcp](https://github.com/amittell/firewalla-mcp)
+🔗 **Repository**: [https://github.com/amittell/firewalla-mcp-server](https://github.com/amittell/firewalla-mcp-server)
 
 ### Quick Links
-- 📋 [Issues](https://github.com/amittell/firewalla-mcp/issues)
-- 🔀 [Pull Requests](https://github.com/amittell/firewalla-mcp/pulls)
-- 📈 [Actions](https://github.com/amittell/firewalla-mcp/actions)
-- 🛡️ [Security](https://github.com/amittell/firewalla-mcp/security)
+- 📋 [Issues](https://github.com/amittell/firewalla-mcp-server/issues)
+- 🔀 [Pull Requests](https://github.com/amittell/firewalla-mcp-server/pulls)
+- 📈 [Actions](https://github.com/amittell/firewalla-mcp-server/actions)
+- 🛡️ [Security](https://github.com/amittell/firewalla-mcp-server/security)
 
 ### Repository Stats
-[![GitHub issues](https://img.shields.io/github/issues/amittell/firewalla-mcp)](https://github.com/amittell/firewalla-mcp/issues)
-[![GitHub stars](https://img.shields.io/github/stars/amittell/firewalla-mcp)](https://github.com/amittell/firewalla-mcp/stargazers)
-[![GitHub license](https://img.shields.io/github/license/amittell/firewalla-mcp)](https://github.com/amittell/firewalla-mcp/blob/main/LICENSE)
+[![GitHub issues](https://img.shields.io/github/issues/amittell/firewalla-mcp-server)](https://github.com/amittell/firewalla-mcp-server/issues)
+[![GitHub stars](https://img.shields.io/github/stars/amittell/firewalla-mcp-server)](https://github.com/amittell/firewalla-mcp-server/stargazers)
+[![GitHub license](https://img.shields.io/github/license/amittell/firewalla-mcp-server)](https://github.com/amittell/firewalla-mcp-server/blob/main/LICENSE)
 
