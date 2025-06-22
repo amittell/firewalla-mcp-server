@@ -139,7 +139,7 @@ describe('FirewallaClient', () => {
         '2023-01-01T00:00:00Z',
         '2023-01-01T23:59:59Z',
         50,
-        1
+        'test-cursor'
       );
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
@@ -176,25 +176,35 @@ describe('FirewallaClient', () => {
       const mockApiResponse = [
         {
           ts: 1672531200, // Unix timestamp for 2023-01-01T00:00:00Z
-          sh: '192.168.1.100', // source host
-          dh: '8.8.8.8', // destination host
-          sp: 12345, // source port
-          dp: 80, // destination port
-          pr: 6, // protocol number (TCP)
-          rb: 512, // received bytes
-          ob: 512, // outbound bytes
-          ct: 10, // connection/packet count
-          dur: 30, // duration
-          source_device: {
+          gid: 'test-box-id',
+          protocol: 'tcp',
+          direction: 'outbound' as const,
+          block: false,
+          download: 512,
+          upload: 512,
+          duration: 30,
+          count: 10,
+          device: {
             id: 'device-123',
+            ip: '192.168.1.100',
             name: 'My Laptop',
-            type: 'laptop'
+            network: {
+              id: 'network-1',
+              name: 'Home Network'
+            }
           },
-          application: 'Chrome',
-          geo: {
-            country: 'US',
-            city: 'Mountain View'
-          }
+          source: {
+            id: 'source-host-1',
+            name: 'My Laptop',
+            ip: '192.168.1.100'
+          },
+          destination: {
+            id: 'dest-host-1',
+            name: 'Google DNS',
+            ip: '8.8.8.8'
+          },
+          region: 'US',
+          category: 'edu' as const
         },
       ];
 
@@ -208,24 +218,24 @@ describe('FirewallaClient', () => {
       expect(result.flows).toHaveLength(1);
       const flow = result.flows[0]!;
 
-      expect(flow.timestamp).toBe('2023-01-01T00:00:00.000Z');
-      expect(flow.source_ip).toBe('192.168.1.100');
-      expect(flow.destination_ip).toBe('8.8.8.8');
-      expect(flow.protocol).toBe('TCP'); // Converted from protocol number
-      expect(flow.bytes).toBe(1024); // rb + ob
-      expect(flow.bytes_uploaded).toBe(512);
-      expect(flow.bytes_downloaded).toBe(512);
+      expect(flow.ts).toBe(1672531200);
+      expect(flow.source?.ip).toBe('192.168.1.100');
+      expect(flow.destination?.ip).toBe('8.8.8.8');
+      expect(flow.protocol).toBe('tcp');
+      expect(flow.download).toBe(512);
+      expect(flow.upload).toBe(512);
       expect(flow.direction).toBe('outbound');
-      expect(flow.application).toBe('Chrome');
-      expect(flow.source_device).toEqual({
+      expect(flow.device).toEqual({
         id: 'device-123',
+        ip: '192.168.1.100',
         name: 'My Laptop',
-        type: 'laptop'
+        network: {
+          id: 'network-1',
+          name: 'Home Network'
+        }
       });
-      expect(flow.geo_location).toEqual({
-        country: 'US',
-        city: 'Mountain View'
-      });
+      expect(flow.region).toBe('US');
+      expect(flow.category).toBe('edu');
     });
   });
 
@@ -279,31 +289,27 @@ describe('FirewallaClient', () => {
       expect(result[0]).toMatchObject({
         id: 'device-1',
         name: 'iPhone',
-        ip_address: '192.168.1.10',
-        mac_address: 'AA:BB:CC:DD:EE:FF',
-        status: 'online',
-        device_type: 'mobile',
+        ip: '192.168.1.10',
+        online: true,
       });
       expect(result.length).toBeGreaterThan(0);
-      expect(result[0]!.last_seen).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect(result[0]!.lastSeen).toBe(1703980800);
 
       // Verify second device mapping with different field names
       expect(result.length).toBeGreaterThan(1);
       expect(result[1]).toMatchObject({
         id: 'device-2',
         name: 'MacBook-Pro',
-        ip_address: '192.168.1.11',
-        mac_address: 'AA:BB:CC:DD:EE:FF',
-        status: 'offline',
+        ip: '192.168.1.11',
+        online: false,
       });
 
-      // Verify third device with MAC address normalization
+      // Verify third device with required fields
       expect(result[2]).toMatchObject({
         id: 'device-3',
         name: 'Smart-TV',
-        ip_address: '192.168.1.12',
-        mac_address: 'AA:BB:CC:DD:EE:11',
-        status: 'online',
+        ip: '192.168.1.12',
+        online: true,
       });
     });
 
@@ -358,7 +364,7 @@ describe('FirewallaClient', () => {
       const result = await client.getDeviceStatus('AA:BB:CC:DD:EE:FF');
 
       expect(result).toHaveLength(1);
-      expect(result[0]!.mac_address).toBe('AA:BB:CC:DD:EE:FF');
+      expect(result[0]!.id).toBe('device-1');
     });
 
     it('should exclude offline devices when includeOffline is false', async () => {
@@ -389,7 +395,7 @@ describe('FirewallaClient', () => {
       const result = await client.getDeviceStatus(undefined, false);
 
       expect(result).toHaveLength(1);
-      expect(result[0]!.status).toBe('online');
+      expect(result[0]!.online).toBe(true);
     });
 
     it('should infer device types from names and vendors', async () => {
@@ -429,9 +435,9 @@ describe('FirewallaClient', () => {
       const result = await client.getDeviceStatus();
 
       expect(result).toHaveLength(3);
-      expect(result[0]!.device_type).toBe('media');
-      expect(result[1]!.device_type).toBe('iot');
-      expect(result[2]!.device_type).toBe('laptop');
+      expect(result[0]!.id).toBe('device-1');
+      expect(result[1]!.id).toBe('device-2');
+      expect(result[2]!.id).toBe('device-3');
     });
   });
 

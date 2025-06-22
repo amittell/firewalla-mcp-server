@@ -43,69 +43,68 @@ export interface Alarm {
 }
 
 /**
- * Network flow data representing a connection between two endpoints
+ * Network flow data - Data Model Compliant
  * @interface Flow
  */
 export interface Flow {
-  /** ISO 8601 timestamp when the flow started */
-  timestamp: string;
-  /** Source IP address */
-  source_ip: string;
-  /** Destination IP address */
-  destination_ip: string;
-  /** Source port number */
-  source_port: number;
-  /** Destination port number */
-  destination_port: number;
-  /** Protocol used (TCP, UDP, etc.) */
+  /** Unix timestamp when flow ended */
+  ts: number;
+  /** Unique Firewalla box identifier */
+  gid: string;
+  /** Transport protocol (tcp or udp) */
   protocol: string;
-  /** Total bytes transferred */
-  bytes: number;
-  /** Total packets transferred */
-  packets: number;
-  /** Duration of the flow in seconds */
-  duration: number;
-  /** Bytes uploaded from source to destination */
-  bytes_uploaded?: number;
-  /** Bytes downloaded from destination to source */
-  bytes_downloaded?: number;
-  /** Source device information */
-  source_device?: {
-    /** Device ID/MAC address */
-    id?: string;
+  /** Traffic direction (inbound, outbound, local) */
+  direction: 'inbound' | 'outbound' | 'local';
+  /** Whether flow was blocked */
+  block: boolean;
+  /** Block type (ip or dns) */
+  blockType?: string;
+  /** Bytes downloaded */
+  download?: number;
+  /** Bytes uploaded */
+  upload?: number;
+  /** Flow duration in seconds */
+  duration?: number;
+  /** TCP connections/UDP sessions or block count */
+  count: number;
+  /** Monitoring device details */
+  device: {
+    /** Device ID */
+    id: string;
+    /** Device IP */
+    ip: string;
     /** Device name */
-    name?: string;
-    /** Device type */
-    type?: string;
+    name: string;
+    /** Network information */
+    network?: {
+      /** Network ID */
+      id: string;
+      /** Network name */
+      name: string;
+    };
   };
-  /** Destination device information */
-  destination_device?: {
-    /** Device ID/MAC address */
-    id?: string;
-    /** Device name */
-    name?: string;
-    /** Service name (if known) */
-    service?: string;
+  /** Source host information */
+  source?: {
+    /** Host ID */
+    id: string;
+    /** Host name */
+    name: string;
+    /** Host IP */
+    ip: string;
   };
-  /** Traffic direction from perspective of monitored network */
-  direction?: 'inbound' | 'outbound' | 'internal';
-  /** Application or service identification */
-  application?: string;
-  /** Connection state (for TCP) */
-  connection_state?: 'established' | 'syn' | 'fin' | 'reset' | 'closed';
-  /** Geographic location of destination IP */
-  geo_location?: {
-    /** Country code */
-    country?: string;
-    /** City name */
-    city?: string;
-    /** ASN (Autonomous System Number) */
-    asn?: string;
+  /** Destination host information */
+  destination?: {
+    /** Host ID */
+    id: string;
+    /** Host name */
+    name: string;
+    /** Host IP */
+    ip: string;
   };
-  /** Security classification */
-  threat_level?: 'safe' | 'suspicious' | 'malicious';
-  /** Additional metadata from the API */
-  metadata?: Record<string, unknown>;
+  /** Remote IP region (ISO 3166 code) */
+  region?: string;
+  /** Remote host category */
+  category?: 'ad' | 'edu' | 'games' | 'gamble' | 'intel' | 'p2p' | 'porn' | 'private' | 'social' | 'shopping' | 'video' | 'vpn';
 }
 
 /**
@@ -125,24 +124,44 @@ export interface FlowData {
 }
 
 /**
- * Network device managed by Firewalla
+ * Network device managed by Firewalla - Data Model Compliant
  * @interface Device
  */
 export interface Device {
-  /** Unique identifier for the device */
+  /** Unique identifier for the device (MAC address, ovpn:, wg_peer:) */
   id: string;
+  /** Firewalla box GID the device connects to */
+  gid: string;
   /** Human-readable name of the device */
   name: string;
   /** IP address assigned to the device */
-  ip_address: string;
-  /** MAC address of the device */
-  mac_address: string;
+  ip: string;
+  /** MAC vendor registered to the MAC address */
+  macVendor?: string;
   /** Current connectivity status */
-  status: 'online' | 'offline';
-  /** ISO 8601 timestamp when device was last seen */
-  last_seen: string;
-  /** Type of device (e.g., 'laptop', 'phone', 'iot') */
-  device_type?: string;
+  online: boolean;
+  /** Unix timestamp when device was last seen */
+  lastSeen?: number;
+  /** Whether IP is reserved on the box */
+  ipReserved: boolean;
+  /** Network where device flows were captured */
+  network: {
+    /** Unique network identifier */
+    id: string;
+    /** Network name */
+    name: string;
+  };
+  /** Device group (optional) */
+  group?: {
+    /** Unique group identifier */
+    id: string;
+    /** Group name */
+    name: string;
+  };
+  /** Total downloads in bytes (last 24 hours) */
+  totalDownload: number;
+  /** Total uploads in bytes (last 24 hours) */
+  totalUpload: number;
 }
 
 /**
@@ -167,41 +186,175 @@ export interface BandwidthUsage {
 }
 
 /**
- * Firewall rule configuration
+ * Firewall rule configuration - Data Model Compliant
  * @interface NetworkRule
  */
 export interface NetworkRule {
   /** Unique identifier for the rule */
   id: string;
-  /** Human-readable name of the rule */
-  name: string;
-  /** Type of rule (e.g., 'firewall', 'family') */
-  type: string;
   /** Action to take when rule matches */
-  action: 'allow' | 'block' | 'redirect';
-  /** Current status of the rule */
-  status: 'active' | 'paused' | 'disabled';
-  /** Rule conditions and parameters */
-  conditions: Record<string, unknown>;
-  /** ISO 8601 timestamp when rule was created */
-  created_at: string;
-  /** ISO 8601 timestamp when rule was last updated */
-  updated_at: string;
+  action: 'allow' | 'block' | 'timelimit';
+  /** Target configuration */
+  target: {
+    /** Target type */
+    type: string;
+    /** Target descriptor */
+    value: string;
+    /** Optional DNS-only blocking */
+    dnsOnly?: boolean;
+    /** Optional port specification */
+    port?: string;
+  };
+  /** Traffic direction */
+  direction: 'bidirection' | 'inbound' | 'outbound';
+  /** Optional Firewalla box ID */
+  gid?: string;
+  /** Optional box group ID */
+  group?: string;
+  /** Scope configuration */
+  scope?: {
+    /** Scope type */
+    type: string;
+    /** Scope descriptor */
+    value: string;
+    /** Optional port specification */
+    port?: string;
+  };
+  /** Optional readable notes */
+  notes?: string;
+  /** Optional rule status */
+  status?: 'active' | 'paused';
+  /** Rule hit statistics */
+  hit?: {
+    /** Number of rule hits */
+    count: number;
+    /** Timestamp of last hit */
+    lastHitTs: number;
+    /** Optional reset timestamp */
+    statsResetTs?: number;
+  };
+  /** Schedule configuration */
+  schedule?: {
+    /** Activation time in seconds */
+    duration: number;
+    /** Optional cron-style activation time */
+    cronTime?: string;
+  };
+  /** Time usage configuration */
+  timeUsage?: {
+    /** Time usage quota in minutes */
+    quota: number;
+    /** Time used in minutes */
+    used: number;
+  };
+  /** Optional protocol specification */
+  protocol?: 'tcp' | 'udp';
+  /** Rule creation timestamp */
+  ts: number;
+  /** Last update timestamp */
+  updateTs: number;
+  /** Optional auto-resume timestamp */
+  resumeTs?: number;
 }
 
 /**
- * Security target list (blocklist/allowlist)
+ * Security target list - Data Model Compliant
  * @interface TargetList
  */
 export interface TargetList {
-  /** Unique identifier for the target list */
+  /** Unique identifier for the target list (immutable, system-generated) */
   id: string;
-  /** Human-readable name of the target list */
+  /** Target list name (required, max 24 characters) */
   name: string;
-  /** Source/type of the target list */
-  type: 'cloudflare' | 'crowdsec' | 'custom';
-  /** Array of IP addresses, domains, or other identifiers */
-  entries: string[];
-  /** ISO 8601 timestamp when list was last updated */
-  last_updated: string;
+  /** Owner (required, immutable, either 'global' or box gid) */
+  owner: string;
+  /** List of domains, IPs, IP ranges */
+  targets: string[];
+  /** Optional category */
+  category?: 'ad' | 'edu' | 'games' | 'gamble' | 'intel' | 'p2p' | 'porn' | 'private' | 'social' | 'shopping' | 'video' | 'vpn';
+  /** Optional additional description */
+  notes?: string;
+  /** Unix timestamp (immutable) */
+  lastUpdated: number;
+}
+
+/**
+ * Trend data point - Data Model Compliant
+ * @interface Trend
+ */
+export interface Trend {
+  /** Unix timestamp associated with the data point */
+  ts: number;
+  /** The actual data point in the time series */
+  value: number;
+}
+
+/**
+ * Statistics data - Data Model Compliant
+ * @interface Statistics
+ */
+export interface Statistics {
+  /** Region or Box metadata */
+  meta: Region | Box;
+  /** Statistic's numeric value */
+  value: number;
+}
+
+/**
+ * Region object for statistics
+ * @interface Region
+ */
+export interface Region {
+  /** 2-letter ISO 3166 country code */
+  code: string;
+}
+
+/**
+ * Box object for statistics and general use - Data Model Compliant
+ * @interface Box
+ */
+export interface Box {
+  /** Unique box identifier */
+  gid: string;
+  /** Box display name */
+  name: string;
+  /** Box model */
+  model: string;
+  /** Monitoring mode */
+  mode: 'router' | 'bridge' | 'dhcp' | 'simple';
+  /** Firewalla software version */
+  version: string;
+  /** Box online status */
+  online: boolean;
+  /** Unix timestamp of last online time */
+  lastSeen?: number;
+  /** Box license code */
+  license: string;
+  /** Public IP address */
+  publicIP: string;
+  /** Group ID (nullable) */
+  group?: string;
+  /** Geographical location based on public IP */
+  location: string;
+  /** Number of devices on box */
+  deviceCount: number;
+  /** Number of rules on box */
+  ruleCount: number;
+  /** Number of alarms on box */
+  alarmCount: number;
+}
+
+/**
+ * Simple statistics interface
+ * @interface SimpleStats
+ */
+export interface SimpleStats {
+  /** Count of currently online Firewalla boxes */
+  onlineBoxes: number;
+  /** Count of currently offline Firewalla boxes */
+  offlineBoxes: number;
+  /** Total number of generated alarms */
+  alarms: number;
+  /** Total number of created rules */
+  rules: number;
 }

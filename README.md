@@ -4,11 +4,12 @@ A Model Context Protocol (MCP) server that enables Claude to access and analyze 
 
 ## Features
 
-🔥 **Real-time Firewall Data**: Query security alerts, network flows, and device status  
-🛡️ **Security Analysis**: Get insights on threats, blocked attacks, and network anomalies  
-📊 **Bandwidth Monitoring**: Track top bandwidth consumers and usage patterns  
-⚙️ **Rule Management**: View and temporarily pause firewall rules  
-🎯 **Target Lists**: Access CloudFlare and CrowdSec security intelligence  
+- **Real-time Firewall Data**: Query security alerts, network flows, and device status  
+- **Security Analysis**: Get insights on threats, blocked attacks, and network anomalies  
+- **Bandwidth Monitoring**: Track top bandwidth consumers and usage patterns  
+- **Rule Management**: View and temporarily pause firewall rules  
+- **Target Lists**: Access CloudFlare and CrowdSec security intelligence
+- **Advanced Search**: Complex query syntax with filters, logical operators, and correlations  
 
 ## Architecture
 
@@ -117,45 +118,74 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
 
 Once connected, you can ask Claude questions like:
 
+**Basic Queries:**
 - "What security alerts do I have right now?"
 - "Show me the top 5 devices using the most bandwidth today"
 - "What firewall rules are currently active?"
+- "Are there any offline devices?"
+
+**Advanced Analytics:**
 - "Analyze my network traffic patterns from the last 24 hours"
-- "Are there any suspicious connections I should know about?"
+- "Show me alarm trends for the past week"
+- "What are the top bandwidth consuming regions?"
+- "Give me a security health assessment"
+
+**Complex Search Queries:**
+- "Find all high severity alarms from suspicious IPs"
+- "Search for blocked traffic from external networks"
+- "Show me devices with high bandwidth usage that went offline recently"
+- "Find firewall rules targeting social media sites"
 
 ## Available MCP Components
 
-### 🔧 Tools (Actions Claude can perform)
+### Tools (Actions Claude can perform)
 
-**Security Monitoring** 🛡️
+**Security Monitoring**
 - `get_active_alarms` - Retrieve current security alerts with complete alarm data, IDs, and descriptions
 - `get_specific_alarm` - Get detailed information for a specific alarm ID
 - `delete_alarm` - Remove specific security alarms
 
-**Network Analysis** 📊
+**Network Analysis**
 - `get_flow_data` - Query network traffic flows with detailed connection data and device context
 - `get_bandwidth_usage` - Get top bandwidth consuming devices with detailed usage statistics
+- `get_offline_devices` - List offline devices with last seen timestamps
 
-**Device Management** 🖥️
+**Device Management**
 - `get_device_status` - Check device status with comprehensive information including names, types, and vendors
 - `get_boxes` - List all Firewalla devices with status and version information
 
-**Rule Management** ⚙️
+**Rule Management**
 - `get_network_rules` - Retrieve firewall rules with complete rule names, conditions, and metadata
 - `pause_rule` - Temporarily disable specific firewall rules
 - `resume_rule` - Re-enable previously paused firewall rules
 
-**Threat Intelligence** 🎯
+**Threat Intelligence**
 - `get_target_lists` - Access CloudFlare and CrowdSec security target lists
 
-### 📋 Resources (Data Claude can access)
+**Statistics and Trends**
+- `get_simple_statistics` - Basic statistics about boxes, alarms, and rules with health scores
+- `get_statistics_by_region` - Flow statistics grouped by country/region
+- `get_statistics_by_box` - Per-device statistics with activity scores
+- `get_flow_trends` - Historical flow data trends over time
+- `get_alarm_trends` - Historical alarm frequency and patterns
+- `get_rule_trends` - Rule activity trends and stability metrics
+
+**Advanced Search**
+- `search_flows` - Advanced flow searching with complex query syntax
+- `search_alarms` - Alarm searching with severity, time, and IP filters
+- `search_rules` - Rule searching with target, action, and status filters
+- `search_devices` - Device searching with network, status, and usage filters
+- `search_target_lists` - Target list searching with category and ownership filters
+- `search_cross_reference` - Multi-entity searches with correlation across data types
+
+### Resources (Data Claude can access)
 - `firewall_summary` - Overview of firewall status and health
 - `device_inventory` - List of all managed devices
 - `security_metrics` - Real-time security statistics
 - `network_topology` - Network structure and connections
 - `recent_threats` - Latest security events and blocked attempts
 
-### 💬 Prompts (Pre-defined interactions)
+### Prompts (Pre-defined interactions)
 - `security_report` - Generate comprehensive security status report
 - `threat_analysis` - Analyze recent alarms and suspicious activity
 - `bandwidth_analysis` - Investigate high bandwidth usage patterns
@@ -178,11 +208,11 @@ npm run lint:fix     # Fix ESLint issues
 ### MCP Execution Methods
 
 **Why `npx` for MCP servers?**
-- ✅ **Version Management**: Always uses the correct/latest version
-- ✅ **Dependency Resolution**: Handles package dependencies automatically  
-- ✅ **No Global Install Required**: Works without global installation
-- ✅ **MCP Standard**: Follows Model Context Protocol conventions
-- ✅ **Cross-Platform**: Works consistently across different environments
+- **Version Management**: Always uses the correct/latest version
+- **Dependency Resolution**: Handles package dependencies automatically  
+- **No Global Install Required**: Works without global installation
+- **MCP Standard**: Follows Model Context Protocol conventions
+- **Cross-Platform**: Works consistently across different environments
 
 **Alternative execution methods:**
 ```bash
@@ -258,27 +288,45 @@ DEBUG=mcp:* npm run mcp:start
 
 ## Recent Improvements
 
-### 🎯 Enhanced Data Mapping (Latest Update)
-All 11 MCP tools now return complete, well-structured data:
+### Enhanced Data Mapping (v1.3.0)
+All MCP tools now return complete, well-structured data:
 
-**Previously Problematic - Now Fixed:**
-- ✅ `get_active_alarms`: Complete alarm information with IDs, descriptions, and source/destination IPs
-- ✅ `get_device_status`: Detailed device profiles with names, types, vendors, and operating systems  
-- ✅ `get_network_rules`: Full rule specifications with names, conditions, and comprehensive metadata
-- ✅ `get_flow_data`: Rich connection details with applications, device names, and traffic statistics
+**Core Tool Improvements:**
+- `get_active_alarms`: Complete alarm information with IDs, descriptions, and source/destination IPs
+- `get_device_status`: Detailed device profiles with names, types, vendors, and operating systems  
+- `get_network_rules`: Full rule specifications with names, conditions, and comprehensive metadata
+- `get_flow_data`: Rich connection details with applications, device names, and traffic statistics
 
-**Key Technical Achievements:**
-- 🔧 Comprehensive API response field mapping with intelligent fallbacks
-- 🕐 Proper timestamp handling and conversion (Unix/ISO formats)
-- 📝 Meaningful name generation when missing from API responses
-- 🛡️ Enhanced error handling and graceful degradation
-- 📊 100% improvement in data completeness and usability
+### Advanced Analytics (v1.4.0)
+**New Statistics and Trends Tools:**
+- Health scoring system for network assessment
+- Regional flow analysis with country-level breakdowns
+- Per-device activity scores and monitoring
+- Historical trend analysis for flows, alarms, and rules
+- Comprehensive offline device tracking
 
-### 🏗️ Architecture Improvements
+### Advanced Search Engine (v1.5.0)
+**Powerful Query Capabilities:**
+- Complex search syntax with logical operators (AND, OR, NOT)
+- Field-specific filters with wildcards and ranges
+- Cross-reference searches for data correlation
+- Time-based filtering with flexible date ranges
+- Post-processing filters for comprehensive results
+- Aggregation and statistical analysis
+
+**Search Examples:**
+```
+severity:high AND source_ip:192.168.*
+timestamp:>2024-01-01 AND bytes:>=1000000
+target_value:*.facebook.com OR mac_vendor:Apple*
+```
+
+### Architecture Improvements
 - Environment-based configuration (no hardcoded values)
 - Full TypeScript compliance maintained
 - Comprehensive test coverage with simulation testing
 - Robust caching and rate limiting
+- Modular filter system with extensible architecture
 
 ## Publishing to npm
 
@@ -327,12 +375,12 @@ npm install -g firewalla-mcp-server
 
 ### Package Features
 
-✅ **MCP Convention Compliant** - Uses `npx` for execution as per MCP standards  
-✅ **Optimized Bundle** - Only includes dist/, README, LICENSE via .npmignore  
-✅ **Automated Build** - Pre-publish hooks ensure clean builds  
-✅ **Semantic Versioning** - Built-in version management scripts  
-✅ **TypeScript Support** - Full type safety with compiled output  
-✅ **Environment Variables** - Secure credential management  
+- **MCP Convention Compliant** - Uses `npx` for execution as per MCP standards  
+- **Optimized Bundle** - Only includes dist/, README, LICENSE via .npmignore  
+- **Automated Build** - Pre-publish hooks ensure clean builds  
+- **Semantic Versioning** - Built-in version management scripts  
+- **TypeScript Support** - Full type safety with compiled output  
+- **Environment Variables** - Secure credential management  
 
 ## License
 
@@ -349,16 +397,15 @@ For issues and questions:
 
 ---
 
-Made with ❤️ for the Firewalla community
 ## GitHub Repository
 
-🔗 **Repository**: [https://github.com/amittell/firewalla-mcp-server](https://github.com/amittell/firewalla-mcp-server)
+**Repository**: [https://github.com/amittell/firewalla-mcp-server](https://github.com/amittell/firewalla-mcp-server)
 
 ### Quick Links
-- 📋 [Issues](https://github.com/amittell/firewalla-mcp-server/issues)
-- 🔀 [Pull Requests](https://github.com/amittell/firewalla-mcp-server/pulls)
-- 📈 [Actions](https://github.com/amittell/firewalla-mcp-server/actions)
-- 🛡️ [Security](https://github.com/amittell/firewalla-mcp-server/security)
+- [Issues](https://github.com/amittell/firewalla-mcp-server/issues)
+- [Pull Requests](https://github.com/amittell/firewalla-mcp-server/pulls)
+- [Actions](https://github.com/amittell/firewalla-mcp-server/actions)
+- [Security](https://github.com/amittell/firewalla-mcp-server/security)
 
 ### Repository Stats
 [![GitHub issues](https://img.shields.io/github/issues/amittell/firewalla-mcp-server)](https://github.com/amittell/firewalla-mcp-server/issues)

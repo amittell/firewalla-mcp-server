@@ -60,8 +60,8 @@ export function setupResources(server: Server, firewalla: FirewallaClient): void
           
           const deviceStats = {
             total: devices.length,
-            online: devices.filter(d => d.status === 'online').length,
-            offline: devices.filter(d => d.status === 'offline').length,
+            online: devices.filter(d => d.online).length,
+            offline: devices.filter(d => !d.online).length,
           };
 
           return {
@@ -76,12 +76,13 @@ export function setupResources(server: Server, firewalla: FirewallaClient): void
                     devices: devices.map(device => ({
                       id: device.id,
                       name: device.name,
-                      ip_address: device.ip_address,
-                      mac_address: device.mac_address,
-                      status: device.status,
-                      last_seen: device.last_seen,
-                      device_type: device.device_type || 'unknown',
-                      status_indicator: device.status === 'online' ? '🟢' : '🔴',
+                      ip_address: device.ip,
+                      mac_vendor: device.macVendor,
+                      status: device.online ? 'online' : 'offline',
+                      last_seen: device.lastSeen ? new Date(device.lastSeen * 1000).toISOString() : 'Never',
+                      network: device.network,
+                      group: device.group,
+                      status_indicator: device.online ? '🟢' : '🔴',
                     })),
                   },
                 }, null, 2),
