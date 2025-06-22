@@ -24,7 +24,7 @@ export class FirewallaClient {
     this.cache = new Map();
     
     // Use mspBaseUrl if provided, otherwise construct from mspId  
-    const baseURL = config.mspBaseUrl || `https://${config.mspId}.firewalla.net/v2`;
+    const baseURL = config.mspBaseUrl || `https://${config.mspId}/v2`;
     
     this.api = axios.create({
       baseURL,
@@ -164,13 +164,16 @@ export class FirewallaClient {
   async getActiveAlarms(severity?: string, limit = 20): Promise<Alarm[]> {
     const params: Record<string, unknown> = {
       limit,
-      query: `status:active box:${this.config.boxId}${severity ? ` severity:${severity}` : ''}`,
     };
-
-    const response = await this.request<{results: any[]}>('GET', `/alarms`, params);
     
-    // Handle the response format which has a 'results' array
-    const rawAlarms = response.results || [];
+    if (severity) {
+      params.severity = severity;
+    }
+
+    const response = await this.request<{results: any[]} | any[]>('GET', `/alarms`, params);
+    
+    // Handle the response format - could be direct array or with results property
+    const rawAlarms = Array.isArray(response) ? response : (response.results || []);
     
     // Transform the raw alarm data with comprehensive field mapping
     return rawAlarms.map((item: any) => {
@@ -223,8 +226,8 @@ export class FirewallaClient {
       params.end_time = endTime;
     }
 
-    const response = await this.request<{results: any[]}>('GET', `/flows`, params);
-    const rawFlows = response.results || [];
+    const response = await this.request<{results: any[]} | any[]>('GET', `/flows`, params);
+    const rawFlows = Array.isArray(response) ? response : (response.results || []);
     
     // Transform the flow data with comprehensive field mapping
     const flows = rawFlows.map((item: any) => {
@@ -270,15 +273,35 @@ export class FirewallaClient {
   }
 
   async getDeviceStatus(deviceId?: string, includeOffline = true): Promise<Device[]> {
-    const params: Record<string, unknown> = {
-      include_offline: includeOffline,
-    };
+    const params: Record<string, unknown> = {};
     
     if (deviceId) {
-      params.device_id = deviceId;
+      // If specific device requested, use device endpoint
+      const response = await this.request<any>('GET', `/devices/${deviceId}`, params);
+      return [response].map(this.transformDevice);
     }
 
-    return this.request<Device[]>('GET', `/devices`, params);
+    // Get all devices from the box
+    const response = await this.request<{devices: any[]} | any[]>('GET', `/boxes/${this.config.boxId}/devices`, params);
+    
+    // Handle different response formats
+    const devices = Array.isArray(response) ? response : (response.devices || []);
+    
+    return devices
+      .map(this.transformDevice)
+      .filter(device => includeOffline || device.status === 'online');
+  }
+
+  private transformDevice = (item: any): Device => {
+    return {
+      id: item.id || item.gid || item.device_id || 'unknown',
+      name: item.name || item.hostname || item.deviceName || 'Unknown Device',
+      ip_address: item.ip || item.ipAddress || item.local_ip || 'unknown',
+      mac_address: item.mac || item.macAddress || item.hw_addr || 'unknown',
+      status: item.online ? 'online' : (item.status || 'offline'),
+      last_seen: item.lastSeen || item.last_seen || item.lastActivity || new Date().toISOString(),
+      device_type: item.type || item.deviceType || item.category || 'unknown',
+    };
   }
 
   async getBandwidthUsage(period: string, top = 10): Promise<BandwidthUsage[]> {
@@ -310,8 +333,8 @@ export class FirewallaClient {
       groupBy: 'device'
     };
 
-    const response = await this.request<{results: any[]}>('GET', `/flows`, params);
-    const rawData = response.results || [];
+    const response = await this.request<{results: any[]} | any[]>('GET', `/flows`, params);
+    const rawData = Array.isArray(response) ? response : (response.results || []);
     
     // Transform the response to BandwidthUsage format
     return rawData.map((item: any) => ({
@@ -334,8 +357,8 @@ export class FirewallaClient {
       params.rule_type = ruleType;
     }
 
-    const response = await this.request<{results: any[]}>('GET', `/rules`, params);
-    const rawRules = response.results || [];
+    const response = await this.request<{results: any[]} | any[]>('GET', `/rules`, params);
+    const rawRules = Array.isArray(response) ? response : (response.results || []);
     
     // Transform raw API response to match NetworkRule interface with comprehensive mapping
     // This handles cases where the API returns raw rule data with different field names
@@ -528,15 +551,10 @@ export class FirewallaClient {
   }
 
   async pauseRule(ruleId: string, duration = 60): Promise<{ success: boolean; message: string }> {
-    const params = {
-      rule_id: ruleId,
-      duration_minutes: duration,
-    };
-
     return this.request<{ success: boolean; message: string }>(
       'POST',
-      `/rules/pause`,
-      params,
+      `/rules/${ruleId}/pause`,
+      { duration_minutes: duration },
       false
     );
   }
@@ -548,7 +566,9 @@ export class FirewallaClient {
       params.list_type = listType;
     }
 
-    return this.request<TargetList[]>('GET', `/target-lists`, params);
+    const response = await this.request<TargetList[] | {results: TargetList[]}>('GET', `/target-lists`, params);
+    // Handle response format
+    return Array.isArray(response) ? response : (response.results || []);
   }
 
   async getFirewallSummary(): Promise<{
@@ -560,7 +580,7 @@ export class FirewallaClient {
     blocked_attempts: number;
     last_updated: string;
   }> {
-    return this.request('GET', `/summary`, undefined, true);
+    return this.request('GET', `/boxes/${this.config.boxId}/summary`, undefined, true);
   }
 
   async getSecurityMetrics(): Promise<{
@@ -571,7 +591,7 @@ export class FirewallaClient {
     threat_level: 'low' | 'medium' | 'high' | 'critical';
     last_threat_detected: string;
   }> {
-    return this.request('GET', `/metrics/security`, undefined, true);
+    return this.request('GET', `/boxes/${this.config.boxId}/metrics/security`, undefined, true);
   }
 
   async getNetworkTopology(): Promise<{
@@ -588,7 +608,7 @@ export class FirewallaClient {
       bandwidth: number;
     }>;
   }> {
-    return this.request('GET', `/topology`, undefined, true);
+    return this.request('GET', `/boxes/${this.config.boxId}/topology`, undefined, true);
   }
 
   async getRecentThreats(hours = 24): Promise<Array<{
@@ -600,18 +620,14 @@ export class FirewallaClient {
     severity: string;
   }>> {
     const params = { hours };
-    return this.request('GET', `/threats/recent`, params, true);
+    return this.request('GET', `/boxes/${this.config.boxId}/threats/recent`, params, true);
   }
 
   async resumeRule(ruleId: string): Promise<{ success: boolean; message: string }> {
-    const params = {
-      rule_id: ruleId,
-    };
-
     return this.request<{ success: boolean; message: string }>(
       'POST',
-      `/rules/resume`,
-      params,
+      `/rules/${ruleId}/resume`,
+      {},
       false
     );
   }
@@ -629,13 +645,42 @@ export class FirewallaClient {
   }
 
   async getSpecificAlarm(alarmId: string): Promise<Alarm> {
-    return this.request<Alarm>('GET', `/alarms/${alarmId}`);
+    const response = await this.request<any>('GET', `/alarms/${this.config.boxId}/${alarmId}`);
+    
+    // Transform response to Alarm format
+    const parseTimestamp = (ts: any) => {
+      if (!ts) return new Date().toISOString();
+      
+      if (typeof ts === 'number') {
+        const timestamp = ts > 1000000000000 ? ts : ts * 1000;
+        return new Date(timestamp).toISOString();
+      }
+      
+      if (typeof ts === 'string') {
+        if (ts.includes('T') || ts.includes('-')) {
+          return new Date(ts).toISOString();
+        }
+      }
+      
+      return new Date().toISOString();
+    };
+
+    return {
+      id: response.aid || response.id || response._id || 'unknown',
+      timestamp: parseTimestamp(response.ts || response.timestamp),
+      severity: response.severity || 'medium',
+      type: response.type || response._type || response.category || 'security',
+      description: response.description || response.message || response.msg || `Alarm ${response._type || 'detected'}`,
+      source_ip: response.device?.ip || response.srcIP || response.source_ip || response.sourceIP,
+      destination_ip: response.dstIP || response.dest_ip || response.destinationIP,
+      status: response.status === 1 ? 'active' : (response.status || 'active')
+    };
   }
 
   async deleteAlarm(alarmId: string): Promise<{ success: boolean; message: string }> {
     return this.request<{ success: boolean; message: string }>(
       'DELETE',
-      `/alarms/${alarmId}`,
+      `/alarms/${this.config.boxId}/${alarmId}`,
       undefined,
       false
     );
