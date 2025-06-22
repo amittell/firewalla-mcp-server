@@ -55,14 +55,14 @@ Create a `.env` file with your Firewalla credentials:
 ```env
 FIREWALLA_MSP_TOKEN=your_msp_access_token_here
 FIREWALLA_MSP_ID=your_msp_id_here
-FIREWALLA_BOX_ID=your_box_id_here
+FIREWALLA_BOX_ID=your_box_gid_here
 ```
 
 **Getting Your Credentials:**
 1. Log into your Firewalla MSP portal
 2. Your MSP ID is the part before `.firewalla.net` in your portal URL
 3. Generate an access token in API settings
-4. Find your Box ID in device settings
+4. Find your Box GID (Group ID) in device settings - this is your unique device identifier
 
 ### 3. Build and Start
 
@@ -83,9 +83,9 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
       "command": "npx",
       "args": ["firewalla-mcp-server"],
       "env": {
-        "FIREWALLA_MSP_TOKEN": "your_token_here",
+        "FIREWALLA_MSP_TOKEN": "your_msp_access_token_here",
         "FIREWALLA_MSP_ID": "your_msp_id_here",
-        "FIREWALLA_BOX_ID": "your_box_id_here"
+        "FIREWALLA_BOX_ID": "your_box_gid_here"
       }
     }
   }
@@ -100,9 +100,9 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
       "command": "node",
       "args": ["--loader", "ts-node/esm", "/path/to/firewalla-mcp-server/src/server.ts"],
       "env": {
-        "FIREWALLA_MSP_TOKEN": "your_token_here",
+        "FIREWALLA_MSP_TOKEN": "your_msp_access_token_here",
         "FIREWALLA_MSP_ID": "your_msp_id_here",
-        "FIREWALLA_BOX_ID": "your_box_id_here"
+        "FIREWALLA_BOX_ID": "your_box_gid_here"
       }
     }
   }
