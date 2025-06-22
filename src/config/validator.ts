@@ -23,16 +23,24 @@ export class ConfigValidator {
       }
     }
 
-    // Validate MSP Base URL
-    if (!config.mspBaseUrl) {
-      errors.push('MSP base URL is required');
-    } else {
+    // Validate MSP ID or MSP Base URL (one required)
+    if (!config.mspId && !config.mspBaseUrl) {
+      errors.push('Either MSP ID or MSP base URL is required');
+    }
+    
+    if (config.mspId) {
+      if (config.mspId.length < 3) {
+        warnings.push('MSP ID appears to be shorter than expected');
+      }
+      if (!/^[a-zA-Z0-9-]+$/.test(config.mspId)) {
+        errors.push('MSP ID must contain only alphanumeric characters and hyphens');
+      }
+    }
+    
+    if (config.mspBaseUrl) {
       try {
         const url = new URL(config.mspBaseUrl);
-        if (!['http:', 'https:'].includes(url.protocol)) {
-          errors.push('MSP base URL must use HTTP or HTTPS protocol');
-        }
-        if (url.protocol === 'http:' && !url.hostname.includes('localhost')) {
+        if (url.protocol === 'http:' && !url.hostname.includes('localhost') && !url.hostname.includes('127.0.0.1')) {
           warnings.push('Using HTTP instead of HTTPS for production API');
         }
       } catch {
@@ -101,7 +109,7 @@ export class ConfigValidator {
         if (args.limit && (typeof args.limit !== 'number' || args.limit < 1 || args.limit > 100)) {
           errors.push('Limit must be a number between 1 and 100');
         }
-        if (args.page && (typeof args.page !== 'number' || args.page < 1)) {
+        if (args.page !== undefined && (typeof args.page !== 'number' || args.page < 1)) {
           errors.push('Page must be a number greater than 0');
         }
         break;

@@ -8,6 +8,7 @@ describe('ConfigValidator', () => {
     beforeEach(() => {
       validConfig = {
         mspToken: 'valid-token-1234567890abcdef',
+        mspId: 'test-msp',
         mspBaseUrl: 'https://msp.firewalla.com',
         boxId: 'valid-box-id-123',
         apiTimeout: 30000,
@@ -27,6 +28,26 @@ describe('ConfigValidator', () => {
       const result = ConfigValidator.validateConfig(validConfig);
       expect(result.valid).toBe(false);
       expect(result.errors).toContain('MSP token is required');
+    });
+
+    it('should require either MSP ID or MSP base URL', () => {
+      delete (validConfig as any).mspId;
+      delete (validConfig as any).mspBaseUrl;
+      const result = ConfigValidator.validateConfig(validConfig);
+      expect(result.valid).toBe(false);
+      expect(result.errors).toContain('Either MSP ID or MSP base URL is required');
+    });
+
+    it('should work with only MSP ID', () => {
+      delete (validConfig as any).mspBaseUrl;
+      const result = ConfigValidator.validateConfig(validConfig);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should work with only MSP base URL', () => {
+      delete (validConfig as any).mspId;
+      const result = ConfigValidator.validateConfig(validConfig);
+      expect(result.valid).toBe(true);
     });
 
     it('should warn about short MSP token', () => {

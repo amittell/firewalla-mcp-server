@@ -1,5 +1,6 @@
 module.exports = {
-  preset: 'ts-jest',
+  preset: 'ts-jest/presets/default-esm',
+  extensionsToTreatAsEsm: ['.ts'],
   testEnvironment: 'node',
   roots: ['<rootDir>/src', '<rootDir>/tests'],
   testMatch: [
@@ -7,7 +8,7 @@ module.exports = {
     '**/?(*.)+(spec|test).ts'
   ],
   transform: {
-    '^.+\\.ts$': 'ts-jest'
+    '^.+\\.ts$': ['ts-jest', { useESM: true }]
   },
   collectCoverage: true,
   coverageDirectory: 'coverage',

@@ -2,6 +2,21 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
 
+/**
+ * Sets up MCP tools for Firewalla firewall management
+ * Provides tools for security monitoring, network analysis, and firewall control
+ * 
+ * Available tools:
+ * - get_active_alarms: Retrieve active security alarms
+ * - get_flow_data: Get network flow information
+ * - get_device_status: Check device connectivity status
+ * - get_bandwidth_usage: Analyze bandwidth consumption
+ * - pause_rule: Temporarily disable firewall rules
+ * - get_target_lists: Access security target lists
+ * 
+ * @param server - MCP server instance to register tools with
+ * @param firewalla - Firewalla client for API communication
+ */
 export function setupTools(server: Server, firewalla: FirewallaClient): void {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
@@ -201,10 +216,111 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                     id: list.id,
                     name: list.name,
                     type: list.type,
-                    entry_count: list.entries.length,
-                    entries: list.entries.slice(0, 10), // Show first 10 entries
-                    last_updated: list.last_updated,
+                    entry_count: (list as any).count || (list.entries?.length || 0),
+                    entries: list.entries?.slice(0, 10) || [],
+                    last_updated: list.last_updated || (list as any).lastUpdated,
+                    notes: (list as any).notes,
                   })),
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'resume_rule': {
+          const ruleId = args?.rule_id as string;
+          
+          if (!ruleId) {
+            throw new Error('Rule ID parameter is required');
+          }
+          
+          const result = await firewalla.resumeRule(ruleId);
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: result.success,
+                  message: result.message,
+                  rule_id: ruleId,
+                  action: 'resume_rule',
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'get_boxes': {
+          const boxes = await firewalla.getBoxes();
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  total_boxes: boxes.length,
+                  boxes: boxes.map((box: any) => ({
+                    id: box.id,
+                    name: box.name,
+                    status: box.status,
+                    version: box.version,
+                    last_seen: box.last_seen,
+                    location: box.location,
+                    type: box.type,
+                  })),
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'get_specific_alarm': {
+          const alarmId = args?.alarm_id as string;
+          
+          if (!alarmId) {
+            throw new Error('Alarm ID parameter is required');
+          }
+          
+          const alarm = await firewalla.getSpecificAlarm(alarmId);
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  alarm_id: alarm.id,
+                  type: alarm.type,
+                  severity: alarm.severity,
+                  description: alarm.description,
+                  timestamp: alarm.timestamp,
+                  source_ip: alarm.source_ip,
+                  destination_ip: alarm.destination_ip,
+                  status: alarm.status,
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'delete_alarm': {
+          const alarmId = args?.alarm_id as string;
+          
+          if (!alarmId) {
+            throw new Error('Alarm ID parameter is required');
+          }
+          
+          const result = await firewalla.deleteAlarm(alarmId);
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: result.success,
+                  message: result.message,
+                  alarm_id: alarmId,
+                  action: 'delete_alarm',
                 }, null, 2),
               },
             ],

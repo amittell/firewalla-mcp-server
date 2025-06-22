@@ -2,6 +2,22 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { ReadResourceRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
 
+/**
+ * Sets up MCP resources for Firewalla data access
+ * Provides structured access to firewall data through URI-based resources
+ * 
+ * Available resources:
+ * - firewalla://summary: Real-time firewall health and status
+ * - firewalla://devices: Complete device inventory with metadata
+ * - firewalla://metrics/security: Aggregated security statistics
+ * - firewalla://topology: Network topology and subnet information
+ * - firewalla://threats/recent: Recent security threats and incidents
+ * - firewalla://rules: Active firewall rules and policies
+ * - firewalla://bandwidth: Bandwidth usage statistics
+ * 
+ * @param server - MCP server instance to register resources with
+ * @param firewalla - Firewalla client for API communication
+ */
 export function setupResources(server: Server, firewalla: FirewallaClient): void {
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     const { uri } = request.params;
