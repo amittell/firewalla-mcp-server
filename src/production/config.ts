@@ -14,7 +14,7 @@ export interface ProductionConfig extends FirewallaConfig {
 export function getProductionConfig(): ProductionConfig {
   const baseConfig = {
     mspToken: getRequiredEnvVar('FIREWALLA_MSP_TOKEN'),
-    mspBaseUrl: getOptionalEnvVar('FIREWALLA_MSP_BASE_URL', 'https://msp.firewalla.com'),
+    mspId: getRequiredEnvVar('FIREWALLA_MSP_ID'),
     boxId: getRequiredEnvVar('FIREWALLA_BOX_ID'),
     apiTimeout: parseInt(getOptionalEnvVar('API_TIMEOUT', '30000'), 10),
     rateLimit: parseInt(getOptionalEnvVar('API_RATE_LIMIT', '100'), 10),
@@ -67,9 +67,7 @@ export class ProductionConfigValidator {
         warnings.push('Debug logging enabled in production may impact performance');
       }
 
-      if (config.mspBaseUrl.startsWith('http://')) {
-        errors.push('HTTP URLs not allowed in production, use HTTPS');
-      }
+      // MSP ID validation for production - no HTTP check needed as URL is constructed
 
       if (config.apiTimeout < 10000) {
         warnings.push('API timeout may be too low for production workloads');

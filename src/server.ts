@@ -13,7 +13,7 @@ import { setupTools } from './tools/index.js';
 import { setupResources } from './resources/index.js';
 import { setupPrompts } from './prompts/index.js';
 
-class FirewallaMCPServer {
+export class FirewallaMCPServer {
   private server: Server;
   private firewalla: FirewallaClient;
 
@@ -81,10 +81,9 @@ class FirewallaMCPServer {
                   minimum: 1,
                   maximum: 100,
                 },
-                page: {
-                  type: 'number',
-                  description: 'Page number for pagination (default: 1)',
-                  minimum: 1,
+                cursor: {
+                  type: 'string',
+                  description: 'Pagination cursor from previous response',
                 },
               },
             },
@@ -176,6 +175,56 @@ class FirewallaMCPServer {
                   description: 'Type of target list to retrieve',
                 },
               },
+            },
+          },
+          {
+            name: 'resume_rule',
+            description: 'Resume a previously paused firewall rule',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                rule_id: {
+                  type: 'string',
+                  description: 'Rule identifier to resume',
+                },
+              },
+              required: ['rule_id'],
+            },
+          },
+          {
+            name: 'get_boxes',
+            description: 'List all managed Firewalla boxes',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+            },
+          },
+          {
+            name: 'get_specific_alarm',
+            description: 'Get detailed information for a specific alarm',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                alarm_id: {
+                  type: 'string',
+                  description: 'Alarm identifier to retrieve',
+                },
+              },
+              required: ['alarm_id'],
+            },
+          },
+          {
+            name: 'delete_alarm',
+            description: 'Delete/dismiss a specific alarm',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                alarm_id: {
+                  type: 'string',
+                  description: 'Alarm identifier to delete',
+                },
+              },
+              required: ['alarm_id'],
             },
           },
         ],
@@ -298,19 +347,26 @@ class FirewallaMCPServer {
     setupPrompts(this.server, this.firewalla);
   }
 
+  /**
+   * Starts the MCP server and begins listening for requests
+   * Uses stdio transport for communication with Claude Code
+   * 
+   * @returns Promise that resolves when the server is running
+   * @throws Will throw an error if server startup fails
+   */
   async start(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
 
-    process.stderr.write('Firewalla MCP Server running on stdio\\n');
+    process.stderr.write('Firewalla MCP Server running on stdio\n');
   }
 }
 
-// Start server if run directly
+// Start server if run directly (ES module compatible)
 if (import.meta.url === `file://${process.argv[1]}`) {
   const server = new FirewallaMCPServer();
   server.start().catch((error: Error) => {
-    process.stderr.write(`Fatal error: ${error.message}\\n`);
+    process.stderr.write(`Fatal error: ${error.message}\n`);
     process.exit(1);
   });
 }

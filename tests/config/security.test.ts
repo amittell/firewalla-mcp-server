@@ -204,7 +204,8 @@ describe('SecurityManager', () => {
       });
 
       expect(loggedMessages).toHaveLength(1);
-      const logEntry = JSON.parse(loggedMessages[0].replace('SECURITY_EVENT: ', ''));
+      const cleanedMessage = loggedMessages[0]!.replace('SECURITY_EVENT: ', '').replace(/\\n$/, '');
+      const logEntry = JSON.parse(cleanedMessage);
       
       expect(logEntry.event).toBe('test_event');
       expect(logEntry.details.user).toBe('testuser');

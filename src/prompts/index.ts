@@ -2,6 +2,20 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { GetPromptRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
 
+/**
+ * Sets up MCP prompts for Firewalla security analysis
+ * Provides intelligent prompts that generate comprehensive security reports
+ * 
+ * Available prompts:
+ * - security_report: Comprehensive security status and threat analysis
+ * - threat_analysis: Detailed analysis of security threats and incidents
+ * - bandwidth_analysis: Network bandwidth usage patterns and insights
+ * - device_investigation: Deep dive into specific device security posture
+ * - network_health_check: Overall network health and performance assessment
+ * 
+ * @param server - MCP server instance to register prompts with
+ * @param firewalla - Firewalla client for API communication
+ */
 export function setupPrompts(server: Server, firewalla: FirewallaClient): void {
   server.setRequestHandler(GetPromptRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;

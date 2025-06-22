@@ -23,11 +23,14 @@ export class FirewallaClient {
   constructor(private config: FirewallaConfig) {
     this.cache = new Map();
     
+    // Use mspBaseUrl if provided, otherwise construct from mspId
+    const baseURL = config.mspBaseUrl || `https://${config.mspId}.firewalla.net`;
+    
     this.api = axios.create({
-      baseURL: config.mspBaseUrl,
+      baseURL,
       timeout: config.apiTimeout,
       headers: {
-        'Authorization': `Bearer ${config.mspToken}`,
+        'Authorization': `Token ${config.mspToken}`,
         'Content-Type': 'application/json',
         'User-Agent': 'Firewalla-MCP-Server/1.0.0',
       },
@@ -213,7 +216,196 @@ export class FirewallaClient {
       params.rule_type = ruleType;
     }
 
-    return this.request<NetworkRule[]>('GET', `/api/v1/rules/${this.config.boxId}`, params);
+    const rawRules = await this.request<any[]>('GET', `/api/v1/rules/${this.config.boxId}`, params);
+    
+    // Transform raw API response to match NetworkRule interface with comprehensive mapping
+    // This handles cases where the API returns raw rule data with different field names
+    return rawRules.map((item: any) => {
+      // If the item already matches the NetworkRule interface perfectly, return as-is
+      if (item.id && item.name && item.type && item.action && item.status && 
+          item.conditions && item.created_at && item.updated_at) {
+        return item as NetworkRule;
+      }
+      
+      // Otherwise, apply comprehensive field mapping
+      // Extract rule ID with multiple fallbacks
+      const ruleId = item.rid || item.id || item._id || item.ruleId || 'unknown';
+      
+      // Build comprehensive rule name with context
+      let ruleName = '';
+      if (item.name) {
+        ruleName = item.name;
+      } else if (item.description || item.desc) {
+        ruleName = item.description || item.desc;
+      } else if (item.msg || item.message) {
+        ruleName = item.msg || item.message;
+      } else if (item.title) {
+        ruleName = item.title;
+      } else {
+        // Generate descriptive name based on rule details
+        const ruleTypeStr = item.type || item.ruleType || item.category || 'rule';
+        const actionStr = item.action || item.policy || 'block';
+        ruleName = `${ruleTypeStr} ${actionStr} rule ${ruleId}`.replace(/\s+/g, ' ').trim();
+      }
+      
+      // Determine rule type with comprehensive mapping
+      let ruleType = 'firewall'; // default
+      if (item.type) {
+        ruleType = item.type;
+      } else if (item.ruleType) {
+        ruleType = item.ruleType;
+      } else if (item.category) {
+        ruleType = item.category;
+      } else if (item.policyType) {
+        ruleType = item.policyType;
+      } else if (item.kind) {
+        ruleType = item.kind;
+      }
+      
+      // Map action with comprehensive fallbacks and normalization
+      let action: 'allow' | 'block' | 'redirect' = 'block'; // default
+      const actionValue = item.action || item.policy || item.verdict || item.disposition;
+      if (actionValue) {
+        const actionLower = String(actionValue).toLowerCase();
+        if (actionLower.includes('allow') || actionLower.includes('permit') || actionLower.includes('accept')) {
+          action = 'allow';
+        } else if (actionLower.includes('redirect') || actionLower.includes('proxy')) {
+          action = 'redirect';
+        } else {
+          action = 'block'; // block, deny, drop, reject, etc.
+        }
+      }
+      
+      // Determine status with comprehensive mapping
+      let status: 'active' | 'paused' | 'disabled' = 'active'; // default
+      if (item.disabled === true || item.status === 'disabled' || item.state === 'disabled') {
+        status = 'disabled';
+      } else if (item.paused === true || item.status === 'paused' || item.state === 'paused') {
+        status = 'paused';
+      } else if (item.enabled === false) {
+        status = 'disabled';
+      } else if (item.active === false && item.disabled !== false) {
+        status = 'disabled';
+      }
+      
+      // Build comprehensive conditions object
+      const conditions: Record<string, unknown> = {};
+      
+      // Direct conditions/criteria mapping
+      if (item.conditions && typeof item.conditions === 'object') {
+        Object.assign(conditions, item.conditions);
+      }
+      if (item.target && typeof item.target === 'object') {
+        Object.assign(conditions, item.target);
+      }
+      if (item.criteria && typeof item.criteria === 'object') {
+        Object.assign(conditions, item.criteria);
+      }
+      if (item.config && typeof item.config === 'object') {
+        Object.assign(conditions, item.config);
+      }
+      
+      // Add specific rule parameters
+      if (item.sourceIP || item.src_ip || item.srcIP) {
+        conditions.source_ip = item.sourceIP || item.src_ip || item.srcIP;
+      }
+      if (item.destinationIP || item.dest_ip || item.dstIP || item.dst_ip) {
+        conditions.destination_ip = item.destinationIP || item.dest_ip || item.dstIP || item.dst_ip;
+      }
+      if (item.sourcePort || item.src_port || item.srcPort) {
+        conditions.source_port = item.sourcePort || item.src_port || item.srcPort;
+      }
+      if (item.destinationPort || item.dest_port || item.dstPort || item.dst_port) {
+        conditions.destination_port = item.destinationPort || item.dest_port || item.dstPort || item.dst_port;
+      }
+      if (item.protocol || item.proto) {
+        conditions.protocol = item.protocol || item.proto;
+      }
+      if (item.domain || item.hostname || item.host) {
+        conditions.domain = item.domain || item.hostname || item.host;
+      }
+      if (item.url || item.path) {
+        conditions.url = item.url || item.path;
+      }
+      if (item.app || item.application || item.appName) {
+        conditions.application = item.app || item.application || item.appName;
+      }
+      if (item.device || item.deviceId || item.mac) {
+        conditions.device = item.device || item.deviceId || item.mac;
+      }
+      if (item.direction) {
+        conditions.direction = item.direction;
+      }
+      if (item.schedule || item.timeRange) {
+        conditions.schedule = item.schedule || item.timeRange;
+      }
+      if (item.tags && Array.isArray(item.tags)) {
+        conditions.tags = item.tags;
+      }
+      if (item.category || item.categories) {
+        conditions.category = item.category || item.categories;
+      }
+      
+      // Add rule metadata
+      if (item.priority !== undefined) {
+        conditions.priority = item.priority;
+      }
+      if (item.weight !== undefined) {
+        conditions.weight = item.weight;
+      }
+      if (item.severity) {
+        conditions.severity = item.severity;
+      }
+      if (item.scope) {
+        conditions.scope = item.scope;
+      }
+      
+      // Handle timestamp conversion with multiple formats
+      const parseTimestamp = (ts: any): string => {
+        if (!ts) return new Date().toISOString();
+        
+        if (typeof ts === 'number') {
+          // Handle both seconds and milliseconds timestamps
+          const timestamp = ts > 1000000000000 ? ts : ts * 1000;
+          return new Date(timestamp).toISOString();
+        }
+        
+        if (typeof ts === 'string') {
+          // Try to parse ISO string or convert to number
+          if (ts.includes('T') || ts.includes('-')) {
+            return new Date(ts).toISOString();
+          } else {
+            const numTs = parseInt(ts, 10);
+            if (!isNaN(numTs)) {
+              const timestamp = numTs > 1000000000000 ? numTs : numTs * 1000;
+              return new Date(timestamp).toISOString();
+            }
+          }
+        }
+        
+        return new Date().toISOString();
+      };
+      
+      const createdAt = parseTimestamp(
+        item.createdAt || item.created_at || item.createTime || item.timestamp || item.ts
+      );
+      
+      const updatedAt = parseTimestamp(
+        item.updatedAt || item.updated_at || item.updateTime || item.lastModified || 
+        item.modifiedAt || item.modified_at || createdAt
+      );
+      
+      return {
+        id: ruleId,
+        name: ruleName,
+        type: ruleType,
+        action,
+        status,
+        conditions,
+        created_at: createdAt,
+        updated_at: updatedAt,
+      };
+    });
   }
 
   async pauseRule(ruleId: string, duration = 60): Promise<{ success: boolean; message: string }> {
@@ -290,6 +482,44 @@ export class FirewallaClient {
   }>> {
     const params = { hours };
     return this.request('GET', `/api/v1/threats/recent/${this.config.boxId}`, params, true);
+  }
+
+  async resumeRule(ruleId: string): Promise<{ success: boolean; message: string }> {
+    const params = {
+      rule_id: ruleId,
+    };
+
+    return this.request<{ success: boolean; message: string }>(
+      'POST',
+      `/api/v1/rules/${this.config.boxId}/resume`,
+      params,
+      false
+    );
+  }
+
+  async getBoxes(): Promise<Array<{
+    id: string;
+    name: string;
+    status: string;
+    version: string;
+    last_seen: string;
+    location?: string;
+    type?: string;
+  }>> {
+    return this.request('GET', `/api/v1/boxes`, undefined, true);
+  }
+
+  async getSpecificAlarm(alarmId: string): Promise<Alarm> {
+    return this.request<Alarm>('GET', `/api/v1/alarms/${this.config.boxId}/${alarmId}`);
+  }
+
+  async deleteAlarm(alarmId: string): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(
+      'DELETE',
+      `/api/v1/alarms/${this.config.boxId}/${alarmId}`,
+      undefined,
+      false
+    );
   }
 
   clearCache(): void {

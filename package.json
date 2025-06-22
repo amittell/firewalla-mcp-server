@@ -1,22 +1,29 @@
 {
   "name": "firewalla_mcp",
   "version": "1.0.0",
+  "type": "module",
   "description": "A Model Context Protocol (MCP) server that enables Claude to access and analyze your Firewalla firewall data in real-time.",
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
     "dev": "nodemon --exec ts-node src/server.ts",
     "start": "node dist/server.js",
-    "mcp:start": "ts-node src/server.ts",
+    "mcp:start": "node --loader ts-node/esm src/server.ts",
     "mcp:test": "echo 'Testing MCP server connection...' && npm run mcp:start",
-    "mcp:debug": "DEBUG=mcp:* ts-node src/server.ts",
+    "mcp:debug": "DEBUG=mcp:* node --loader ts-node/esm src/server.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts"
   },
-  "keywords": ["mcp", "firewalla", "firewall", "security", "model-context-protocol"],
+  "keywords": [
+    "mcp",
+    "firewalla",
+    "firewall",
+    "security",
+    "model-context-protocol"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
@@ -34,6 +41,7 @@
     "jest": "^30.0.2",
     "nodemon": "^3.1.10",
     "prettier": "^3.5.3",
+    "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2"
   }
 }

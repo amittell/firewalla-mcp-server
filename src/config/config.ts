@@ -18,7 +18,7 @@ function getOptionalEnvVar(name: string, defaultValue: string): string {
 export function getConfig(): FirewallaConfig {
   return {
     mspToken: getRequiredEnvVar('FIREWALLA_MSP_TOKEN'),
-    mspBaseUrl: getOptionalEnvVar('FIREWALLA_MSP_BASE_URL', 'https://msp.firewalla.com'),
+    mspId: getRequiredEnvVar('FIREWALLA_MSP_ID'),
     boxId: getRequiredEnvVar('FIREWALLA_BOX_ID'),
     apiTimeout: parseInt(getOptionalEnvVar('API_TIMEOUT', '30000'), 10),
     rateLimit: parseInt(getOptionalEnvVar('API_RATE_LIMIT', '100'), 10),
