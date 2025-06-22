@@ -132,11 +132,21 @@ export class FirewallaClient {
           break;
       }
 
-      if (!response.data.success) {
-        throw new Error(response.data.error || 'API request failed');
+      // Debug: Log the actual response structure
+      process.stderr.write(`API Response Data: ${JSON.stringify(response.data).substring(0, 500)}...\n`);
+      
+      // Handle different response formats from Firewalla API
+      let result: T;
+      if (response.data && typeof response.data === 'object' && 'success' in response.data) {
+        // Standard API response format
+        if (!response.data.success) {
+          throw new Error(response.data.error || 'API request failed');
+        }
+        result = response.data.data;
+      } else {
+        // Direct data response (more common with Firewalla API)
+        result = response.data;
       }
-
-      const result = response.data.data;
       
       if (cacheable && method === 'GET') {
         this.setCache(cacheKey, result);
@@ -161,7 +171,7 @@ export class FirewallaClient {
       params.severity = severity;
     }
 
-    return this.request<Alarm[]>('GET', `/api/v1/alarms/${this.config.boxId}`, params);
+    return this.request<Alarm[]>('GET', `/v2/gid/${this.config.boxId}/alarms`, params);
   }
 
   async getFlowData(
@@ -183,7 +193,7 @@ export class FirewallaClient {
       params.end_time = endTime;
     }
 
-    return this.request<FlowData>('GET', `/api/v1/flow/${this.config.boxId}`, params);
+    return this.request<FlowData>('GET', `/v2/gid/${this.config.boxId}/flows`, params);
   }
 
   async getDeviceStatus(deviceId?: string, includeOffline = true): Promise<Device[]> {
@@ -195,7 +205,7 @@ export class FirewallaClient {
       params.device_id = deviceId;
     }
 
-    return this.request<Device[]>('GET', `/api/v1/devices/${this.config.boxId}`, params);
+    return this.request<Device[]>('GET', `/v2/gid/${this.config.boxId}/devices`, params);
   }
 
   async getBandwidthUsage(period: string, top = 10): Promise<BandwidthUsage[]> {
@@ -204,7 +214,7 @@ export class FirewallaClient {
       top,
     };
 
-    return this.request<BandwidthUsage[]>('GET', `/api/v1/bandwidth/${this.config.boxId}`, params);
+    return this.request<BandwidthUsage[]>('GET', `/v2/gid/${this.config.boxId}/bandwidth`, params);
   }
 
   async getNetworkRules(ruleType?: string, activeOnly = true): Promise<NetworkRule[]> {
@@ -216,7 +226,7 @@ export class FirewallaClient {
       params.rule_type = ruleType;
     }
 
-    const rawRules = await this.request<any[]>('GET', `/api/v1/rules/${this.config.boxId}`, params);
+    const rawRules = await this.request<any[]>('GET', `/v2/gid/${this.config.boxId}/rules`, params);
     
     // Transform raw API response to match NetworkRule interface with comprehensive mapping
     // This handles cases where the API returns raw rule data with different field names
@@ -416,7 +426,7 @@ export class FirewallaClient {
 
     return this.request<{ success: boolean; message: string }>(
       'POST',
-      `/api/v1/rules/${this.config.boxId}/pause`,
+      `/v2/gid/${this.config.boxId}/rules/pause`,
       params,
       false
     );
@@ -429,7 +439,7 @@ export class FirewallaClient {
       params.list_type = listType;
     }
 
-    return this.request<TargetList[]>('GET', `/api/v1/target-lists/${this.config.boxId}`, params);
+    return this.request<TargetList[]>('GET', `/v2/gid/${this.config.boxId}/target_lists`, params);
   }
 
   async getFirewallSummary(): Promise<{
@@ -441,7 +451,7 @@ export class FirewallaClient {
     blocked_attempts: number;
     last_updated: string;
   }> {
-    return this.request('GET', `/api/v1/summary/${this.config.boxId}`, undefined, true);
+    return this.request('GET', `/v2/gid/${this.config.boxId}/summary`, undefined, true);
   }
 
   async getSecurityMetrics(): Promise<{
@@ -452,7 +462,7 @@ export class FirewallaClient {
     threat_level: 'low' | 'medium' | 'high' | 'critical';
     last_threat_detected: string;
   }> {
-    return this.request('GET', `/api/v1/metrics/security/${this.config.boxId}`, undefined, true);
+    return this.request('GET', `/v2/gid/${this.config.boxId}/security_metrics`, undefined, true);
   }
 
   async getNetworkTopology(): Promise<{
@@ -469,7 +479,7 @@ export class FirewallaClient {
       bandwidth: number;
     }>;
   }> {
-    return this.request('GET', `/api/v1/topology/${this.config.boxId}`, undefined, true);
+    return this.request('GET', `/v2/gid/${this.config.boxId}/topology`, undefined, true);
   }
 
   async getRecentThreats(hours = 24): Promise<Array<{
@@ -481,7 +491,7 @@ export class FirewallaClient {
     severity: string;
   }>> {
     const params = { hours };
-    return this.request('GET', `/api/v1/threats/recent/${this.config.boxId}`, params, true);
+    return this.request('GET', `/v2/gid/${this.config.boxId}/threats/recent`, params, true);
   }
 
   async resumeRule(ruleId: string): Promise<{ success: boolean; message: string }> {
@@ -491,7 +501,7 @@ export class FirewallaClient {
 
     return this.request<{ success: boolean; message: string }>(
       'POST',
-      `/api/v1/rules/${this.config.boxId}/resume`,
+      `/v2/gid/${this.config.boxId}/rules/resume`,
       params,
       false
     );
@@ -506,17 +516,17 @@ export class FirewallaClient {
     location?: string;
     type?: string;
   }>> {
-    return this.request('GET', `/api/v1/boxes`, undefined, true);
+    return this.request('GET', `/v2/boxes`, undefined, true);
   }
 
   async getSpecificAlarm(alarmId: string): Promise<Alarm> {
-    return this.request<Alarm>('GET', `/api/v1/alarms/${this.config.boxId}/${alarmId}`);
+    return this.request<Alarm>('GET', `/v2/gid/${this.config.boxId}/alarms/${alarmId}`);
   }
 
   async deleteAlarm(alarmId: string): Promise<{ success: boolean; message: string }> {
     return this.request<{ success: boolean; message: string }>(
       'DELETE',
-      `/api/v1/alarms/${this.config.boxId}/${alarmId}`,
+      `/v2/gid/${this.config.boxId}/alarms/${alarmId}`,
       undefined,
       false
     );
