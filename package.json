@@ -4,9 +4,6 @@
   "type": "module",
   "description": "A Model Context Protocol (MCP) server that enables Claude to access and analyze your Firewalla firewall data in real-time.",
   "main": "dist/server.js",
-  "bin": {
-    "firewalla-mcp": "dist/server.js"
-  },
   "files": [
     "dist/**/*",
     "README.md",

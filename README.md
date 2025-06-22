@@ -73,12 +73,15 @@ npm run mcp:start
 
 ### 4. Connect Claude Desktop
 
+Add this configuration to your Claude Desktop `claude_desktop_config.json`:
+
 **If installed via npm:**
 ```json
 {
   "mcpServers": {
     "firewalla": {
-      "command": "firewalla-mcp",
+      "command": "npx",
+      "args": ["firewalla-mcp-server"],
       "env": {
         "FIREWALLA_MSP_TOKEN": "your_token_here",
         "FIREWALLA_MSP_ID": "your_msp_id_here",
@@ -105,6 +108,10 @@ npm run mcp:start
   }
 }
 ```
+
+**Config file locations:**
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
 ## Usage Examples
 
@@ -166,6 +173,27 @@ npm run test         # Run all tests
 npm run test:watch   # Run tests in watch mode
 npm run lint         # Run ESLint
 npm run lint:fix     # Fix ESLint issues
+```
+
+### MCP Execution Methods
+
+**Why `npx` for MCP servers?**
+- ✅ **Version Management**: Always uses the correct/latest version
+- ✅ **Dependency Resolution**: Handles package dependencies automatically  
+- ✅ **No Global Install Required**: Works without global installation
+- ✅ **MCP Standard**: Follows Model Context Protocol conventions
+- ✅ **Cross-Platform**: Works consistently across different environments
+
+**Alternative execution methods:**
+```bash
+# Development (from source)
+npm run mcp:start
+
+# Production (npm installed)
+npx firewalla-mcp-server
+
+# Direct execution (if globally installed)
+node dist/server.js
 ```
 
 ### Project Structure
@@ -251,6 +279,60 @@ All 11 MCP tools now return complete, well-structured data:
 - Full TypeScript compliance maintained
 - Comprehensive test coverage with simulation testing
 - Robust caching and rate limiting
+
+## Publishing to npm
+
+This package is configured for npm publishing. To publish your own version:
+
+### 1. Prepare for Publishing
+
+```bash
+# Make sure you're logged into npm
+npm login
+
+# Test the package build
+npm run build
+npm test
+
+# Check what will be included in the package
+npm pack --dry-run
+```
+
+### 2. Publish to npm
+
+```bash
+# For first release
+npm publish
+
+# For updates, bump version first
+npm run version:patch  # 1.0.0 -> 1.0.1
+npm run version:minor  # 1.0.0 -> 1.1.0  
+npm run version:major  # 1.0.0 -> 2.0.0
+
+# Then publish
+npm publish
+```
+
+### 3. Post-Publishing
+
+Once published, users can install with:
+
+```bash
+# Install locally (recommended for MCP servers)
+npm install firewalla-mcp-server
+
+# Or install globally
+npm install -g firewalla-mcp-server
+```
+
+### Package Features
+
+✅ **MCP Convention Compliant** - Uses `npx` for execution as per MCP standards  
+✅ **Optimized Bundle** - Only includes dist/, README, LICENSE via .npmignore  
+✅ **Automated Build** - Pre-publish hooks ensure clean builds  
+✅ **Semantic Versioning** - Built-in version management scripts  
+✅ **TypeScript Support** - Full type safety with compiled output  
+✅ **Environment Variables** - Secure credential management  
 
 ## License
 
