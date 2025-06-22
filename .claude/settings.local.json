@@ -42,7 +42,8 @@
       "Bash(gh repo create:*)",
       "Bash(git remote add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(FIREWALLA_MSP_TOKEN=\"c1ecdc13bf0888c6784bdeeeb4c4a6c5\" FIREWALLA_MSP_ID=\"dn-k7evgj\" FIREWALLA_BOX_ID=\"1eb71e38-3a95-4371-8903-ace24c83ab49\" npm run mcp:start:dev)"
     ],
     "deny": []
   }
