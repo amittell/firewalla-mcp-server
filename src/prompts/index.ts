@@ -154,7 +154,11 @@ Please provide:
           ]);
 
           const highUsageDevices = usage.filter(u => u.total_bytes > thresholdMb * 1024 * 1024);
-          const flowAnalysis = analyzeFlowPatterns(flows.flows);
+          const flowAnalysis = analyzeFlowPatterns(flows.flows.map(f => ({ 
+            protocol: f.protocol, 
+            duration: f.duration || 0, 
+            timestamp: new Date(f.ts * 1000).toISOString() 
+          })));
 
           const prompt = `# Bandwidth Usage Analysis (${period})
 
@@ -179,7 +183,7 @@ ${highUsageDevices.map(device =>
 
 **Device Status Context:**
 - Total devices: ${devices.length}
-- Online devices: ${devices.filter(d => d.status === 'online').length}
+- Online devices: ${devices.filter(d => d.online).length}
 - Devices with high usage: ${highUsageDevices.length}
 
 Please analyze and provide:
@@ -223,34 +227,35 @@ Please analyze and provide:
           }
 
           const deviceFlows = flows.flows.filter(f => 
-            f.source_ip === targetDevice.ip_address || f.destination_ip === targetDevice.ip_address
+            f.source?.ip === targetDevice.ip || f.destination?.ip === targetDevice.ip ||
+            f.device.ip === targetDevice.ip
           );
           const deviceAlarms = alarms.filter(a => 
-            a.source_ip === targetDevice.ip_address || a.destination_ip === targetDevice.ip_address
+            a.source_ip === targetDevice.ip || a.destination_ip === targetDevice.ip
           );
 
           const prompt = `# Device Investigation Report
-## Target Device: ${targetDevice.name} (${targetDevice.ip_address})
+## Target Device: ${targetDevice.name} (${targetDevice.ip})
 
 Investigate potential security issues and unusual behavior for this device:
 
 **Device Information:**
 - Device ID: ${targetDevice.id}
 - Name: ${targetDevice.name}
-- IP Address: ${targetDevice.ip_address}
-- MAC Address: ${targetDevice.mac_address}
-- Status: ${targetDevice.status}
-- Device Type: ${targetDevice.device_type || 'Unknown'}
-- Last Seen: ${targetDevice.last_seen}
+- IP Address: ${targetDevice.ip}
+- MAC Vendor: ${targetDevice.macVendor || 'Unknown'}
+- Status: ${targetDevice.online ? 'online' : 'offline'}
+- Network: ${targetDevice.network.name}
+- Last Seen: ${targetDevice.lastSeen ? new Date(targetDevice.lastSeen * 1000).toISOString() : 'Never'}
 
 **Network Activity (${lookbackHours}h lookback):**
 - Total flows involving this device: ${deviceFlows.length}
-- Outbound connections: ${deviceFlows.filter(f => f.source_ip === targetDevice.ip_address).length}
-- Inbound connections: ${deviceFlows.filter(f => f.destination_ip === targetDevice.ip_address).length}
-- Data transferred: ${deviceFlows.reduce((sum, f) => sum + f.bytes, 0)} bytes
+- Outbound connections: ${deviceFlows.filter(f => f.source?.ip === targetDevice.ip || f.device.ip === targetDevice.ip).length}
+- Inbound connections: ${deviceFlows.filter(f => f.destination?.ip === targetDevice.ip).length}
+- Data transferred: ${deviceFlows.reduce((sum, f) => sum + ((f.download || 0) + (f.upload || 0)), 0)} bytes
 - Unique remote IPs: ${new Set(deviceFlows.map(f => 
-  f.source_ip === targetDevice.ip_address ? f.destination_ip : f.source_ip
-)).size}
+  f.source?.ip === targetDevice.ip ? f.destination?.ip : f.source?.ip
+).filter(Boolean)).size}
 
 **Security Alerts:**
 ${deviceAlarms.length > 0 ? 
@@ -262,8 +267,8 @@ ${deviceAlarms.length > 0 ?
 
 **Connection Patterns:**
 ${deviceFlows.slice(0, 10).map(flow => 
-  `- ${flow.source_ip}:${flow.source_port} → ${flow.destination_ip}:${flow.destination_port} (${flow.protocol})
-    ${flow.bytes} bytes, ${flow.packets} packets, ${flow.duration}s duration`
+  `- ${flow.source?.ip || 'N/A'} → ${flow.destination?.ip || 'N/A'} (${flow.protocol})
+    ${((flow.download || 0) + (flow.upload || 0))} bytes, ${flow.count} packets, ${flow.duration || 0}s duration`
 ).join('\\n')}
 
 Please investigate and provide:
@@ -318,8 +323,8 @@ Evaluate overall network health and performance:
 
 **Network Connectivity:**
 - Total Devices: ${devices.length}
-- Online: ${devices.filter(d => d.status === 'online').length} (${Math.round(devices.filter(d => d.status === 'online').length / devices.length * 100)}%)
-- Offline: ${devices.filter(d => d.status === 'offline').length}
+- Online: ${devices.filter(d => d.online).length} (${Math.round(devices.filter(d => d.online).length / devices.length * 100)}%)
+- Offline: ${devices.filter(d => !d.online).length}
 - Subnets: ${topology.subnets.length}
 - Active Connections: ${summary.active_connections}
 
@@ -327,7 +332,7 @@ Evaluate overall network health and performance:
 - Threat Level: ${metrics.threat_level}
 - Active Alarms: ${metrics.active_alarms}
 - Blocked Attempts: ${summary.blocked_attempts}
-- Active Rules: ${rules.filter(r => r.status === 'active').length}
+- Active Rules: ${rules.filter(r => r.status === 'active' || !r.status).length}
 - Security Score: ${calculateSecurityScore(metrics)}/100
 
 **Overall Health Score: ${healthScore}/100**
@@ -424,10 +429,10 @@ function analyzeFlowPatterns(flows: Array<{ protocol: string; duration: number; 
 
 function calculateNetworkHealthScore(data: {
   summary: { status: string; cpu_usage: number; memory_usage: number; uptime: number };
-  devices: Array<{ status: string }>;
+  devices: Array<{ online: boolean }>;
   metrics: { active_alarms: number; threat_level: string };
   topology: { subnets: unknown[] };
-  rules: Array<{ status: string }>;
+  rules: Array<{ status?: string }>;
 }): number {
   let score = 100;
 
@@ -438,7 +443,7 @@ function calculateNetworkHealthScore(data: {
   if (data.summary.uptime < 86400) score -= 5; // Less than 1 day
 
   // Connectivity (25 points)
-  const onlineRatio = data.devices.filter(d => d.status === 'online').length / data.devices.length;
+  const onlineRatio = data.devices.filter(d => d.online).length / data.devices.length;
   score -= (1 - onlineRatio) * 25;
 
   // Security (30 points)
@@ -447,7 +452,7 @@ function calculateNetworkHealthScore(data: {
   score -= threatPenalty[data.metrics.threat_level as keyof typeof threatPenalty] || 0;
 
   // Configuration (15 points)
-  const activeRules = data.rules.filter(r => r.status === 'active').length;
+  const activeRules = data.rules.filter(r => r.status === 'active' || !r.status).length;
   if (activeRules === 0) score -= 15;
   if (data.topology.subnets.length === 0) score -= 5;
 

@@ -1,18 +1,34 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
+// import { createSearchTools } from './search.js'; // Temporarily disabled
 
 /**
  * Sets up MCP tools for Firewalla firewall management
  * Provides tools for security monitoring, network analysis, and firewall control
  * 
  * Available tools:
+ * Core tools:
  * - get_active_alarms: Retrieve active security alarms
  * - get_flow_data: Get network flow information
  * - get_device_status: Check device connectivity status
  * - get_bandwidth_usage: Analyze bandwidth consumption
+ * - get_network_rules: Get firewall rules (with token optimization and limits)
  * - pause_rule: Temporarily disable firewall rules
  * - get_target_lists: Access security target lists
+ * 
+ * Specialized rule tools:
+ * - get_network_rules_summary: Overview statistics and counts by category
+ * - get_most_active_rules: Rules with highest hit counts for traffic analysis
+ * - get_recent_rules: Recently created or modified firewall rules
+ * 
+ * Advanced search tools (temporarily disabled):
+ * - search_flows: Advanced flow searching with complex queries
+ * - search_alarms: Alarm searching with severity, time, IP filters
+ * - search_rules: Rule searching with target, action, status filters
+ * - search_devices: Device searching with network, status, usage filters
+ * - search_target_lists: Target list searching with category, ownership filters
+ * - search_cross_reference: Multi-entity searches with correlation
  * 
  * @param server - MCP server instance to register tools with
  * @param firewalla - Firewalla client for API communication
@@ -55,9 +71,9 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
           const startTime = args?.start_time as string | undefined;
           const endTime = args?.end_time as string | undefined;
           const limit = (args?.limit as number) || 50;
-          const page = (args?.page as number) || 1;
+          const cursor = args?.cursor as string | undefined;
           
-          const flowData = await firewalla.getFlowData(startTime, endTime, limit, page);
+          const flowData = await firewalla.getFlowData(startTime, endTime, limit, cursor);
           
           return {
             content: [
@@ -65,15 +81,17 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                 type: 'text',
                 text: JSON.stringify({
                   flows: flowData.flows.map(flow => ({
-                    timestamp: flow.timestamp,
-                    source_ip: flow.source_ip,
-                    destination_ip: flow.destination_ip,
-                    source_port: flow.source_port,
-                    destination_port: flow.destination_port,
+                    timestamp: new Date(flow.ts * 1000).toISOString(),
+                    source_ip: flow.source?.ip || flow.device.ip,
+                    destination_ip: flow.destination?.ip || 'unknown',
+                    source_port: 0, // Not available in new Flow model
+                    destination_port: 0, // Not available in new Flow model
                     protocol: flow.protocol,
-                    bytes: flow.bytes,
-                    packets: flow.packets,
-                    duration: flow.duration,
+                    bytes: (flow.download || 0) + (flow.upload || 0),
+                    packets: flow.count,
+                    duration: flow.duration || 0,
+                    direction: flow.direction,
+                    blocked: flow.block,
                   })),
                   pagination: flowData.pagination,
                 }, null, 2),
@@ -94,16 +112,61 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                 type: 'text',
                 text: JSON.stringify({
                   total_devices: devices.length,
-                  online_devices: devices.filter(d => d.status === 'online').length,
-                  offline_devices: devices.filter(d => d.status === 'offline').length,
+                  online_devices: devices.filter(d => d.online).length,
+                  offline_devices: devices.filter(d => !d.online).length,
                   devices: devices.map(device => ({
                     id: device.id,
+                    gid: device.gid,
                     name: device.name,
-                    ip_address: device.ip_address,
-                    mac_address: device.mac_address,
-                    status: device.status,
-                    last_seen: device.last_seen,
-                    device_type: device.device_type,
+                    ip: device.ip,
+                    macVendor: device.macVendor,
+                    online: device.online,
+                    lastSeen: device.lastSeen,
+                    ipReserved: device.ipReserved,
+                    network: device.network,
+                    group: device.group,
+                    totalDownload: device.totalDownload,
+                    totalUpload: device.totalUpload,
+                  })),
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'get_offline_devices': {
+          const sortByLastSeen = (args?.sort_by_last_seen as boolean) ?? true;
+          
+          // Get all devices including offline ones
+          const allDevices = await firewalla.getDeviceStatus(undefined, true);
+          
+          // Filter to only offline devices
+          let offlineDevices = allDevices.filter(device => !device.online);
+          
+          // Sort by last seen timestamp if requested
+          if (sortByLastSeen) {
+            offlineDevices = offlineDevices.sort((a, b) => {
+              const aTime = a.lastSeen || 0;
+              const bTime = b.lastSeen || 0;
+              return bTime - aTime; // Most recent first
+            });
+          }
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  total_offline_devices: offlineDevices.length,
+                  devices: offlineDevices.map(device => ({
+                    id: device.id,
+                    name: device.name,
+                    ip: device.ip,
+                    macVendor: device.macVendor,
+                    lastSeen: device.lastSeen,
+                    lastSeenFormatted: device.lastSeen ? new Date(device.lastSeen * 1000).toISOString() : 'Never',
+                    network: device.network,
+                    group: device.group,
                   })),
                 }, null, 2),
               },
@@ -147,28 +210,245 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         case 'get_network_rules': {
           const ruleType = args?.rule_type as string | undefined;
           const activeOnly = (args?.active_only as boolean) ?? true;
+          const limit = Math.min((args?.limit as number) || 50, 200); // Default 50, max 200
+          const summaryOnly = (args?.summary_only as boolean) || false;
           
-          const rules = await firewalla.getNetworkRules(ruleType, activeOnly);
+          const allRules = await firewalla.getNetworkRules(ruleType, activeOnly);
+          
+          // Helper function to truncate long text fields
+          const truncateText = (text: string | undefined, maxLength = 100): string => {
+            if (!text) return '';
+            return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+          };
+          
+          // Apply client-side limiting
+          const limitedRules = allRules.slice(0, limit);
+          
+          // Build response based on mode
+          const responseData: any = {
+            total_rules_available: allRules.length,
+            active_rules_available: allRules.filter(r => r.status === 'active').length,
+            paused_rules_available: allRules.filter(r => r.status === 'paused').length,
+            returned_count: limitedRules.length,
+            limit_applied: limit,
+            summary_mode: summaryOnly,
+            rules: summaryOnly 
+              ? limitedRules.map(rule => ({
+                  id: rule.id,
+                  action: rule.action,
+                  target_type: rule.target.type,
+                  target_value: truncateText(rule.target.value, 50),
+                  status: rule.status || 'active',
+                  hit_count: rule.hit?.count || 0,
+                }))
+              : limitedRules.map(rule => ({
+                  id: rule.id,
+                  action: rule.action,
+                  target: {
+                    type: rule.target.type,
+                    value: truncateText(rule.target.value, 100),
+                    ...(rule.target.dnsOnly && { dnsOnly: rule.target.dnsOnly }),
+                    ...(rule.target.port && { port: rule.target.port }),
+                  },
+                  direction: rule.direction,
+                  status: rule.status || 'active',
+                  notes: truncateText(rule.notes, 100),
+                  hit_count: rule.hit?.count || 0,
+                  created_at: new Date(rule.ts * 1000).toISOString(),
+                  updated_at: new Date(rule.updateTs * 1000).toISOString(),
+                })),
+          };
+          
+          // Add pagination hint if more rules available
+          if (allRules.length > limit) {
+            responseData.pagination_note = `Showing ${limit} of ${allRules.length} rules. Use limit parameter (max 200) or summary_only=true for fewer tokens.`;
+          }
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(responseData), // Remove pretty printing to save tokens
+              },
+            ],
+          };
+        }
+
+        case 'get_network_rules_summary': {
+          const ruleType = args?.rule_type as string | undefined;
+          const activeOnly = (args?.active_only as boolean) ?? true;
+          
+          const allRules = await firewalla.getNetworkRules(ruleType, activeOnly);
+          
+          // Group rules by various categories for overview
+          const rulesByAction = allRules.reduce((acc, rule) => {
+            acc[rule.action] = (acc[rule.action] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+          
+          const rulesByDirection = allRules.reduce((acc, rule) => {
+            acc[rule.direction] = (acc[rule.direction] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+          
+          const rulesByStatus = allRules.reduce((acc, rule) => {
+            const status = rule.status || 'active';
+            acc[status] = (acc[status] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+          
+          const rulesByTargetType = allRules.reduce((acc, rule) => {
+            acc[rule.target.type] = (acc[rule.target.type] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+          
+          // Calculate hit statistics
+          const rulesWithHits = allRules.filter(rule => rule.hit && rule.hit.count > 0);
+          const totalHits = allRules.reduce((sum, rule) => sum + (rule.hit?.count || 0), 0);
+          const avgHitsPerRule = allRules.length > 0 ? Math.round(totalHits / allRules.length * 100) / 100 : 0;
+          
+          // Find most recent rule activity
+          const mostRecentRuleTs = Math.max(...allRules.map(rule => Math.max(rule.ts, rule.updateTs)));
+          const oldestRuleTs = Math.min(...allRules.map(rule => rule.ts));
           
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
-                  total_rules: rules.length,
-                  active_rules: rules.filter(r => r.status === 'active').length,
-                  paused_rules: rules.filter(r => r.status === 'paused').length,
-                  rules: rules.map(rule => ({
+                  total_rules: allRules.length,
+                  summary_timestamp: new Date().toISOString(),
+                  breakdown: {
+                    by_action: rulesByAction,
+                    by_direction: rulesByDirection,
+                    by_status: rulesByStatus,
+                    by_target_type: rulesByTargetType,
+                  },
+                  hit_statistics: {
+                    total_hits: totalHits,
+                    rules_with_hits: rulesWithHits.length,
+                    rules_with_no_hits: allRules.length - rulesWithHits.length,
+                    average_hits_per_rule: avgHitsPerRule,
+                    hit_rate_percentage: allRules.length > 0 ? Math.round((rulesWithHits.length / allRules.length) * 100) : 0,
+                  },
+                  age_statistics: {
+                    most_recent_activity: new Date(mostRecentRuleTs * 1000).toISOString(),
+                    oldest_rule_created: new Date(oldestRuleTs * 1000).toISOString(),
+                  },
+                  filters_applied: {
+                    rule_type: ruleType || 'all',
+                    active_only: activeOnly,
+                  },
+                }),
+              },
+            ],
+          };
+        }
+
+        case 'get_most_active_rules': {
+          const limit = Math.min((args?.limit as number) || 20, 50);
+          const minHits = (args?.min_hits as number) || 1;
+          const ruleType = args?.rule_type as string | undefined;
+          
+          const allRules = await firewalla.getNetworkRules(ruleType, true); // Only active rules for traffic analysis
+          
+          // Filter and sort by hit count
+          const activeRules = allRules
+            .filter(rule => rule.hit && rule.hit.count >= minHits)
+            .sort((a, b) => (b.hit?.count || 0) - (a.hit?.count || 0))
+            .slice(0, limit);
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  total_rules_analyzed: allRules.length,
+                  rules_meeting_criteria: activeRules.length,
+                  min_hits_threshold: minHits,
+                  limit_applied: limit,
+                  rules: activeRules.map(rule => ({
                     id: rule.id,
-                    name: rule.name,
-                    type: rule.type,
                     action: rule.action,
-                    status: rule.status,
-                    conditions: rule.conditions,
-                    created_at: rule.created_at,
-                    updated_at: rule.updated_at,
+                    target_type: rule.target.type,
+                    target_value: rule.target.value.length > 60 
+                      ? rule.target.value.substring(0, 60) + '...' 
+                      : rule.target.value,
+                    direction: rule.direction,
+                    hit_count: rule.hit?.count || 0,
+                    last_hit: rule.hit?.lastHitTs ? new Date(rule.hit.lastHitTs * 1000).toISOString() : 'Never',
+                    created_at: new Date(rule.ts * 1000).toISOString(),
+                    notes: rule.notes && rule.notes.length > 80 
+                      ? rule.notes.substring(0, 80) + '...' 
+                      : rule.notes || '',
                   })),
-                }, null, 2),
+                  summary: {
+                    total_hits: activeRules.reduce((sum, rule) => sum + (rule.hit?.count || 0), 0),
+                    top_rule_hits: activeRules.length > 0 ? activeRules[0].hit?.count || 0 : 0,
+                    analysis_timestamp: new Date().toISOString(),
+                  },
+                }),
+              },
+            ],
+          };
+        }
+
+        case 'get_recent_rules': {
+          const hours = Math.min((args?.hours as number) || 24, 168); // Default 24h, max 1 week
+          const limit = Math.min((args?.limit as number) || 30, 100);
+          const ruleType = args?.rule_type as string | undefined;
+          const includeModified = (args?.include_modified as boolean) ?? true;
+          
+          const allRules = await firewalla.getNetworkRules(ruleType, true);
+          
+          const hoursAgoTs = Math.floor(Date.now() / 1000) - (hours * 3600);
+          
+          // Filter rules created or modified within the timeframe
+          const recentRules = allRules
+            .filter(rule => {
+              const created = rule.ts >= hoursAgoTs;
+              const modified = includeModified && rule.updateTs >= hoursAgoTs && rule.updateTs > rule.ts;
+              return created || modified;
+            })
+            .sort((a, b) => Math.max(b.ts, b.updateTs) - Math.max(a.ts, a.updateTs)) // Sort by most recent activity
+            .slice(0, limit);
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  total_rules_analyzed: allRules.length,
+                  recent_rules_found: recentRules.length,
+                  lookback_hours: hours,
+                  include_modified: includeModified,
+                  cutoff_time: new Date(hoursAgoTs * 1000).toISOString(),
+                  rules: recentRules.map(rule => {
+                    const wasModified = rule.updateTs > rule.ts && rule.updateTs >= hoursAgoTs;
+                    return {
+                      id: rule.id,
+                      action: rule.action,
+                      target_type: rule.target.type,
+                      target_value: rule.target.value.length > 60 
+                        ? rule.target.value.substring(0, 60) + '...' 
+                        : rule.target.value,
+                      direction: rule.direction,
+                      status: rule.status || 'active',
+                      activity_type: wasModified ? 'modified' : 'created',
+                      created_at: new Date(rule.ts * 1000).toISOString(),
+                      updated_at: new Date(rule.updateTs * 1000).toISOString(),
+                      hit_count: rule.hit?.count || 0,
+                      notes: rule.notes && rule.notes.length > 80 
+                        ? rule.notes.substring(0, 80) + '...' 
+                        : rule.notes || '',
+                    };
+                  }),
+                  summary: {
+                    newly_created: recentRules.filter(r => r.ts >= hoursAgoTs && (r.updateTs <= r.ts || r.updateTs < hoursAgoTs)).length,
+                    recently_modified: recentRules.filter(r => r.updateTs > r.ts && r.updateTs >= hoursAgoTs).length,
+                    analysis_timestamp: new Date().toISOString(),
+                  },
+                }),
               },
             ],
           };
@@ -211,15 +491,16 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                 type: 'text',
                 text: JSON.stringify({
                   total_lists: lists.length,
-                  list_types: [...new Set(lists.map(l => l.type))],
+                  categories: [...new Set(lists.map(l => l.category).filter(Boolean))],
                   target_lists: lists.map(list => ({
                     id: list.id,
                     name: list.name,
-                    type: list.type,
-                    entry_count: (list as any).count || (list.entries?.length || 0),
-                    entries: list.entries?.slice(0, 10) || [],
-                    last_updated: list.last_updated || (list as any).lastUpdated,
-                    notes: (list as any).notes,
+                    owner: list.owner,
+                    category: list.category,
+                    entry_count: list.targets.length,
+                    targets: list.targets.slice(0, 10),
+                    last_updated: new Date(list.lastUpdated * 1000).toISOString(),
+                    notes: list.notes,
                   })),
                 }, null, 2),
               },
@@ -327,6 +608,227 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
           };
         }
 
+        case 'get_simple_statistics': {
+          const stats = await firewalla.getSimpleStatistics();
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  statistics: {
+                    online_boxes: stats.onlineBoxes,
+                    offline_boxes: stats.offlineBoxes,
+                    total_boxes: stats.onlineBoxes + stats.offlineBoxes,
+                    total_alarms: stats.alarms,
+                    total_rules: stats.rules,
+                    box_availability: stats.onlineBoxes + stats.offlineBoxes > 0 
+                      ? Math.round((stats.onlineBoxes / (stats.onlineBoxes + stats.offlineBoxes)) * 100) 
+                      : 0,
+                  },
+                  summary: {
+                    status: stats.onlineBoxes > 0 ? 'operational' : 'offline',
+                    health_score: calculateHealthScore(stats),
+                    active_monitoring: stats.onlineBoxes > 0,
+                  }
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'get_statistics_by_region': {
+          const stats = await firewalla.getStatisticsByRegion();
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  total_regions: stats.length,
+                  regional_statistics: stats.map(stat => ({
+                    country_code: (stat.meta as any).code,
+                    flow_count: stat.value,
+                    percentage: stats.length > 0 
+                      ? Math.round((stat.value / stats.reduce((sum, s) => sum + s.value, 0)) * 100) 
+                      : 0,
+                  })).sort((a, b) => b.flow_count - a.flow_count),
+                  top_regions: stats
+                    .sort((a, b) => b.value - a.value)
+                    .slice(0, 5)
+                    .map(stat => ({
+                      country_code: (stat.meta as any).code,
+                      flow_count: stat.value,
+                    })),
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'get_statistics_by_box': {
+          const stats = await firewalla.getStatisticsByBox();
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  total_boxes: stats.length,
+                  box_statistics: stats.map(stat => {
+                    const boxMeta = stat.meta as any;
+                    return {
+                      box_id: boxMeta.gid,
+                      name: boxMeta.name,
+                      model: boxMeta.model,
+                      status: boxMeta.online ? 'online' : 'offline',
+                      version: boxMeta.version,
+                      location: boxMeta.location,
+                      device_count: boxMeta.deviceCount,
+                      rule_count: boxMeta.ruleCount,
+                      alarm_count: boxMeta.alarmCount,
+                      activity_score: stat.value,
+                      last_seen: boxMeta.lastSeen 
+                        ? new Date((boxMeta.lastSeen as number) * 1000).toISOString() 
+                        : 'Never',
+                    };
+                  }).sort((a, b) => b.activity_score - a.activity_score),
+                  summary: {
+                    online_boxes: stats.filter(s => (s.meta as any).online).length,
+                    total_devices: stats.reduce((sum, s) => sum + (s.meta as any).deviceCount, 0),
+                    total_rules: stats.reduce((sum, s) => sum + (s.meta as any).ruleCount, 0),
+                    total_alarms: stats.reduce((sum, s) => sum + (s.meta as any).alarmCount, 0),
+                  }
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'get_flow_trends': {
+          const period = (args?.period as '1h' | '24h' | '7d' | '30d') || '24h';
+          const interval = (args?.interval as number) || 3600;
+          
+          const trends = await firewalla.getFlowTrends(period, interval);
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  period,
+                  interval_seconds: interval,
+                  data_points: trends.length,
+                  trends: trends.map(trend => ({
+                    timestamp: trend.ts,
+                    timestamp_iso: new Date(trend.ts * 1000).toISOString(),
+                    flow_count: trend.value,
+                  })),
+                  summary: {
+                    total_flows: trends.reduce((sum, t) => sum + t.value, 0),
+                    avg_flows_per_interval: trends.length > 0 
+                      ? Math.round(trends.reduce((sum, t) => sum + t.value, 0) / trends.length)
+                      : 0,
+                    peak_flow_count: trends.length > 0 ? Math.max(...trends.map(t => t.value)) : 0,
+                    min_flow_count: trends.length > 0 ? Math.min(...trends.map(t => t.value)) : 0,
+                  }
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'get_alarm_trends': {
+          const period = (args?.period as '1h' | '24h' | '7d' | '30d') || '24h';
+          
+          const trends = await firewalla.getAlarmTrends(period);
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  period,
+                  data_points: trends.length,
+                  trends: trends.map(trend => ({
+                    timestamp: trend.ts,
+                    timestamp_iso: new Date(trend.ts * 1000).toISOString(),
+                    alarm_count: trend.value,
+                  })),
+                  summary: {
+                    total_alarms: trends.reduce((sum, t) => sum + t.value, 0),
+                    avg_alarms_per_interval: trends.length > 0 
+                      ? Math.round(trends.reduce((sum, t) => sum + t.value, 0) / trends.length * 100) / 100
+                      : 0,
+                    peak_alarm_count: trends.length > 0 ? Math.max(...trends.map(t => t.value)) : 0,
+                    intervals_with_alarms: trends.filter(t => t.value > 0).length,
+                    alarm_frequency: trends.length > 0 
+                      ? Math.round((trends.filter(t => t.value > 0).length / trends.length) * 100)
+                      : 0,
+                  }
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'get_rule_trends': {
+          const period = (args?.period as '1h' | '24h' | '7d' | '30d') || '24h';
+          
+          const trends = await firewalla.getRuleTrends(period);
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  period,
+                  data_points: trends.length,
+                  trends: trends.map(trend => ({
+                    timestamp: trend.ts,
+                    timestamp_iso: new Date(trend.ts * 1000).toISOString(),
+                    active_rule_count: trend.value,
+                  })),
+                  summary: {
+                    avg_active_rules: trends.length > 0 
+                      ? Math.round(trends.reduce((sum, t) => sum + t.value, 0) / trends.length)
+                      : 0,
+                    max_active_rules: trends.length > 0 ? Math.max(...trends.map(t => t.value)) : 0,
+                    min_active_rules: trends.length > 0 ? Math.min(...trends.map(t => t.value)) : 0,
+                    rule_stability: calculateRuleStability(trends),
+                  }
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        // Search Tools - Temporarily disabled due to module import issues
+        // case 'search_flows':
+        // case 'search_alarms': 
+        // case 'search_rules':
+        // case 'search_devices':
+        // case 'search_target_lists':
+        // case 'search_cross_reference': {
+        //   const searchTools = createSearchTools(firewalla);
+        //   const toolFunction = searchTools[name as keyof typeof searchTools];
+        //   
+        //   if (!toolFunction) {
+        //     throw new Error(`Search tool not found: ${name}`);
+        //   }
+        //   
+        //   const result = await toolFunction(args as any);
+        //   
+        //   return {
+        //     content: [
+        //       {
+        //         type: 'text',
+        //         text: JSON.stringify(result, null, 2),
+        //       },
+        //     ],
+        //   };
+        // }
+
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -347,4 +849,47 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
       };
     }
   });
+}
+
+// Helper function for health score calculation
+function calculateHealthScore(stats: { onlineBoxes: number; offlineBoxes: number; alarms: number; rules: number }): number {
+  let score = 100;
+  
+  const totalBoxes = stats.onlineBoxes + stats.offlineBoxes;
+  if (totalBoxes === 0) return 0;
+  
+  // Penalize for offline boxes (up to -40 points)
+  const offlineRatio = stats.offlineBoxes / totalBoxes;
+  score -= Math.round(offlineRatio * 40);
+  
+  // Penalize for high alarm count (up to -30 points)
+  const alarmPenalty = Math.min(stats.alarms * 2, 30);
+  score -= alarmPenalty;
+  
+  // Bonus for having active rules (up to +10 points)
+  const ruleBonus = Math.min(stats.rules / 10, 10);
+  score += ruleBonus;
+  
+  return Math.max(0, Math.min(100, score));
+}
+
+// Helper function for rule stability calculation
+function calculateRuleStability(trends: Array<{ ts: number; value: number }>): number {
+  if (trends.length < 2) return 100;
+  
+  let totalVariation = 0;
+  for (let i = 1; i < trends.length; i++) {
+    const current = trends[i];
+    const previous = trends[i-1];
+    if (current && previous) {
+      const change = Math.abs(current.value - previous.value);
+      totalVariation += change;
+    }
+  }
+  
+  const avgValue = trends.reduce((sum, t) => sum + t.value, 0) / trends.length;
+  if (avgValue === 0) return 100;
+  
+  const variationPercentage = (totalVariation / (trends.length - 1)) / avgValue;
+  return Math.max(0, Math.min(100, Math.round((1 - variationPercentage) * 100)));
 }

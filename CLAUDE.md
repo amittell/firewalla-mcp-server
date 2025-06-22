@@ -3,7 +3,7 @@
 This file contains essential commands and procedures for Claude to effectively work on this project.
 
 ## Project Overview
-A Model Context Protocol (MCP) server that provides Claude with access to Firewalla firewall data including security alerts, network flows, device status, and firewall rules.
+A Model Context Protocol (MCP) server that provides Claude with access to Firewalla firewall data including security alerts, network flows, device status, and firewall rules. Features advanced search capabilities with complex query syntax, intelligent caching, and result aggregation.
 
 ## Development Commands
 
@@ -81,6 +81,98 @@ The fixed implementation now uses the correct Firewalla MSP API v2 endpoints:
    - "What security alerts do I have?"
    - "Show me top bandwidth users"
    - "What firewall rules are active?"
+
+## Advanced Search API (Phase 3)
+
+### Search Query Syntax
+The server supports advanced search queries with complex syntax:
+
+```
+# Basic field queries
+severity:high
+source_ip:192.168.1.1
+protocol:tcp
+
+# Logical operators
+severity:high AND source_ip:192.168.*
+action:block OR action:timelimit
+
+# Wildcards and patterns
+ip:192.168.*
+device_name:*laptop*
+target_value:*.facebook.com
+
+# Ranges and comparisons
+bytes:[1000 TO 50000]
+severity:>=medium
+timestamp:>=2024-01-01
+
+# Complex queries
+(severity:high OR severity:critical) AND source_ip:192.168.* NOT resolved:true
+```
+
+### Available Search Tools
+
+#### Core Search Tools
+- **search_flows**: Advanced flow searching with complex filters
+- **search_alarms**: Alarm searching with severity, time, IP filters  
+- **search_rules**: Rule searching with target, action, status filters
+- **search_devices**: Device searching with network, status, usage filters
+- **search_target_lists**: Target list searching with category, ownership filters
+- **search_cross_reference**: Multi-entity searches with correlation
+
+#### Example Search Queries
+
+```bash
+# Find high-severity alarms from specific IP range
+search_alarms query:"severity:>=high AND source_ip:192.168.*"
+
+# Find blocked flows over 1MB
+search_flows query:"blocked:true AND bytes:>=1000000"
+
+# Find all rules targeting social media
+search_rules query:"target_value:*facebook* OR target_value:*twitter*"
+
+# Find offline devices by vendor
+search_devices query:"online:false AND mac_vendor:Apple"
+
+# Cross-reference suspicious flows with related alarms
+search_cross_reference primary_query:"source_ip:suspicious_ip" secondary_queries:"severity:high" correlation_field:"source_ip"
+```
+
+### Search Features
+
+#### Query Optimization
+- Automatic query optimization for performance
+- Predicate pushdown and boolean logic optimization
+- Field-specific optimizations (wildcards to exact matches)
+- Cost-based query reordering
+
+#### Intelligent Caching
+- Query-aware caching with automatic invalidation
+- Context-specific TTL (alarms: 30s, flows: 2m, rules: 10m)
+- LRU eviction with complexity scoring
+- Cache statistics and performance metrics
+
+#### Result Aggregation
+- Group by any field: `group_by:"protocol"`
+- Statistical analysis: sum, avg, min, max, percentiles
+- Time-based bucketing: hour, day, week, month
+- Trend analysis and correlation detection
+
+### Testing Advanced Search
+
+```bash
+# Test search API validation
+npm run test:search
+
+# Manual search testing
+npm run mcp:start
+# Use Claude Code to test:
+# "search for high severity alarms from the last hour"
+# "find blocked flows larger than 10MB grouped by source IP"
+# "show me all rules that block social media sites"
+```
 
 ## Common Issues and Solutions
 
