@@ -167,7 +167,41 @@ export class FirewallaClient {
       query: `status:active box:${this.config.boxId}${severity ? ` severity:${severity}` : ''}`,
     };
 
-    return this.request<Alarm[]>('GET', `/alarms`, params);
+    const response = await this.request<{results: any[]}>('GET', `/alarms`, params);
+    
+    // Handle the response format which has a 'results' array
+    const rawAlarms = response.results || [];
+    
+    // Transform the raw alarm data with comprehensive field mapping
+    return rawAlarms.map((item: any) => {
+      const parseTimestamp = (ts: any) => {
+        if (!ts) return new Date().toISOString();
+        
+        if (typeof ts === 'number') {
+          const timestamp = ts > 1000000000000 ? ts : ts * 1000;
+          return new Date(timestamp).toISOString();
+        }
+        
+        if (typeof ts === 'string') {
+          if (ts.includes('T') || ts.includes('-')) {
+            return new Date(ts).toISOString();
+          }
+        }
+        
+        return new Date().toISOString();
+      };
+
+      return {
+        id: item.aid || item.id || item._id || 'unknown',
+        timestamp: parseTimestamp(item.ts || item.timestamp),
+        severity: item.severity || 'medium',
+        type: item.type || item._type || item.category || 'security',
+        description: item.description || item.message || item.msg || `Alarm ${item._type || 'detected'}`,
+        source_ip: item.device?.ip || item.srcIP || item.source_ip || item.sourceIP,
+        destination_ip: item.dstIP || item.dest_ip || item.destinationIP,
+        status: item.status === 1 ? 'active' : (item.status || 'active')
+      };
+    });
   }
 
   async getFlowData(
@@ -189,7 +223,50 @@ export class FirewallaClient {
       params.end_time = endTime;
     }
 
-    return this.request<FlowData>('GET', `/flows`, params);
+    const response = await this.request<{results: any[]}>('GET', `/flows`, params);
+    const rawFlows = response.results || [];
+    
+    // Transform the flow data with comprehensive field mapping
+    const flows = rawFlows.map((item: any) => {
+      const parseTimestamp = (ts: any) => {
+        if (!ts) return new Date().toISOString();
+        
+        if (typeof ts === 'number') {
+          const timestamp = ts > 1000000000000 ? ts : ts * 1000;
+          return new Date(timestamp).toISOString();
+        }
+        
+        return new Date().toISOString();
+      };
+
+      return {
+        timestamp: parseTimestamp(item.ts || item.timestamp),
+        source_ip: item.source?.ip || item.srcIP || item.source_ip,
+        destination_ip: item.destination?.ip || item.dstIP || item.destination_ip || item.domain,
+        source_port: item.source?.port || item.srcPort || item.source_port || 0,
+        destination_port: item.destination?.port || item.dstPort || item.destination_port || 0,
+        protocol: item.protocol || 'unknown',
+        bytes: item.total || item.bytes || 0,
+        packets: item.count || item.packets || 0,
+        duration: item.duration || 0,
+        bytes_uploaded: item.upload || 0,
+        bytes_downloaded: item.download || 0,
+        ...(item.source && {
+          source_device: {
+            id: item.source.id,
+            name: item.source.name,
+            type: item.source.deviceType || item.source.type
+          }
+        })
+      };
+    });
+
+    return {
+      flows,
+      pagination: {
+        has_more: rawFlows.length === limit
+      }
+    };
   }
 
   async getDeviceStatus(deviceId?: string, includeOffline = true): Promise<Device[]> {
@@ -205,12 +282,47 @@ export class FirewallaClient {
   }
 
   async getBandwidthUsage(period: string, top = 10): Promise<BandwidthUsage[]> {
+    // Calculate timestamp range based on period
+    const end = Math.floor(Date.now() / 1000);
+    let begin: number;
+    
+    switch (period) {
+      case '1h':
+        begin = end - (60 * 60);
+        break;
+      case '24h':
+        begin = end - (24 * 60 * 60);
+        break;
+      case '7d':
+        begin = end - (7 * 24 * 60 * 60);
+        break;
+      case '30d':
+        begin = end - (30 * 24 * 60 * 60);
+        break;
+      default:
+        begin = end - (24 * 60 * 60); // Default to 24h
+    }
+
     const params = {
-      period,
-      top,
+      query: `ts:${begin}-${end}`,
+      limit: top,
+      sortBy: 'total:desc',
+      groupBy: 'device'
     };
 
-    return this.request<BandwidthUsage[]>('GET', `/bandwidth`, params);
+    const response = await this.request<{results: any[]}>('GET', `/flows`, params);
+    const rawData = response.results || [];
+    
+    // Transform the response to BandwidthUsage format
+    return rawData.map((item: any) => ({
+      device_id: item.device?.id || item.deviceId || 'unknown',
+      device_name: item.device?.name || item.deviceName || 'Unknown Device',
+      ip_address: item.device?.ip || item.ip || 'unknown',
+      bytes_uploaded: item.upload || item.uploadBytes || 0,
+      bytes_downloaded: item.download || item.downloadBytes || 0,
+      total_bytes: item.total || item.totalBytes || 0,
+      period: period
+    }));
   }
 
   async getNetworkRules(ruleType?: string, activeOnly = true): Promise<NetworkRule[]> {
@@ -222,7 +334,8 @@ export class FirewallaClient {
       params.rule_type = ruleType;
     }
 
-    const rawRules = await this.request<any[]>('GET', `/rules`, params);
+    const response = await this.request<{results: any[]}>('GET', `/rules`, params);
+    const rawRules = response.results || [];
     
     // Transform raw API response to match NetworkRule interface with comprehensive mapping
     // This handles cases where the API returns raw rule data with different field names
