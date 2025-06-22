@@ -5,7 +5,7 @@
   "description": "A Model Context Protocol (MCP) server that enables Claude to access and analyze your Firewalla firewall data in real-time.",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
+    "build": "npx tsc",
     "dev": "nodemon --exec ts-node src/server.ts",
     "start": "node dist/server.js",
     "mcp:start": "node --loader ts-node/esm src/server.ts",
