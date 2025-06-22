@@ -1,9 +1,26 @@
 {
-  "name": "firewalla_mcp",
+  "name": "firewalla-mcp-server",
   "version": "1.0.0",
   "type": "module",
   "description": "A Model Context Protocol (MCP) server that enables Claude to access and analyze your Firewalla firewall data in real-time.",
   "main": "dist/server.js",
+  "bin": {
+    "firewalla-mcp": "dist/server.js"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE",
+    "mcp-server.sh"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/amittell/firewalla-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/amittell/firewalla-mcp-server/issues"
+  },
+  "homepage": "https://github.com/amittell/firewalla-mcp-server#readme",
   "scripts": {
     "build": "npx tsc",
     "dev": "nodemon --exec ts-node src/server.ts",
@@ -15,7 +32,12 @@
     "test:watch": "jest --watch",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
-    "format": "prettier --write src/**/*.ts"
+    "format": "prettier --write src/**/*.ts",
+    "prepublishOnly": "npm run build && npm test",
+    "publish:npm": "npm publish",
+    "version:patch": "npm version patch",
+    "version:minor": "npm version minor",
+    "version:major": "npm version major"
   },
   "keywords": [
     "mcp",
@@ -24,7 +46,11 @@
     "security",
     "model-context-protocol"
   ],
-  "author": "",
+  "author": {
+    "name": "amittell",
+    "email": "mittell@me.com",
+    "url": "https://github.com/amittell"
+  },
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",

@@ -31,10 +31,21 @@ A Model Context Protocol (MCP) server that enables Claude to access and analyze 
 
 ### 1. Installation
 
+**Option A: Install from npm (Recommended)**
 ```bash
-git clone <repository-url>
-cd firewalla_mcp
+# Install globally
+npm install -g firewalla-mcp-server
+
+# Or install locally in your project
+npm install firewalla-mcp-server
+```
+
+**Option B: Install from source**
+```bash
+git clone https://github.com/amittell/firewalla-mcp-server.git
+cd firewalla-mcp-server
 npm install
+npm run build
 ```
 
 ### 2. Configuration
@@ -60,9 +71,40 @@ npm run build
 npm run mcp:start
 ```
 
-### 4. Connect Claude Code
+### 4. Connect Claude Desktop
 
-Configure Claude Code to use this MCP server by adding it to your MCP settings.
+**If installed via npm:**
+```json
+{
+  "mcpServers": {
+    "firewalla": {
+      "command": "firewalla-mcp",
+      "env": {
+        "FIREWALLA_MSP_TOKEN": "your_token_here",
+        "FIREWALLA_MSP_ID": "your_msp_id_here",
+        "FIREWALLA_BOX_ID": "your_box_id_here"
+      }
+    }
+  }
+}
+```
+
+**If installed from source:**
+```json
+{
+  "mcpServers": {
+    "firewalla": {
+      "command": "node",
+      "args": ["--loader", "ts-node/esm", "/path/to/firewalla-mcp-server/src/server.ts"],
+      "env": {
+        "FIREWALLA_MSP_TOKEN": "your_token_here",
+        "FIREWALLA_MSP_ID": "your_msp_id_here",
+        "FIREWALLA_BOX_ID": "your_box_id_here"
+      }
+    }
+  }
+}
+```
 
 ## Usage Examples
 

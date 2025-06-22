@@ -1,0 +1,50 @@
+# Source files (only dist should be included)
+src/
+tests/
+*.test.ts
+*.test.js
+
+# Development files
+.env
+.env.example
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Development dependencies
+node_modules/
+
+# TypeScript config
+tsconfig.json
+jest.config.*
+
+# Linting and formatting
+.eslintrc.*
+.prettierrc.*
+
+# Git files
+.git/
+.gitignore
+
+# Development scripts
+test-*.js
+test-*.sh
+
+# Documentation that's not needed in package
+docs/
+CLAUDE.md
+SPEC.md
+FINAL_TESTING_REPORT.md
+
+# Claude config
+.claude/
