@@ -38,7 +38,11 @@
       "Bash(npx tsc:*)",
       "Bash(./test-all-tools.sh:*)",
       "mcp__firewalla__get_network_rules",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(gh repo create:*)",
+      "Bash(git remote add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": []
   }
