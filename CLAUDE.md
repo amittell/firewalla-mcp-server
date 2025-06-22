@@ -42,15 +42,25 @@ npm run mcp:debug
 2. Add the following environment variables:
 ```env
 FIREWALLA_MSP_TOKEN=your_msp_access_token_here
-FIREWALLA_MSP_BASE_URL=https://msp.firewalla.com
-FIREWALLA_BOX_ID=your_box_id_here
+FIREWALLA_MSP_ID=yourdomain.firewalla.net
+FIREWALLA_BOX_ID=your_box_gid_here
 ```
 
 ### Getting MSP Credentials
-1. Log into Firewalla MSP portal
-2. Navigate to API settings
-3. Generate access token
-4. Find your Box ID in device settings
+1. Log into your Firewalla MSP portal at `https://yourdomain.firewalla.net`
+2. Navigate to Account Settings > API Settings
+3. Generate a personal access token
+4. Note your MSP domain (e.g., `yourdomain.firewalla.net`)
+5. Find your Box GID (Global ID) in the box details - this is the long identifier that looks like `1eb71e38-3a95-4371-8903-ace24c83ab49`
+
+### API Endpoint Structure
+The fixed implementation now uses the correct Firewalla MSP API v2 endpoints:
+- Base URL: `https://{msp_domain}/v2/`
+- Box-specific endpoints: `/v2/boxes/{box_gid}/{resource}`
+- Examples:
+  - Devices: `/v2/boxes/{box_gid}/devices`
+  - Alarms: `/v2/boxes/{box_gid}/alarms`
+  - Flows: `/v2/boxes/{box_gid}/flows`
 
 ## Testing Procedures
 
