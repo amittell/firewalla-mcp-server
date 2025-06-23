@@ -253,10 +253,15 @@ function optimizeQuery(components: QueryComponent[]): string {
   }).join(' ').trim();
 }
 
+const DEFAULT_MAX_COMPLEXITY = 10;
+
 /**
  * Validate search query syntax
  */
-export function validateSearchQuery(query: string): { valid: boolean; errors: string[] } {
+export function validateSearchQuery(
+  query: string, 
+  maxComplexity: number = DEFAULT_MAX_COMPLEXITY
+): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   
   try {
@@ -268,8 +273,8 @@ export function validateSearchQuery(query: string): { valid: boolean; errors: st
     }
     
     // Check complexity limit
-    if (parsed.complexity > 10) {
-      errors.push(`Query too complex (${parsed.complexity}). Maximum complexity is 10.`);
+    if (parsed.complexity > maxComplexity) {
+      errors.push(`Query too complex (${parsed.complexity}). Maximum complexity is ${maxComplexity}.`);
     }
     
     // Check for unsupported operators

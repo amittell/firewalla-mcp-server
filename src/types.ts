@@ -194,6 +194,8 @@ export interface Device {
   ip: string;
   /** MAC vendor registered to the MAC address */
   macVendor?: string;
+  /** Alternative field name for MAC vendor (for schema compatibility) */
+  mac_vendor?: string;
   /** Current connectivity status */
   online: boolean;
   /** Timestamp when device was last seen (as string) */

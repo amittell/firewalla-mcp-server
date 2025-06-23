@@ -225,6 +225,7 @@ describe('FirewallaClient', () => {
       expect(flow.protocol).toBe('tcp');
       expect(flow.download).toBe(512);
       expect(flow.upload).toBe(512);
+      expect(flow.bytes).toBe(1024); // Validate combined bytes value (download + upload)
       expect(flow.direction).toBe('outbound');
       expect(flow.device).toEqual({
         id: 'device-123',

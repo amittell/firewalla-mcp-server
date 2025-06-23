@@ -90,17 +90,17 @@ export class ResponseOptimizer {
         if (Array.isArray(value)) {
           // Truncate arrays and summarize items
           summarized[key] = value.slice(0, Math.min(5, value.length)).map(item => 
-            this.summarizeObject(item, config)
+            ResponseOptimizer.summarizeObject(item, config)
           );
           if (value.length > 5) {
             summarized[`${key}_truncated`] = `... ${value.length - 5} more items`;
           }
         } else {
-          summarized[key] = this.summarizeObject(value, config);
+          summarized[key] = ResponseOptimizer.summarizeObject(value, config);
         }
       } else if (typeof value === 'string') {
         // Truncate long strings
-        summarized[key] = this.truncateText(value, 100);
+        summarized[key] = ResponseOptimizer.truncateText(value, 100);
       } else {
         summarized[key] = value;
       }

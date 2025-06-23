@@ -77,7 +77,7 @@ export function setupResources(server: Server, firewalla: FirewallaClient): void
                       id: device.id,
                       name: device.name,
                       ip_address: device.ip,
-                      mac_vendor: device.macVendor,
+                      mac_vendor: device.macVendor || device.mac_vendor,
                       status: device.online ? 'online' : 'offline',
                       last_seen: device.lastSeen ? new Date(Number(device.lastSeen) * 1000).toISOString() : 'Never',
                       network: device.network,
