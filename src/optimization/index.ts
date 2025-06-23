@@ -141,9 +141,7 @@ export class ResponseOptimizer {
       next_cursor: response.next_cursor
     };
 
-    if (response.count > config.summaryMode.maxItems) {
-      optimized.pagination_note = `Showing ${config.summaryMode.maxItems} of ${response.count} alarms. Use limit parameter or pagination for more results.`;
-    }
+    // Note: Showing limited results based on configuration
 
     return optimized;
   }
@@ -178,7 +176,7 @@ export class ResponseOptimizer {
     };
 
     if (response.count > config.summaryMode.maxItems) {
-      optimized.pagination_note = `Showing ${config.summaryMode.maxItems} of ${response.count} flows. Use limit parameter or pagination for more results.`;
+      // Note: Showing limited results based on configuration
     }
 
     return optimized;
@@ -211,7 +209,7 @@ export class ResponseOptimizer {
     };
 
     if (response.count > config.summaryMode.maxItems) {
-      optimized.pagination_note = `Showing ${config.summaryMode.maxItems} of ${response.count} rules. Use limit parameter or pagination for more results.`;
+      // Note: Showing limited results based on configuration
     }
 
     return optimized;
@@ -246,7 +244,7 @@ export class ResponseOptimizer {
     };
 
     if (response.count > config.summaryMode.maxItems) {
-      optimized.pagination_note = `Showing ${config.summaryMode.maxItems} of ${response.count} devices. Use limit parameter or pagination for more results.`;
+      // Note: Showing limited results based on configuration
     }
 
     return optimized;
@@ -291,14 +289,14 @@ export class ResponseOptimizer {
 
     const optimized = {
       count: response.count,
-      results: response.results.slice(0, config.summaryMode.maxItems).map(item => 
+      results: response.results.slice(0, config.summaryMode.maxItems).map((item: any) => 
         this.summarizeObject(item, config.summaryMode)
       ),
       next_cursor: response.next_cursor
     };
 
     if (response.count > config.summaryMode.maxItems) {
-      optimized.pagination_note = `Showing ${config.summaryMode.maxItems} of ${response.count} items. Use limit parameter or pagination for more results.`;
+      // Note: Showing limited results based on configuration
     }
 
     return optimized;

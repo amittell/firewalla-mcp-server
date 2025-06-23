@@ -54,9 +54,9 @@ Generate a comprehensive security report based on the following data:
 - Threat Level: ${metrics.threat_level}
 - Recent Threats: ${threats.length}
 
-**Active Alarms (${alarms.length}):**
-${alarms.slice(0, 10).map(alarm => 
-  `- ${alarm.severity.toUpperCase()}: ${alarm.description} (${alarm.timestamp})`
+**Active Alarms (${alarms.count}):**
+${alarms.results.slice(0, 10).map((alarm: any) => 
+  `- ${alarm.type}: ${alarm.message} (${new Date(alarm.ts * 1000).toISOString()})`
 ).join('\\n')}
 
 **Recent Threats (${threats.length}):**
@@ -102,10 +102,10 @@ Please analyze this data and provide:
 Analyze the following security data to identify patterns, trends, and recommend defensive actions:
 
 **Active Alarms (${severityThreshold}+ severity):**
-${alarms.map(alarm => 
-  `- [${alarm.severity}] ${alarm.type}: ${alarm.description}
-    Source: ${alarm.source_ip || 'N/A'} → Destination: ${alarm.destination_ip || 'N/A'}
-    Time: ${alarm.timestamp}`
+${alarms.results.map((alarm: any) => 
+  `- [${alarm.type}] ${alarm.message}
+    Source: ${alarm.device?.ip || 'N/A'} → Destination: ${alarm.remote?.ip || 'N/A'}
+    Time: ${new Date(alarm.ts * 1000).toISOString()}`
 ).join('\\n\\n')}
 
 **Recent Threat Patterns:**
@@ -115,8 +115,8 @@ ${alarms.map(alarm =>
 - Attack time distribution: ${JSON.stringify(threatPatterns.timeDistribution)}
 
 **Current Rule Status:**
-- Active rules: ${rules.filter(r => r.status === 'active').length}
-- Paused rules: ${rules.filter(r => r.status === 'paused').length}
+- Active rules: ${rules.results.filter(r => r.status === 'active').length}
+- Paused rules: ${rules.results.filter(r => r.status === 'paused').length}
 
 Please provide:
 1. Threat pattern analysis and significance
@@ -150,11 +150,11 @@ Please provide:
           const [usage, devices, flows] = await Promise.all([
             firewalla.getBandwidthUsage(period, 20),
             firewalla.getDeviceStatus(),
-            firewalla.getFlowData(undefined, undefined, 100),
+            firewalla.getFlowData(undefined, undefined, undefined, 100),
           ]);
 
-          const highUsageDevices = usage.filter(u => u.total_bytes > thresholdMb * 1024 * 1024);
-          const flowAnalysis = analyzeFlowPatterns(flows.flows.map(f => ({ 
+          const highUsageDevices = usage.results.filter((u: any) => u.total_bytes > thresholdMb * 1024 * 1024);
+          const flowAnalysis = analyzeFlowPatterns(flows.results.map((f: any) => ({ 
             protocol: f.protocol, 
             duration: f.duration || 0, 
             timestamp: new Date(f.ts * 1000).toISOString() 
@@ -166,7 +166,7 @@ Please provide:
 Analyze bandwidth consumption patterns and identify optimization opportunities:
 
 **Top Bandwidth Consumers (>${thresholdMb}MB):**
-${highUsageDevices.map(device => 
+${highUsageDevices.map((device: any) => 
   `- ${device.device_name} (${device.ip_address})
     Total: ${Math.round(device.total_bytes / (1024 * 1024))}MB
     Upload: ${Math.round(device.bytes_uploaded / (1024 * 1024))}MB
@@ -175,15 +175,15 @@ ${highUsageDevices.map(device =>
 ).join('\\n\\n')}
 
 **Network Flow Analysis:**
-- Total flows analyzed: ${flows.flows.length}
+- Total flows analyzed: ${flows.count}
 - Unique protocols: ${flowAnalysis.protocols.length}
 - Top protocols: ${flowAnalysis.protocols.slice(0, 5).join(', ')}
 - Average flow duration: ${flowAnalysis.avgDuration}s
 - Peak bandwidth periods: ${JSON.stringify(flowAnalysis.peakPeriods)}
 
 **Device Status Context:**
-- Total devices: ${devices.length}
-- Online devices: ${devices.filter(d => d.online).length}
+- Total devices: ${devices.count}
+- Online devices: ${devices.results.filter((d: any) => d.online).length}
 - Devices with high usage: ${highUsageDevices.length}
 
 Please analyze and provide:
@@ -216,22 +216,22 @@ Please analyze and provide:
           }
 
           const [devices, flows, alarms] = await Promise.all([
-            firewalla.getDeviceStatus(deviceId),
-            firewalla.getFlowData(undefined, undefined, 200),
+            firewalla.getDeviceStatus(),
+            firewalla.getFlowData(undefined, undefined, undefined, 200),
             firewalla.getActiveAlarms(),
           ]);
 
-          const targetDevice = devices.find(d => d.id === deviceId);
+          const targetDevice = devices.results.find((d: any) => d.id === deviceId);
           if (!targetDevice) {
             throw new Error(`Device with ID ${deviceId} not found`);
           }
 
-          const deviceFlows = flows.flows.filter(f => 
+          const deviceFlows = flows.results.filter((f: any) => 
             f.source?.ip === targetDevice.ip || f.destination?.ip === targetDevice.ip ||
             f.device.ip === targetDevice.ip
           );
-          const deviceAlarms = alarms.filter(a => 
-            a.source_ip === targetDevice.ip || a.destination_ip === targetDevice.ip
+          const deviceAlarms = alarms.results.filter((a: any) => 
+            a.device?.ip === targetDevice.ip || a.remote?.ip === targetDevice.ip
           );
 
           const prompt = `# Device Investigation Report
@@ -246,27 +246,27 @@ Investigate potential security issues and unusual behavior for this device:
 - MAC Vendor: ${targetDevice.macVendor || 'Unknown'}
 - Status: ${targetDevice.online ? 'online' : 'offline'}
 - Network: ${targetDevice.network.name}
-- Last Seen: ${targetDevice.lastSeen ? new Date(targetDevice.lastSeen * 1000).toISOString() : 'Never'}
+- Last Seen: ${targetDevice.lastSeen ? new Date(Number(targetDevice.lastSeen) * 1000).toISOString() : 'Never'}
 
 **Network Activity (${lookbackHours}h lookback):**
 - Total flows involving this device: ${deviceFlows.length}
-- Outbound connections: ${deviceFlows.filter(f => f.source?.ip === targetDevice.ip || f.device.ip === targetDevice.ip).length}
-- Inbound connections: ${deviceFlows.filter(f => f.destination?.ip === targetDevice.ip).length}
-- Data transferred: ${deviceFlows.reduce((sum, f) => sum + ((f.download || 0) + (f.upload || 0)), 0)} bytes
-- Unique remote IPs: ${new Set(deviceFlows.map(f => 
+- Outbound connections: ${deviceFlows.filter((f: any) => f.source?.ip === targetDevice.ip || f.device.ip === targetDevice.ip).length}
+- Inbound connections: ${deviceFlows.filter((f: any) => f.destination?.ip === targetDevice.ip).length}
+- Data transferred: ${deviceFlows.reduce((sum: any, f: any) => sum + ((f.download || 0) + (f.upload || 0)), 0)} bytes
+- Unique remote IPs: ${new Set(deviceFlows.map((f: any) => 
   f.source?.ip === targetDevice.ip ? f.destination?.ip : f.source?.ip
 ).filter(Boolean)).size}
 
 **Security Alerts:**
 ${deviceAlarms.length > 0 ? 
-  deviceAlarms.map(alarm => 
-    `- [${alarm.severity}] ${alarm.type}: ${alarm.description} (${alarm.timestamp})`
+  deviceAlarms.map((alarm: any) => 
+    `- [${alarm.type}] ${alarm.message} (${new Date(alarm.ts * 1000).toISOString()})`
   ).join('\\n') : 
   'No security alerts found for this device'
 }
 
 **Connection Patterns:**
-${deviceFlows.slice(0, 10).map(flow => 
+${deviceFlows.slice(0, 10).map((flow: any) => 
   `- ${flow.source?.ip || 'N/A'} → ${flow.destination?.ip || 'N/A'} (${flow.protocol})
     ${((flow.download || 0) + (flow.upload || 0))} bytes, ${flow.count} packets, ${flow.duration || 0}s duration`
 ).join('\\n')}
@@ -322,9 +322,9 @@ Evaluate overall network health and performance:
 - Performance Score: ${calculatePerformanceScore(summary)}/100
 
 **Network Connectivity:**
-- Total Devices: ${devices.length}
-- Online: ${devices.filter(d => d.online).length} (${Math.round(devices.filter(d => d.online).length / devices.length * 100)}%)
-- Offline: ${devices.filter(d => !d.online).length}
+- Total Devices: ${devices.count}
+- Online: ${devices.results.filter((d: any) => d.online).length} (${Math.round(devices.results.filter((d: any) => d.online).length / devices.count * 100)}%)
+- Offline: ${devices.results.filter((d: any) => !d.online).length}
 - Subnets: ${topology.subnets.length}
 - Active Connections: ${summary.active_connections}
 
@@ -332,7 +332,7 @@ Evaluate overall network health and performance:
 - Threat Level: ${metrics.threat_level}
 - Active Alarms: ${metrics.active_alarms}
 - Blocked Attempts: ${summary.blocked_attempts}
-- Active Rules: ${rules.filter(r => r.status === 'active' || !r.status).length}
+- Active Rules: ${rules.results.filter((r: any) => r.status === 'active' || !r.status).length}
 - Security Score: ${calculateSecurityScore(metrics)}/100
 
 **Overall Health Score: ${healthScore}/100**
@@ -429,10 +429,10 @@ function analyzeFlowPatterns(flows: Array<{ protocol: string; duration: number; 
 
 function calculateNetworkHealthScore(data: {
   summary: { status: string; cpu_usage: number; memory_usage: number; uptime: number };
-  devices: Array<{ online: boolean }>;
+  devices: { count: number; results: Array<{ online: boolean }> };
   metrics: { active_alarms: number; threat_level: string };
   topology: { subnets: unknown[] };
-  rules: Array<{ status?: string }>;
+  rules: { count: number; results: Array<{ status?: string }> };
 }): number {
   let score = 100;
 
@@ -443,7 +443,7 @@ function calculateNetworkHealthScore(data: {
   if (data.summary.uptime < 86400) score -= 5; // Less than 1 day
 
   // Connectivity (25 points)
-  const onlineRatio = data.devices.filter(d => d.online).length / data.devices.length;
+  const onlineRatio = data.devices.results.filter(d => d.online).length / data.devices.count;
   score -= (1 - onlineRatio) * 25;
 
   // Security (30 points)
@@ -452,7 +452,7 @@ function calculateNetworkHealthScore(data: {
   score -= threatPenalty[data.metrics.threat_level as keyof typeof threatPenalty] || 0;
 
   // Configuration (15 points)
-  const activeRules = data.rules.filter(r => r.status === 'active' || !r.status).length;
+  const activeRules = data.rules.results.filter(r => r.status === 'active' || !r.status).length;
   if (activeRules === 0) score -= 15;
   if (data.topology.subnets.length === 0) score -= 5;
 

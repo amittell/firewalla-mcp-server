@@ -108,6 +108,14 @@ export class FirewallaClient {
     });
   }
 
+  private sanitizeInput(input: string | undefined): string {
+    if (!input || typeof input !== 'string') {
+      return '';
+    }
+    // Basic sanitization - remove potentially dangerous characters
+    return input.replace(/[^a-zA-Z0-9\-_]/g, '').trim();
+  }
+
   private async request<T>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     endpoint: string,
@@ -331,143 +339,69 @@ export class FirewallaClient {
     };
   }
 
-  async searchFlows(query: string, limit = 50, cursor?: string): Promise<FlowData> {
-    const params: Record<string, unknown> = {
-      query,
-      limit,
-    };
-    
-    if (cursor) {
-      params.cursor = cursor;
-    }
-
-    const response = await this.request<{results: any[]} | any[]>('GET', `/boxes/${this.config.boxId}/flows`, params);
-    const rawFlows = Array.isArray(response) ? response : (response.results || []);
-    
-    const flows = rawFlows.map((item: any): Flow => {
-      const parseTimestamp = (ts: any): number => {
-        if (!ts) return Math.floor(Date.now() / 1000);
-        
-        if (typeof ts === 'number') {
-          return ts > 1000000000000 ? Math.floor(ts / 1000) : ts;
-        }
-        
-        if (typeof ts === 'string') {
-          const parsed = Date.parse(ts);
-          return Math.floor(parsed / 1000);
-        }
-        
-        return Math.floor(Date.now() / 1000);
-      };
-
-      const flow: Flow = {
-        ts: parseTimestamp(item.ts || item.timestamp),
-        gid: item.gid || this.config.boxId,
-        protocol: item.protocol || 'tcp',
-        direction: item.direction || 'outbound',
-        block: Boolean(item.block || item.blocked),
-        download: item.download || 0,
-        upload: item.upload || 0,
-        duration: item.duration || 0,
-        count: item.count || item.packets || 1,
-        device: {
-          id: item.device?.id || 'unknown',
-          ip: item.device?.ip || item.srcIP || 'unknown',
-          name: item.device?.name || 'Unknown Device',
-        },
-      };
-      
-      if (item.blockType) {
-        flow.blockType = item.blockType;
-      }
-      
-      if (item.device?.network) {
-        flow.device.network = {
-          id: item.device.network.id,
-          name: item.device.network.name
-        };
-      }
-      
-      if (item.source) {
-        flow.source = {
-          id: item.source.id || 'unknown',
-          name: item.source.name || 'Unknown',
-          ip: item.source.ip || item.srcIP || 'unknown'
-        };
-      }
-      
-      if (item.destination) {
-        flow.destination = {
-          id: item.destination.id || 'unknown', 
-          name: item.destination.name || item.domain || 'Unknown',
-          ip: item.destination.ip || item.dstIP || 'unknown'
-        };
-      }
-      
-      if (item.region) {
-        flow.region = item.region;
-      }
-      
-      if (item.category) {
-        flow.category = item.category;
-      }
-      
-      return flow;
-    });
-
-    return {
-      flows,
-      pagination: {
-        has_more: rawFlows.length === limit,
-        next_cursor: Array.isArray(response) ? undefined : (response as any).cursor
-      }
-    };
-  }
 
   @optimizeResponse('devices')
   @validateResponse(ResponseValidator.validateDevice)
   async getDeviceStatus(boxId?: string, groupId?: string): Promise<{count: number; results: Device[]; next_cursor?: string}> {
-    const params: Record<string, unknown> = {};
-    
-    if (boxId) {
-      params.box = boxId;
-    }
-    if (groupId) {
-      params.group = groupId;
-    }
+    try {
+      // Input validation and sanitization
+      const params: Record<string, unknown> = {};
+      
+      if (boxId && boxId.trim()) {
+        params.box = boxId.trim();
+      }
+      if (groupId && groupId.trim()) {
+        params.group = groupId.trim();
+      }
 
-    // API returns direct array of devices
-    const response = await this.request<Device[]>('GET', `/v2/devices`, params);
-    const results = response.map(this.transformDevice);
-    
-    return {
-      count: results.length,
-      results
-    };
+      // API returns direct array of devices
+      const response = await this.request<Device[]>('GET', `/v2/devices`, params);
+      const results = Array.isArray(response) ? response.map(this.transformDevice) : [];
+      
+      return {
+        count: results.length,
+        results,
+        next_cursor: undefined
+      };
+    } catch (error) {
+      console.error('Error in getDeviceStatus:', error);
+      throw new Error(`Failed to get device status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   @optimizeResponse('devices')
   @validateResponse(ResponseValidator.validateDevice)
   async getOfflineDevices(sortByLastSeen: boolean = true): Promise<{count: number; results: Device[]; next_cursor?: string}> {
-    // Get all devices first
-    const allDevices = await this.getDeviceStatus();
-    
-    // Filter for offline devices only
-    const offlineDevices = allDevices.results.filter(device => !device.online);
-    
-    // Sort by last seen if requested
-    if (sortByLastSeen) {
-      offlineDevices.sort((a, b) => {
-        const aLastSeen = new Date(a.lastSeen || 0).getTime();
-        const bLastSeen = new Date(b.lastSeen || 0).getTime();
-        return bLastSeen - aLastSeen; // Most recent first
-      });
+    try {
+      // Input validation
+      const shouldSort = typeof sortByLastSeen === 'boolean' ? sortByLastSeen : true;
+      
+      // Get all devices first
+      const allDevices = await this.getDeviceStatus();
+      
+      // Filter for offline devices only with null safety
+      const offlineDevices = (allDevices.results || []).filter(device => 
+        device && !device.online
+      );
+      
+      // Sort by last seen if requested
+      if (shouldSort) {
+        offlineDevices.sort((a, b) => {
+          const aLastSeen = new Date(a.lastSeen || 0).getTime();
+          const bLastSeen = new Date(b.lastSeen || 0).getTime();
+          return bLastSeen - aLastSeen; // Most recent first
+        });
+      }
+      
+      return {
+        count: offlineDevices.length,
+        results: offlineDevices,
+        next_cursor: undefined
+      };
+    } catch (error) {
+      console.error('Error in getOfflineDevices:', error);
+      throw new Error(`Failed to get offline devices: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    
-    return {
-      count: offlineDevices.length,
-      results: offlineDevices
-    };
   }
 
   private transformDevice = (item: any): Device => {
@@ -507,52 +441,63 @@ export class FirewallaClient {
   @optimizeResponse('bandwidth')
   @validateResponse(ResponseValidator.validateBandwidth)
   async getBandwidthUsage(period: string, top = 10): Promise<{count: number; results: BandwidthUsage[]; next_cursor?: string}> {
-    // Calculate timestamp range based on period
-    const end = Math.floor(Date.now() / 1000);
-    let begin: number;
-    
-    switch (period) {
-      case '1h':
-        begin = end - (60 * 60);
-        break;
-      case '24h':
-        begin = end - (24 * 60 * 60);
-        break;
-      case '7d':
-        begin = end - (7 * 24 * 60 * 60);
-        break;
-      case '30d':
-        begin = end - (30 * 24 * 60 * 60);
-        break;
-      default:
-        begin = end - (24 * 60 * 60); // Default to 24h
+    try {
+      // Input validation and sanitization
+      const validPeriods = ['1h', '24h', '7d', '30d'];
+      const validatedPeriod = validPeriods.includes(period) ? period : '24h';
+      const validatedTop = Math.max(1, Math.min(Number(top) || 10, 50));
+      
+      // Calculate timestamp range based on period
+      const end = Math.floor(Date.now() / 1000);
+      let begin: number;
+      
+      switch (validatedPeriod) {
+        case '1h':
+          begin = end - (60 * 60);
+          break;
+        case '24h':
+          begin = end - (24 * 60 * 60);
+          break;
+        case '7d':
+          begin = end - (7 * 24 * 60 * 60);
+          break;
+        case '30d':
+          begin = end - (30 * 24 * 60 * 60);
+          break;
+        default:
+          begin = end - (24 * 60 * 60); // Default to 24h
+      }
+
+      const params = {
+        query: `ts:${begin}-${end}`,
+        limit: validatedTop,
+        sortBy: 'total:desc',
+        groupBy: 'device'
+      };
+
+      const response = await this.request<{results: any[]} | any[]>('GET', `/boxes/${this.config.boxId}/flows`, params);
+      const rawData = Array.isArray(response) ? response : (response.results || []);
+      
+      // Transform the response to BandwidthUsage format with null safety
+      const results = (rawData || []).map((item: any) => ({
+        device_id: item.device?.id || item.deviceId || 'unknown',
+        device_name: item.device?.name || item.deviceName || 'Unknown Device',
+        ip_address: item.device?.ip || item.ip || 'unknown',
+        bytes_uploaded: Math.max(0, Number(item.upload || item.uploadBytes || 0)),
+        bytes_downloaded: Math.max(0, Number(item.download || item.downloadBytes || 0)),
+        total_bytes: Math.max(0, Number(item.total || item.totalBytes || 0)),
+        period: validatedPeriod
+      }));
+
+      return {
+        count: results.length,
+        results,
+        next_cursor: undefined
+      };
+    } catch (error) {
+      console.error('Error in getBandwidthUsage:', error);
+      throw new Error(`Failed to get bandwidth usage: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-
-    const params = {
-      query: `ts:${begin}-${end}`,
-      limit: top,
-      sortBy: 'total:desc',
-      groupBy: 'device'
-    };
-
-    const response = await this.request<{results: any[]} | any[]>('GET', `/boxes/${this.config.boxId}/flows`, params);
-    const rawData = Array.isArray(response) ? response : (response.results || []);
-    
-    // Transform the response to BandwidthUsage format
-    const results = rawData.map((item: any) => ({
-      device_id: item.device?.id || item.deviceId || 'unknown',
-      device_name: item.device?.name || item.deviceName || 'Unknown Device',
-      ip_address: item.device?.ip || item.ip || 'unknown',
-      bytes_uploaded: item.upload || item.uploadBytes || 0,
-      bytes_downloaded: item.download || item.downloadBytes || 0,
-      total_bytes: item.total || item.totalBytes || 0,
-      period: period
-    }));
-
-    return {
-      count: results.length,
-      results
-    };
   }
 
   @optimizeResponse('rules')
@@ -612,13 +557,39 @@ export class FirewallaClient {
     };
   }
 
-  async pauseRule(ruleId: string, duration = 60): Promise<{ success: boolean; message: string }> {
-    return this.request<{ success: boolean; message: string }>(
-      'POST',
-      `/rules/${ruleId}/pause`,
-      { duration_minutes: duration },
-      false
-    );
+  @optimizeResponse('rules')
+  @validateResponse(ResponseValidator.validateRule)
+  async pauseRule(ruleId: string, duration = 60): Promise<{count: number; results: any[]; next_cursor?: string}> {
+    try {
+      // Input validation and sanitization
+      if (!ruleId || typeof ruleId !== 'string' || !ruleId.trim()) {
+        throw new Error('Rule ID is required and must be a non-empty string');
+      }
+      
+      const validatedRuleId = ruleId.trim();
+      const validatedDuration = Math.max(1, Math.min(Number(duration) || 60, 1440)); // 1-1440 minutes as per schema
+      
+      const response = await this.request<{ success: boolean; message: string }>(
+        'POST',
+        `/rules/${validatedRuleId}/pause`,
+        { duration_minutes: validatedDuration },
+        false
+      );
+      
+      return {
+        count: 1,
+        results: [{
+          id: validatedRuleId,
+          success: Boolean(response.success),
+          message: response.message || `Rule paused for ${validatedDuration} minutes`,
+          duration: validatedDuration
+        }],
+        next_cursor: undefined
+      };
+    } catch (error) {
+      console.error('Error in pauseRule:', error);
+      throw new Error(`Failed to pause rule: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   @optimizeResponse('targets')
@@ -692,92 +663,164 @@ export class FirewallaClient {
     return this.request('GET', `/boxes/${this.config.boxId}/threats/recent`, params, true);
   }
 
-  async resumeRule(ruleId: string): Promise<{ success: boolean; message: string }> {
-    return this.request<{ success: boolean; message: string }>(
-      'POST',
-      `/rules/${ruleId}/resume`,
-      {},
-      false
-    );
+  @optimizeResponse('rules')
+  @validateResponse(ResponseValidator.validateRule)
+  async resumeRule(ruleId: string): Promise<{count: number; results: any[]; next_cursor?: string}> {
+    try {
+      // Input validation and sanitization
+      if (!ruleId || typeof ruleId !== 'string' || !ruleId.trim()) {
+        throw new Error('Rule ID is required and must be a non-empty string');
+      }
+      
+      const validatedRuleId = ruleId.trim();
+      
+      const response = await this.request<{ success: boolean; message: string }>(
+        'POST',
+        `/rules/${validatedRuleId}/resume`,
+        {},
+        false
+      );
+      
+      return {
+        count: 1,
+        results: [{
+          id: validatedRuleId,
+          success: Boolean(response.success),
+          message: response.message || 'Rule resumed successfully'
+        }],
+        next_cursor: undefined
+      };
+    } catch (error) {
+      console.error('Error in resumeRule:', error);
+      throw new Error(`Failed to resume rule: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   @optimizeResponse('boxes')
   @validateResponse(ResponseValidator.validateBox)
   async getBoxes(groupId?: string): Promise<{count: number; results: Box[]; next_cursor?: string}> {
-    const params: Record<string, unknown> = {};
-    
-    if (groupId) {
-      params.group = groupId;
+    try {
+      // Input validation and sanitization
+      const params: Record<string, unknown> = {};
+      
+      if (groupId && groupId.trim()) {
+        params.group = groupId.trim();
+      }
+
+      // API returns direct array of boxes
+      const response = await this.request<any[]>('GET', `/v2/boxes`, params, true);
+      
+      const results = Array.isArray(response) ? response.map((item: any): Box => ({
+        gid: item.gid || item.id || 'unknown',
+        name: item.name || 'Unknown Box',
+        model: item.model || 'unknown',
+        mode: item.mode || 'router',
+        version: item.version || 'unknown',
+        online: Boolean(item.online || item.status === 'online'),
+        lastSeen: item.lastSeen || item.last_seen,
+        license: item.license || 'unknown',
+        publicIP: item.publicIP || item.public_ip || 'unknown',
+        group: item.group,
+        location: item.location || 'unknown',
+        deviceCount: item.deviceCount || item.device_count || 0,
+        ruleCount: item.ruleCount || item.rule_count || 0,
+        alarmCount: item.alarmCount || item.alarm_count || 0
+      })) : [];
+
+      return {
+        count: results.length,
+        results,
+        next_cursor: undefined
+      };
+    } catch (error) {
+      console.error('Error in getBoxes:', error);
+      throw new Error(`Failed to get boxes: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-
-    // API returns direct array of boxes
-    const response = await this.request<any[]>('GET', `/v2/boxes`, params, true);
-    
-    const results = response.map((item: any): Box => ({
-      gid: item.gid || item.id || 'unknown',
-      name: item.name || 'Unknown Box',
-      model: item.model || 'unknown',
-      mode: item.mode || 'router',
-      version: item.version || 'unknown',
-      online: Boolean(item.online || item.status === 'online'),
-      lastSeen: item.lastSeen || item.last_seen,
-      license: item.license || 'unknown',
-      publicIP: item.publicIP || item.public_ip || 'unknown',
-      group: item.group,
-      location: item.location || 'unknown',
-      deviceCount: item.deviceCount || item.device_count || 0,
-      ruleCount: item.ruleCount || item.rule_count || 0,
-      alarmCount: item.alarmCount || item.alarm_count || 0
-    }));
-
-    return {
-      count: results.length,
-      results
-    };
   }
 
   @optimizeResponse('alarms')
   @validateResponse(ResponseValidator.validateAlarm)
-  async getSpecificAlarm(alarmId: string): Promise<Alarm> {
-    const response = await this.request<any>('GET', `/alarms/${this.config.boxId}/${alarmId}`);
-    
-    // Transform response to Alarm format
-    const parseTimestamp = (ts: any) => {
-      if (!ts) return new Date().toISOString();
-      
-      if (typeof ts === 'number') {
-        const timestamp = ts > 1000000000000 ? ts : ts * 1000;
-        return new Date(timestamp).toISOString();
+  async getSpecificAlarm(alarmId: string): Promise<{count: number; results: Alarm[]; next_cursor?: string}> {
+    try {
+      // Input validation and sanitization
+      const validatedAlarmId = this.sanitizeInput(alarmId);
+      if (!validatedAlarmId) {
+        throw new Error('Invalid alarm ID provided');
       }
-      
-      if (typeof ts === 'string') {
-        if (ts.includes('T') || ts.includes('-')) {
-          return new Date(ts).toISOString();
-        }
-      }
-      
-      return new Date().toISOString();
-    };
 
-    return {
-      id: response.aid || response.id || response._id || 'unknown',
-      timestamp: parseTimestamp(response.ts || response.timestamp),
-      severity: response.severity || 'medium',
-      type: response.type || response._type || response.category || 'security',
-      description: response.description || response.message || response.msg || `Alarm ${response._type || 'detected'}`,
-      source_ip: response.device?.ip || response.srcIP || response.source_ip || response.sourceIP,
-      destination_ip: response.dstIP || response.dest_ip || response.destinationIP,
-      status: response.status === 1 ? 'active' : (response.status || 'active')
-    };
+      const response = await this.request<any>('GET', `/alarms/${this.config.boxId}/${validatedAlarmId}`);
+      
+      // Transform response to Alarm format
+      const parseTimestamp = (ts: any) => {
+        if (!ts) return new Date().toISOString();
+        
+        if (typeof ts === 'number') {
+          const timestamp = ts > 1000000000000 ? ts : ts * 1000;
+          return new Date(timestamp).toISOString();
+        }
+        
+        if (typeof ts === 'string') {
+          if (ts.includes('T') || ts.includes('-')) {
+            return new Date(ts).toISOString();
+          }
+        }
+        
+        return new Date().toISOString();
+      };
+
+      const alarm = {
+        ts: response.ts || Math.floor(Date.now() / 1000),
+        gid: response.gid || this.config.boxId,
+        aid: response.aid || 0,
+        type: response.type || 1,
+        status: response.status || 1,
+        message: response.message || response.description || response.msg || `Alarm ${response._type || 'detected'}`,
+        direction: response.direction || 'inbound',
+        protocol: response.protocol || 'tcp'
+      };
+
+      return {
+        count: 1,
+        results: [alarm],
+        next_cursor: undefined
+      };
+    } catch (error) {
+      console.error('Error in getSpecificAlarm:', error);
+      throw new Error(`Failed to get specific alarm: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
-  async deleteAlarm(alarmId: string): Promise<{ success: boolean; message: string }> {
-    return this.request<{ success: boolean; message: string }>(
-      'DELETE',
-      `/alarms/${this.config.boxId}/${alarmId}`,
-      undefined,
-      false
-    );
+  @optimizeResponse('alarms')
+  @validateResponse(ResponseValidator.validateAlarm)
+  async deleteAlarm(alarmId: string): Promise<{count: number; results: any[]; next_cursor?: string}> {
+    try {
+      // Input validation and sanitization
+      const validatedAlarmId = this.sanitizeInput(alarmId);
+      if (!validatedAlarmId) {
+        throw new Error('Invalid alarm ID provided');
+      }
+
+      const response = await this.request<{ success: boolean; message: string }>(
+        'DELETE',
+        `/alarms/${this.config.boxId}/${validatedAlarmId}`,
+        undefined,
+        false
+      );
+
+      return {
+        count: 1,
+        results: [{
+          id: validatedAlarmId,
+          success: Boolean(response.success),
+          message: response.message || `Alarm ${validatedAlarmId} deleted successfully`,
+          timestamp: new Date().toISOString()
+        }],
+        next_cursor: undefined
+      };
+    } catch (error) {
+      console.error('Error in deleteAlarm:', error);
+      throw new Error(`Failed to delete alarm: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   // Statistics API Implementation
@@ -789,8 +832,8 @@ export class FirewallaClient {
       this.getNetworkRules()
     ]);
 
-    const onlineBoxes = boxes.filter((box: any) => box.status === 'online' || box.online).length;
-    const offlineBoxes = boxes.length - onlineBoxes;
+    const onlineBoxes = boxes.results.filter((box: any) => box.status === 'online' || box.online).length;
+    const offlineBoxes = boxes.results.length - onlineBoxes;
 
     const stats = {
       onlineBoxes,
@@ -806,219 +849,266 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('statistics')
+  @validateResponse(ResponseValidator.validateStatistics)
   async getStatisticsByRegion(): Promise<{count: number; results: import('../types').Statistics[]; next_cursor?: string}> {
-    const flows = await this.getFlowData();
-    const alarms = await this.getActiveAlarms();
+    try {
+      const flows = await this.getFlowData();
+      const alarms = await this.getActiveAlarms();
 
-    // Group flows by region
-    const regionStats = new Map<string, number>();
-    
-    flows.results.forEach(flow => {
-      if (flow.region) {
-        regionStats.set(flow.region, (regionStats.get(flow.region) || 0) + 1);
-      }
-    });
+      // Group flows by region
+      const regionStats = new Map<string, number>();
+      
+      flows.results.forEach(flow => {
+        if (flow.region) {
+          regionStats.set(flow.region, (regionStats.get(flow.region) || 0) + 1);
+        }
+      });
 
-    // Convert to Statistics format
-    const results = Array.from(regionStats.entries()).map(([code, value]) => ({
-      meta: { code },
-      value
-    }));
+      // Convert to Statistics format
+      const results = Array.from(regionStats.entries()).map(([code, value]) => ({
+        meta: { code },
+        value
+      }));
 
-    return {
-      count: results.length,
-      results
-    };
+      return {
+        count: results.length,
+        results
+      };
+    } catch (error) {
+      console.error('Error in getStatisticsByRegion:', error);
+      throw new Error(`Failed to get statistics by region: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   // Trends API Implementation
   @optimizeResponse('trends')
+  @validateResponse(ResponseValidator.validateTrend)
   async getFlowTrends(period: '1h' | '24h' | '7d' | '30d' = '24h', interval: number = 3600): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
-    const end = Math.floor(Date.now() / 1000);
-    let begin: number;
-    let points: number;
-    
-    switch (period) {
-      case '1h':
-        begin = end - (60 * 60);
-        points = Math.min(60, Math.floor((end - begin) / interval)); // 1 point per minute max
-        break;
-      case '24h':
-        begin = end - (24 * 60 * 60);
-        points = Math.min(24, Math.floor((end - begin) / interval)); // 1 point per hour max
-        break;
-      case '7d':
-        begin = end - (7 * 24 * 60 * 60);
-        points = Math.min(168, Math.floor((end - begin) / interval)); // 1 point per hour max
-        break;
-      case '30d':
-        begin = end - (30 * 24 * 60 * 60);
-        points = Math.min(30, Math.floor((end - begin) / interval)); // 1 point per day max
-        break;
-      default:
-        begin = end - (24 * 60 * 60);
-        points = 24;
-    }
-
-    const actualInterval = Math.floor((end - begin) / points);
-    const trends: import('../types').Trend[] = [];
-    
-    // Generate time-based trend data by querying flows in intervals
-    for (let i = 0; i < points; i++) {
-      const intervalStart = begin + (i * actualInterval);
-      const intervalEnd = begin + ((i + 1) * actualInterval);
+    try {
+      // Input validation and sanitization
+      const validPeriods: Array<'1h' | '24h' | '7d' | '30d'> = ['1h', '24h', '7d', '30d'];
+      const validatedPeriod = validPeriods.includes(period) ? period : '24h';
+      const validatedInterval = Math.max(60, Math.min(Number(interval) || 3600, 86400)); // 60-86400 seconds as per schema
       
-      try {
-        // Query flows for this time interval
-        const startTime = new Date(intervalStart * 1000).toISOString();
-        const endTime = new Date(intervalEnd * 1000).toISOString();
-        const flows = await this.getFlowData();
+      const end = Math.floor(Date.now() / 1000);
+      let begin: number;
+      let points: number;
+      
+      switch (validatedPeriod) {
+        case '1h':
+          begin = end - (60 * 60);
+          points = Math.min(60, Math.floor((end - begin) / validatedInterval)); // 1 point per minute max
+          break;
+        case '24h':
+          begin = end - (24 * 60 * 60);
+          points = Math.min(24, Math.floor((end - begin) / validatedInterval)); // 1 point per hour max
+          break;
+        case '7d':
+          begin = end - (7 * 24 * 60 * 60);
+          points = Math.min(168, Math.floor((end - begin) / validatedInterval)); // 1 point per hour max
+          break;
+        case '30d':
+          begin = end - (30 * 24 * 60 * 60);
+          points = Math.min(30, Math.floor((end - begin) / validatedInterval)); // 1 point per day max
+          break;
+        default:
+          begin = end - (24 * 60 * 60);
+          points = 24;
+      }
+
+      const actualInterval = Math.floor((end - begin) / Math.max(1, points));
+      const trends: import('../types').Trend[] = [];
+      
+      // Generate time-based trend data by querying flows in intervals
+      for (let i = 0; i < points; i++) {
+        const intervalStart = begin + (i * actualInterval);
+        const intervalEnd = begin + ((i + 1) * actualInterval);
         
-        trends.push({
-          ts: intervalEnd,
-          value: flows.results.length
-        });
-      } catch (error) {
-        // If we can't get data for this interval, use 0
-        trends.push({
-          ts: intervalEnd,
-          value: 0
-        });
+        try {
+          // Query flows for this time interval
+          const startTime = new Date(intervalStart * 1000).toISOString();
+          const endTime = new Date(intervalEnd * 1000).toISOString();
+          const flows = await this.getFlowData();
+          
+          trends.push({
+            ts: intervalEnd,
+            value: Math.max(0, flows.results?.length || 0)
+          });
+        } catch (error) {
+          // If we can't get data for this interval, use 0
+          trends.push({
+            ts: intervalEnd,
+            value: 0
+          });
+        }
       }
+      
+      return {
+        count: trends.length,
+        results: trends,
+        next_cursor: undefined
+      };
+    } catch (error) {
+      console.error('Error in getFlowTrends:', error);
+      throw new Error(`Failed to get flow trends: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    
-    return {
-      count: trends.length,
-      results: trends
-    };
   }
 
   @optimizeResponse('trends')
+  @validateResponse(ResponseValidator.validateTrend)
   async getAlarmTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
-    // For alarms, we'll simulate trends based on current alarm timestamps
-    // In a real implementation, this would query historical alarm data
-    const alarms = await this.getActiveAlarms();
-    const end = Math.floor(Date.now() / 1000);
-    let begin: number;
-    let points: number;
-    
-    switch (period) {
-      case '1h':
-        begin = end - (60 * 60);
-        points = 12; // 5-minute intervals
-        break;
-      case '24h':
-        begin = end - (24 * 60 * 60);
-        points = 24; // 1-hour intervals
-        break;
-      case '7d':
-        begin = end - (7 * 24 * 60 * 60);
-        points = 168; // 1-hour intervals
-        break;
-      case '30d':
-        begin = end - (30 * 24 * 60 * 60);
-        points = 30; // 1-day intervals
-        break;
-      default:
-        begin = end - (24 * 60 * 60);
-        points = 24;
-    }
-
-    const interval = Math.floor((end - begin) / points);
-    const trends: import('../types').Trend[] = [];
-    
-    // Group alarms by time intervals
-    const alarmsByInterval = new Map<number, number>();
-    
-    alarms.forEach(alarm => {
-      const alarmTime = new Date(alarm.timestamp).getTime() / 1000;
-      if (alarmTime >= begin && alarmTime <= end) {
-        const intervalIndex = Math.floor((alarmTime - begin) / interval);
-        const intervalEnd = begin + ((intervalIndex + 1) * interval);
-        alarmsByInterval.set(intervalEnd, (alarmsByInterval.get(intervalEnd) || 0) + 1);
+    try {
+      // Input validation and sanitization
+      const validPeriods: Array<'1h' | '24h' | '7d' | '30d'> = ['1h', '24h', '7d', '30d'];
+      const validatedPeriod = validPeriods.includes(period) ? period : '24h';
+      
+      // For alarms, we'll simulate trends based on current alarm timestamps
+      // In a real implementation, this would query historical alarm data
+      const alarms = await this.getActiveAlarms();
+      const end = Math.floor(Date.now() / 1000);
+      let begin: number;
+      let points: number;
+      
+      switch (validatedPeriod) {
+        case '1h':
+          begin = end - (60 * 60);
+          points = 12; // 5-minute intervals
+          break;
+        case '24h':
+          begin = end - (24 * 60 * 60);
+          points = 24; // 1-hour intervals
+          break;
+        case '7d':
+          begin = end - (7 * 24 * 60 * 60);
+          points = 168; // 1-hour intervals
+          break;
+        case '30d':
+          begin = end - (30 * 24 * 60 * 60);
+          points = 30; // 1-day intervals
+          break;
+        default:
+          begin = end - (24 * 60 * 60);
+          points = 24;
       }
-    });
-    
-    // Generate trend points
-    for (let i = 0; i < points; i++) {
-      const intervalEnd = begin + ((i + 1) * interval);
-      trends.push({
-        ts: intervalEnd,
-        value: alarmsByInterval.get(intervalEnd) || 0
+
+      const interval = Math.floor((end - begin) / Math.max(1, points));
+      const trends: import('../types').Trend[] = [];
+      
+      // Group alarms by time intervals with null safety
+      const alarmsByInterval = new Map<number, number>();
+      
+      (alarms.results || []).forEach(alarm => {
+        if (alarm && alarm.ts) {
+          const alarmTime = alarm.ts;
+          if (alarmTime >= begin && alarmTime <= end) {
+            const intervalIndex = Math.floor((alarmTime - begin) / interval);
+            const intervalEnd = begin + ((intervalIndex + 1) * interval);
+            alarmsByInterval.set(intervalEnd, (alarmsByInterval.get(intervalEnd) || 0) + 1);
+          }
+        }
       });
+      
+      // Generate trend points
+      for (let i = 0; i < points; i++) {
+        const intervalEnd = begin + ((i + 1) * interval);
+        trends.push({
+          ts: intervalEnd,
+          value: Math.max(0, alarmsByInterval.get(intervalEnd) || 0)
+        });
+      }
+      
+      return {
+        count: trends.length,
+        results: trends,
+        next_cursor: undefined
+      };
+    } catch (error) {
+      // Handle errors in alarm trends analysis gracefully
+      console.error('Error in getAlarmTrends:', error);
+      throw new Error(`Failed to get alarm trends: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    
-    return {
-      count: trends.length,
-      results: trends
-    };
   }
 
   @optimizeResponse('trends')
+  @validateResponse(ResponseValidator.validateTrend)
   async getRuleTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
-    // For rules, we'll show trend based on rule creation/update times
-    const rules = await this.getNetworkRules();
-    const end = Math.floor(Date.now() / 1000);
-    let begin: number;
-    let points: number;
-    
-    switch (period) {
-      case '1h':
-        begin = end - (60 * 60);
-        points = 12;
-        break;
-      case '24h':
-        begin = end - (24 * 60 * 60);
-        points = 24;
-        break;
-      case '7d':
-        begin = end - (7 * 24 * 60 * 60);
-        points = 168;
-        break;
-      case '30d':
-        begin = end - (30 * 24 * 60 * 60);
-        points = 30;
-        break;
-      default:
-        begin = end - (24 * 60 * 60);
-        points = 24;
-    }
+    try {
+      // Input validation and sanitization
+      const validPeriods: Array<'1h' | '24h' | '7d' | '30d'> = ['1h', '24h', '7d', '30d'];
+      const validatedPeriod = validPeriods.includes(period) ? period : '24h';
+      
+      // For rules, we'll show trend based on rule creation/update times
+      const rules = await this.getNetworkRules();
+      const end = Math.floor(Date.now() / 1000);
+      let begin: number;
+      let points: number;
+      
+      switch (validatedPeriod) {
+        case '1h':
+          begin = end - (60 * 60);
+          points = 12;
+          break;
+        case '24h':
+          begin = end - (24 * 60 * 60);
+          points = 24;
+          break;
+        case '7d':
+          begin = end - (7 * 24 * 60 * 60);
+          points = 168;
+          break;
+        case '30d':
+          begin = end - (30 * 24 * 60 * 60);
+          points = 30;
+          break;
+        default:
+          begin = end - (24 * 60 * 60);
+          points = 24;
+      }
 
-    const interval = Math.floor((end - begin) / points);
-    const trends: import('../types').Trend[] = [];
-    
-    // Count active rules over time (simplified - shows current count for each interval)
-    const activeRuleCount = rules.results.filter(rule => rule.status === 'active' || !rule.status).length;
-    
-    for (let i = 0; i < points; i++) {
-      const intervalEnd = begin + ((i + 1) * interval);
-      // In a real implementation, this would show historical rule counts
-      // For now, we'll show the current active count with some variation
-      const variation = Math.floor(Math.random() * 5) - 2; // ±2 variation
-      trends.push({
-        ts: intervalEnd,
-        value: Math.max(0, activeRuleCount + variation)
-      });
+      const interval = Math.floor((end - begin) / Math.max(1, points));
+      const trends: import('../types').Trend[] = [];
+      
+      // Count active rules over time with null safety
+      const activeRuleCount = (rules.results || []).filter(rule => 
+        rule && (rule.status === 'active' || !rule.status)
+      ).length;
+      
+      for (let i = 0; i < points; i++) {
+        const intervalEnd = begin + ((i + 1) * interval);
+        // In a real implementation, this would show historical rule counts
+        // For now, we'll show the current active count with minimal variation
+        const variation = Math.floor(Math.random() * 3); // 0-2 variation for stability
+        trends.push({
+          ts: intervalEnd,
+          value: Math.max(0, activeRuleCount + variation)
+        });
+      }
+      
+      return {
+        count: trends.length,
+        results: trends,
+        next_cursor: undefined
+      };
+    } catch (error) {
+      // Handle errors in rule trends analysis gracefully
+      console.error('Error in getRuleTrends:', error);
+      throw new Error(`Failed to get rule trends: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    
-    return {
-      count: trends.length,
-      results: trends
-    };
   }
 
   @optimizeResponse('statistics')
   async getStatisticsByBox(): Promise<{count: number; results: import('../types').Statistics[]; next_cursor?: string}> {
-    const [boxes, alarms, rules] = await Promise.all([
-      this.getBoxes(),
-      this.getActiveAlarms(),
-      this.getNetworkRules()
-    ]);
+    try {
+      const [boxes, alarms, rules] = await Promise.all([
+        this.getBoxes(),
+        this.getActiveAlarms(),
+        this.getNetworkRules()
+      ]);
 
     // Group data by box
     const boxStats = new Map<string, { box: any; alarmCount: number; ruleCount: number }>();
     
-    boxes.forEach((box: any) => {
+    boxes.results.forEach((box: any) => {
       boxStats.set(box.id || box.gid, {
         box,
         alarmCount: 0,
@@ -1061,10 +1151,15 @@ export class FirewallaClient {
       value: stat.alarmCount + stat.ruleCount // Combined activity score
     }));
 
-    return {
-      count: results.length,
-      results
-    };
+      return {
+        count: results.length,
+        results
+      };
+    } catch (error) {
+      // Handle errors in statistics aggregation gracefully
+      console.error('Error in getStatisticsByBox:', error);
+      throw new Error(`Failed to get statistics by box: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   clearCache(): void {
@@ -1192,9 +1287,10 @@ export class FirewallaClient {
     searchQuery: SearchQuery,
     options: SearchOptions = {}
   ): Promise<SearchResult<Alarm>> {
-    const startTime = Date.now();
-    
-    const parsed = parseSearchQuery(searchQuery.query);
+    try {
+      const startTime = Date.now();
+      
+      const parsed = parseSearchQuery(searchQuery.query);
     const optimizedQuery = formatQueryForAPI(searchQuery.query);
     
     const params: Record<string, unknown> = {
@@ -1239,17 +1335,22 @@ export class FirewallaClient {
       ...(item.wan && { wan: item.wan })
     }));
 
-    return {
-      count: response.count || alarms.length,
-      results: alarms,
-      next_cursor: response.next_cursor,
-      aggregations: response.aggregations,
-      metadata: {
-        execution_time: Date.now() - startTime,
-        cached: false,
-        filters_applied: parsed.filters.map(f => `${f.field}:${f.operator}`)
-      }
-    };
+      return {
+        count: response.count || alarms.length,
+        results: alarms,
+        next_cursor: response.next_cursor,
+        aggregations: response.aggregations,
+        metadata: {
+          execution_time: Date.now() - startTime,
+          cached: false,
+          filters_applied: parsed.filters.map(f => `${f.field}:${f.operator}`)
+        }
+      };
+    } catch (error) {
+      // Handle errors in alarm search gracefully
+      console.error('Error in searchAlarms:', error);
+      throw new Error(`Failed to search alarms: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   /**
@@ -1260,9 +1361,10 @@ export class FirewallaClient {
     searchQuery: SearchQuery,
     options: SearchOptions = {}
   ): Promise<SearchResult<NetworkRule>> {
-    const startTime = Date.now();
-    
-    const parsed = parseSearchQuery(searchQuery.query);
+    try {
+      const startTime = Date.now();
+      
+      const parsed = parseSearchQuery(searchQuery.query);
     const optimizedQuery = formatQueryForAPI(searchQuery.query);
     
     const params: Record<string, unknown> = {
@@ -1306,17 +1408,22 @@ export class FirewallaClient {
       resumeTs: item.resumeTs
     }));
 
-    return {
-      count: response.count || rules.length,
-      results: rules,
-      next_cursor: response.next_cursor,
-      aggregations: response.aggregations,
-      metadata: {
-        execution_time: Date.now() - startTime,
-        cached: false,
-        filters_applied: parsed.filters.map(f => `${f.field}:${f.operator}`)
-      }
-    };
+      return {
+        count: response.count || rules.length,
+        results: rules,
+        next_cursor: response.next_cursor,
+        aggregations: response.aggregations,
+        metadata: {
+          execution_time: Date.now() - startTime,
+          cached: false,
+          filters_applied: parsed.filters.map(f => `${f.field}:${f.operator}`)
+        }
+      };
+    } catch (error) {
+      // Handle errors in rule search gracefully
+      console.error('Error in searchRules:', error);
+      throw new Error(`Failed to search rules: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   /**
@@ -1327,41 +1434,46 @@ export class FirewallaClient {
     searchQuery: SearchQuery,
     options: SearchOptions = {}
   ): Promise<SearchResult<Device>> {
-    const startTime = Date.now();
-    
-    const parsed = parseSearchQuery(searchQuery.query);
-    const optimizedQuery = formatQueryForAPI(searchQuery.query);
-    
-    const params: Record<string, unknown> = {
-      query: optimizedQuery,
-      limit: Math.min(searchQuery.limit || 50, 1000),
-      sortBy: searchQuery.sort_by || 'name:asc',
-    };
-    
-    if (searchQuery.group_by) params.groupBy = searchQuery.group_by;
-    if (searchQuery.cursor) params.cursor = searchQuery.cursor;
-    if (searchQuery.aggregate) params.aggregate = true;
-    
-    // Add online status filter
-    if (options.include_resolved === false) {
-      params.query = params.query ? `${params.query} AND online:true` : 'online:true';
-    }
-
-    const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/devices`, params);
-    
-    const devices = response.results.map((item: any) => this.transformDevice(item));
-
-    return {
-      count: response.count || devices.length,
-      results: devices,
-      next_cursor: response.next_cursor,
-      aggregations: response.aggregations,
-      metadata: {
-        execution_time: Date.now() - startTime,
-        cached: false,
-        filters_applied: parsed.filters.map(f => `${f.field}:${f.operator}`)
+    try {
+      const startTime = Date.now();
+      
+      const parsed = parseSearchQuery(searchQuery.query);
+      const optimizedQuery = formatQueryForAPI(searchQuery.query);
+      
+      const params: Record<string, unknown> = {
+        query: optimizedQuery,
+        limit: Math.min(searchQuery.limit || 50, 1000),
+        sortBy: searchQuery.sort_by || 'name:asc',
+      };
+      
+      if (searchQuery.group_by) params.groupBy = searchQuery.group_by;
+      if (searchQuery.cursor) params.cursor = searchQuery.cursor;
+      if (searchQuery.aggregate) params.aggregate = true;
+      
+      // Add online status filter
+      if (options.include_resolved === false) {
+        params.query = params.query ? `${params.query} AND online:true` : 'online:true';
       }
-    };
+
+      const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/devices`, params);
+      
+      const devices = response.results.map((item: any) => this.transformDevice(item));
+
+      return {
+        count: response.count || devices.length,
+        results: devices,
+        next_cursor: response.next_cursor,
+        aggregations: response.aggregations,
+        metadata: {
+          execution_time: Date.now() - startTime,
+          cached: false,
+          filters_applied: parsed.filters.map(f => `${f.field}:${f.operator}`)
+        }
+      };
+    } catch (error) {
+      console.error('Error in searchDevices:', error);
+      throw new Error(`Failed to search devices: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   /**
@@ -1371,108 +1483,120 @@ export class FirewallaClient {
     searchQuery: SearchQuery,
     options: SearchOptions = {}
   ): Promise<SearchResult<TargetList>> {
-    const startTime = Date.now();
-    
-    const parsed = parseSearchQuery(searchQuery.query);
-    const optimizedQuery = formatQueryForAPI(searchQuery.query);
-    
-    const params: Record<string, unknown> = {
-      query: optimizedQuery,
-      limit: Math.min(searchQuery.limit || 50, 1000),
-      sortBy: searchQuery.sort_by || 'name:asc',
-    };
-    
-    if (searchQuery.group_by) params.groupBy = searchQuery.group_by;
-    if (searchQuery.cursor) params.cursor = searchQuery.cursor;
-    if (searchQuery.aggregate) params.aggregate = true;
+    try {
+      const startTime = Date.now();
+      
+      const parsed = parseSearchQuery(searchQuery.query);
+      const optimizedQuery = formatQueryForAPI(searchQuery.query);
+      
+      const params: Record<string, unknown> = {
+        query: optimizedQuery,
+        limit: Math.min(searchQuery.limit || 50, 1000),
+        sortBy: searchQuery.sort_by || 'name:asc',
+      };
+      
+      if (searchQuery.group_by) params.groupBy = searchQuery.group_by;
+      if (searchQuery.cursor) params.cursor = searchQuery.cursor;
+      if (searchQuery.aggregate) params.aggregate = true;
 
-    const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/target-lists`, params);
-    
-    const targetLists = response.results.map((item: any): TargetList => ({
-      id: item.id || 'unknown',
-      name: item.name || 'Unknown List',
-      owner: item.owner || 'global',
-      targets: item.targets || [],
-      category: item.category,
-      notes: item.notes,
-      lastUpdated: item.lastUpdated || Math.floor(Date.now() / 1000)
-    }));
+      const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/target-lists`, params);
+      
+      const targetLists = response.results.map((item: any): TargetList => ({
+        id: item.id || 'unknown',
+        name: item.name || 'Unknown List',
+        owner: item.owner || 'global',
+        targets: item.targets || [],
+        category: item.category,
+        notes: item.notes,
+        lastUpdated: item.lastUpdated || Math.floor(Date.now() / 1000)
+      }));
 
-    return {
-      count: response.count || targetLists.length,
-      results: targetLists,
-      next_cursor: response.next_cursor,
-      aggregations: response.aggregations,
-      metadata: {
-        execution_time: Date.now() - startTime,
-        cached: false,
-        filters_applied: parsed.filters.map(f => `${f.field}:${f.operator}`)
-      }
-    };
+      return {
+        count: response.count || targetLists.length,
+        results: targetLists,
+        next_cursor: response.next_cursor,
+        aggregations: response.aggregations,
+        metadata: {
+          execution_time: Date.now() - startTime,
+          cached: false,
+          filters_applied: parsed.filters.map(f => `${f.field}:${f.operator}`)
+        }
+      };
+    } catch (error) {
+      console.error('Error in searchTargetLists:', error);
+      throw new Error(`Failed to search target lists: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   /**
    * Multi-entity searches with correlation across different data types
    */
+  @optimizeResponse('cross-reference')
+  @validateResponse(ResponseValidator.validateFlow)
   async searchCrossReference(
     primaryQuery: SearchQuery,
     secondaryQueries: Record<string, SearchQuery>,
     correlationField: string,
     options: SearchOptions = {}
   ): Promise<CrossReferenceResult> {
-    const startTime = Date.now();
-    
-    // Execute primary search first
-    const primary = await this.searchFlows(primaryQuery, options);
-    
-    // Extract correlation values from primary results
-    const correlationValues = new Set<string>();
-    primary.results.forEach(flow => {
-      const value = this.extractFieldValue(flow, correlationField);
-      if (value) correlationValues.add(String(value));
-    });
-    
-    // Execute secondary searches with correlation filter
-    const secondary: Record<string, SearchResult<any>> = {};
-    
-    for (const [name, query] of Object.entries(secondaryQueries)) {
-      if (correlationValues.size === 0) {
-        secondary[name] = { count: 0, results: [], metadata: { execution_time: 0, cached: false, filters_applied: [] } };
-        continue;
+    try {
+      const startTime = Date.now();
+      
+      // Execute primary search first
+      const primary = await this.searchFlows(primaryQuery, options);
+      
+      // Extract correlation values from primary results
+      const correlationValues = new Set<string>();
+      primary.results.forEach(flow => {
+        const value = this.extractFieldValue(flow, correlationField);
+        if (value) correlationValues.add(String(value));
+      });
+      
+      // Execute secondary searches with correlation filter
+      const secondary: Record<string, SearchResult<any>> = {};
+      
+      for (const [name, query] of Object.entries(secondaryQueries)) {
+        if (correlationValues.size === 0) {
+          secondary[name] = { count: 0, results: [], metadata: { execution_time: 0, cached: false, filters_applied: [] } };
+          continue;
+        }
+        
+        // Add correlation filter to secondary query
+        const correlationFilter = `${correlationField}:(${Array.from(correlationValues).join(',')})`;
+        const enhancedQuery: SearchQuery = {
+          ...query,
+          query: query.query ? `${query.query} AND ${correlationFilter}` : correlationFilter
+        };
+        
+        // Execute appropriate search based on query name/type
+        if (name.includes('alarm')) {
+          secondary[name] = await this.searchAlarms(enhancedQuery, options);
+        } else if (name.includes('rule')) {
+          secondary[name] = await this.searchRules(enhancedQuery, options);
+        } else if (name.includes('device')) {
+          secondary[name] = await this.searchDevices(enhancedQuery, options);
+        } else {
+          secondary[name] = await this.searchFlows(enhancedQuery, options);
+        }
       }
       
-      // Add correlation filter to secondary query
-      const correlationFilter = `${correlationField}:(${Array.from(correlationValues).join(',')})`;
-      const enhancedQuery: SearchQuery = {
-        ...query,
-        query: query.query ? `${query.query} AND ${correlationFilter}` : correlationFilter
+      // Calculate correlation statistics
+      const totalSecondaryResults = Object.values(secondary).reduce((sum, result) => sum + result.count, 0);
+      const correlationStrength = correlationValues.size > 0 ? totalSecondaryResults / correlationValues.size : 0;
+      
+      return {
+        primary,
+        secondary,
+        correlations: {
+          correlation_field: correlationField,
+          correlated_count: totalSecondaryResults,
+          correlation_strength: Math.min(1, correlationStrength / 10) // Normalize to 0-1
+        }
       };
-      
-      // Execute appropriate search based on query name/type
-      if (name.includes('alarm')) {
-        secondary[name] = await this.searchAlarms(enhancedQuery, options);
-      } else if (name.includes('rule')) {
-        secondary[name] = await this.searchRules(enhancedQuery, options);
-      } else if (name.includes('device')) {
-        secondary[name] = await this.searchDevices(enhancedQuery, options);
-      } else {
-        secondary[name] = await this.searchFlows(enhancedQuery, options);
-      }
+    } catch (error) {
+      console.error('Error in searchCrossReference:', error);
+      throw new Error(`Failed to search cross reference: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    
-    // Calculate correlation statistics
-    const totalSecondaryResults = Object.values(secondary).reduce((sum, result) => sum + result.count, 0);
-    const correlationStrength = correlationValues.size > 0 ? totalSecondaryResults / correlationValues.size : 0;
-    
-    return {
-      primary,
-      secondary,
-      correlations: {
-        correlation_field: correlationField,
-        correlated_count: totalSecondaryResults,
-        correlation_strength: Math.min(1, correlationStrength / 10) // Normalize to 0-1
-      }
-    };
   }
 
   /**
@@ -1484,52 +1608,57 @@ export class FirewallaClient {
     activeOnly: boolean = true,
     ruleType?: string
   ): Promise<{count: number; results: any[]; next_cursor?: string}> {
-    const rules = await this.getNetworkRules();
-    
-    // Filter rules based on parameters
-    let filteredRules = rules.results;
-    
-    if (activeOnly) {
-      filteredRules = filteredRules.filter(rule => rule.status === 'active' || !rule.status);
+    try {
+      const rules = await this.getNetworkRules();
+      
+      // Filter rules based on parameters
+      let filteredRules = rules.results;
+      
+      if (activeOnly) {
+        filteredRules = filteredRules.filter(rule => rule.status === 'active' || !rule.status);
+      }
+      
+      if (ruleType) {
+        filteredRules = filteredRules.filter(rule => rule.target?.type === ruleType);
+      }
+      
+      // Generate summary statistics by category
+      const summary = {
+        total_rules: filteredRules.length,
+        by_action: {} as Record<string, number>,
+        by_target_type: {} as Record<string, number>,
+        by_direction: {} as Record<string, number>,
+        active_rules: filteredRules.filter(rule => rule.status === 'active' || !rule.status).length,
+        paused_rules: filteredRules.filter(rule => rule.status === 'paused').length,
+        rules_with_hits: filteredRules.filter(rule => (rule.hit?.count || 0) > 0).length
+      };
+      
+      // Count by action
+      filteredRules.forEach(rule => {
+        const action = rule.action || 'unknown';
+        summary.by_action[action] = (summary.by_action[action] || 0) + 1;
+      });
+      
+      // Count by target type  
+      filteredRules.forEach(rule => {
+        const targetType = rule.target?.type || 'unknown';
+        summary.by_target_type[targetType] = (summary.by_target_type[targetType] || 0) + 1;
+      });
+      
+      // Count by direction
+      filteredRules.forEach(rule => {
+        const direction = rule.direction || 'bidirection';
+        summary.by_direction[direction] = (summary.by_direction[direction] || 0) + 1;
+      });
+      
+      return {
+        count: 1,
+        results: [summary]
+      };
+    } catch (error) {
+      console.error('Error in getNetworkRulesSummary:', error);
+      throw new Error(`Failed to get network rules summary: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    
-    if (ruleType) {
-      filteredRules = filteredRules.filter(rule => rule.target?.type === ruleType);
-    }
-    
-    // Generate summary statistics by category
-    const summary = {
-      total_rules: filteredRules.length,
-      by_action: {} as Record<string, number>,
-      by_target_type: {} as Record<string, number>,
-      by_direction: {} as Record<string, number>,
-      active_rules: filteredRules.filter(rule => rule.status === 'active' || !rule.status).length,
-      paused_rules: filteredRules.filter(rule => rule.status === 'paused').length,
-      rules_with_hits: filteredRules.filter(rule => (rule.hitCount || 0) > 0).length
-    };
-    
-    // Count by action
-    filteredRules.forEach(rule => {
-      const action = rule.action || 'unknown';
-      summary.by_action[action] = (summary.by_action[action] || 0) + 1;
-    });
-    
-    // Count by target type  
-    filteredRules.forEach(rule => {
-      const targetType = rule.target?.type || 'unknown';
-      summary.by_target_type[targetType] = (summary.by_target_type[targetType] || 0) + 1;
-    });
-    
-    // Count by direction
-    filteredRules.forEach(rule => {
-      const direction = rule.direction || 'bidirection';
-      summary.by_direction[direction] = (summary.by_direction[direction] || 0) + 1;
-    });
-    
-    return {
-      count: 1,
-      results: [summary]
-    };
   }
 
   /**
@@ -1542,28 +1671,33 @@ export class FirewallaClient {
     minHits: number = 1,
     ruleType?: string
   ): Promise<{count: number; results: NetworkRule[]; next_cursor?: string}> {
-    const rules = await this.getNetworkRules();
-    
-    // Filter and sort rules by hit count
-    let filteredRules = rules.results;
-    
-    if (ruleType) {
-      filteredRules = filteredRules.filter(rule => rule.target?.type === ruleType);
+    try {
+      const rules = await this.getNetworkRules();
+      
+      // Filter and sort rules by hit count
+      let filteredRules = rules.results;
+      
+      if (ruleType) {
+        filteredRules = filteredRules.filter(rule => rule.target?.type === ruleType);
+      }
+      
+      // Filter by minimum hits
+      filteredRules = filteredRules.filter(rule => (rule.hit?.count || 0) >= minHits);
+      
+      // Sort by hit count (descending)
+      filteredRules.sort((a, b) => (b.hit?.count || 0) - (a.hit?.count || 0));
+      
+      // Apply limit
+      const results = filteredRules.slice(0, Math.min(limit, 50));
+      
+      return {
+        count: results.length,
+        results
+      };
+    } catch (error) {
+      console.error('Error in getMostActiveRules:', error);
+      throw new Error(`Failed to get most active rules: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    
-    // Filter by minimum hits
-    filteredRules = filteredRules.filter(rule => (rule.hitCount || 0) >= minHits);
-    
-    // Sort by hit count (descending)
-    filteredRules.sort((a, b) => (b.hitCount || 0) - (a.hitCount || 0));
-    
-    // Apply limit
-    const results = filteredRules.slice(0, Math.min(limit, 50));
-    
-    return {
-      count: results.length,
-      results
-    };
   }
 
   /**
@@ -1577,46 +1711,51 @@ export class FirewallaClient {
     limit: number = 30,
     ruleType?: string
   ): Promise<{count: number; results: NetworkRule[]; next_cursor?: string}> {
-    const rules = await this.getNetworkRules();
-    
-    const cutoffTime = Math.floor(Date.now() / 1000) - (hours * 3600);
-    
-    // Filter rules by creation/modification time
-    let filteredRules = rules.results.filter(rule => {
-      const createdTime = rule.createdAt || 0;
-      const updatedTime = rule.updatedAt || 0;
+    try {
+      const rules = await this.getNetworkRules();
       
-      // Include if created recently
-      if (createdTime >= cutoffTime) {
-        return true;
+      const cutoffTime = Math.floor(Date.now() / 1000) - (hours * 3600);
+      
+      // Filter rules by creation/modification time
+      let filteredRules = rules.results.filter(rule => {
+        const createdTime = rule.ts || 0;
+        const updatedTime = rule.updateTs || 0;
+        
+        // Include if created recently
+        if (createdTime >= cutoffTime) {
+          return true;
+        }
+        
+        // Include if modified recently (if includeModified is true)
+        if (includeModified && updatedTime >= cutoffTime) {
+          return true;
+        }
+        
+        return false;
+      });
+      
+      if (ruleType) {
+        filteredRules = filteredRules.filter(rule => rule.target?.type === ruleType);
       }
       
-      // Include if modified recently (if includeModified is true)
-      if (includeModified && updatedTime >= cutoffTime) {
-        return true;
-      }
+      // Sort by most recent first (creation time, then update time)
+      filteredRules.sort((a, b) => {
+        const aTime = Math.max(a.ts || 0, a.updateTs || 0);
+        const bTime = Math.max(b.ts || 0, b.updateTs || 0);
+        return bTime - aTime;
+      });
       
-      return false;
-    });
-    
-    if (ruleType) {
-      filteredRules = filteredRules.filter(rule => rule.target?.type === ruleType);
+      // Apply limit
+      const results = filteredRules.slice(0, Math.min(limit, 100));
+      
+      return {
+        count: results.length,
+        results
+      };
+    } catch (error) {
+      console.error('Error in getRecentRules:', error);
+      throw new Error(`Failed to get recent rules: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-    
-    // Sort by most recent first (creation time, then update time)
-    filteredRules.sort((a, b) => {
-      const aTime = Math.max(a.createdAt || 0, a.updatedAt || 0);
-      const bTime = Math.max(b.createdAt || 0, b.updatedAt || 0);
-      return bTime - aTime;
-    });
-    
-    // Apply limit
-    const results = filteredRules.slice(0, Math.min(limit, 100));
-    
-    return {
-      count: results.length,
-      results
-    };
   }
 
   /**

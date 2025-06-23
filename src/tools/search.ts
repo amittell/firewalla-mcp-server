@@ -129,7 +129,7 @@ export class SearchEngine {
         params.limit || 100
       );
 
-      let results = alarms;
+      let results = alarms.results;
       if (filterResult.postProcessing) {
         results = filterResult.postProcessing(results);
       }
@@ -185,7 +185,7 @@ export class SearchEngine {
       
       const rules = await this.firewalla.getNetworkRules();
 
-      let results = rules;
+      let results = rules.results;
       if (filterResult.postProcessing) {
         results = filterResult.postProcessing(results);
       }
@@ -245,7 +245,7 @@ export class SearchEngine {
       
       const devices = await this.firewalla.getDeviceStatus();
 
-      let results = devices;
+      let results = devices.results;
       if (filterResult.postProcessing) {
         results = filterResult.postProcessing(results);
       }
@@ -305,7 +305,7 @@ export class SearchEngine {
       
       const targetLists = await this.firewalla.getTargetLists();
 
-      let results = targetLists;
+      let results = targetLists.results;
       if (filterResult.postProcessing) {
         results = filterResult.postProcessing(results);
       }
