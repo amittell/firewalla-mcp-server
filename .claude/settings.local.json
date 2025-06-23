@@ -45,7 +45,10 @@
       "Bash(git push:*)",
       "Bash(FIREWALLA_MSP_TOKEN=\"c1ecdc13bf0888c6784bdeeeb4c4a6c5\" FIREWALLA_MSP_ID=\"dn-k7evgj\" FIREWALLA_BOX_ID=\"1eb71e38-3a95-4371-8903-ace24c83ab49\" npm run mcp:start:dev)",
       "mcp__firewalla__search_flows",
-      "mcp__firewalla__search_rules"
+      "mcp__firewalla__search_rules",
+      "WebFetch(domain:docs.anthropic.com)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(sed:*)"
     ],
     "deny": []
   }

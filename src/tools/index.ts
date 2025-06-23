@@ -1,6 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
+import { ResponseOptimizer, DEFAULT_OPTIMIZATION_CONFIG } from '../optimization/index.js';
 // import { createSearchTools } from './search.js'; // Temporarily disabled
 
 /**
@@ -40,27 +41,39 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
     try {
       switch (name) {
         case 'get_active_alarms': {
-          const severity = args?.severity as string | undefined;
-          const limit = (args?.limit as number) || 20;
+          const query = args?.query as string | undefined;
+          const groupBy = args?.groupBy as string | undefined;
+          const sortBy = args?.sortBy as string | undefined;
+          const limit = (args?.limit as number) || 200;
+          const cursor = args?.cursor as string | undefined;
           
-          const alarms = await firewalla.getActiveAlarms(severity, limit);
+          const response = await firewalla.getActiveAlarms(query, groupBy, sortBy, limit, cursor);
           
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
-                  total: alarms.length,
-                  alarms: alarms.map(alarm => ({
-                    id: alarm.id,
-                    timestamp: alarm.timestamp,
-                    severity: alarm.severity,
+                  count: response.count,
+                  alarms: response.results.map(alarm => ({
+                    aid: alarm.aid,
+                    timestamp: new Date(alarm.ts * 1000).toISOString(),
                     type: alarm.type,
-                    description: alarm.description,
-                    source_ip: alarm.source_ip,
-                    destination_ip: alarm.destination_ip,
                     status: alarm.status,
+                    message: alarm.message,
+                    direction: alarm.direction,
+                    protocol: alarm.protocol,
+                    gid: alarm.gid,
+                    // Include conditional properties if present
+                    ...(alarm.device && { device: alarm.device }),
+                    ...(alarm.remote && { remote: alarm.remote }),
+                    ...(alarm.transfer && { transfer: alarm.transfer }),
+                    ...(alarm.dataPlan && { dataPlan: alarm.dataPlan }),
+                    ...(alarm.vpn && { vpn: alarm.vpn }),
+                    ...(alarm.port && { port: alarm.port }),
+                    ...(alarm.wan && { wan: alarm.wan }),
                   })),
+                  next_cursor: response.next_cursor,
                 }, null, 2),
               },
             ],
@@ -68,32 +81,52 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'get_flow_data': {
-          const startTime = args?.start_time as string | undefined;
-          const endTime = args?.end_time as string | undefined;
-          const limit = (args?.limit as number) || 50;
+          const query = args?.query as string | undefined;
+          const groupBy = args?.groupBy as string | undefined;
+          const sortBy = args?.sortBy as string | undefined;
+          const limit = (args?.limit as number) || 200;
           const cursor = args?.cursor as string | undefined;
           
-          const flowData = await firewalla.getFlowData(startTime, endTime, limit, cursor);
+          // Build query for time range if provided
+          const startTime = args?.start_time as string | undefined;
+          const endTime = args?.end_time as string | undefined;
+          let finalQuery = query;
+          
+          if (startTime && endTime) {
+            const startTs = Math.floor(new Date(startTime).getTime() / 1000);
+            const endTs = Math.floor(new Date(endTime).getTime() / 1000);
+            const timeQuery = `ts:${startTs}-${endTs}`;
+            finalQuery = query ? `${query} AND ${timeQuery}` : timeQuery;
+          }
+          
+          const response = await firewalla.getFlowData(finalQuery, groupBy, sortBy, limit, cursor);
           
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
-                  flows: flowData.flows.map(flow => ({
+                  count: response.count,
+                  flows: response.results.map(flow => ({
                     timestamp: new Date(flow.ts * 1000).toISOString(),
                     source_ip: flow.source?.ip || flow.device.ip,
                     destination_ip: flow.destination?.ip || 'unknown',
-                    source_port: 0, // Not available in new Flow model
-                    destination_port: 0, // Not available in new Flow model
                     protocol: flow.protocol,
                     bytes: (flow.download || 0) + (flow.upload || 0),
+                    download: flow.download || 0,
+                    upload: flow.upload || 0,
                     packets: flow.count,
                     duration: flow.duration || 0,
                     direction: flow.direction,
                     blocked: flow.block,
+                    block_type: flow.blockType,
+                    device: flow.device,
+                    source: flow.source,
+                    destination: flow.destination,
+                    region: flow.region,
+                    category: flow.category,
                   })),
-                  pagination: flowData.pagination,
+                  next_cursor: response.next_cursor,
                 }, null, 2),
               },
             ],
@@ -101,20 +134,20 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'get_device_status': {
-          const deviceId = args?.device_id as string | undefined;
-          const includeOffline = (args?.include_offline as boolean) ?? true;
+          const boxId = args?.box_id as string | undefined;
+          const groupId = args?.group_id as string | undefined;
           
-          const devices = await firewalla.getDeviceStatus(deviceId, includeOffline);
+          const devicesResponse = await firewalla.getDeviceStatus(boxId, groupId);
           
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
-                  total_devices: devices.length,
-                  online_devices: devices.filter(d => d.online).length,
-                  offline_devices: devices.filter(d => !d.online).length,
-                  devices: devices.map(device => ({
+                  total_devices: devicesResponse.results.length,
+                  online_devices: devicesResponse.results.filter(d => d.online).length,
+                  offline_devices: devicesResponse.results.filter(d => !d.online).length,
+                  devices: devicesResponse.results.map(device => ({
                     id: device.id,
                     gid: device.gid,
                     name: device.name,
@@ -138,10 +171,10 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
           const sortByLastSeen = (args?.sort_by_last_seen as boolean) ?? true;
           
           // Get all devices including offline ones
-          const allDevices = await firewalla.getDeviceStatus(undefined, true);
+          const allDevicesResponse = await firewalla.getDeviceStatus();
           
           // Filter to only offline devices
-          let offlineDevices = allDevices.filter(device => !device.online);
+          let offlineDevices = allDevicesResponse.results.filter(device => !device.online);
           
           // Sort by last seen timestamp if requested
           if (sortByLastSeen) {
@@ -182,7 +215,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
             throw new Error('Period parameter is required');
           }
           
-          const usage = await firewalla.getBandwidthUsage(period, top);
+          const usageResponse = await firewalla.getBandwidthUsage(period, top);
           
           return {
             content: [
@@ -190,8 +223,8 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                 type: 'text',
                 text: JSON.stringify({
                   period,
-                  top_devices: usage.length,
-                  bandwidth_usage: usage.map(item => ({
+                  top_devices: usageResponse.results.length,
+                  bandwidth_usage: usageResponse.results.map(item => ({
                     device_id: item.device_id,
                     device_name: item.device_name,
                     ip_address: item.ip_address,
@@ -208,67 +241,59 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'get_network_rules': {
-          const ruleType = args?.rule_type as string | undefined;
-          const activeOnly = (args?.active_only as boolean) ?? true;
-          const limit = Math.min((args?.limit as number) || 50, 200); // Default 50, max 200
-          const summaryOnly = (args?.summary_only as boolean) || false;
+          const query = args?.query as string | undefined;
+          const summaryOnly = (args?.summary_only as boolean) ?? false;
+          const limit = (args?.limit as number) || 50;
           
-          const allRules = await firewalla.getNetworkRules(ruleType, activeOnly);
+          const response = await firewalla.getNetworkRules(query);
           
-          // Helper function to truncate long text fields
-          const truncateText = (text: string | undefined, maxLength = 100): string => {
-            if (!text) return '';
-            return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
-          };
-          
-          // Apply client-side limiting
-          const limitedRules = allRules.slice(0, limit);
-          
-          // Build response based on mode
-          const responseData: any = {
-            total_rules_available: allRules.length,
-            active_rules_available: allRules.filter(r => r.status === 'active').length,
-            paused_rules_available: allRules.filter(r => r.status === 'paused').length,
-            returned_count: limitedRules.length,
-            limit_applied: limit,
-            summary_mode: summaryOnly,
-            rules: summaryOnly 
-              ? limitedRules.map(rule => ({
-                  id: rule.id,
-                  action: rule.action,
-                  target_type: rule.target.type,
-                  target_value: truncateText(rule.target.value, 50),
-                  status: rule.status || 'active',
-                  hit_count: rule.hit?.count || 0,
-                }))
-              : limitedRules.map(rule => ({
-                  id: rule.id,
-                  action: rule.action,
-                  target: {
-                    type: rule.target.type,
-                    value: truncateText(rule.target.value, 100),
-                    ...(rule.target.dnsOnly && { dnsOnly: rule.target.dnsOnly }),
-                    ...(rule.target.port && { port: rule.target.port }),
-                  },
-                  direction: rule.direction,
-                  status: rule.status || 'active',
-                  notes: truncateText(rule.notes, 100),
-                  hit_count: rule.hit?.count || 0,
-                  created_at: new Date(rule.ts * 1000).toISOString(),
-                  updated_at: new Date(rule.updateTs * 1000).toISOString(),
-                })),
-          };
-          
-          // Add pagination hint if more rules available
-          if (allRules.length > limit) {
-            responseData.pagination_note = `Showing ${limit} of ${allRules.length} rules. Use limit parameter (max 200) or summary_only=true for fewer tokens.`;
+          // Apply additional optimization if summary mode requested
+          let optimizedResponse = response;
+          if (summaryOnly) {
+            optimizedResponse = ResponseOptimizer.optimizeRuleResponse(response, {
+              ...DEFAULT_OPTIMIZATION_CONFIG,
+              summaryMode: {
+                maxItems: limit,
+                includeFields: ['id', 'action', 'target', 'direction', 'status', 'hit'],
+                excludeFields: ['notes', 'schedule', 'timeUsage', 'scope']
+              }
+            });
           }
           
           return {
             content: [
               {
                 type: 'text',
-                text: JSON.stringify(responseData), // Remove pretty printing to save tokens
+                text: JSON.stringify({
+                  count: optimizedResponse.count,
+                  summary_mode: summaryOnly,
+                  limit_applied: summaryOnly ? limit : undefined,
+                  rules: summaryOnly ? optimizedResponse.results : response.results.slice(0, limit).map(rule => ({
+                    id: rule.id,
+                    action: rule.action,
+                    target: {
+                      type: rule.target.type,
+                      value: rule.target.value,
+                      ...(rule.target.dnsOnly && { dnsOnly: rule.target.dnsOnly }),
+                      ...(rule.target.port && { port: rule.target.port }),
+                    },
+                    direction: rule.direction,
+                    gid: rule.gid,
+                    group: rule.group,
+                    scope: rule.scope,
+                    notes: rule.notes,
+                    status: rule.status,
+                    hit: rule.hit,
+                    schedule: rule.schedule,
+                    timeUsage: rule.timeUsage,
+                    protocol: rule.protocol,
+                    created_at: new Date(rule.ts * 1000).toISOString(),
+                    updated_at: new Date(rule.updateTs * 1000).toISOString(),
+                    resume_at: rule.resumeTs ? new Date(rule.resumeTs * 1000).toISOString() : undefined,
+                  })),
+                  next_cursor: summaryOnly ? optimizedResponse.next_cursor : response.next_cursor,
+                  ...(summaryOnly && optimizedResponse.pagination_note && { pagination_note: optimizedResponse.pagination_note }),
+                }, null, 2),
               },
             ],
           };
@@ -278,7 +303,8 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
           const ruleType = args?.rule_type as string | undefined;
           const activeOnly = (args?.active_only as boolean) ?? true;
           
-          const allRules = await firewalla.getNetworkRules(ruleType, activeOnly);
+          const allRulesResponse = await firewalla.getNetworkRules();
+          const allRules = allRulesResponse.results;
           
           // Group rules by various categories for overview
           const rulesByAction = allRules.reduce((acc, rule) => {
@@ -350,10 +376,10 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
           const minHits = (args?.min_hits as number) || 1;
           const ruleType = args?.rule_type as string | undefined;
           
-          const allRules = await firewalla.getNetworkRules(ruleType, true); // Only active rules for traffic analysis
+          const allRulesResponse = await firewalla.getNetworkRules(); // Only active rules for traffic analysis
           
           // Filter and sort by hit count
-          const activeRules = allRules
+          const activeRules = allRulesResponse.results
             .filter(rule => rule.hit && rule.hit.count >= minHits)
             .sort((a, b) => (b.hit?.count || 0) - (a.hit?.count || 0))
             .slice(0, limit);
@@ -363,7 +389,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
               {
                 type: 'text',
                 text: JSON.stringify({
-                  total_rules_analyzed: allRules.length,
+                  total_rules_analyzed: allRulesResponse.results.length,
                   rules_meeting_criteria: activeRules.length,
                   min_hits_threshold: minHits,
                   limit_applied: limit,
@@ -399,12 +425,12 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
           const ruleType = args?.rule_type as string | undefined;
           const includeModified = (args?.include_modified as boolean) ?? true;
           
-          const allRules = await firewalla.getNetworkRules(ruleType, true);
+          const allRulesResponse = await firewalla.getNetworkRules();
           
           const hoursAgoTs = Math.floor(Date.now() / 1000) - (hours * 3600);
           
           // Filter rules created or modified within the timeframe
-          const recentRules = allRules
+          const recentRules = allRulesResponse.results
             .filter(rule => {
               const created = rule.ts >= hoursAgoTs;
               const modified = includeModified && rule.updateTs >= hoursAgoTs && rule.updateTs > rule.ts;
@@ -418,7 +444,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
               {
                 type: 'text',
                 text: JSON.stringify({
-                  total_rules_analyzed: allRules.length,
+                  total_rules_analyzed: allRulesResponse.results.length,
                   recent_rules_found: recentRules.length,
                   lookback_hours: hours,
                   include_modified: includeModified,
@@ -483,16 +509,16 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         case 'get_target_lists': {
           const listType = args?.list_type as string | undefined;
           
-          const lists = await firewalla.getTargetLists(listType);
+          const listsResponse = await firewalla.getTargetLists(listType);
           
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
-                  total_lists: lists.length,
-                  categories: [...new Set(lists.map(l => l.category).filter(Boolean))],
-                  target_lists: lists.map(list => ({
+                  total_lists: listsResponse.results.length,
+                  categories: [...new Set(listsResponse.results.map(l => l.category).filter(Boolean))],
+                  target_lists: listsResponse.results.map(list => ({
                     id: list.id,
                     name: list.name,
                     owner: list.owner,
@@ -533,22 +559,31 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'get_boxes': {
-          const boxes = await firewalla.getBoxes();
+          const groupId = args?.group_id as string | undefined;
+          
+          const boxesResponse = await firewalla.getBoxes(groupId);
           
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
-                  total_boxes: boxes.length,
-                  boxes: boxes.map((box: any) => ({
-                    id: box.id,
+                  total_boxes: boxesResponse.results.length,
+                  boxes: boxesResponse.results.map(box => ({
+                    gid: box.gid,
                     name: box.name,
-                    status: box.status,
+                    model: box.model,
+                    mode: box.mode,
                     version: box.version,
-                    last_seen: box.last_seen,
+                    online: box.online,
+                    last_seen: box.lastSeen,
+                    license: box.license,
+                    public_ip: box.publicIP,
+                    group: box.group,
                     location: box.location,
-                    type: box.type,
+                    device_count: box.deviceCount,
+                    rule_count: box.ruleCount,
+                    alarm_count: box.alarmCount,
                   })),
                 }, null, 2),
               },

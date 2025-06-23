@@ -20,26 +20,80 @@ export interface FirewallaConfig {
 }
 
 /**
- * Security alarm/alert from Firewalla
+ * Alarm types supported by Firewalla API
+ */
+export type AlarmType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
+
+/**
+ * Alarm status values
+ */
+export type AlarmStatus = 1 | 2;
+
+/**
+ * Security alarm/alert from Firewalla - API Compliant
  * @interface Alarm
  */
 export interface Alarm {
-  /** Unique identifier for the alarm */
-  id: string;
-  /** ISO 8601 timestamp when the alarm was triggered */
-  timestamp: string;
-  /** Severity level of the alarm */
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  /** Type/category of the alarm (e.g., 'intrusion', 'malware') */
-  type: string;
-  /** Human-readable description of the alarm */
-  description: string;
-  /** Source IP address (if applicable) */
-  source_ip?: string;
-  /** Destination IP address (if applicable) */
-  destination_ip?: string;
-  /** Current status of the alarm */
-  status: 'active' | 'resolved';
+  /** Unix timestamp of alarm generation */
+  ts: number;
+  /** Unique Firewalla box identifier */
+  gid: string;
+  /** Unique alarm identifier */
+  aid: number;
+  /** Alarm type (1-16) */
+  type: AlarmType;
+  /** Alarm status (1-2) */
+  status: AlarmStatus;
+  /** Readable alarm description */
+  message: string;
+  /** Traffic direction */
+  direction: 'inbound' | 'outbound' | 'local';
+  /** Transport protocol */
+  protocol: 'tcp' | 'udp';
+  
+  // Conditional properties based on alarm type
+  /** Device details (when type != 4) */
+  device?: {
+    id: string;
+    ip: string;
+    name: string;
+    network?: {
+      id: string;
+      name: string;
+    };
+  };
+  /** Remote host details (when type in [1,2,8,9,10,16]) */
+  remote?: {
+    id: string;
+    name: string;
+    ip: string;
+  };
+  /** Data transfer details (when type in [2,3,4,16]) */
+  transfer?: {
+    download: number;
+    upload: number;
+    duration: number;
+  };
+  /** Data plan details (when type == 4) */
+  dataPlan?: {
+    quota: number;
+    used: number;
+  };
+  /** VPN connection details (when type in [11,12,13]) */
+  vpn?: {
+    name: string;
+    ip: string;
+  };
+  /** Port details (when type == 14) */
+  port?: {
+    number: number;
+    protocol: 'tcp' | 'udp';
+  };
+  /** Internet connectivity details (when type == 15) */
+  wan?: {
+    status: 'connected' | 'disconnected';
+    ip?: string;
+  };
 }
 
 /**
@@ -58,7 +112,7 @@ export interface Flow {
   /** Whether flow was blocked */
   block: boolean;
   /** Block type (ip or dns) */
-  blockType?: string;
+  blockType?: 'ip' | 'dns';
   /** Bytes downloaded */
   download?: number;
   /** Bytes uploaded */
@@ -140,8 +194,8 @@ export interface Device {
   macVendor?: string;
   /** Current connectivity status */
   online: boolean;
-  /** Unix timestamp when device was last seen */
-  lastSeen?: number;
+  /** Timestamp when device was last seen (as string) */
+  lastSeen?: string;
   /** Whether IP is reserved on the box */
   ipReserved: boolean;
   /** Network where device flows were captured */
@@ -326,8 +380,8 @@ export interface Box {
   version: string;
   /** Box online status */
   online: boolean;
-  /** Unix timestamp of last online time */
-  lastSeen?: number;
+  /** Timestamp of last online time (as string) */
+  lastSeen?: string;
   /** Box license code */
   license: string;
   /** Public IP address */
@@ -357,4 +411,106 @@ export interface SimpleStats {
   alarms: number;
   /** Total number of created rules */
   rules: number;
+}
+
+/**
+ * Advanced search query interface for complex filtering
+ * @interface SearchQuery
+ */
+export interface SearchQuery {
+  /** Raw query string using advanced syntax */
+  query: string;
+  /** Optional field to group results by */
+  group_by?: string;
+  /** Sort field and direction (e.g., "ts:desc", "severity:asc") */
+  sort_by?: string;
+  /** Maximum number of results to return */
+  limit?: number;
+  /** Pagination cursor for next page */
+  cursor?: string;
+  /** Whether to include aggregation statistics */
+  aggregate?: boolean;
+}
+
+/**
+ * Search filter for specific field filtering
+ * @interface SearchFilter
+ */
+export interface SearchFilter {
+  /** Field name to filter on */
+  field: string;
+  /** Operator for comparison */
+  operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'nin' | 'contains' | 'startswith' | 'endswith' | 'regex';
+  /** Value(s) to filter against */
+  value: string | number | boolean | Array<string | number>;
+}
+
+/**
+ * Search options for advanced search operations
+ * @interface SearchOptions
+ */
+export interface SearchOptions {
+  /** Array of filters to apply */
+  filters?: SearchFilter[];
+  /** Time range for search */
+  time_range?: {
+    /** Start time (ISO 8601 or Unix timestamp) */
+    start: string | number;
+    /** End time (ISO 8601 or Unix timestamp) */
+    end: string | number;
+  };
+  /** Fields to include in results (for projection) */
+  include_fields?: string[];
+  /** Fields to exclude from results */
+  exclude_fields?: string[];
+  /** Whether to include resolved/inactive items */
+  include_resolved?: boolean;
+  /** Minimum severity level for alarms */
+  min_severity?: 'low' | 'medium' | 'high' | 'critical';
+  /** Minimum hit count for rules */
+  min_hits?: number;
+}
+
+/**
+ * Search result wrapper with metadata
+ * @interface SearchResult
+ */
+export interface SearchResult<T> {
+  /** Total count of matching items */
+  count: number;
+  /** Array of result items */
+  results: T[];
+  /** Pagination cursor for next page */
+  next_cursor?: string;
+  /** Aggregation results if requested */
+  aggregations?: Record<string, any>;
+  /** Search metadata */
+  metadata?: {
+    /** Query execution time in milliseconds */
+    execution_time?: number;
+    /** Whether results are from cache */
+    cached?: boolean;
+    /** Applied filters summary */
+    filters_applied?: string[];
+  };
+}
+
+/**
+ * Cross-reference search result for correlation queries
+ * @interface CrossReferenceResult
+ */
+export interface CrossReferenceResult {
+  /** Primary search results */
+  primary: SearchResult<any>;
+  /** Secondary search results correlated with primary */
+  secondary: Record<string, SearchResult<any>>;
+  /** Correlation statistics */
+  correlations: {
+    /** Field used for correlation */
+    correlation_field: string;
+    /** Number of correlated items */
+    correlated_count: number;
+    /** Correlation strength (0-1) */
+    correlation_strength?: number;
+  };
 }
