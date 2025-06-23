@@ -62,14 +62,22 @@ export class SearchEngine {
       // Combine with the parsed query
       const finalQuery = queryString ? `${queryString} AND (${params.query})` : params.query;
       
+      const searchOptions: any = {};
+      if (params.time_range && params.time_range.start && params.time_range.end) {
+        searchOptions.time_range = {
+          start: params.time_range.start,
+          end: params.time_range.end
+        };
+      }
+      
       const flowData = await this.firewalla.searchFlows(
-        finalQuery,
-        apiParams.limit
+        { query: finalQuery, limit: apiParams.limit },
+        searchOptions
       );
 
       // Apply post-processing filters
-      let results = flowData.flows;
-      if (filterResult.postProcessing) {
+      let results = flowData.results || [];
+      if (filterResult.postProcessing && results.length > 0) {
         results = filterResult.postProcessing(results);
       }
 
@@ -125,12 +133,14 @@ export class SearchEngine {
       const filterResult = this.applyFiltersRecursively(validation.ast, context);
       
       const alarms = await this.firewalla.getActiveAlarms(
-        filterResult.apiParams.severity,
+        filterResult.queryString || undefined,
+        undefined,
+        'ts:desc',
         params.limit || 100
       );
 
-      let results = alarms.results;
-      if (filterResult.postProcessing) {
+      let results = alarms.results || [];
+      if (filterResult.postProcessing && results.length > 0) {
         results = filterResult.postProcessing(results);
       }
 
@@ -185,8 +195,8 @@ export class SearchEngine {
       
       const rules = await this.firewalla.getNetworkRules();
 
-      let results = rules.results;
-      if (filterResult.postProcessing) {
+      let results = rules.results || [];
+      if (filterResult.postProcessing && results.length > 0) {
         results = filterResult.postProcessing(results);
       }
 
@@ -245,8 +255,8 @@ export class SearchEngine {
       
       const devices = await this.firewalla.getDeviceStatus();
 
-      let results = devices.results;
-      if (filterResult.postProcessing) {
+      let results = devices.results || [];
+      if (filterResult.postProcessing && results.length > 0) {
         results = filterResult.postProcessing(results);
       }
 
@@ -305,8 +315,8 @@ export class SearchEngine {
       
       const targetLists = await this.firewalla.getTargetLists();
 
-      let results = targetLists.results;
-      if (filterResult.postProcessing) {
+      let results = targetLists.results || [];
+      if (filterResult.postProcessing && results.length > 0) {
         results = filterResult.postProcessing(results);
       }
 
