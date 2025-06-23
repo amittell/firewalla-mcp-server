@@ -334,8 +334,30 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
           const avgHitsPerRule = allRules.length > 0 ? Math.round(totalHits / allRules.length * 100) / 100 : 0;
           
           // Find most recent rule activity
-          const mostRecentRuleTs = Math.max(...allRules.map(rule => Math.max(rule.ts, rule.updateTs)));
-          const oldestRuleTs = Math.min(...allRules.map(rule => rule.ts));
+          let mostRecentRuleTs: number | null = null;
+          let oldestRuleTs: number | null = null;
+          
+          if (allRules.length > 0) {
+            const validTimestamps = allRules
+              .map(rule => {
+                const ts = typeof rule.ts === 'number' && !isNaN(rule.ts) ? rule.ts : 0;
+                const updateTs = typeof rule.updateTs === 'number' && !isNaN(rule.updateTs) ? rule.updateTs : 0;
+                return Math.max(ts, updateTs);
+              })
+              .filter(ts => ts > 0);
+            
+            const creationTimestamps = allRules
+              .map(rule => typeof rule.ts === 'number' && !isNaN(rule.ts) ? rule.ts : 0)
+              .filter(ts => ts > 0);
+            
+            if (validTimestamps.length > 0) {
+              mostRecentRuleTs = Math.max(...validTimestamps);
+            }
+            
+            if (creationTimestamps.length > 0) {
+              oldestRuleTs = Math.min(...creationTimestamps);
+            }
+          }
           
           return {
             content: [
@@ -358,8 +380,9 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                     hit_rate_percentage: allRules.length > 0 ? Math.round((rulesWithHits.length / allRules.length) * 100) : 0,
                   },
                   age_statistics: {
-                    most_recent_activity: new Date(mostRecentRuleTs * 1000).toISOString(),
-                    oldest_rule_created: new Date(oldestRuleTs * 1000).toISOString(),
+                    most_recent_activity: mostRecentRuleTs ? new Date(mostRecentRuleTs * 1000).toISOString() : null,
+                    oldest_rule_created: oldestRuleTs ? new Date(oldestRuleTs * 1000).toISOString() : null,
+                    has_timestamp_data: mostRecentRuleTs !== null || oldestRuleTs !== null,
                   },
                   filters_applied: {
                     rule_type: ruleType || 'all',
@@ -682,26 +705,65 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         case 'get_statistics_by_region': {
           const stats = await firewalla.getStatisticsByRegion();
           
+          // Validate response structure with comprehensive null/undefined guards
+          if (!stats || !stats.results || !Array.isArray(stats.results)) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    total_regions: 0,
+                    regional_statistics: [],
+                    top_regions: [],
+                    error: 'No regional statistics available - API response missing results array',
+                    debug_info: {
+                      stats_exists: !!stats,
+                      results_exists: !!(stats && stats.results),
+                      results_is_array: !!(stats && stats.results && Array.isArray(stats.results)),
+                      actual_structure: stats ? Object.keys(stats) : 'null'
+                    }
+                  }, null, 2),
+                },
+              ],
+            };
+          }
+
+          // Calculate total flow count for percentage calculations
+          const totalFlowCount = stats.results.reduce((sum, stat) => {
+            return sum + (typeof stat?.value === 'number' ? stat.value : 0);
+          }, 0);
+
+          // Process regional statistics with defensive programming
+          const regionalStatistics = stats.results
+            .filter(stat => stat && typeof stat.value === 'number' && stat.meta)
+            .map(stat => ({
+              country_code: (stat.meta as any)?.code || 'unknown',
+              flow_count: stat.value,
+              percentage: totalFlowCount > 0 
+                ? Math.round((stat.value / totalFlowCount) * 100) 
+                : 0,
+            }))
+            .sort((a, b) => b.flow_count - a.flow_count);
+
+          // Get top 5 regions with defensive programming
+          const topRegions = stats.results
+            .filter(stat => stat && typeof stat.value === 'number' && stat.meta)
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 5)
+            .map(stat => ({
+              country_code: (stat.meta as any)?.code || 'unknown',
+              flow_count: stat.value,
+            }));
+          
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
                   total_regions: stats.results.length,
-                  regional_statistics: stats.results.map(stat => ({
-                    country_code: (stat.meta as any).code,
-                    flow_count: stat.value,
-                    percentage: stats.results.length > 0 
-                      ? Math.round((stat.value / stats.results.reduce((sum, s) => sum + s.value, 0)) * 100) 
-                      : 0,
-                  })).sort((a, b) => b.flow_count - a.flow_count),
-                  top_regions: stats.results
-                    .sort((a, b) => b.value - a.value)
-                    .slice(0, 5)
-                    .map(stat => ({
-                      country_code: (stat.meta as any).code,
-                      flow_count: stat.value,
-                    })),
+                  regional_statistics: regionalStatistics,
+                  top_regions: topRegions,
+                  total_flow_count: totalFlowCount,
                 }, null, 2),
               },
             ],
@@ -709,75 +771,151 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'get_statistics_by_box': {
-          const stats = await firewalla.getStatisticsByBox();
-          
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  total_boxes: stats.results.length,
-                  box_statistics: stats.results.map(stat => {
-                    const boxMeta = stat.meta as any;
-                    return {
-                      box_id: boxMeta.gid,
-                      name: boxMeta.name,
-                      model: boxMeta.model,
-                      status: boxMeta.online ? 'online' : 'offline',
-                      version: boxMeta.version,
-                      location: boxMeta.location,
-                      device_count: boxMeta.deviceCount,
-                      rule_count: boxMeta.ruleCount,
-                      alarm_count: boxMeta.alarmCount,
-                      activity_score: stat.value,
-                      last_seen: boxMeta.lastSeen 
-                        ? new Date((boxMeta.lastSeen as number) * 1000).toISOString() 
-                        : 'Never',
-                    };
-                  }).sort((a, b) => b.activity_score - a.activity_score),
-                  summary: {
-                    online_boxes: stats.results.filter(s => (s.meta as any).online).length,
-                    total_devices: stats.results.reduce((sum, s) => sum + (s.meta as any).deviceCount, 0),
-                    total_rules: stats.results.reduce((sum, s) => sum + (s.meta as any).ruleCount, 0),
-                    total_alarms: stats.results.reduce((sum, s) => sum + (s.meta as any).alarmCount, 0),
-                  }
-                }, null, 2),
-              },
-            ],
-          };
+          try {
+            const stats = await firewalla.getStatisticsByBox();
+            
+            // Validate stats response structure
+            if (!stats || typeof stats !== 'object') {
+              throw new Error('Invalid stats response: not an object');
+            }
+            
+            if (!stats.results || !Array.isArray(stats.results)) {
+              throw new Error('Invalid stats response: results is not an array');
+            }
+            
+            // Process and validate each box statistic
+            const boxStatistics = stats.results.map(stat => {
+              const boxMeta = (stat.meta as any) || {};
+              return {
+                box_id: boxMeta.gid || 'unknown',
+                name: boxMeta.name || 'Unknown Box',
+                model: boxMeta.model || 'unknown',
+                status: boxMeta.online ? 'online' : 'offline',
+                version: boxMeta.version || 'unknown',
+                location: boxMeta.location || 'unknown',
+                device_count: boxMeta.deviceCount || 0,
+                rule_count: boxMeta.ruleCount || 0,
+                alarm_count: boxMeta.alarmCount || 0,
+                activity_score: stat.value || 0,
+                last_seen: boxMeta.lastSeen 
+                  ? new Date((boxMeta.lastSeen as number) * 1000).toISOString() 
+                  : 'Never',
+              };
+            }).sort((a, b) => b.activity_score - a.activity_score);
+            
+            // Calculate summary with safe operations
+            const onlineBoxes = stats.results.filter(s => (s.meta as any)?.online).length;
+            const totalDevices = stats.results.reduce((sum, s) => sum + ((s.meta as any)?.deviceCount || 0), 0);
+            const totalRules = stats.results.reduce((sum, s) => sum + ((s.meta as any)?.ruleCount || 0), 0);
+            const totalAlarms = stats.results.reduce((sum, s) => sum + ((s.meta as any)?.alarmCount || 0), 0);
+            
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    total_boxes: stats.results.length,
+                    box_statistics: boxStatistics,
+                    summary: {
+                      online_boxes: onlineBoxes,
+                      total_devices: totalDevices,
+                      total_rules: totalRules,
+                      total_alarms: totalAlarms,
+                    }
+                  }, null, 2),
+                },
+              ],
+            };
+          } catch (error) {
+            console.error('Error in get_statistics_by_box:', error);
+            
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    error: 'Failed to get box statistics',
+                    message: error instanceof Error ? error.message : 'Unknown error',
+                    total_boxes: 0,
+                    box_statistics: [],
+                    summary: {
+                      online_boxes: 0,
+                      total_devices: 0,
+                      total_rules: 0,
+                      total_alarms: 0,
+                    }
+                  }, null, 2),
+                },
+              ],
+            };
+          }
         }
 
         case 'get_flow_trends': {
           const period = (args?.period as '1h' | '24h' | '7d' | '30d') || '24h';
           const interval = (args?.interval as number) || 3600;
           
-          const trends = await firewalla.getFlowTrends(period, interval);
-          
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  period,
-                  interval_seconds: interval,
-                  data_points: trends.results.length,
-                  trends: trends.results.map(trend => ({
-                    timestamp: trend.ts,
-                    timestamp_iso: new Date(trend.ts * 1000).toISOString(),
-                    flow_count: trend.value,
-                  })),
-                  summary: {
-                    total_flows: trends.results.reduce((sum, t) => sum + t.value, 0),
-                    avg_flows_per_interval: trends.results.length > 0 
-                      ? Math.round(trends.results.reduce((sum, t) => sum + t.value, 0) / trends.results.length)
-                      : 0,
-                    peak_flow_count: trends.results.length > 0 ? Math.max(...trends.results.map(t => t.value)) : 0,
-                    min_flow_count: trends.results.length > 0 ? Math.min(...trends.results.map(t => t.value)) : 0,
-                  }
-                }, null, 2),
-              },
-            ],
-          };
+          try {
+            const trends = await firewalla.getFlowTrends(period, interval);
+            
+            // Validate trends response structure
+            if (!trends || typeof trends !== 'object') {
+              throw new Error('Invalid trends response: not an object');
+            }
+            
+            if (!trends.results || !Array.isArray(trends.results)) {
+              throw new Error('Invalid trends response: results is not an array');
+            }
+            
+            // Validate each trend item has required properties
+            const validTrends = trends.results.filter(trend => 
+              trend && 
+              typeof trend.ts === 'number' && 
+              typeof trend.value === 'number'
+            );
+            
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    period,
+                    interval_seconds: interval,
+                    data_points: validTrends.length,
+                    trends: validTrends.map(trend => ({
+                      timestamp: trend.ts,
+                      timestamp_iso: new Date(trend.ts * 1000).toISOString(),
+                      flow_count: trend.value,
+                    })),
+                    summary: {
+                      total_flows: validTrends.reduce((sum, t) => sum + t.value, 0),
+                      avg_flows_per_interval: validTrends.length > 0 
+                        ? Math.round(validTrends.reduce((sum, t) => sum + t.value, 0) / validTrends.length)
+                        : 0,
+                      peak_flow_count: validTrends.length > 0 ? Math.max(...validTrends.map(t => t.value)) : 0,
+                      min_flow_count: validTrends.length > 0 ? Math.min(...validTrends.map(t => t.value)) : 0,
+                    }
+                  }, null, 2),
+                },
+              ],
+            };
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    error: 'Failed to get flow trends',
+                    details: errorMessage,
+                    period,
+                    interval_seconds: interval,
+                    troubleshooting: 'Check if Firewalla API is accessible and credentials are valid'
+                  }, null, 2),
+                },
+              ],
+            };
+          }
         }
 
         case 'get_alarm_trends': {
@@ -785,27 +923,60 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
           
           const trends = await firewalla.getAlarmTrends(period);
           
+          // Defensive programming: validate trends response structure
+          if (!trends || !trends.results || !Array.isArray(trends.results)) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    period,
+                    data_points: 0,
+                    trends: [],
+                    summary: {
+                      total_alarms: 0,
+                      avg_alarms_per_interval: 0,
+                      peak_alarm_count: 0,
+                      intervals_with_alarms: 0,
+                      alarm_frequency: 0,
+                    },
+                    error: 'Invalid alarm trends data received'
+                  }, null, 2),
+                },
+              ],
+            };
+          }
+
+          // Validate individual trend entries
+          const validTrends = trends.results.filter(trend => 
+            trend && 
+            typeof trend.ts === 'number' && 
+            typeof trend.value === 'number' && 
+            trend.ts > 0 && 
+            trend.value >= 0
+          );
+          
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
                   period,
-                  data_points: trends.results.length,
-                  trends: trends.results.map(trend => ({
+                  data_points: validTrends.length,
+                  trends: validTrends.map(trend => ({
                     timestamp: trend.ts,
                     timestamp_iso: new Date(trend.ts * 1000).toISOString(),
                     alarm_count: trend.value,
                   })),
                   summary: {
-                    total_alarms: trends.results.reduce((sum, t) => sum + t.value, 0),
-                    avg_alarms_per_interval: trends.results.length > 0 
-                      ? Math.round(trends.results.reduce((sum, t) => sum + t.value, 0) / trends.results.length * 100) / 100
+                    total_alarms: validTrends.reduce((sum, t) => sum + t.value, 0),
+                    avg_alarms_per_interval: validTrends.length > 0 
+                      ? Math.round(validTrends.reduce((sum, t) => sum + t.value, 0) / validTrends.length * 100) / 100
                       : 0,
-                    peak_alarm_count: trends.results.length > 0 ? Math.max(...trends.results.map(t => t.value)) : 0,
-                    intervals_with_alarms: trends.results.filter(t => t.value > 0).length,
-                    alarm_frequency: trends.results.length > 0 
-                      ? Math.round((trends.results.filter(t => t.value > 0).length / trends.results.length) * 100)
+                    peak_alarm_count: validTrends.length > 0 ? Math.max(...validTrends.map(t => t.value)) : 0,
+                    intervals_with_alarms: validTrends.filter(t => t.value > 0).length,
+                    alarm_frequency: validTrends.length > 0 
+                      ? Math.round((validTrends.filter(t => t.value > 0).length / validTrends.length) * 100)
                       : 0,
                   }
                 }, null, 2),
@@ -817,32 +988,65 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         case 'get_rule_trends': {
           const period = (args?.period as '1h' | '24h' | '7d' | '30d') || '24h';
           
-          const trends = await firewalla.getRuleTrends(period);
-          
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  period,
-                  data_points: trends.results.length,
-                  trends: trends.results.map(trend => ({
-                    timestamp: trend.ts,
-                    timestamp_iso: new Date(trend.ts * 1000).toISOString(),
-                    active_rule_count: trend.value,
-                  })),
-                  summary: {
-                    avg_active_rules: trends.results.length > 0 
-                      ? Math.round(trends.results.reduce((sum, t) => sum + t.value, 0) / trends.results.length)
-                      : 0,
-                    max_active_rules: trends.results.length > 0 ? Math.max(...trends.results.map(t => t.value)) : 0,
-                    min_active_rules: trends.results.length > 0 ? Math.min(...trends.results.map(t => t.value)) : 0,
-                    rule_stability: calculateRuleStability(trends.results),
-                  }
-                }, null, 2),
-              },
-            ],
-          };
+          try {
+            const trends = await firewalla.getRuleTrends(period);
+            
+            // Validate trends response structure
+            if (!trends || typeof trends !== 'object') {
+              throw new Error('Invalid trends response: not an object');
+            }
+            
+            if (!trends.results || !Array.isArray(trends.results)) {
+              throw new Error('Invalid trends response: results is not an array');
+            }
+            
+            // Validate each trend item has required properties
+            const validTrends = trends.results.filter(trend => 
+              trend && 
+              typeof trend.ts === 'number' && 
+              typeof trend.value === 'number'
+            );
+            
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    period,
+                    data_points: validTrends.length,
+                    trends: validTrends.map(trend => ({
+                      timestamp: trend.ts,
+                      timestamp_iso: new Date(trend.ts * 1000).toISOString(),
+                      active_rule_count: trend.value,
+                    })),
+                    summary: {
+                      avg_active_rules: validTrends.length > 0 
+                        ? Math.round(validTrends.reduce((sum, t) => sum + t.value, 0) / validTrends.length)
+                        : 0,
+                      max_active_rules: validTrends.length > 0 ? Math.max(...validTrends.map(t => t.value)) : 0,
+                      min_active_rules: validTrends.length > 0 ? Math.min(...validTrends.map(t => t.value)) : 0,
+                      rule_stability: calculateRuleStability(validTrends),
+                    }
+                  }, null, 2),
+                },
+              ],
+            };
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    error: 'Failed to get rule trends',
+                    details: errorMessage,
+                    period,
+                    troubleshooting: 'Check if Firewalla API is accessible and firewall rules are available'
+                  }, null, 2),
+                },
+              ],
+            };
+          }
         }
 
         // Search Tools - Advanced search capabilities with complex query syntax
