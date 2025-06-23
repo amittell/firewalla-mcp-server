@@ -22,6 +22,10 @@ export class SearchEngine {
     const startTime = Date.now();
     
     try {
+      // Validate input parameters
+      if (!params || !params.query || typeof params.query !== 'string') {
+        throw new Error('Invalid search parameters: query is required and must be a string');
+      }
       // Parse the query
       const validation = queryParser.parse(params.query, 'flows');
       if (!validation.isValid || !validation.ast) {
@@ -115,6 +119,10 @@ export class SearchEngine {
     const startTime = Date.now();
     
     try {
+      // Validate input parameters
+      if (!params || !params.query || typeof params.query !== 'string') {
+        throw new Error('Invalid search parameters: query is required and must be a string');
+      }
       const validation = queryParser.parse(params.query, 'alarms');
       if (!validation.isValid || !validation.ast) {
         throw new Error(`Invalid query: ${validation.errors.join(', ')}`);
@@ -176,6 +184,10 @@ export class SearchEngine {
     const startTime = Date.now();
     
     try {
+      // Validate input parameters
+      if (!params || !params.query || typeof params.query !== 'string') {
+        throw new Error('Invalid search parameters: query is required and must be a string');
+      }
       const validation = queryParser.parse(params.query, 'rules');
       if (!validation.isValid || !validation.ast) {
         throw new Error(`Invalid query: ${validation.errors.join(', ')}`);
@@ -236,6 +248,10 @@ export class SearchEngine {
     const startTime = Date.now();
     
     try {
+      // Validate input parameters
+      if (!params || !params.query || typeof params.query !== 'string') {
+        throw new Error('Invalid search parameters: query is required and must be a string');
+      }
       const validation = queryParser.parse(params.query, 'devices');
       if (!validation.isValid || !validation.ast) {
         throw new Error(`Invalid query: ${validation.errors.join(', ')}`);
@@ -296,6 +312,10 @@ export class SearchEngine {
     const startTime = Date.now();
     
     try {
+      // Validate input parameters
+      if (!params || !params.query || typeof params.query !== 'string') {
+        throw new Error('Invalid search parameters: query is required and must be a string');
+      }
       const validation = queryParser.parse(params.query, 'target_lists');
       if (!validation.isValid || !validation.ast) {
         throw new Error(`Invalid query: ${validation.errors.join(', ')}`);

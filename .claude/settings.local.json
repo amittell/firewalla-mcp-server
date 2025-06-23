@@ -48,7 +48,15 @@
       "mcp__firewalla__search_rules",
       "WebFetch(domain:docs.anthropic.com)",
       "mcp__sequential-thinking__sequentialthinking",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "mcp__firewalla-mcp__get_simple_statistics",
+      "mcp__firewalla-mcp__get_statistics_by_region",
+      "mcp__firewalla-mcp__get_statistics_by_box",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(find:*)",
+      "mcp__firewalla-mcp__get_bandwidth_usage",
+      "mcp__firewalla-mcp__get_target_lists",
+      "mcp__firewalla-mcp__search_target_lists"
     ],
     "deny": []
   }

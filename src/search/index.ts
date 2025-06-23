@@ -11,7 +11,7 @@ import { SearchFilter, SearchOptions } from '../types.js';
 interface QueryComponent {
   field?: string;
   operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'nin' | 'contains' | 'startswith' | 'endswith' | 'regex' | 'range';
-  value: string | number | boolean | Array<string | number>;
+  value: string | number | boolean | Array<string | number | boolean>;
   logical?: 'AND' | 'OR' | 'NOT';
 }
 
