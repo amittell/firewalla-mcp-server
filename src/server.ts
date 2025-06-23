@@ -47,6 +47,18 @@ export class FirewallaMCPServer {
             inputSchema: {
               type: 'object',
               properties: {
+                query: {
+                  type: 'string',
+                  description: 'Search query for filtering alarms',
+                },
+                groupBy: {
+                  type: 'string',
+                  description: 'Group alarms by field (e.g., type, box)',
+                },
+                sortBy: {
+                  type: 'string',
+                  description: 'Sort alarms (default: ts:desc)',
+                },
                 severity: {
                   type: 'string',
                   enum: ['low', 'medium', 'high', 'critical'],
@@ -57,6 +69,10 @@ export class FirewallaMCPServer {
                   description: 'Maximum number of results (default: 20)',
                   minimum: 1,
                   maximum: 100,
+                },
+                cursor: {
+                  type: 'string',
+                  description: 'Pagination cursor from previous response',
                 },
               },
             },
@@ -94,13 +110,13 @@ export class FirewallaMCPServer {
             inputSchema: {
               type: 'object',
               properties: {
-                device_id: {
+                box_id: {
                   type: 'string',
-                  description: 'Specific device ID to query',
+                  description: 'Filter devices under a specific Firewalla box',
                 },
-                include_offline: {
-                  type: 'boolean',
-                  description: 'Include offline devices (default: true)',
+                group_id: {
+                  type: 'string',
+                  description: 'Filter devices under a specific device group',
                 },
               },
             },
@@ -215,11 +231,44 @@ export class FirewallaMCPServer {
             },
           },
           {
+            name: 'get_specific_alarm',
+            description: 'Get detailed information for a specific alarm',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                alarm_id: {
+                  type: 'string',
+                  description: 'Alarm identifier to retrieve',
+                },
+              },
+              required: ['alarm_id'],
+            },
+          },
+          {
+            name: 'delete_alarm',
+            description: 'Delete/dismiss a specific alarm',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                alarm_id: {
+                  type: 'string',
+                  description: 'Alarm identifier to delete',
+                },
+              },
+              required: ['alarm_id'],
+            },
+          },
+          {
             name: 'get_boxes',
             description: 'List all managed Firewalla boxes',
             inputSchema: {
               type: 'object',
-              properties: {},
+              properties: {
+                group_id: {
+                  type: 'string',
+                  description: 'Filter boxes by group ID (optional)',
+                },
+              },
             },
           },
           {

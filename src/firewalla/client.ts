@@ -766,7 +766,7 @@ export class FirewallaClient {
         throw new Error('Alarm ID contains invalid characters');
       }
 
-      const response = await this.request<any>('GET', `/alarms/${this.config.boxId}/${validatedAlarmId}`);
+      const response = await this.request<any>('GET', `/v2/alarms/${this.config.boxId}/${validatedAlarmId}`);
       
       // Enhanced null/undefined checks for response
       if (!response || typeof response !== 'object') {
@@ -890,7 +890,7 @@ export class FirewallaClient {
 
       const response = await this.request<{ success: boolean; message: string; deleted?: boolean; status?: string }>(
         'DELETE',
-        `/alarms/${this.config.boxId}/${validatedAlarmId}`,
+        `/v2/alarms/${this.config.boxId}/${validatedAlarmId}`,
         undefined,
         false
       );
@@ -2846,7 +2846,7 @@ export class FirewallaClient {
       
       const response = await this.request<{success: boolean; message: string}>(
         'POST',
-        `/rules/${this.config.boxId}/${validatedRuleId}/pause`,
+        `/v2/rules/${validatedRuleId}/pause`,
         { duration: validatedDuration },
         false
       );
@@ -2876,7 +2876,7 @@ export class FirewallaClient {
 
       const response = await this.request<{success: boolean; message: string}>(
         'POST',
-        `/rules/${this.config.boxId}/${validatedRuleId}/resume`,
+        `/v2/rules/${validatedRuleId}/resume`,
         {},
         false
       );
