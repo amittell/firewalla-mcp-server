@@ -55,7 +55,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                 type: 'text',
                 text: JSON.stringify({
                   count: response.count,
-                  alarms: response.results.map(alarm => ({
+                  alarms: (Array.isArray(response.results) ? response.results : []).map(alarm => ({
                     aid: alarm.aid,
                     timestamp: new Date(alarm.ts * 1000).toISOString(),
                     type: alarm.type,
@@ -107,7 +107,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                 type: 'text',
                 text: JSON.stringify({
                   count: response.count,
-                  flows: response.results.map(flow => ({
+                  flows: (Array.isArray(response.results) ? response.results : []).map(flow => ({
                     timestamp: new Date(flow.ts * 1000).toISOString(),
                     source_ip: flow.source?.ip || flow.device.ip,
                     destination_ip: flow.destination?.ip || 'unknown',
@@ -144,10 +144,10 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
               {
                 type: 'text',
                 text: JSON.stringify({
-                  total_devices: devicesResponse.results.length,
-                  online_devices: devicesResponse.results.filter(d => d.online).length,
-                  offline_devices: devicesResponse.results.filter(d => !d.online).length,
-                  devices: devicesResponse.results.map(device => ({
+                  total_devices: Array.isArray(devicesResponse.results) ? devicesResponse.results.length : 0,
+                  online_devices: Array.isArray(devicesResponse.results) ? devicesResponse.results.filter(d => d.online).length : 0,
+                  offline_devices: Array.isArray(devicesResponse.results) ? devicesResponse.results.filter(d => !d.online).length : 0,
+                  devices: (Array.isArray(devicesResponse.results) ? devicesResponse.results : []).map(device => ({
                     id: device.id,
                     gid: device.gid,
                     name: device.name,
@@ -223,8 +223,8 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                 type: 'text',
                 text: JSON.stringify({
                   period,
-                  top_devices: usageResponse.results.length,
-                  bandwidth_usage: usageResponse.results.map(item => ({
+                  top_devices: Array.isArray(usageResponse.results) ? usageResponse.results.length : 0,
+                  bandwidth_usage: (Array.isArray(usageResponse.results) ? usageResponse.results : []).map(item => ({
                     device_id: item.device_id,
                     device_name: item.device_name,
                     ip_address: item.ip_address,
@@ -539,9 +539,9 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
               {
                 type: 'text',
                 text: JSON.stringify({
-                  total_lists: listsResponse.results.length,
-                  categories: [...new Set(listsResponse.results.map(l => l.category).filter(Boolean))],
-                  target_lists: listsResponse.results.map(list => ({
+                  total_lists: Array.isArray(listsResponse.results) ? listsResponse.results.length : 0,
+                  categories: [...new Set((Array.isArray(listsResponse.results) ? listsResponse.results : []).map(l => l.category).filter(Boolean))],
+                  target_lists: (Array.isArray(listsResponse.results) ? listsResponse.results : []).map(list => ({
                     id: list.id,
                     name: list.name,
                     owner: list.owner,
@@ -591,8 +591,8 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
               {
                 type: 'text',
                 text: JSON.stringify({
-                  total_boxes: boxesResponse.results.length,
-                  boxes: boxesResponse.results.map(box => ({
+                  total_boxes: Array.isArray(boxesResponse.results) ? boxesResponse.results.length : 0,
+                  boxes: (Array.isArray(boxesResponse.results) ? boxesResponse.results : []).map(box => ({
                     gid: box.gid,
                     name: box.name,
                     model: box.model,
@@ -784,7 +784,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
             }
             
             // Process and validate each box statistic
-            const boxStatistics = stats.results.map(stat => {
+            const boxStatistics = (Array.isArray(stats.results) ? stats.results : []).map(stat => {
               const boxMeta = (stat.meta as any) || {};
               return {
                 box_id: boxMeta.gid || 'unknown',
@@ -1059,10 +1059,10 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
               {
                 type: 'text',
                 text: JSON.stringify({
-                  count: result.results.length,
+                  count: Array.isArray(result.results) ? result.results.length : 0,
                   query_executed: result.query,
                   execution_time_ms: result.execution_time_ms,
-                  flows: result.results.map(flow => ({
+                  flows: (Array.isArray(result.results) ? result.results : []).map(flow => ({
                     timestamp: new Date(flow.ts * 1000).toISOString(),
                     source_ip: flow.source?.ip || 'unknown',
                     destination_ip: flow.destination?.ip || 'unknown',
@@ -1091,7 +1091,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                   count: result.results.length,
                   query_executed: result.query,
                   execution_time_ms: result.execution_time_ms,
-                  alarms: result.results.map(alarm => ({
+                  alarms: (Array.isArray(result.results) ? result.results : []).map(alarm => ({
                     timestamp: new Date(alarm.ts * 1000).toISOString(),
                     type: alarm.type,
                     message: alarm.message,
@@ -1118,7 +1118,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                   count: result.results.length,
                   query_executed: result.query,
                   execution_time_ms: result.execution_time_ms,
-                  rules: result.results.map(rule => ({
+                  rules: (Array.isArray(result.results) ? result.results : []).map(rule => ({
                     id: rule.id,
                     action: rule.action,
                     target_type: rule.target?.type,
@@ -1146,7 +1146,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                   count: result.results.length,
                   query_executed: result.query,
                   execution_time_ms: result.execution_time_ms,
-                  devices: result.results.map(device => ({
+                  devices: (Array.isArray(result.results) ? result.results : []).map(device => ({
                     id: device.id,
                     name: device.name,
                     ip: device.ip,
@@ -1173,7 +1173,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                   count: result.results.length,
                   query_executed: result.query,
                   execution_time_ms: result.execution_time_ms,
-                  target_lists: result.results.map(list => ({
+                  target_lists: (Array.isArray(result.results) ? result.results : []).map(list => ({
                     id: list.id,
                     name: list.name,
                     category: list.category,

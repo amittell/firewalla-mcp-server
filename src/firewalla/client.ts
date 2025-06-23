@@ -208,7 +208,7 @@ export class FirewallaClient {
     const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/alarms`, params);
     
     // API returns {count, results[], next_cursor} format
-    const alarms = response.results.map((item: any): Alarm => ({
+    const alarms = (Array.isArray(response.results) ? response.results : []).map((item: any): Alarm => ({
       ts: item.ts || Math.floor(Date.now() / 1000),
       gid: item.gid || this.config.boxId,
       aid: item.aid || 0,
@@ -261,7 +261,7 @@ export class FirewallaClient {
     const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/flows`, params);
     
     // API returns {count, results[], next_cursor} format
-    const flows = response.results.map((item: any): Flow => {
+    const flows = (Array.isArray(response.results) ? response.results : []).map((item: any): Flow => {
       const parseTimestamp = (ts: any): number => {
         if (!ts) return Math.floor(Date.now() / 1000);
         
@@ -580,7 +580,7 @@ export class FirewallaClient {
     const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/rules`, params);
     
     // API returns {count, results[]} format
-    const rules = response.results.map((item: any): NetworkRule => ({
+    const rules = (Array.isArray(response.results) ? response.results : []).map((item: any): NetworkRule => ({
       id: item.id || 'unknown',
       action: item.action || 'block',
       target: {
@@ -1635,7 +1635,9 @@ export class FirewallaClient {
 
     const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/flows`, params);
     
-    const flows = response.results.map((item: any): Flow => {
+    // Defensive programming: ensure results is an array before mapping
+    const resultsList = Array.isArray(response.results) ? response.results : [];
+    const flows = resultsList.map((item: any): Flow => {
       const parseTimestamp = (ts: any): number => {
         if (!ts) return Math.floor(Date.now() / 1000);
         if (typeof ts === 'number') {
@@ -1683,7 +1685,7 @@ export class FirewallaClient {
       metadata: {
         execution_time: Date.now() - startTime,
         cached: false,
-        filters_applied: parsed.filters.map(f => `${f.field}:${f.operator}`)
+        filters_applied: parsed?.filters?.map(f => `${f.field}:${f.operator}`) || []
       }
     };
   }
