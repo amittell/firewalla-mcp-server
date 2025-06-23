@@ -8,7 +8,15 @@ import {
   BandwidthUsage,
   NetworkRule,
   TargetList,
-} from '../types';
+  Box,
+  SearchResult,
+  SearchQuery,
+  SearchOptions,
+  CrossReferenceResult,
+} from '../types.js';
+import { parseSearchQuery, formatQueryForAPI, buildSearchOptions } from '../search/index.js';
+import { ResponseValidator, validateResponse, ValidationError } from '../validation/index.js';
+import { optimizeResponse, ResponseOptimizer } from '../optimization/index.js';
 
 interface APIResponse<T> {
   success: boolean;
@@ -149,6 +157,9 @@ export class FirewallaClient {
         result = response.data as T;
       }
       
+      // Sanitize response data
+      result = ResponseValidator.sanitizeResponse(result);
+      
       if (cacheable && method === 'GET') {
         this.setCache(cacheKey, result);
       }
@@ -162,80 +173,87 @@ export class FirewallaClient {
     }
   }
 
-  async getActiveAlarms(severity?: string, limit = 20): Promise<Alarm[]> {
-    const params: Record<string, unknown> = {
-      limit,
-    };
-    
-    if (severity) {
-      params.severity = severity;
-    }
-
-    const response = await this.request<{results: any[]} | any[]>('GET', `/alarms`, params);
-    
-    // Handle the response format - could be direct array or with results property
-    const rawAlarms = Array.isArray(response) ? response : (response.results || []);
-    
-    // Transform the raw alarm data with comprehensive field mapping
-    return rawAlarms.map((item: any) => {
-      const parseTimestamp = (ts: any) => {
-        if (!ts) return new Date().toISOString();
-        
-        if (typeof ts === 'number') {
-          const timestamp = ts > 1000000000000 ? ts : ts * 1000;
-          return new Date(timestamp).toISOString();
-        }
-        
-        if (typeof ts === 'string') {
-          if (ts.includes('T') || ts.includes('-')) {
-            return new Date(ts).toISOString();
-          }
-        }
-        
-        return new Date().toISOString();
-      };
-
-      return {
-        id: item.aid || item.id || item._id || 'unknown',
-        timestamp: parseTimestamp(item.ts || item.timestamp),
-        severity: item.severity || 'medium',
-        type: item.type || item._type || item.category || 'security',
-        description: item.description || item.message || item.msg || `Alarm ${item._type || 'detected'}`,
-        source_ip: item.device?.ip || item.srcIP || item.source_ip || item.sourceIP,
-        destination_ip: item.dstIP || item.dest_ip || item.destinationIP,
-        status: item.status === 1 ? 'active' : (item.status || 'active')
-      };
-    });
-  }
-
-  async getFlowData(
-    startTime?: string,
-    endTime?: string,
-    limit = 50,
+  @optimizeResponse('alarms')
+  @validateResponse(ResponseValidator.validateAlarm)
+  async getActiveAlarms(
+    query?: string, 
+    groupBy?: string, 
+    sortBy = 'ts:desc', 
+    limit = 200, 
     cursor?: string
-  ): Promise<FlowData> {
+  ): Promise<{count: number; results: Alarm[]; next_cursor?: string}> {
     const params: Record<string, unknown> = {
-      limit,
+      sortBy,
+      limit: Math.min(limit, 500), // API max is 500
     };
     
-    // Use Firewalla's query format for time-based filtering
-    if (startTime && endTime) {
-      // Convert ISO strings to Unix timestamps
-      const startTs = Math.floor(new Date(startTime).getTime() / 1000);
-      const endTs = Math.floor(new Date(endTime).getTime() / 1000);
-      params.query = `ts:${startTs}-${endTs}`;
+    if (query) {
+      params.query = query;
     }
-    
+    if (groupBy) {
+      params.groupBy = groupBy;
+    }
     if (cursor) {
       params.cursor = cursor;
     }
 
-    // Use correct box-specific endpoint
-    const response = await this.request<{results: any[]} | any[]>('GET', `/boxes/${this.config.boxId}/flows`, params);
-    const rawFlows = Array.isArray(response) ? response : (response.results || []);
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/alarms`, params);
     
-    // Transform the flow data to match new Flow interface
-    const flows = rawFlows.map((item: any): Flow => {
+    // API returns {count, results[], next_cursor} format
+    const alarms = response.results.map((item: any): Alarm => ({
+      ts: item.ts || Math.floor(Date.now() / 1000),
+      gid: item.gid || this.config.boxId,
+      aid: item.aid || 0,
+      type: item.type || 1,
+      status: item.status || 1,
+      message: item.message || 'Unknown alarm',
+      direction: item.direction || 'inbound',
+      protocol: item.protocol || 'tcp',
+      // Conditional properties based on alarm type
+      ...(item.device && { device: item.device }),
+      ...(item.remote && { remote: item.remote }),
+      ...(item.transfer && { transfer: item.transfer }),
+      ...(item.dataPlan && { dataPlan: item.dataPlan }),
+      ...(item.vpn && { vpn: item.vpn }),
+      ...(item.port && { port: item.port }),
+      ...(item.wan && { wan: item.wan })
+    }));
+
+    return {
+      count: response.count || alarms.length,
+      results: alarms,
+      next_cursor: response.next_cursor
+    };
+  }
+
+  @optimizeResponse('flows')
+  @validateResponse(ResponseValidator.validateFlow)
+  async getFlowData(
+    query?: string,
+    groupBy?: string,
+    sortBy = 'ts:desc',
+    limit = 200,
+    cursor?: string
+  ): Promise<{count: number; results: Flow[]; next_cursor?: string}> {
+    const params: Record<string, unknown> = {
+      sortBy,
+      limit: Math.min(limit, 500), // API max is 500
+    };
+    
+    if (query) {
+      params.query = query;
+    }
+    if (groupBy) {
+      params.groupBy = groupBy;
+    }
+    if (cursor) {
+      params.cursor = cursor;
+    }
+
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/flows`, params);
+    
+    // API returns {count, results[], next_cursor} format
+    const flows = response.results.map((item: any): Flow => {
       const parseTimestamp = (ts: any): number => {
         if (!ts) return Math.floor(Date.now() / 1000);
         
@@ -307,11 +325,9 @@ export class FirewallaClient {
     });
 
     return {
-      flows,
-      pagination: {
-        has_more: rawFlows.length === limit,
-        next_cursor: Array.isArray(response) ? undefined : (response as any).cursor
-      }
+      count: response.count || flows.length,
+      results: flows,
+      next_cursor: response.next_cursor
     };
   }
 
@@ -408,24 +424,50 @@ export class FirewallaClient {
     };
   }
 
-  async getDeviceStatus(deviceId?: string, includeOffline = true): Promise<Device[]> {
+  @optimizeResponse('devices')
+  @validateResponse(ResponseValidator.validateDevice)
+  async getDeviceStatus(boxId?: string, groupId?: string): Promise<{count: number; results: Device[]; next_cursor?: string}> {
     const params: Record<string, unknown> = {};
     
-    if (deviceId) {
-      // If specific device requested, use device endpoint
-      const response = await this.request<any>('GET', `/devices/${deviceId}`, params);
-      return [response].map(this.transformDevice);
+    if (boxId) {
+      params.box = boxId;
+    }
+    if (groupId) {
+      params.group = groupId;
     }
 
-    // Get all devices from the box
-    const response = await this.request<{devices: any[]} | any[]>('GET', `/boxes/${this.config.boxId}/devices`, params);
+    // API returns direct array of devices
+    const response = await this.request<Device[]>('GET', `/v2/devices`, params);
+    const results = response.map(this.transformDevice);
     
-    // Handle different response formats
-    const devices = Array.isArray(response) ? response : (response.devices || []);
+    return {
+      count: results.length,
+      results
+    };
+  }
+
+  @optimizeResponse('devices')
+  @validateResponse(ResponseValidator.validateDevice)
+  async getOfflineDevices(sortByLastSeen: boolean = true): Promise<{count: number; results: Device[]; next_cursor?: string}> {
+    // Get all devices first
+    const allDevices = await this.getDeviceStatus();
     
-    return devices
-      .map(this.transformDevice)
-      .filter(device => includeOffline || device.online);
+    // Filter for offline devices only
+    const offlineDevices = allDevices.results.filter(device => !device.online);
+    
+    // Sort by last seen if requested
+    if (sortByLastSeen) {
+      offlineDevices.sort((a, b) => {
+        const aLastSeen = new Date(a.lastSeen || 0).getTime();
+        const bLastSeen = new Date(b.lastSeen || 0).getTime();
+        return bLastSeen - aLastSeen; // Most recent first
+      });
+    }
+    
+    return {
+      count: offlineDevices.length,
+      results: offlineDevices
+    };
   }
 
   private transformDevice = (item: any): Device => {
@@ -462,7 +504,9 @@ export class FirewallaClient {
     return device;
   }
 
-  async getBandwidthUsage(period: string, top = 10): Promise<BandwidthUsage[]> {
+  @optimizeResponse('bandwidth')
+  @validateResponse(ResponseValidator.validateBandwidth)
+  async getBandwidthUsage(period: string, top = 10): Promise<{count: number; results: BandwidthUsage[]; next_cursor?: string}> {
     // Calculate timestamp range based on period
     const end = Math.floor(Date.now() / 1000);
     let begin: number;
@@ -495,7 +539,7 @@ export class FirewallaClient {
     const rawData = Array.isArray(response) ? response : (response.results || []);
     
     // Transform the response to BandwidthUsage format
-    return rawData.map((item: any) => ({
+    const results = rawData.map((item: any) => ({
       device_id: item.device?.id || item.deviceId || 'unknown',
       device_name: item.device?.name || item.deviceName || 'Unknown Device',
       ip_address: item.device?.ip || item.ip || 'unknown',
@@ -504,221 +548,68 @@ export class FirewallaClient {
       total_bytes: item.total || item.totalBytes || 0,
       period: period
     }));
+
+    return {
+      count: results.length,
+      results
+    };
   }
 
-  async getNetworkRules(ruleType?: string, activeOnly = true): Promise<NetworkRule[]> {
-    const params: Record<string, unknown> = {
-      active_only: activeOnly,
-    };
+  @optimizeResponse('rules')
+  @validateResponse(ResponseValidator.validateNetworkRule)
+  async getNetworkRules(query?: string): Promise<{count: number; results: NetworkRule[]; next_cursor?: string}> {
+    const params: Record<string, unknown> = {};
     
-    if (ruleType) {
-      params.rule_type = ruleType;
+    if (query) {
+      params.query = query;
     }
 
-    const response = await this.request<{results: any[]} | any[]>('GET', `/rules`, params);
-    const rawRules = Array.isArray(response) ? response : (response.results || []);
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/rules`, params);
     
-    // Transform raw API response to match NetworkRule interface with comprehensive mapping
-    // This handles cases where the API returns raw rule data with different field names
-    return rawRules.map((item: any) => {
-      // If the item already matches the NetworkRule interface perfectly, return as-is
-      if (item.id && item.name && item.type && item.action && item.status && 
-          item.conditions && item.created_at && item.updated_at) {
-        return item as NetworkRule;
-      }
-      
-      // Otherwise, apply comprehensive field mapping
-      // Extract rule ID with multiple fallbacks
-      const ruleId = item.rid || item.id || item._id || item.ruleId || 'unknown';
-      
-      // Build comprehensive rule name with context
-      let ruleName = '';
-      if (item.name) {
-        ruleName = item.name;
-      } else if (item.description || item.desc) {
-        ruleName = item.description || item.desc;
-      } else if (item.msg || item.message) {
-        ruleName = item.msg || item.message;
-      } else if (item.title) {
-        ruleName = item.title;
-      } else {
-        // Generate descriptive name based on rule details
-        const ruleTypeStr = item.type || item.ruleType || item.category || 'rule';
-        const actionStr = item.action || item.policy || 'block';
-        ruleName = `${ruleTypeStr} ${actionStr} rule ${ruleId}`.replace(/\s+/g, ' ').trim();
-      }
-      
-      // Determine rule type with comprehensive mapping
-      let ruleType = 'firewall'; // default
-      if (item.type) {
-        ruleType = item.type;
-      } else if (item.ruleType) {
-        ruleType = item.ruleType;
-      } else if (item.category) {
-        ruleType = item.category;
-      } else if (item.policyType) {
-        ruleType = item.policyType;
-      } else if (item.kind) {
-        ruleType = item.kind;
-      }
-      
-      // Map action with comprehensive fallbacks and normalization
-      let action: 'allow' | 'block' | 'redirect' = 'block'; // default
-      const actionValue = item.action || item.policy || item.verdict || item.disposition;
-      if (actionValue) {
-        const actionLower = String(actionValue).toLowerCase();
-        if (actionLower.includes('allow') || actionLower.includes('permit') || actionLower.includes('accept')) {
-          action = 'allow';
-        } else if (actionLower.includes('redirect') || actionLower.includes('proxy')) {
-          action = 'redirect';
-        } else {
-          action = 'block'; // block, deny, drop, reject, etc.
-        }
-      }
-      
-      // Determine status with comprehensive mapping
-      let status: 'active' | 'paused' | 'disabled' = 'active'; // default
-      if (item.disabled === true || item.status === 'disabled' || item.state === 'disabled') {
-        status = 'disabled';
-      } else if (item.paused === true || item.status === 'paused' || item.state === 'paused') {
-        status = 'paused';
-      } else if (item.enabled === false) {
-        status = 'disabled';
-      } else if (item.active === false && item.disabled !== false) {
-        status = 'disabled';
-      }
-      
-      // Build comprehensive conditions object
-      const conditions: Record<string, unknown> = {};
-      
-      // Direct conditions/criteria mapping
-      if (item.conditions && typeof item.conditions === 'object') {
-        Object.assign(conditions, item.conditions);
-      }
-      if (item.target && typeof item.target === 'object') {
-        Object.assign(conditions, item.target);
-      }
-      if (item.criteria && typeof item.criteria === 'object') {
-        Object.assign(conditions, item.criteria);
-      }
-      if (item.config && typeof item.config === 'object') {
-        Object.assign(conditions, item.config);
-      }
-      
-      // Add specific rule parameters
-      if (item.sourceIP || item.src_ip || item.srcIP) {
-        conditions.source_ip = item.sourceIP || item.src_ip || item.srcIP;
-      }
-      if (item.destinationIP || item.dest_ip || item.dstIP || item.dst_ip) {
-        conditions.destination_ip = item.destinationIP || item.dest_ip || item.dstIP || item.dst_ip;
-      }
-      if (item.sourcePort || item.src_port || item.srcPort) {
-        conditions.source_port = item.sourcePort || item.src_port || item.srcPort;
-      }
-      if (item.destinationPort || item.dest_port || item.dstPort || item.dst_port) {
-        conditions.destination_port = item.destinationPort || item.dest_port || item.dstPort || item.dst_port;
-      }
-      if (item.protocol || item.proto) {
-        conditions.protocol = item.protocol || item.proto;
-      }
-      if (item.domain || item.hostname || item.host) {
-        conditions.domain = item.domain || item.hostname || item.host;
-      }
-      if (item.url || item.path) {
-        conditions.url = item.url || item.path;
-      }
-      if (item.app || item.application || item.appName) {
-        conditions.application = item.app || item.application || item.appName;
-      }
-      if (item.device || item.deviceId || item.mac) {
-        conditions.device = item.device || item.deviceId || item.mac;
-      }
-      if (item.direction) {
-        conditions.direction = item.direction;
-      }
-      if (item.schedule || item.timeRange) {
-        conditions.schedule = item.schedule || item.timeRange;
-      }
-      if (item.tags && Array.isArray(item.tags)) {
-        conditions.tags = item.tags;
-      }
-      if (item.category || item.categories) {
-        conditions.category = item.category || item.categories;
-      }
-      
-      // Add rule metadata
-      if (item.priority !== undefined) {
-        conditions.priority = item.priority;
-      }
-      if (item.weight !== undefined) {
-        conditions.weight = item.weight;
-      }
-      if (item.severity) {
-        conditions.severity = item.severity;
-      }
-      if (item.scope) {
-        conditions.scope = item.scope;
-      }
-      
-      // Handle timestamp conversion with multiple formats - returns Unix timestamp in seconds
-      const parseTimestamp = (ts: any): number => {
-        if (!ts) return Math.floor(Date.now() / 1000);
-        
-        if (typeof ts === 'number') {
-          // Handle both seconds and milliseconds timestamps
-          return ts > 1000000000000 ? Math.floor(ts / 1000) : ts;
-        }
-        
-        if (typeof ts === 'string') {
-          // Try to parse ISO string or convert to number
-          if (ts.includes('T') || ts.includes('-')) {
-            return Math.floor(new Date(ts).getTime() / 1000);
-          } else {
-            const numTs = parseInt(ts, 10);
-            if (!isNaN(numTs)) {
-              return numTs > 1000000000000 ? Math.floor(numTs / 1000) : numTs;
-            }
-          }
-        }
-        
-        return Math.floor(Date.now() / 1000);
-      };
-      
-      const createdAt = parseTimestamp(
-        item.createdAt || item.created_at || item.createTime || item.timestamp || item.ts
-      );
-      
-      const updatedAt = parseTimestamp(
-        item.updatedAt || item.updated_at || item.updateTime || item.lastModified || 
-        item.modifiedAt || item.modified_at || createdAt
-      );
-      
-      return {
-        id: ruleId,
-        action,
-        target: {
-          type: item.target?.type || 'ip',
-          value: item.target?.value || conditions.destination_ip || conditions.domain || 'unknown'
-        },
-        direction: item.direction || 'bidirection',
-        gid: item.gid || this.config.boxId,
-        group: item.group,
-        scope: item.scope,
-        notes: item.notes || ruleName,
-        status: status === 'disabled' ? undefined : status,
-        hit: item.hit ? {
-          count: item.hit.count || 0,
-          lastHitTs: item.hit.lastHitTs || 0,
-          statsResetTs: item.hit.statsResetTs
-        } : undefined,
-        schedule: item.schedule,
-        timeUsage: item.timeUsage,
-        protocol: item.protocol,
-        ts: parseTimestamp(item.createdAt || item.created_at || item.createTime || item.timestamp || item.ts),
-        updateTs: parseTimestamp(item.updatedAt || item.updated_at || item.updateTime || item.lastModified || item.modifiedAt || item.modified_at),
-        resumeTs: item.resumeTs
-      } as NetworkRule;
-    });
+    // API returns {count, results[]} format
+    const rules = response.results.map((item: any): NetworkRule => ({
+      id: item.id || 'unknown',
+      action: item.action || 'block',
+      target: {
+        type: item.target?.type || 'ip',
+        value: item.target?.value || 'unknown',
+        dnsOnly: item.target?.dnsOnly,
+        port: item.target?.port
+      },
+      direction: item.direction || 'bidirection',
+      gid: item.gid || this.config.boxId,
+      group: item.group,
+      scope: item.scope ? {
+        type: item.scope.type || 'ip',
+        value: item.scope.value || 'unknown',
+        port: item.scope.port
+      } : undefined,
+      notes: item.notes,
+      status: item.status,
+      hit: item.hit ? {
+        count: item.hit.count || 0,
+        lastHitTs: item.hit.lastHitTs || 0,
+        statsResetTs: item.hit.statsResetTs
+      } : undefined,
+      schedule: item.schedule ? {
+        duration: item.schedule.duration || 0,
+        cronTime: item.schedule.cronTime
+      } : undefined,
+      timeUsage: item.timeUsage ? {
+        quota: item.timeUsage.quota || 0,
+        used: item.timeUsage.used || 0
+      } : undefined,
+      protocol: item.protocol,
+      ts: item.ts || Math.floor(Date.now() / 1000),
+      updateTs: item.updateTs || Math.floor(Date.now() / 1000),
+      resumeTs: item.resumeTs
+    }));
+
+    return {
+      count: response.count || rules.length,
+      results: rules,
+      next_cursor: response.next_cursor
+    };
   }
 
   async pauseRule(ruleId: string, duration = 60): Promise<{ success: boolean; message: string }> {
@@ -730,7 +621,9 @@ export class FirewallaClient {
     );
   }
 
-  async getTargetLists(listType?: string): Promise<TargetList[]> {
+  @optimizeResponse('targets')
+  @validateResponse(ResponseValidator.validateTarget)
+  async getTargetLists(listType?: string): Promise<{count: number; results: TargetList[]; next_cursor?: string}> {
     const params: Record<string, unknown> = {};
     
     if (listType && listType !== 'all') {
@@ -739,7 +632,12 @@ export class FirewallaClient {
 
     const response = await this.request<TargetList[] | {results: TargetList[]}>('GET', `/target-lists`, params);
     // Handle response format
-    return Array.isArray(response) ? response : (response.results || []);
+    const results = Array.isArray(response) ? response : (response.results || []);
+    
+    return {
+      count: results.length,
+      results
+    };
   }
 
   async getFirewallSummary(): Promise<{
@@ -803,18 +701,43 @@ export class FirewallaClient {
     );
   }
 
-  async getBoxes(): Promise<Array<{
-    id: string;
-    name: string;
-    status: string;
-    version: string;
-    last_seen: string;
-    location?: string;
-    type?: string;
-  }>> {
-    return this.request('GET', `/boxes`, undefined, true);
+  @optimizeResponse('boxes')
+  @validateResponse(ResponseValidator.validateBox)
+  async getBoxes(groupId?: string): Promise<{count: number; results: Box[]; next_cursor?: string}> {
+    const params: Record<string, unknown> = {};
+    
+    if (groupId) {
+      params.group = groupId;
+    }
+
+    // API returns direct array of boxes
+    const response = await this.request<any[]>('GET', `/v2/boxes`, params, true);
+    
+    const results = response.map((item: any): Box => ({
+      gid: item.gid || item.id || 'unknown',
+      name: item.name || 'Unknown Box',
+      model: item.model || 'unknown',
+      mode: item.mode || 'router',
+      version: item.version || 'unknown',
+      online: Boolean(item.online || item.status === 'online'),
+      lastSeen: item.lastSeen || item.last_seen,
+      license: item.license || 'unknown',
+      publicIP: item.publicIP || item.public_ip || 'unknown',
+      group: item.group,
+      location: item.location || 'unknown',
+      deviceCount: item.deviceCount || item.device_count || 0,
+      ruleCount: item.ruleCount || item.rule_count || 0,
+      alarmCount: item.alarmCount || item.alarm_count || 0
+    }));
+
+    return {
+      count: results.length,
+      results
+    };
   }
 
+  @optimizeResponse('alarms')
+  @validateResponse(ResponseValidator.validateAlarm)
   async getSpecificAlarm(alarmId: string): Promise<Alarm> {
     const response = await this.request<any>('GET', `/alarms/${this.config.boxId}/${alarmId}`);
     
@@ -858,7 +781,8 @@ export class FirewallaClient {
   }
 
   // Statistics API Implementation
-  async getSimpleStatistics(): Promise<import('../types').SimpleStats> {
+  @optimizeResponse('statistics')
+  async getSimpleStatistics(): Promise<{count: number; results: import('../types').SimpleStats[]; next_cursor?: string}> {
     const [boxes, alarms, rules] = await Promise.all([
       this.getBoxes(),
       this.getActiveAlarms(),
@@ -868,36 +792,48 @@ export class FirewallaClient {
     const onlineBoxes = boxes.filter((box: any) => box.status === 'online' || box.online).length;
     const offlineBoxes = boxes.length - onlineBoxes;
 
-    return {
+    const stats = {
       onlineBoxes,
       offlineBoxes,
-      alarms: alarms.length,
-      rules: rules.length
+      alarms: alarms.count,
+      rules: rules.count
+    };
+
+    return {
+      count: 1,
+      results: [stats]
     };
   }
 
-  async getStatisticsByRegion(): Promise<import('../types').Statistics[]> {
-    const flows = await this.getFlowData(undefined, undefined, 1000);
+  @optimizeResponse('statistics')
+  async getStatisticsByRegion(): Promise<{count: number; results: import('../types').Statistics[]; next_cursor?: string}> {
+    const flows = await this.getFlowData();
     const alarms = await this.getActiveAlarms();
 
     // Group flows by region
     const regionStats = new Map<string, number>();
     
-    flows.flows.forEach(flow => {
+    flows.results.forEach(flow => {
       if (flow.region) {
         regionStats.set(flow.region, (regionStats.get(flow.region) || 0) + 1);
       }
     });
 
     // Convert to Statistics format
-    return Array.from(regionStats.entries()).map(([code, value]) => ({
+    const results = Array.from(regionStats.entries()).map(([code, value]) => ({
       meta: { code },
       value
     }));
+
+    return {
+      count: results.length,
+      results
+    };
   }
 
   // Trends API Implementation
-  async getFlowTrends(period: '1h' | '24h' | '7d' | '30d' = '24h', interval: number = 3600): Promise<import('../types').Trend[]> {
+  @optimizeResponse('trends')
+  async getFlowTrends(period: '1h' | '24h' | '7d' | '30d' = '24h', interval: number = 3600): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
     const end = Math.floor(Date.now() / 1000);
     let begin: number;
     let points: number;
@@ -936,11 +872,11 @@ export class FirewallaClient {
         // Query flows for this time interval
         const startTime = new Date(intervalStart * 1000).toISOString();
         const endTime = new Date(intervalEnd * 1000).toISOString();
-        const flows = await this.getFlowData(startTime, endTime, 1000);
+        const flows = await this.getFlowData();
         
         trends.push({
           ts: intervalEnd,
-          value: flows.flows.length
+          value: flows.results.length
         });
       } catch (error) {
         // If we can't get data for this interval, use 0
@@ -951,10 +887,14 @@ export class FirewallaClient {
       }
     }
     
-    return trends;
+    return {
+      count: trends.length,
+      results: trends
+    };
   }
 
-  async getAlarmTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<import('../types').Trend[]> {
+  @optimizeResponse('trends')
+  async getAlarmTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
     // For alarms, we'll simulate trends based on current alarm timestamps
     // In a real implementation, this would query historical alarm data
     const alarms = await this.getActiveAlarms();
@@ -1008,10 +948,14 @@ export class FirewallaClient {
       });
     }
     
-    return trends;
+    return {
+      count: trends.length,
+      results: trends
+    };
   }
 
-  async getRuleTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<import('../types').Trend[]> {
+  @optimizeResponse('trends')
+  async getRuleTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
     // For rules, we'll show trend based on rule creation/update times
     const rules = await this.getNetworkRules();
     const end = Math.floor(Date.now() / 1000);
@@ -1044,7 +988,7 @@ export class FirewallaClient {
     const trends: import('../types').Trend[] = [];
     
     // Count active rules over time (simplified - shows current count for each interval)
-    const activeRuleCount = rules.filter(rule => rule.status === 'active' || !rule.status).length;
+    const activeRuleCount = rules.results.filter(rule => rule.status === 'active' || !rule.status).length;
     
     for (let i = 0; i < points; i++) {
       const intervalEnd = begin + ((i + 1) * interval);
@@ -1057,10 +1001,14 @@ export class FirewallaClient {
       });
     }
     
-    return trends;
+    return {
+      count: trends.length,
+      results: trends
+    };
   }
 
-  async getStatisticsByBox(): Promise<import('../types').Statistics[]> {
+  @optimizeResponse('statistics')
+  async getStatisticsByBox(): Promise<{count: number; results: import('../types').Statistics[]; next_cursor?: string}> {
     const [boxes, alarms, rules] = await Promise.all([
       this.getBoxes(),
       this.getActiveAlarms(),
@@ -1079,21 +1027,21 @@ export class FirewallaClient {
     });
 
     // Count alarms per box (if alarm has box info)
-    alarms.forEach(alarm => {
+    alarms.results.forEach(alarm => {
       if ((alarm as any).gid && boxStats.has((alarm as any).gid)) {
         boxStats.get((alarm as any).gid)!.alarmCount++;
       }
     });
 
     // Count rules per box (if rule has box info)
-    rules.forEach(rule => {
+    rules.results.forEach(rule => {
       if (rule.gid && boxStats.has(rule.gid)) {
         boxStats.get(rule.gid)!.ruleCount++;
       }
     });
 
     // Convert to Statistics format - using combined score as value
-    return Array.from(boxStats.values()).map(stat => ({
+    const results = Array.from(boxStats.values()).map(stat => ({
       meta: {
         gid: stat.box.id || stat.box.gid,
         name: stat.box.name,
@@ -1112,6 +1060,11 @@ export class FirewallaClient {
       },
       value: stat.alarmCount + stat.ruleCount // Combined activity score
     }));
+
+    return {
+      count: results.length,
+      results
+    };
   }
 
   clearCache(): void {
@@ -1123,5 +1076,553 @@ export class FirewallaClient {
       size: this.cache.size,
       keys: Array.from(this.cache.keys()),
     };
+  }
+
+  // Advanced Search Methods
+
+  /**
+   * Advanced search for network flows with complex query syntax
+   * Supports: severity:high AND source_ip:192.168.* NOT resolved:true
+   */
+  @optimizeResponse('flows')
+  async searchFlows(
+    searchQuery: SearchQuery,
+    options: SearchOptions = {}
+  ): Promise<SearchResult<Flow>> {
+    const startTime = Date.now();
+    
+    // Parse and optimize query
+    const parsed = parseSearchQuery(searchQuery.query);
+    const optimizedQuery = formatQueryForAPI(searchQuery.query);
+    
+    const params: Record<string, unknown> = {
+      query: optimizedQuery,
+      limit: Math.min(searchQuery.limit || 50, 1000),
+      sortBy: searchQuery.sort_by || 'ts:desc',
+    };
+    
+    if (searchQuery.group_by) {
+      params.groupBy = searchQuery.group_by;
+    }
+    if (searchQuery.cursor) {
+      params.cursor = searchQuery.cursor;
+    }
+    if (searchQuery.aggregate) {
+      params.aggregate = true;
+    }
+    
+    // Add time range if specified
+    if (options.time_range) {
+      const startTs = typeof options.time_range.start === 'string' 
+        ? Math.floor(new Date(options.time_range.start).getTime() / 1000)
+        : options.time_range.start;
+      const endTs = typeof options.time_range.end === 'string'
+        ? Math.floor(new Date(options.time_range.end).getTime() / 1000)
+        : options.time_range.end;
+      
+      const timeQuery = `ts:${startTs}-${endTs}`;
+      params.query = params.query ? `${params.query} AND ${timeQuery}` : timeQuery;
+    }
+    
+    // Add blocked flow filter if needed
+    if (options.include_resolved === false) {
+      params.query = params.query ? `${params.query} AND block:false` : 'block:false';
+    }
+
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/flows`, params);
+    
+    const flows = response.results.map((item: any): Flow => {
+      const parseTimestamp = (ts: any): number => {
+        if (!ts) return Math.floor(Date.now() / 1000);
+        if (typeof ts === 'number') {
+          return ts > 1000000000000 ? Math.floor(ts / 1000) : ts;
+        }
+        if (typeof ts === 'string') {
+          const parsed = Date.parse(ts);
+          return Math.floor(parsed / 1000);
+        }
+        return Math.floor(Date.now() / 1000);
+      };
+
+      const flow: Flow = {
+        ts: parseTimestamp(item.ts || item.timestamp),
+        gid: item.gid || this.config.boxId,
+        protocol: item.protocol || 'tcp',
+        direction: item.direction || 'outbound',
+        block: Boolean(item.block || item.blocked),
+        download: item.download || 0,
+        upload: item.upload || 0,
+        duration: item.duration || 0,
+        count: item.count || item.packets || 1,
+        device: {
+          id: item.device?.id || 'unknown',
+          ip: item.device?.ip || item.srcIP || 'unknown',
+          name: item.device?.name || 'Unknown Device',
+        },
+      };
+      
+      if (item.blockType) flow.blockType = item.blockType;
+      if (item.device?.network) flow.device.network = item.device.network;
+      if (item.source) flow.source = item.source;
+      if (item.destination) flow.destination = item.destination;
+      if (item.region) flow.region = item.region;
+      if (item.category) flow.category = item.category;
+      
+      return flow;
+    });
+
+    return {
+      count: response.count || flows.length,
+      results: flows,
+      next_cursor: response.next_cursor,
+      aggregations: response.aggregations,
+      metadata: {
+        execution_time: Date.now() - startTime,
+        cached: false,
+        filters_applied: parsed.filters.map(f => `${f.field}:${f.operator}`)
+      }
+    };
+  }
+
+  /**
+   * Advanced search for security alarms with severity, time, and IP filters
+   */
+  @optimizeResponse('alarms')
+  async searchAlarms(
+    searchQuery: SearchQuery,
+    options: SearchOptions = {}
+  ): Promise<SearchResult<Alarm>> {
+    const startTime = Date.now();
+    
+    const parsed = parseSearchQuery(searchQuery.query);
+    const optimizedQuery = formatQueryForAPI(searchQuery.query);
+    
+    const params: Record<string, unknown> = {
+      query: optimizedQuery,
+      limit: Math.min(searchQuery.limit || 50, 1000),
+      sortBy: searchQuery.sort_by || 'ts:desc',
+    };
+    
+    if (searchQuery.group_by) params.groupBy = searchQuery.group_by;
+    if (searchQuery.cursor) params.cursor = searchQuery.cursor;
+    if (searchQuery.aggregate) params.aggregate = true;
+    
+    // Add resolved alarm filter
+    if (options.include_resolved === false) {
+      params.query = params.query ? `${params.query} AND status:1` : 'status:1';
+    }
+    
+    // Add minimum severity filter
+    if (options.min_severity) {
+      const severityMap = { low: 1, medium: 4, high: 8, critical: 12 };
+      const minSeverity = severityMap[options.min_severity];
+      params.query = params.query ? `${params.query} AND type:>=${minSeverity}` : `type:>=${minSeverity}`;
+    }
+
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/alarms`, params);
+    
+    const alarms = response.results.map((item: any): Alarm => ({
+      ts: item.ts || Math.floor(Date.now() / 1000),
+      gid: item.gid || this.config.boxId,
+      aid: item.aid || 0,
+      type: item.type || 1,
+      status: item.status || 1,
+      message: item.message || 'Unknown alarm',
+      direction: item.direction || 'inbound',
+      protocol: item.protocol || 'tcp',
+      ...(item.device && { device: item.device }),
+      ...(item.remote && { remote: item.remote }),
+      ...(item.transfer && { transfer: item.transfer }),
+      ...(item.dataPlan && { dataPlan: item.dataPlan }),
+      ...(item.vpn && { vpn: item.vpn }),
+      ...(item.port && { port: item.port }),
+      ...(item.wan && { wan: item.wan })
+    }));
+
+    return {
+      count: response.count || alarms.length,
+      results: alarms,
+      next_cursor: response.next_cursor,
+      aggregations: response.aggregations,
+      metadata: {
+        execution_time: Date.now() - startTime,
+        cached: false,
+        filters_applied: parsed.filters.map(f => `${f.field}:${f.operator}`)
+      }
+    };
+  }
+
+  /**
+   * Advanced search for firewall rules with target, action, and status filters
+   */
+  @optimizeResponse('rules')
+  async searchRules(
+    searchQuery: SearchQuery,
+    options: SearchOptions = {}
+  ): Promise<SearchResult<NetworkRule>> {
+    const startTime = Date.now();
+    
+    const parsed = parseSearchQuery(searchQuery.query);
+    const optimizedQuery = formatQueryForAPI(searchQuery.query);
+    
+    const params: Record<string, unknown> = {
+      query: optimizedQuery,
+      limit: Math.min(searchQuery.limit || 50, 1000),
+      sortBy: searchQuery.sort_by || 'ts:desc',
+    };
+    
+    if (searchQuery.group_by) params.groupBy = searchQuery.group_by;
+    if (searchQuery.cursor) params.cursor = searchQuery.cursor;
+    if (searchQuery.aggregate) params.aggregate = true;
+    
+    // Add minimum hit count filter
+    if (options.min_hits && options.min_hits > 0) {
+      params.query = params.query ? `${params.query} AND hit.count:>=${options.min_hits}` : `hit.count:>=${options.min_hits}`;
+    }
+
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/rules`, params);
+    
+    const rules = response.results.map((item: any): NetworkRule => ({
+      id: item.id || 'unknown',
+      action: item.action || 'block',
+      target: {
+        type: item.target?.type || 'ip',
+        value: item.target?.value || 'unknown',
+        dnsOnly: item.target?.dnsOnly,
+        port: item.target?.port
+      },
+      direction: item.direction || 'bidirection',
+      gid: item.gid || this.config.boxId,
+      group: item.group,
+      scope: item.scope,
+      notes: item.notes,
+      status: item.status,
+      hit: item.hit,
+      schedule: item.schedule,
+      timeUsage: item.timeUsage,
+      protocol: item.protocol,
+      ts: item.ts || Math.floor(Date.now() / 1000),
+      updateTs: item.updateTs || Math.floor(Date.now() / 1000),
+      resumeTs: item.resumeTs
+    }));
+
+    return {
+      count: response.count || rules.length,
+      results: rules,
+      next_cursor: response.next_cursor,
+      aggregations: response.aggregations,
+      metadata: {
+        execution_time: Date.now() - startTime,
+        cached: false,
+        filters_applied: parsed.filters.map(f => `${f.field}:${f.operator}`)
+      }
+    };
+  }
+
+  /**
+   * Advanced search for network devices with network, status, and usage filters
+   */
+  @optimizeResponse('devices')
+  async searchDevices(
+    searchQuery: SearchQuery,
+    options: SearchOptions = {}
+  ): Promise<SearchResult<Device>> {
+    const startTime = Date.now();
+    
+    const parsed = parseSearchQuery(searchQuery.query);
+    const optimizedQuery = formatQueryForAPI(searchQuery.query);
+    
+    const params: Record<string, unknown> = {
+      query: optimizedQuery,
+      limit: Math.min(searchQuery.limit || 50, 1000),
+      sortBy: searchQuery.sort_by || 'name:asc',
+    };
+    
+    if (searchQuery.group_by) params.groupBy = searchQuery.group_by;
+    if (searchQuery.cursor) params.cursor = searchQuery.cursor;
+    if (searchQuery.aggregate) params.aggregate = true;
+    
+    // Add online status filter
+    if (options.include_resolved === false) {
+      params.query = params.query ? `${params.query} AND online:true` : 'online:true';
+    }
+
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/devices`, params);
+    
+    const devices = response.results.map((item: any) => this.transformDevice(item));
+
+    return {
+      count: response.count || devices.length,
+      results: devices,
+      next_cursor: response.next_cursor,
+      aggregations: response.aggregations,
+      metadata: {
+        execution_time: Date.now() - startTime,
+        cached: false,
+        filters_applied: parsed.filters.map(f => `${f.field}:${f.operator}`)
+      }
+    };
+  }
+
+  /**
+   * Advanced search for target lists with category and ownership filters
+   */
+  async searchTargetLists(
+    searchQuery: SearchQuery,
+    options: SearchOptions = {}
+  ): Promise<SearchResult<TargetList>> {
+    const startTime = Date.now();
+    
+    const parsed = parseSearchQuery(searchQuery.query);
+    const optimizedQuery = formatQueryForAPI(searchQuery.query);
+    
+    const params: Record<string, unknown> = {
+      query: optimizedQuery,
+      limit: Math.min(searchQuery.limit || 50, 1000),
+      sortBy: searchQuery.sort_by || 'name:asc',
+    };
+    
+    if (searchQuery.group_by) params.groupBy = searchQuery.group_by;
+    if (searchQuery.cursor) params.cursor = searchQuery.cursor;
+    if (searchQuery.aggregate) params.aggregate = true;
+
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/target-lists`, params);
+    
+    const targetLists = response.results.map((item: any): TargetList => ({
+      id: item.id || 'unknown',
+      name: item.name || 'Unknown List',
+      owner: item.owner || 'global',
+      targets: item.targets || [],
+      category: item.category,
+      notes: item.notes,
+      lastUpdated: item.lastUpdated || Math.floor(Date.now() / 1000)
+    }));
+
+    return {
+      count: response.count || targetLists.length,
+      results: targetLists,
+      next_cursor: response.next_cursor,
+      aggregations: response.aggregations,
+      metadata: {
+        execution_time: Date.now() - startTime,
+        cached: false,
+        filters_applied: parsed.filters.map(f => `${f.field}:${f.operator}`)
+      }
+    };
+  }
+
+  /**
+   * Multi-entity searches with correlation across different data types
+   */
+  async searchCrossReference(
+    primaryQuery: SearchQuery,
+    secondaryQueries: Record<string, SearchQuery>,
+    correlationField: string,
+    options: SearchOptions = {}
+  ): Promise<CrossReferenceResult> {
+    const startTime = Date.now();
+    
+    // Execute primary search first
+    const primary = await this.searchFlows(primaryQuery, options);
+    
+    // Extract correlation values from primary results
+    const correlationValues = new Set<string>();
+    primary.results.forEach(flow => {
+      const value = this.extractFieldValue(flow, correlationField);
+      if (value) correlationValues.add(String(value));
+    });
+    
+    // Execute secondary searches with correlation filter
+    const secondary: Record<string, SearchResult<any>> = {};
+    
+    for (const [name, query] of Object.entries(secondaryQueries)) {
+      if (correlationValues.size === 0) {
+        secondary[name] = { count: 0, results: [], metadata: { execution_time: 0, cached: false, filters_applied: [] } };
+        continue;
+      }
+      
+      // Add correlation filter to secondary query
+      const correlationFilter = `${correlationField}:(${Array.from(correlationValues).join(',')})`;
+      const enhancedQuery: SearchQuery = {
+        ...query,
+        query: query.query ? `${query.query} AND ${correlationFilter}` : correlationFilter
+      };
+      
+      // Execute appropriate search based on query name/type
+      if (name.includes('alarm')) {
+        secondary[name] = await this.searchAlarms(enhancedQuery, options);
+      } else if (name.includes('rule')) {
+        secondary[name] = await this.searchRules(enhancedQuery, options);
+      } else if (name.includes('device')) {
+        secondary[name] = await this.searchDevices(enhancedQuery, options);
+      } else {
+        secondary[name] = await this.searchFlows(enhancedQuery, options);
+      }
+    }
+    
+    // Calculate correlation statistics
+    const totalSecondaryResults = Object.values(secondary).reduce((sum, result) => sum + result.count, 0);
+    const correlationStrength = correlationValues.size > 0 ? totalSecondaryResults / correlationValues.size : 0;
+    
+    return {
+      primary,
+      secondary,
+      correlations: {
+        correlation_field: correlationField,
+        correlated_count: totalSecondaryResults,
+        correlation_strength: Math.min(1, correlationStrength / 10) // Normalize to 0-1
+      }
+    };
+  }
+
+  /**
+   * Get overview statistics and counts of network rules by category
+   */
+  @optimizeResponse('rules')
+  @validateResponse(ResponseValidator.validateRule)
+  async getNetworkRulesSummary(
+    activeOnly: boolean = true,
+    ruleType?: string
+  ): Promise<{count: number; results: any[]; next_cursor?: string}> {
+    const rules = await this.getNetworkRules();
+    
+    // Filter rules based on parameters
+    let filteredRules = rules.results;
+    
+    if (activeOnly) {
+      filteredRules = filteredRules.filter(rule => rule.status === 'active' || !rule.status);
+    }
+    
+    if (ruleType) {
+      filteredRules = filteredRules.filter(rule => rule.target?.type === ruleType);
+    }
+    
+    // Generate summary statistics by category
+    const summary = {
+      total_rules: filteredRules.length,
+      by_action: {} as Record<string, number>,
+      by_target_type: {} as Record<string, number>,
+      by_direction: {} as Record<string, number>,
+      active_rules: filteredRules.filter(rule => rule.status === 'active' || !rule.status).length,
+      paused_rules: filteredRules.filter(rule => rule.status === 'paused').length,
+      rules_with_hits: filteredRules.filter(rule => (rule.hitCount || 0) > 0).length
+    };
+    
+    // Count by action
+    filteredRules.forEach(rule => {
+      const action = rule.action || 'unknown';
+      summary.by_action[action] = (summary.by_action[action] || 0) + 1;
+    });
+    
+    // Count by target type  
+    filteredRules.forEach(rule => {
+      const targetType = rule.target?.type || 'unknown';
+      summary.by_target_type[targetType] = (summary.by_target_type[targetType] || 0) + 1;
+    });
+    
+    // Count by direction
+    filteredRules.forEach(rule => {
+      const direction = rule.direction || 'bidirection';
+      summary.by_direction[direction] = (summary.by_direction[direction] || 0) + 1;
+    });
+    
+    return {
+      count: 1,
+      results: [summary]
+    };
+  }
+
+  /**
+   * Get rules with highest hit counts for traffic analysis
+   */
+  @optimizeResponse('rules') 
+  @validateResponse(ResponseValidator.validateRule)
+  async getMostActiveRules(
+    limit: number = 20,
+    minHits: number = 1,
+    ruleType?: string
+  ): Promise<{count: number; results: NetworkRule[]; next_cursor?: string}> {
+    const rules = await this.getNetworkRules();
+    
+    // Filter and sort rules by hit count
+    let filteredRules = rules.results;
+    
+    if (ruleType) {
+      filteredRules = filteredRules.filter(rule => rule.target?.type === ruleType);
+    }
+    
+    // Filter by minimum hits
+    filteredRules = filteredRules.filter(rule => (rule.hitCount || 0) >= minHits);
+    
+    // Sort by hit count (descending)
+    filteredRules.sort((a, b) => (b.hitCount || 0) - (a.hitCount || 0));
+    
+    // Apply limit
+    const results = filteredRules.slice(0, Math.min(limit, 50));
+    
+    return {
+      count: results.length,
+      results
+    };
+  }
+
+  /**
+   * Get recently created or modified firewall rules
+   */
+  @optimizeResponse('rules')
+  @validateResponse(ResponseValidator.validateRule) 
+  async getRecentRules(
+    hours: number = 24,
+    includeModified: boolean = true,
+    limit: number = 30,
+    ruleType?: string
+  ): Promise<{count: number; results: NetworkRule[]; next_cursor?: string}> {
+    const rules = await this.getNetworkRules();
+    
+    const cutoffTime = Math.floor(Date.now() / 1000) - (hours * 3600);
+    
+    // Filter rules by creation/modification time
+    let filteredRules = rules.results.filter(rule => {
+      const createdTime = rule.createdAt || 0;
+      const updatedTime = rule.updatedAt || 0;
+      
+      // Include if created recently
+      if (createdTime >= cutoffTime) {
+        return true;
+      }
+      
+      // Include if modified recently (if includeModified is true)
+      if (includeModified && updatedTime >= cutoffTime) {
+        return true;
+      }
+      
+      return false;
+    });
+    
+    if (ruleType) {
+      filteredRules = filteredRules.filter(rule => rule.target?.type === ruleType);
+    }
+    
+    // Sort by most recent first (creation time, then update time)
+    filteredRules.sort((a, b) => {
+      const aTime = Math.max(a.createdAt || 0, a.updatedAt || 0);
+      const bTime = Math.max(b.createdAt || 0, b.updatedAt || 0);
+      return bTime - aTime;
+    });
+    
+    // Apply limit
+    const results = filteredRules.slice(0, Math.min(limit, 100));
+    
+    return {
+      count: results.length,
+      results
+    };
+  }
+
+  /**
+   * Extract field value from object using dot notation
+   */
+  private extractFieldValue(obj: any, fieldPath: string): any {
+    return fieldPath.split('.').reduce((current, key) => current?.[key], obj);
   }
 }
