@@ -442,9 +442,9 @@ export interface SearchFilter {
   /** Field name to filter on */
   field: string;
   /** Operator for comparison */
-  operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'nin' | 'contains' | 'startswith' | 'endswith' | 'regex';
+  operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'nin' | 'contains' | 'startswith' | 'endswith' | 'regex' | 'range';
   /** Value(s) to filter against */
-  value: string | number | boolean | Array<string | number>;
+  value: string | number | boolean | Array<string | number | boolean>;
 }
 
 /**

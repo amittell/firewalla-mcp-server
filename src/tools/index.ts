@@ -179,8 +179,8 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
           // Sort by last seen timestamp if requested
           if (sortByLastSeen) {
             offlineDevices = offlineDevices.sort((a, b) => {
-              const aTime = a.lastSeen || 0;
-              const bTime = b.lastSeen || 0;
+              const aTime = Number(a.lastSeen) || 0;
+              const bTime = Number(b.lastSeen) || 0;
               return bTime - aTime; // Most recent first
             });
           }
@@ -197,7 +197,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                     ip: device.ip,
                     macVendor: device.macVendor,
                     lastSeen: device.lastSeen,
-                    lastSeenFormatted: device.lastSeen ? new Date(device.lastSeen * 1000).toISOString() : 'Never',
+                    lastSeenFormatted: device.lastSeen ? new Date(Number(device.lastSeen) * 1000).toISOString() : 'Never',
                     network: device.network,
                     group: device.group,
                   })),
@@ -292,7 +292,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                     resume_at: rule.resumeTs ? new Date(rule.resumeTs * 1000).toISOString() : undefined,
                   })),
                   next_cursor: summaryOnly ? optimizedResponse.next_cursor : response.next_cursor,
-                  ...(summaryOnly && optimizedResponse.pagination_note && { pagination_note: optimizedResponse.pagination_note }),
+                  ...(summaryOnly && (optimizedResponse as any).pagination_note && { pagination_note: (optimizedResponse as any).pagination_note }),
                 }, null, 2),
               },
             ],
@@ -650,7 +650,8 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'get_simple_statistics': {
-          const stats = await firewalla.getSimpleStatistics();
+          const statsResponse = await firewalla.getSimpleStatistics();
+          const stats = statsResponse.results[0];
           
           return {
             content: [
