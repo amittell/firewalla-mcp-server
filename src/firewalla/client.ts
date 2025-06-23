@@ -981,11 +981,24 @@ export class FirewallaClient {
       const flows = await this.getFlowData();
       const alarms = await this.getActiveAlarms();
 
+      // Validate flows response structure
+      if (!flows || !flows.results || !Array.isArray(flows.results)) {
+        console.warn('getStatisticsByRegion: flows data missing or invalid structure', {
+          flows_exists: !!flows,
+          results_exists: !!(flows && flows.results),
+          results_is_array: !!(flows && flows.results && Array.isArray(flows.results))
+        });
+        return {
+          count: 0,
+          results: []
+        };
+      }
+
       // Group flows by region
       const regionStats = new Map<string, number>();
       
       flows.results.forEach(flow => {
-        if (flow.region) {
+        if (flow && flow.region) {
           regionStats.set(flow.region, (regionStats.get(flow.region) || 0) + 1);
         }
       });

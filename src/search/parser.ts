@@ -29,6 +29,18 @@ export class QueryParser {
   parse(query: string, entityType?: keyof typeof SEARCH_FIELDS): QueryValidation {
     this.reset();
     
+    // Input validation
+    if (!query || typeof query !== 'string') {
+      this.errors.push('Query must be a non-empty string');
+      return {
+        isValid: false,
+        errors: this.errors,
+        warnings: [],
+        suggestions: [],
+        ast: undefined
+      };
+    }
+    
     try {
       this.tokens = this.tokenize(query);
       const ast = this.parseExpression();
@@ -70,9 +82,19 @@ export class QueryParser {
   private tokenize(input: string): Token[] {
     const tokens: Token[] = [];
     let i = 0;
+    
+    // Additional safety check
+    if (!input || typeof input !== 'string') {
+      return tokens;
+    }
+    
+    const safeInput = input.trim();
+    if (!safeInput) {
+      return tokens;
+    }
 
-    while (i < input.length) {
-      const char = input[i];
+    while (i < safeInput.length) {
+      const char = safeInput[i];
 
       // Skip whitespace
       if (/\s/.test(char)) {
@@ -120,18 +142,18 @@ export class QueryParser {
         i++; // Skip opening quote
         const start = i - 1;
 
-        while (i < input.length && input[i] !== quote) {
-          if (input[i] === '\\' && i + 1 < input.length) {
+        while (i < safeInput.length && safeInput[i] !== quote) {
+          if (safeInput[i] === '\\' && i + 1 < safeInput.length) {
             // Handle escaped characters
             i++;
-            value += input[i];
+            value += safeInput[i];
           } else {
-            value += input[i];
+            value += safeInput[i];
           }
           i++;
         }
 
-        if (i >= input.length) {
+        if (i >= safeInput.length) {
           throw new Error(`Unclosed quoted string starting at position ${start}`);
         }
 
@@ -149,7 +171,7 @@ export class QueryParser {
       if (char === '>' || char === '<') {
         let operator = char;
         i++;
-        if (i < input.length && input[i] === '=') {
+        if (i < safeInput.length && safeInput[i] === '=') {
           operator += '=';
           i++;
         }
@@ -162,7 +184,7 @@ export class QueryParser {
         continue;
       }
 
-      if (char === '!' && i + 1 < input.length && input[i + 1] === '=') {
+      if (char === '!' && i + 1 < safeInput.length && safeInput[i + 1] === '=') {
         tokens.push({ type: TokenType.OPERATOR, value: '!=', position: i, length: 2 });
         i += 2;
         continue;
@@ -173,8 +195,8 @@ export class QueryParser {
         let word = '';
         const start = i;
 
-        while (i < input.length && /[a-zA-Z0-9_.-]/.test(input[i])) {
-          word += input[i];
+        while (i < safeInput.length && /[a-zA-Z0-9_.-]/.test(safeInput[i])) {
+          word += safeInput[i];
           i++;
         }
 
@@ -195,11 +217,11 @@ export class QueryParser {
         const start = i;
         let hasWildcard = false;
 
-        while (i < input.length && /[0-9*?.-]/.test(input[i])) {
-          if (input[i] === '*' || input[i] === '?') {
+        while (i < safeInput.length && /[0-9*?.-]/.test(safeInput[i])) {
+          if (safeInput[i] === '*' || safeInput[i] === '?') {
             hasWildcard = true;
           }
-          value += input[i];
+          value += safeInput[i];
           i++;
         }
 
@@ -216,7 +238,7 @@ export class QueryParser {
       throw new Error(`Unexpected character '${char}' at position ${i}`);
     }
 
-    tokens.push({ type: TokenType.EOF, value: '', position: input.length, length: 0 });
+    tokens.push({ type: TokenType.EOF, value: '', position: safeInput.length, length: 0 });
     return tokens;
   }
 
