@@ -455,16 +455,15 @@ export class ResponseValidator {
     const errors: ValidationError[] = [];
     const warnings: string[] = [];
 
-    if (typeof stats.box_count !== 'number') {
-      errors.push(new ValidationError('box_count must be a number', 'box_count', stats.box_count, 'number'));
+    // Use 'meta' and 'value' fields as per Statistics interface definition
+    if (!stats.meta || typeof stats.meta !== 'object') {
+      errors.push(new ValidationError('meta must be an object', 'meta', stats.meta, 'object'));
     }
 
-    if (typeof stats.alarm_count !== 'number') {
-      errors.push(new ValidationError('alarm_count must be a number', 'alarm_count', stats.alarm_count, 'number'));
-    }
-
-    if (typeof stats.rule_count !== 'number') {
-      errors.push(new ValidationError('rule_count must be a number', 'rule_count', stats.rule_count, 'number'));
+    if (typeof stats.value !== 'number') {
+      errors.push(new ValidationError('value must be a number', 'value', stats.value, 'number'));
+    } else if (stats.value < 0) {
+      errors.push(new ValidationError('value must be non-negative', 'value', stats.value, 'non-negative number'));
     }
 
     return { valid: errors.length === 0, errors, warnings };
@@ -477,12 +476,17 @@ export class ResponseValidator {
     const errors: ValidationError[] = [];
     const warnings: string[] = [];
 
-    if (typeof trend.timestamp !== 'number') {
-      errors.push(new ValidationError('timestamp must be a number', 'timestamp', trend.timestamp, 'number'));
+    // Use 'ts' field as per Trend interface definition
+    if (typeof trend.ts !== 'number') {
+      errors.push(new ValidationError('ts must be a number', 'ts', trend.ts, 'number'));
+    } else if (trend.ts <= 0) {
+      errors.push(new ValidationError('ts must be positive', 'ts', trend.ts, 'positive number'));
     }
 
     if (typeof trend.value !== 'number') {
       errors.push(new ValidationError('value must be a number', 'value', trend.value, 'number'));
+    } else if (trend.value < 0) {
+      errors.push(new ValidationError('value must be non-negative', 'value', trend.value, 'non-negative number'));
     }
 
     return { valid: errors.length === 0, errors, warnings };
