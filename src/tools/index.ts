@@ -687,15 +687,15 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
               {
                 type: 'text',
                 text: JSON.stringify({
-                  total_regions: stats.length,
-                  regional_statistics: stats.map(stat => ({
+                  total_regions: stats.results.length,
+                  regional_statistics: stats.results.map(stat => ({
                     country_code: (stat.meta as any).code,
                     flow_count: stat.value,
-                    percentage: stats.length > 0 
-                      ? Math.round((stat.value / stats.reduce((sum, s) => sum + s.value, 0)) * 100) 
+                    percentage: stats.results.length > 0 
+                      ? Math.round((stat.value / stats.results.reduce((sum, s) => sum + s.value, 0)) * 100) 
                       : 0,
                   })).sort((a, b) => b.flow_count - a.flow_count),
-                  top_regions: stats
+                  top_regions: stats.results
                     .sort((a, b) => b.value - a.value)
                     .slice(0, 5)
                     .map(stat => ({
@@ -716,8 +716,8 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
               {
                 type: 'text',
                 text: JSON.stringify({
-                  total_boxes: stats.length,
-                  box_statistics: stats.map(stat => {
+                  total_boxes: stats.results.length,
+                  box_statistics: stats.results.map(stat => {
                     const boxMeta = stat.meta as any;
                     return {
                       box_id: boxMeta.gid,
@@ -736,10 +736,10 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                     };
                   }).sort((a, b) => b.activity_score - a.activity_score),
                   summary: {
-                    online_boxes: stats.filter(s => (s.meta as any).online).length,
-                    total_devices: stats.reduce((sum, s) => sum + (s.meta as any).deviceCount, 0),
-                    total_rules: stats.reduce((sum, s) => sum + (s.meta as any).ruleCount, 0),
-                    total_alarms: stats.reduce((sum, s) => sum + (s.meta as any).alarmCount, 0),
+                    online_boxes: stats.results.filter(s => (s.meta as any).online).length,
+                    total_devices: stats.results.reduce((sum, s) => sum + (s.meta as any).deviceCount, 0),
+                    total_rules: stats.results.reduce((sum, s) => sum + (s.meta as any).ruleCount, 0),
+                    total_alarms: stats.results.reduce((sum, s) => sum + (s.meta as any).alarmCount, 0),
                   }
                 }, null, 2),
               },
@@ -760,19 +760,19 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                 text: JSON.stringify({
                   period,
                   interval_seconds: interval,
-                  data_points: trends.length,
-                  trends: trends.map(trend => ({
+                  data_points: trends.results.length,
+                  trends: trends.results.map(trend => ({
                     timestamp: trend.ts,
                     timestamp_iso: new Date(trend.ts * 1000).toISOString(),
                     flow_count: trend.value,
                   })),
                   summary: {
-                    total_flows: trends.reduce((sum, t) => sum + t.value, 0),
-                    avg_flows_per_interval: trends.length > 0 
-                      ? Math.round(trends.reduce((sum, t) => sum + t.value, 0) / trends.length)
+                    total_flows: trends.results.reduce((sum, t) => sum + t.value, 0),
+                    avg_flows_per_interval: trends.results.length > 0 
+                      ? Math.round(trends.results.reduce((sum, t) => sum + t.value, 0) / trends.results.length)
                       : 0,
-                    peak_flow_count: trends.length > 0 ? Math.max(...trends.map(t => t.value)) : 0,
-                    min_flow_count: trends.length > 0 ? Math.min(...trends.map(t => t.value)) : 0,
+                    peak_flow_count: trends.results.length > 0 ? Math.max(...trends.results.map(t => t.value)) : 0,
+                    min_flow_count: trends.results.length > 0 ? Math.min(...trends.results.map(t => t.value)) : 0,
                   }
                 }, null, 2),
               },
@@ -791,21 +791,21 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                 type: 'text',
                 text: JSON.stringify({
                   period,
-                  data_points: trends.length,
-                  trends: trends.map(trend => ({
+                  data_points: trends.results.length,
+                  trends: trends.results.map(trend => ({
                     timestamp: trend.ts,
                     timestamp_iso: new Date(trend.ts * 1000).toISOString(),
                     alarm_count: trend.value,
                   })),
                   summary: {
-                    total_alarms: trends.reduce((sum, t) => sum + t.value, 0),
-                    avg_alarms_per_interval: trends.length > 0 
-                      ? Math.round(trends.reduce((sum, t) => sum + t.value, 0) / trends.length * 100) / 100
+                    total_alarms: trends.results.reduce((sum, t) => sum + t.value, 0),
+                    avg_alarms_per_interval: trends.results.length > 0 
+                      ? Math.round(trends.results.reduce((sum, t) => sum + t.value, 0) / trends.results.length * 100) / 100
                       : 0,
-                    peak_alarm_count: trends.length > 0 ? Math.max(...trends.map(t => t.value)) : 0,
-                    intervals_with_alarms: trends.filter(t => t.value > 0).length,
-                    alarm_frequency: trends.length > 0 
-                      ? Math.round((trends.filter(t => t.value > 0).length / trends.length) * 100)
+                    peak_alarm_count: trends.results.length > 0 ? Math.max(...trends.results.map(t => t.value)) : 0,
+                    intervals_with_alarms: trends.results.filter(t => t.value > 0).length,
+                    alarm_frequency: trends.results.length > 0 
+                      ? Math.round((trends.results.filter(t => t.value > 0).length / trends.results.length) * 100)
                       : 0,
                   }
                 }, null, 2),
@@ -825,19 +825,19 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                 type: 'text',
                 text: JSON.stringify({
                   period,
-                  data_points: trends.length,
-                  trends: trends.map(trend => ({
+                  data_points: trends.results.length,
+                  trends: trends.results.map(trend => ({
                     timestamp: trend.ts,
                     timestamp_iso: new Date(trend.ts * 1000).toISOString(),
                     active_rule_count: trend.value,
                   })),
                   summary: {
-                    avg_active_rules: trends.length > 0 
-                      ? Math.round(trends.reduce((sum, t) => sum + t.value, 0) / trends.length)
+                    avg_active_rules: trends.results.length > 0 
+                      ? Math.round(trends.results.reduce((sum, t) => sum + t.value, 0) / trends.results.length)
                       : 0,
-                    max_active_rules: trends.length > 0 ? Math.max(...trends.map(t => t.value)) : 0,
-                    min_active_rules: trends.length > 0 ? Math.min(...trends.map(t => t.value)) : 0,
-                    rule_stability: calculateRuleStability(trends),
+                    max_active_rules: trends.results.length > 0 ? Math.max(...trends.results.map(t => t.value)) : 0,
+                    min_active_rules: trends.results.length > 0 ? Math.min(...trends.results.map(t => t.value)) : 0,
+                    rule_stability: calculateRuleStability(trends.results),
                   }
                 }, null, 2),
               },
