@@ -3,18 +3,11 @@ import { GetPromptRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
 
 /**
- * Sets up MCP prompts for Firewalla security analysis
- * Provides intelligent prompts that generate comprehensive security reports
- * 
- * Available prompts:
- * - security_report: Comprehensive security status and threat analysis
- * - threat_analysis: Detailed analysis of security threats and incidents
- * - bandwidth_analysis: Network bandwidth usage patterns and insights
- * - device_investigation: Deep dive into specific device security posture
- * - network_health_check: Overall network health and performance assessment
- * 
- * @param server - MCP server instance to register prompts with
- * @param firewalla - Firewalla client for API communication
+ * Registers and handles intelligent MCP prompts for Firewalla security and network analysis.
+ *
+ * Sets up multiple prompt types on the MCP server, each generating a detailed, context-aware user message for scenarios such as security reporting, threat analysis, bandwidth usage, device investigation, and network health assessment. Prompts are dynamically constructed using real-time Firewalla API data and tailored to the requested analysis type.
+ *
+ * Throws an error for unknown prompt names or missing required arguments.
  */
 export function setupPrompts(server: Server, firewalla: FirewallaClient): void {
   server.setRequestHandler(GetPromptRequestSchema, async (request) => {
@@ -427,6 +420,14 @@ function analyzeFlowPatterns(flows: Array<{ protocol: string; duration: number; 
   return { protocols, avgDuration: Math.round(avgDuration), peakPeriods };
 }
 
+/**
+ * Calculates an overall network health score based on system status, device connectivity, security metrics, network topology, and rule configuration.
+ *
+ * The score starts at 100 and deducts points for offline status, high resource usage, low uptime, offline devices, active alarms, threat severity, lack of active rules, and missing subnets. The final score is clamped between 0 and 100.
+ *
+ * @param data - Aggregated network data including system summary, device list, security metrics, topology, and rules
+ * @returns The computed network health score (0–100)
+ */
 function calculateNetworkHealthScore(data: {
   summary: { status: string; cpu_usage: number; memory_usage: number; uptime: number };
   devices: { count: number; results: Array<{ online: boolean }> };

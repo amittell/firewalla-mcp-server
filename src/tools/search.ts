@@ -542,7 +542,9 @@ export class SearchEngine {
 }
 
 /**
- * Create search tools for MCP server
+ * Creates and returns a set of advanced search functions for Firewalla MCP server entities.
+ *
+ * The returned object provides methods for searching flows, alarms, rules, devices, target lists, and performing cross-entity correlation searches.
  */
 export function createSearchTools(firewalla: FirewallaClient) {
   const searchEngine = new SearchEngine(firewalla);

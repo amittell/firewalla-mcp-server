@@ -19,6 +19,11 @@ const config = {
   cacheTtl: 300,
 };
 
+/**
+ * Runs a series of tests to validate and demonstrate token limit optimizations for retrieving network rules from the Firewalla API.
+ *
+ * Fetches all network rules and generates multiple response formats to compare their character counts, simulating token usage. Tests include the original full response, a limited subset with truncated fields, a summary mode, and a specialized view of the most active rules. Logs the results and confirms that optimized formats remain under the 25,000 character limit.
+ */
 async function testTokenLimits() {
   console.log('🧪 Testing Network Rules Token Optimization...\n');
   

@@ -565,7 +565,12 @@ export class ResponseValidator {
 }
 
 /**
- * Decorator for automatic response validation
+ * Method decorator that automatically validates the response of an asynchronous method using the provided item validator.
+ *
+ * If validation errors or warnings are detected in the returned response, they are logged to standard error.
+ * If the decorated method throws an error, a standardized error response is returned.
+ *
+ * @param validator - Function to validate each item in the response's results array
  */
 export function validateResponse<T>(validator: (item: any) => ValidationResult) {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {

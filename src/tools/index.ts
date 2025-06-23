@@ -5,34 +5,18 @@ import { ResponseOptimizer, DEFAULT_OPTIMIZATION_CONFIG } from '../optimization/
 import { createSearchTools } from './search.js';
 
 /**
- * Sets up MCP tools for Firewalla firewall management
- * Provides tools for security monitoring, network analysis, and firewall control
- * 
- * Available tools:
- * Core tools:
- * - get_active_alarms: Retrieve active security alarms
- * - get_flow_data: Get network flow information
- * - get_device_status: Check device connectivity status
- * - get_bandwidth_usage: Analyze bandwidth consumption
- * - get_network_rules: Get firewall rules (with token optimization and limits)
- * - pause_rule: Temporarily disable firewall rules
- * - get_target_lists: Access security target lists
- * 
- * Specialized rule tools:
- * - get_network_rules_summary: Overview statistics and counts by category
- * - get_most_active_rules: Rules with highest hit counts for traffic analysis
- * - get_recent_rules: Recently created or modified firewall rules
- * 
- * Advanced search tools:
- * - search_flows: Advanced flow searching with complex queries
- * - search_alarms: Alarm searching with severity, time, IP filters
- * - search_rules: Rule searching with target, action, status filters
- * - search_devices: Device searching with network, status, usage filters
- * - search_target_lists: Target list searching with category, ownership filters
- * - search_cross_reference: Multi-entity searches with correlation
- * 
- * @param server - MCP server instance to register tools with
- * @param firewalla - Firewalla client for API communication
+ * Registers a comprehensive suite of Firewalla management and analytics tools on an MCP server.
+ *
+ * This function enables the server to handle requests for a wide range of security monitoring, network analysis, firewall rule management, advanced search, and statistical reporting tools. Each tool is accessible by name and supports structured arguments for flexible queries, filtering, and control operations. Responses are returned as structured JSON content, with robust error handling for all tool invocations.
+ *
+ * Tools include:
+ * - Core firewall and device management (alarms, flows, devices, bandwidth, rules, target lists, boxes)
+ * - Specialized rule analytics (summaries, most active, recent, pause/resume)
+ * - Statistical and trend reporting (simple stats, by region/box, flow/alarm/rule trends)
+ * - Advanced search across flows, alarms, rules, devices, target lists, and cross-entity correlations
+ *
+ * @param server - The MCP server instance to register tool handlers on
+ * @param firewalla - The Firewalla client used for all API interactions
  */
 export function setupTools(server: Server, firewalla: FirewallaClient): void {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -1233,7 +1217,14 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
   });
 }
 
-// Helper function for health score calculation
+/**
+ * Calculates a health score (0-100) based on the number of online/offline boxes, alarms, and rules.
+ *
+ * The score penalizes for offline boxes and high alarm counts, and adds a bonus for active rules. Returns 0 if there are no boxes.
+ *
+ * @param stats - Object containing counts of onlineBoxes, offlineBoxes, alarms, and rules
+ * @returns The computed health score as an integer between 0 and 100
+ */
 function calculateHealthScore(stats: { onlineBoxes: number; offlineBoxes: number; alarms: number; rules: number }): number {
   let score = 100;
   
@@ -1255,7 +1246,14 @@ function calculateHealthScore(stats: { onlineBoxes: number; offlineBoxes: number
   return Math.max(0, Math.min(100, score));
 }
 
-// Helper function for rule stability calculation
+/**
+ * Calculates a stability score (0-100) for rule trends based on the average variation between consecutive data points.
+ *
+ * A higher score indicates more stable rule activity over time, while a lower score reflects greater fluctuations.
+ *
+ * @param trends - Array of trend data points, each with a timestamp and value
+ * @returns The calculated rule stability score, where 100 represents perfect stability
+ */
 function calculateRuleStability(trends: Array<{ ts: number; value: number }>): number {
   if (trends.length < 2) return 100;
   

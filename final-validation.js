@@ -47,6 +47,14 @@ const testRequests = [
   }
 ];
 
+/**
+ * Runs a validation test by spawning the MCP server, sending a JSON-RPC request, and verifying the response.
+ * 
+ * Spawns the server process, waits for it to indicate readiness, sends the specified test request, collects and parses the response, and logs the outcome based on the validity and content of the response. The server process is terminated after a timeout.
+ * 
+ * @param {Object} testCase - The test case containing the tool name and JSON-RPC request to be sent.
+ * @returns {Promise<void>} Resolves when the test is complete.
+ */
 async function testTool(testCase) {
   return new Promise((resolve) => {
     console.log(`\n📋 Testing: ${testCase.name}`);
@@ -109,6 +117,9 @@ async function testTool(testCase) {
   });
 }
 
+/**
+ * Runs a sequence of validation tests against the Firewalla MCP Server to verify correct startup, JSON-RPC tool responses, error handling, and data model implementation.
+ */
 async function runValidation() {
   console.log('Starting validation of updated Firewalla MCP Server...\n');
   

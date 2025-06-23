@@ -332,7 +332,9 @@ export class ResponseOptimizer {
 }
 
 /**
- * Decorator for automatic response optimization
+ * Method decorator that automatically optimizes the response of the decorated function based on the specified response type and configuration.
+ *
+ * Applies response truncation and summarization strategies to reduce token usage. Logs optimization statistics to stderr if debug mode is enabled.
  */
 export function optimizeResponse(responseType: string, config?: Partial<OptimizationConfig>) {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {

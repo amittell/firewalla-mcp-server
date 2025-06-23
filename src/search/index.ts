@@ -26,11 +26,12 @@ interface ParsedQuery {
 }
 
 /**
- * Parse complex search query into structured components
- * Supports syntax like: severity:high AND source_ip:192.168.* NOT resolved:true
- * 
- * @param query - Raw query string
- * @returns Parsed query components and filters
+ * Parses a raw search query string into structured components and filters.
+ *
+ * Supports advanced syntax including logical operators (AND, OR, NOT), field:value pairs, comparison operators, wildcards, ranges, and arrays. Returns parsed query components, corresponding filters, an optimized query string, and a computed complexity score.
+ *
+ * @param query - The raw search query string to parse
+ * @returns An object containing parsed components, filters, an optimized query string, and the query's complexity score
  */
 export function parseSearchQuery(query: string): ParsedQuery {
   const components: QueryComponent[] = [];
@@ -89,7 +90,12 @@ export function parseSearchQuery(query: string): ParsedQuery {
 }
 
 /**
- * Parse individual field expression (e.g., severity:high, ip:192.168.*, bytes:[1000 TO 5000])
+ * Parses a single field expression from a search query into a structured query component.
+ *
+ * Supports range queries (e.g., `field:[min TO max]`), comparison operators (e.g., `field:>=value`), wildcards (converted to regex), array values (comma-separated), standard equality, and free-text search.
+ *
+ * @param expression - The field expression string to parse
+ * @returns A `QueryComponent` representing the parsed expression, or `null` if parsing fails
  */
 function parseFieldExpression(expression: string): QueryComponent | null {
   // Handle parentheses (basic support)
@@ -156,7 +162,12 @@ function parseFieldExpression(expression: string): QueryComponent | null {
 }
 
 /**
- * Parse string value to appropriate type
+ * Converts a string value to its appropriate type: boolean, number, or unquoted string.
+ *
+ * Removes surrounding quotes if present and parses the value as a boolean or number when possible.
+ *
+ * @param value - The input string to parse
+ * @returns The parsed value as a boolean, number, or string
  */
 function parseValue(value: string): string | number | boolean {
   const trimmed = value.trim();
@@ -181,7 +192,10 @@ function parseValue(value: string): string | number | boolean {
 }
 
 /**
- * Map comparison operator symbols to internal operators
+ * Maps a comparison operator symbol to its corresponding internal operator string.
+ *
+ * @param op - The comparison operator symbol (e.g., '>=', '<=', '>', '<', '!=', '=')
+ * @returns The internal operator string representing the comparison (e.g., 'gte', 'lte', 'gt', 'lt', 'neq', 'eq')
  */
 function mapComparisonOperator(op: string): QueryComponent['operator'] {
   switch (op) {
@@ -196,7 +210,12 @@ function mapComparisonOperator(op: string): QueryComponent['operator'] {
 }
 
 /**
- * Convert wildcard pattern to regex
+ * Converts a wildcard pattern containing `*` and `?` into a regular expression string.
+ *
+ * Escapes all regex special characters except `*` and `?`, then replaces `*` with `.*` and `?` with `.` to form a valid regex pattern.
+ *
+ * @param pattern - The wildcard pattern to convert
+ * @returns The equivalent regular expression string
  */
 function convertWildcardToRegex(pattern: string): string {
   // Escape special regex characters except * and ?
@@ -209,7 +228,12 @@ function convertWildcardToRegex(pattern: string): string {
 }
 
 /**
- * Get complexity score for operator
+ * Returns the complexity score associated with a given query operator.
+ *
+ * Complexity scores are used to estimate the cost of evaluating different types of search operators.
+ *
+ * @param operator - The query operator whose complexity is being evaluated
+ * @returns The numeric complexity score for the specified operator
  */
 function getOperatorComplexity(operator: QueryComponent['operator']): number {
   switch (operator) {
@@ -231,7 +255,12 @@ function getOperatorComplexity(operator: QueryComponent['operator']): number {
 }
 
 /**
- * Optimize query by reordering components for performance
+ * Returns an optimized query string by reordering components based on operator complexity.
+ *
+ * Components with simpler operators are placed earlier in the query to improve performance.
+ *
+ * @param components - The parsed query components to optimize
+ * @returns The optimized query string with reordered components
  */
 function optimizeQuery(components: QueryComponent[]): string {
   // Sort components by complexity (simpler first)
@@ -254,7 +283,12 @@ function optimizeQuery(components: QueryComponent[]): string {
 }
 
 /**
- * Validate search query syntax
+ * Validates the syntax and complexity of a search query.
+ *
+ * Checks for empty queries, enforces a maximum complexity threshold, and validates regex patterns within the query. Returns an object indicating whether the query is valid and an array of error messages if any issues are found.
+ *
+ * @param query - The raw search query string to validate
+ * @returns An object with a boolean `valid` flag and an array of error messages in `errors`
  */
 export function validateSearchQuery(query: string): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
@@ -294,7 +328,11 @@ export function validateSearchQuery(query: string): { valid: boolean; errors: st
 }
 
 /**
- * Build search options from parsed query and additional parameters
+ * Combines filters from a parsed query with additional search options to create a complete SearchOptions object.
+ *
+ * @param parsedQuery - The parsed query containing filters to apply
+ * @param additionalOptions - Optional additional search options to merge with the filters
+ * @returns The combined search options for executing a search
  */
 export function buildSearchOptions(
   parsedQuery: ParsedQuery,
@@ -307,7 +345,12 @@ export function buildSearchOptions(
 }
 
 /**
- * Format search query for API consumption
+ * Returns an optimized version of the search query string for API use.
+ *
+ * If the query can be optimized, the optimized string is returned; otherwise, the original query is returned.
+ *
+ * @param query - The raw search query string to format
+ * @returns The optimized query string suitable for API consumption
  */
 export function formatQueryForAPI(query: string): string {
   const parsed = parseSearchQuery(query);

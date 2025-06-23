@@ -18,19 +18,19 @@ TOTAL_TESTS=0
 PASSED_TESTS=0
 FAILED_TESTS=0
 
-# Function to print test header
+# print_header prints a formatted blue-colored header for major test phases or sections.
 print_header() {
     echo -e "\n${BLUE}======================================="
     echo -e "$1"
     echo -e "=======================================${NC}\n"
 }
 
-# Function to print test section
+# print_section prints a yellow-colored section header for a test group or step.
 print_section() {
     echo -e "\n${YELLOW}--- $1 ---${NC}"
 }
 
-# Function to track test results
+# track_test updates test counters and prints a colored pass/fail message based on the test result.
 track_test() {
     TOTAL_TESTS=$((TOTAL_TESTS + 1))
     if [ $1 -eq 0 ]; then
@@ -42,7 +42,9 @@ track_test() {
     fi
 }
 
-# Function to test JSON-RPC 2.0 message format
+# test_jsonrpc_message sends a JSON-RPC 2.0 request to the server for a specified tool and arguments, then validates that the response is valid JSON.
+# 
+# Prints a section header describing the test, constructs and sends the request, and tracks the test result as passed if the response is valid JSON, or failed otherwise.
 test_jsonrpc_message() {
     local tool_name="$1"
     local args="$2"

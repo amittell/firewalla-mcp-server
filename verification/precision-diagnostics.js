@@ -526,7 +526,11 @@ class PrecisionDiagnostics {
     }
 }
 
-// Main execution
+/**
+ * Executes the Phase 4 precision diagnostics workflow on high-priority I-Block tools.
+ *
+ * Runs detailed diagnostics on a predefined set of critical tools, generates a precision report, saves the results to a timestamped JSON file, and logs progress and outcomes. Exits the process with an error code if diagnostics fail.
+ */
 async function main() {
     try {
         const diagnostics = new PrecisionDiagnostics();

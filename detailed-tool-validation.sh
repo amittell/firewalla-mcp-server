@@ -9,7 +9,14 @@ echo "======================================="
 echo "DETAILED TOOL VALIDATION"
 echo "======================================="
 
-# Function to test a tool and show detailed response
+# test_tool_detailed sends a JSON-RPC 2.0 request to a specified tool with given arguments and displays the detailed response for validation purposes.
+# 
+# Arguments:
+#   tool_name: Name of the tool to test.
+#   args: JSON-formatted string of arguments to pass to the tool.
+#   description: Description of the test case for display.
+# 
+# Prints the request, the formatted response, and a success status message.
 test_tool_detailed() {
     local tool_name="$1"
     local args="$2"

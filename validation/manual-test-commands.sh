@@ -7,7 +7,7 @@ echo "🎯 Phase 2 Manual Testing Guide"
 echo "================================"
 echo ""
 
-# Check if MCP server is running
+# check_server verifies that the MCP server process is running and prompts the user to start it if not detected.
 check_server() {
     if ! pgrep -f "mcp:start" > /dev/null; then
         echo "❌ MCP server is not running. Please start it first:"
@@ -18,7 +18,7 @@ check_server() {
     return 0
 }
 
-# Test tool registration
+# test_tool_registration queries the MCP server for the list of available tools and verifies the registration status of six Phase 2 tools, reporting which are present or missing.
 test_tool_registration() {
     echo "📋 1. Testing Tool Registration"
     echo "------------------------------"
@@ -50,7 +50,7 @@ test_tool_registration() {
     echo ""
 }
 
-# Test Statistics API
+# test_statistics_api runs manual tests for three statistics-related Phase 2 tools by sending JSON-RPC requests, parsing their responses, and displaying key metrics or error messages for each tool.
 test_statistics_api() {
     echo "📊 2. Testing Statistics API"
     echo "----------------------------"
@@ -130,7 +130,7 @@ test_statistics_api() {
     echo ""
 }
 
-# Test Trends API
+# test_trends_api runs manual tests for the MCP server's trend-related Phase 2 tools, verifying correct responses and outputting key metrics for get_flow_trends, get_alarm_trends, and get_rule_trends with various parameters.
 test_trends_api() {
     echo "📈 3. Testing Trends API"
     echo "-----------------------"
@@ -238,7 +238,7 @@ test_trends_api() {
     echo ""
 }
 
-# Test error handling
+# test_error_handling sends invalid JSON-RPC requests to verify that the MCP server correctly rejects invalid parameters and non-existent tools, confirming robust error handling.
 test_error_handling() {
     echo "🚨 4. Testing Error Handling"
     echo "----------------------------"
@@ -307,7 +307,7 @@ test_error_handling() {
     echo ""
 }
 
-# Test performance
+# test_performance outputs instructions for running the automated performance test suite and does not perform any tests directly.
 test_performance() {
     echo "⚡ 5. Testing Performance"
     echo "------------------------"
@@ -317,7 +317,7 @@ test_performance() {
     echo ""
 }
 
-# Test backwards compatibility
+# test_backwards_compatibility verifies that existing Phase 1 tools (get_active_alarms and get_device_status) continue to function correctly by invoking them and displaying key output metrics.
 test_backwards_compatibility() {
     echo "🔄 6. Testing Backwards Compatibility"
     echo "------------------------------------"
@@ -370,7 +370,7 @@ test_backwards_compatibility() {
     echo ""
 }
 
-# Main execution
+# main runs the manual testing workflow for Phase 2 MCP tools, orchestrating server checks and sequentially executing all test categories with user guidance and completion instructions.
 main() {
     echo "🎯 Phase 2 Manual Testing Guide"
     echo "================================"
