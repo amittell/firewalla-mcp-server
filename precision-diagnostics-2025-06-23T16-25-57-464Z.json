@@ -1,0 +1,255 @@
+{
+  "overallSuccess": 67,
+  "totalWarnings": 10,
+  "warningsByCategory": [
+    [
+      "response_format",
+      [
+        {
+          "tool": "get_device_status",
+          "category": "response_format",
+          "message": "Method \"getDeviceStatus\" missing standardized return type",
+          "context": "Tool: get_device_status, Expected: Promise<{count: number; results: T[]; next_cursor?: string}>",
+          "suggestedFix": "Update getDeviceStatus return type to standardized format"
+        },
+        {
+          "tool": "get_offline_devices",
+          "category": "response_format",
+          "message": "Method \"getOfflineDevices\" missing standardized return type",
+          "context": "Tool: get_offline_devices, Expected: Promise<{count: number; results: T[]; next_cursor?: string}>",
+          "suggestedFix": "Update getOfflineDevices return type to standardized format"
+        },
+        {
+          "tool": "get_boxes",
+          "category": "response_format",
+          "message": "Method \"getBoxes\" missing standardized return type",
+          "context": "Tool: get_boxes, Expected: Promise<{count: number; results: T[]; next_cursor?: string}>",
+          "suggestedFix": "Update getBoxes return type to standardized format"
+        }
+      ]
+    ],
+    [
+      "category_requirements",
+      [
+        {
+          "tool": "get_device_status",
+          "category": "category_requirements",
+          "message": "Core tool should emphasize essential functionality",
+          "context": "Tool: get_device_status, Category: CORE",
+          "suggestedFix": "Update description to highlight core/essential nature"
+        }
+      ]
+    ],
+    [
+      "edge_cases",
+      [
+        {
+          "tool": "get_device_status",
+          "category": "edge_cases",
+          "message": "Method \"getDeviceStatus\" missing try-catch error handling",
+          "context": "Tool: get_device_status",
+          "suggestedFix": "Add try-catch block to getDeviceStatus for proper error handling"
+        },
+        {
+          "tool": "get_device_status",
+          "category": "edge_cases",
+          "message": "Method \"getDeviceStatus\" missing input validation",
+          "context": "Tool: get_device_status",
+          "suggestedFix": "Add input validation/sanitization to getDeviceStatus"
+        },
+        {
+          "tool": "get_offline_devices",
+          "category": "edge_cases",
+          "message": "Method \"getOfflineDevices\" missing try-catch error handling",
+          "context": "Tool: get_offline_devices",
+          "suggestedFix": "Add try-catch block to getOfflineDevices for proper error handling"
+        },
+        {
+          "tool": "get_offline_devices",
+          "category": "edge_cases",
+          "message": "Method \"getOfflineDevices\" missing input validation",
+          "context": "Tool: get_offline_devices",
+          "suggestedFix": "Add input validation/sanitization to getOfflineDevices"
+        },
+        {
+          "tool": "get_boxes",
+          "category": "edge_cases",
+          "message": "Method \"getBoxes\" missing try-catch error handling",
+          "context": "Tool: get_boxes",
+          "suggestedFix": "Add try-catch block to getBoxes for proper error handling"
+        },
+        {
+          "tool": "get_boxes",
+          "category": "edge_cases",
+          "message": "Method \"getBoxes\" missing input validation",
+          "context": "Tool: get_boxes",
+          "suggestedFix": "Add input validation/sanitization to getBoxes"
+        }
+      ]
+    ]
+  ],
+  "warningsByTool": [
+    [
+      "get_device_status",
+      [
+        {
+          "category": "response_format",
+          "message": "Method \"getDeviceStatus\" missing standardized return type",
+          "context": "Tool: get_device_status, Expected: Promise<{count: number; results: T[]; next_cursor?: string}>",
+          "suggestedFix": "Update getDeviceStatus return type to standardized format"
+        },
+        {
+          "category": "category_requirements",
+          "message": "Core tool should emphasize essential functionality",
+          "context": "Tool: get_device_status, Category: CORE",
+          "suggestedFix": "Update description to highlight core/essential nature"
+        },
+        {
+          "category": "edge_cases",
+          "message": "Method \"getDeviceStatus\" missing try-catch error handling",
+          "context": "Tool: get_device_status",
+          "suggestedFix": "Add try-catch block to getDeviceStatus for proper error handling"
+        },
+        {
+          "category": "edge_cases",
+          "message": "Method \"getDeviceStatus\" missing input validation",
+          "context": "Tool: get_device_status",
+          "suggestedFix": "Add input validation/sanitization to getDeviceStatus"
+        }
+      ]
+    ],
+    [
+      "get_offline_devices",
+      [
+        {
+          "category": "response_format",
+          "message": "Method \"getOfflineDevices\" missing standardized return type",
+          "context": "Tool: get_offline_devices, Expected: Promise<{count: number; results: T[]; next_cursor?: string}>",
+          "suggestedFix": "Update getOfflineDevices return type to standardized format"
+        },
+        {
+          "category": "edge_cases",
+          "message": "Method \"getOfflineDevices\" missing try-catch error handling",
+          "context": "Tool: get_offline_devices",
+          "suggestedFix": "Add try-catch block to getOfflineDevices for proper error handling"
+        },
+        {
+          "category": "edge_cases",
+          "message": "Method \"getOfflineDevices\" missing input validation",
+          "context": "Tool: get_offline_devices",
+          "suggestedFix": "Add input validation/sanitization to getOfflineDevices"
+        }
+      ]
+    ],
+    [
+      "get_boxes",
+      [
+        {
+          "category": "response_format",
+          "message": "Method \"getBoxes\" missing standardized return type",
+          "context": "Tool: get_boxes, Expected: Promise<{count: number; results: T[]; next_cursor?: string}>",
+          "suggestedFix": "Update getBoxes return type to standardized format"
+        },
+        {
+          "category": "edge_cases",
+          "message": "Method \"getBoxes\" missing try-catch error handling",
+          "context": "Tool: get_boxes",
+          "suggestedFix": "Add try-catch block to getBoxes for proper error handling"
+        },
+        {
+          "category": "edge_cases",
+          "message": "Method \"getBoxes\" missing input validation",
+          "context": "Tool: get_boxes",
+          "suggestedFix": "Add input validation/sanitization to getBoxes"
+        }
+      ]
+    ]
+  ],
+  "priorityTargets": [],
+  "results": [
+    {
+      "name": "get_device_status",
+      "passed": 6,
+      "failed": 0,
+      "warnings": [
+        {
+          "category": "response_format",
+          "message": "Method \"getDeviceStatus\" missing standardized return type",
+          "context": "Tool: get_device_status, Expected: Promise<{count: number; results: T[]; next_cursor?: string}>",
+          "suggestedFix": "Update getDeviceStatus return type to standardized format"
+        },
+        {
+          "category": "category_requirements",
+          "message": "Core tool should emphasize essential functionality",
+          "context": "Tool: get_device_status, Category: CORE",
+          "suggestedFix": "Update description to highlight core/essential nature"
+        },
+        {
+          "category": "edge_cases",
+          "message": "Method \"getDeviceStatus\" missing try-catch error handling",
+          "context": "Tool: get_device_status",
+          "suggestedFix": "Add try-catch block to getDeviceStatus for proper error handling"
+        },
+        {
+          "category": "edge_cases",
+          "message": "Method \"getDeviceStatus\" missing input validation",
+          "context": "Tool: get_device_status",
+          "suggestedFix": "Add input validation/sanitization to getDeviceStatus"
+        }
+      ],
+      "successRate": 60
+    },
+    {
+      "name": "get_offline_devices",
+      "passed": 7,
+      "failed": 0,
+      "warnings": [
+        {
+          "category": "response_format",
+          "message": "Method \"getOfflineDevices\" missing standardized return type",
+          "context": "Tool: get_offline_devices, Expected: Promise<{count: number; results: T[]; next_cursor?: string}>",
+          "suggestedFix": "Update getOfflineDevices return type to standardized format"
+        },
+        {
+          "category": "edge_cases",
+          "message": "Method \"getOfflineDevices\" missing try-catch error handling",
+          "context": "Tool: get_offline_devices",
+          "suggestedFix": "Add try-catch block to getOfflineDevices for proper error handling"
+        },
+        {
+          "category": "edge_cases",
+          "message": "Method \"getOfflineDevices\" missing input validation",
+          "context": "Tool: get_offline_devices",
+          "suggestedFix": "Add input validation/sanitization to getOfflineDevices"
+        }
+      ],
+      "successRate": 70
+    },
+    {
+      "name": "get_boxes",
+      "passed": 7,
+      "failed": 0,
+      "warnings": [
+        {
+          "category": "response_format",
+          "message": "Method \"getBoxes\" missing standardized return type",
+          "context": "Tool: get_boxes, Expected: Promise<{count: number; results: T[]; next_cursor?: string}>",
+          "suggestedFix": "Update getBoxes return type to standardized format"
+        },
+        {
+          "category": "edge_cases",
+          "message": "Method \"getBoxes\" missing try-catch error handling",
+          "context": "Tool: get_boxes",
+          "suggestedFix": "Add try-catch block to getBoxes for proper error handling"
+        },
+        {
+          "category": "edge_cases",
+          "message": "Method \"getBoxes\" missing input validation",
+          "context": "Tool: get_boxes",
+          "suggestedFix": "Add input validation/sanitization to getBoxes"
+        }
+      ],
+      "successRate": 70
+    }
+  ]
+}

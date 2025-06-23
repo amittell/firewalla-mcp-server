@@ -2,7 +2,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
 import { ResponseOptimizer, DEFAULT_OPTIMIZATION_CONFIG } from '../optimization/index.js';
-// import { createSearchTools } from './search.js'; // Temporarily disabled
+import { createSearchTools } from './search.js';
 
 /**
  * Sets up MCP tools for Firewalla firewall management
@@ -23,7 +23,7 @@ import { ResponseOptimizer, DEFAULT_OPTIMIZATION_CONFIG } from '../optimization/
  * - get_most_active_rules: Rules with highest hit counts for traffic analysis
  * - get_recent_rules: Recently created or modified firewall rules
  * 
- * Advanced search tools (temporarily disabled):
+ * Advanced search tools:
  * - search_flows: Advanced flow searching with complex queries
  * - search_alarms: Alarm searching with severity, time, IP filters
  * - search_rules: Rule searching with target, action, status filters
@@ -598,21 +598,25 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
             throw new Error('Alarm ID parameter is required');
           }
           
-          const alarm = await firewalla.getSpecificAlarm(alarmId);
+          const alarmResponse = await firewalla.getSpecificAlarm(alarmId);
+          const alarm = alarmResponse.results[0];
           
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
-                  alarm_id: alarm.id,
-                  type: alarm.type,
-                  severity: alarm.severity,
-                  description: alarm.description,
-                  timestamp: alarm.timestamp,
-                  source_ip: alarm.source_ip,
-                  destination_ip: alarm.destination_ip,
-                  status: alarm.status,
+                  alarm_id: alarm?.aid || alarmId,
+                  gid: alarm?.gid,
+                  type: alarm?.type,
+                  severity: alarm?.severity,
+                  message: alarm?.message,
+                  timestamp: alarm?.ts ? new Date(alarm.ts * 1000).toISOString() : undefined,
+                  direction: alarm?.direction,
+                  protocol: alarm?.protocol,
+                  status: alarm?.status,
+                  device: alarm?.device,
+                  remote: alarm?.remote,
                 }, null, 2),
               },
             ],
@@ -626,17 +630,19 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
             throw new Error('Alarm ID parameter is required');
           }
           
-          const result = await firewalla.deleteAlarm(alarmId);
+          const deleteResponse = await firewalla.deleteAlarm(alarmId);
+          const result = deleteResponse.results[0];
           
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
-                  success: result.success,
-                  message: result.message,
+                  success: result?.success || false,
+                  message: result?.message || 'Delete operation completed',
                   alarm_id: alarmId,
                   action: 'delete_alarm',
+                  timestamp: result?.timestamp,
                 }, null, 2),
               },
             ],
@@ -838,31 +844,167 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
           };
         }
 
-        // Search Tools - Temporarily disabled due to module import issues
-        // case 'search_flows':
-        // case 'search_alarms': 
-        // case 'search_rules':
-        // case 'search_devices':
-        // case 'search_target_lists':
-        // case 'search_cross_reference': {
-        //   const searchTools = createSearchTools(firewalla);
-        //   const toolFunction = searchTools[name as keyof typeof searchTools];
-        //   
-        //   if (!toolFunction) {
-        //     throw new Error(`Search tool not found: ${name}`);
-        //   }
-        //   
-        //   const result = await toolFunction(args as any);
-        //   
-        //   return {
-        //     content: [
-        //       {
-        //         type: 'text',
-        //         text: JSON.stringify(result, null, 2),
-        //       },
-        //     ],
-        //   };
-        // }
+        // Search Tools - Advanced search capabilities with complex query syntax
+        case 'search_flows': {
+          const searchTools = createSearchTools(firewalla);
+          const result = await searchTools.search_flows(args as any);
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  count: result.results.length,
+                  query_executed: result.query,
+                  execution_time_ms: result.execution_time_ms,
+                  flows: result.results.map(flow => ({
+                    timestamp: new Date(flow.ts * 1000).toISOString(),
+                    source_ip: flow.source?.ip || 'unknown',
+                    destination_ip: flow.destination?.ip || 'unknown',
+                    protocol: flow.protocol,
+                    bytes: (flow.download || 0) + (flow.upload || 0),
+                    blocked: flow.block,
+                    direction: flow.direction,
+                    device: flow.device
+                  })),
+                  aggregations: result.aggregations
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'search_alarms': {
+          const searchTools = createSearchTools(firewalla);
+          const result = await searchTools.search_alarms(args as any);
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  count: result.results.length,
+                  query_executed: result.query,
+                  execution_time_ms: result.execution_time_ms,
+                  alarms: result.results.map(alarm => ({
+                    timestamp: new Date(alarm.ts * 1000).toISOString(),
+                    type: alarm.type,
+                    message: alarm.message,
+                    direction: alarm.direction,
+                    protocol: alarm.protocol,
+                    status: alarm.status
+                  })),
+                  aggregations: result.aggregations
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'search_rules': {
+          const searchTools = createSearchTools(firewalla);
+          const result = await searchTools.search_rules(args as any);
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  count: result.results.length,
+                  query_executed: result.query,
+                  execution_time_ms: result.execution_time_ms,
+                  rules: result.results.map(rule => ({
+                    id: rule.id,
+                    action: rule.action,
+                    target_type: rule.target?.type,
+                    target_value: rule.target?.value,
+                    direction: rule.direction,
+                    status: rule.status,
+                    hit_count: rule.hit?.count || 0
+                  })),
+                  aggregations: result.aggregations
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'search_devices': {
+          const searchTools = createSearchTools(firewalla);
+          const result = await searchTools.search_devices(args as any);
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  count: result.results.length,
+                  query_executed: result.query,
+                  execution_time_ms: result.execution_time_ms,
+                  devices: result.results.map(device => ({
+                    id: device.id,
+                    name: device.name,
+                    ip: device.ip,
+                    online: device.online,
+                    macVendor: device.macVendor,
+                    lastSeen: device.lastSeen
+                  })),
+                  aggregations: result.aggregations
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'search_target_lists': {
+          const searchTools = createSearchTools(firewalla);
+          const result = await searchTools.search_target_lists(args as any);
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  count: result.results.length,
+                  query_executed: result.query,
+                  execution_time_ms: result.execution_time_ms,
+                  target_lists: result.results.map(list => ({
+                    id: list.id,
+                    name: list.name,
+                    category: list.category,
+                    owner: list.owner,
+                    entry_count: list.targets?.length || 0
+                  })),
+                  aggregations: result.aggregations
+                }, null, 2),
+              },
+            ],
+          };
+        }
+
+        case 'search_cross_reference': {
+          const searchTools = createSearchTools(firewalla);
+          const result = await searchTools.search_cross_reference(args as any);
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  primary_query: result.primary.query,
+                  primary_results: result.primary.count,
+                  correlations: result.correlations.map((corr: any) => ({
+                    query: corr.query,
+                    matches: corr.count,
+                    correlation_field: corr.correlation_field
+                  })),
+                  correlation_summary: result.correlation_summary,
+                  execution_time_ms: result.execution_time_ms
+                }, null, 2),
+              },
+            ],
+          };
+        }
 
         default:
           throw new Error(`Unknown tool: ${name}`);

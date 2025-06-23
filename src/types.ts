@@ -47,9 +47,11 @@ export interface Alarm {
   /** Readable alarm description */
   message: string;
   /** Traffic direction */
-  direction: 'inbound' | 'outbound' | 'local';
+  direction: string;
   /** Transport protocol */
-  protocol: 'tcp' | 'udp';
+  protocol: string;
+  /** Optional severity level */
+  severity?: string;
   
   // Conditional properties based on alarm type
   /** Device details (when type != 4) */
@@ -469,6 +471,12 @@ export interface SearchOptions {
   min_severity?: 'low' | 'medium' | 'high' | 'critical';
   /** Minimum hit count for rules */
   min_hits?: number;
+  /** Minimum number of targets in list (for target lists) */
+  min_targets?: number;
+  /** Filter by categories (for target lists) */
+  categories?: string[];
+  /** Filter by owners (for target lists) */
+  owners?: string[];
 }
 
 /**
