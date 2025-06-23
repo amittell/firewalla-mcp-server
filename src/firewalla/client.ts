@@ -195,6 +195,11 @@ export class FirewallaClient {
       limit: Math.min(limit, 500), // API max is 500
     };
     
+    // Add default box filter if configured
+    if (this.config.boxId && this.config.boxId.trim()) {
+      params.gid = this.config.boxId.trim();
+    }
+    
     if (query) {
       params.query = query;
     }
@@ -349,6 +354,8 @@ export class FirewallaClient {
       
       if (boxId && boxId.trim()) {
         params.box = boxId.trim();
+      } else if (this.config.boxId && this.config.boxId.trim()) {
+        params.box = this.config.boxId.trim();
       }
       if (groupId && groupId.trim()) {
         params.group = groupId.trim();
