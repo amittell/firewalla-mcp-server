@@ -20,10 +20,9 @@
   "homepage": "https://github.com/amittell/firewalla-mcp-server#readme",
   "scripts": {
     "build": "npx tsc",
-    "dev": "nodemon --exec ts-node src/server.ts",
-    "start": "node dist/server.js",
+    "dev": "npm run build && node dist/server.js",
+    "start": "node dist/server.js", 
     "mcp:start": "npm run build && node dist/server.js",
-    "mcp:start:dev": "node --loader ts-node/esm src/server.ts",
     "mcp:test": "echo 'Testing MCP server connection...' && npm run mcp:start",
     "mcp:debug": "DEBUG=mcp:* npm run build && node dist/server.js",
     "test": "jest",

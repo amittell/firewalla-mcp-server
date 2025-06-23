@@ -15,7 +15,7 @@ npm run build
 
 ### Development
 ```bash
-npm run dev          # Start development server with hot reload
+npm run dev          # Build and start development server
 npm run build        # Build TypeScript to JavaScript
 npm run test         # Run all tests
 npm run test:watch   # Run tests in watch mode
