@@ -10,6 +10,7 @@ import {
   NetworkRule, 
   TargetList, 
   Box,
+  BandwidthUsage,
   SimpleStats,
   Statistics,
   Trend,
@@ -336,6 +337,152 @@ export class ResponseValidator {
 
     if (typeof list.lastUpdated !== 'number') {
       errors.push(new ValidationError('lastUpdated must be a number', 'lastUpdated', list.lastUpdated, 'number'));
+    }
+
+    return { valid: errors.length === 0, errors, warnings };
+  }
+
+  /**
+   * Validate BandwidthUsage object
+   */
+  static validateBandwidth(bandwidth: any): ValidationResult {
+    const errors: ValidationError[] = [];
+    const warnings: string[] = [];
+
+    // Required fields
+    if (typeof bandwidth.device_id !== 'string') {
+      errors.push(new ValidationError('device_id must be a string', 'device_id', bandwidth.device_id, 'string'));
+    }
+
+    if (typeof bandwidth.device_name !== 'string') {
+      errors.push(new ValidationError('device_name must be a string', 'device_name', bandwidth.device_name, 'string'));
+    }
+
+    if (typeof bandwidth.ip_address !== 'string') {
+      errors.push(new ValidationError('ip_address must be a string', 'ip_address', bandwidth.ip_address, 'string'));
+    }
+
+    if (typeof bandwidth.bytes_uploaded !== 'number') {
+      errors.push(new ValidationError('bytes_uploaded must be a number', 'bytes_uploaded', bandwidth.bytes_uploaded, 'number'));
+    } else if (bandwidth.bytes_uploaded < 0) {
+      errors.push(new ValidationError('bytes_uploaded must be non-negative', 'bytes_uploaded', bandwidth.bytes_uploaded, 'non-negative number'));
+    }
+
+    if (typeof bandwidth.bytes_downloaded !== 'number') {
+      errors.push(new ValidationError('bytes_downloaded must be a number', 'bytes_downloaded', bandwidth.bytes_downloaded, 'number'));
+    } else if (bandwidth.bytes_downloaded < 0) {
+      errors.push(new ValidationError('bytes_downloaded must be non-negative', 'bytes_downloaded', bandwidth.bytes_downloaded, 'non-negative number'));
+    }
+
+    if (typeof bandwidth.total_bytes !== 'number') {
+      errors.push(new ValidationError('total_bytes must be a number', 'total_bytes', bandwidth.total_bytes, 'number'));
+    } else if (bandwidth.total_bytes < 0) {
+      errors.push(new ValidationError('total_bytes must be non-negative', 'total_bytes', bandwidth.total_bytes, 'non-negative number'));
+    }
+
+    if (typeof bandwidth.period !== 'string') {
+      errors.push(new ValidationError('period must be a string', 'period', bandwidth.period, 'string'));
+    } else if (!['1h', '24h', '7d', '30d'].includes(bandwidth.period)) {
+      errors.push(new ValidationError('period must be one of: 1h, 24h, 7d, 30d', 'period', bandwidth.period, '1h|24h|7d|30d'));
+    }
+
+    // Validate that total_bytes matches sum of uploaded + downloaded (with tolerance for rounding)
+    if (typeof bandwidth.bytes_uploaded === 'number' && 
+        typeof bandwidth.bytes_downloaded === 'number' && 
+        typeof bandwidth.total_bytes === 'number') {
+      const expectedTotal = bandwidth.bytes_uploaded + bandwidth.bytes_downloaded;
+      const tolerance = Math.max(1, expectedTotal * 0.01); // 1% tolerance or minimum 1 byte
+      
+      if (Math.abs(bandwidth.total_bytes - expectedTotal) > tolerance) {
+        warnings.push(`total_bytes (${bandwidth.total_bytes}) does not match sum of uploaded (${bandwidth.bytes_uploaded}) + downloaded (${bandwidth.bytes_downloaded})`);
+      }
+    }
+
+    return { valid: errors.length === 0, errors, warnings };
+  }
+
+  /**
+   * Validate Rule object (for pause/resume operations)
+   */
+  static validateRule(rule: any): ValidationResult {
+    const errors: ValidationError[] = [];
+    const warnings: string[] = [];
+
+    if (typeof rule.id !== 'string') {
+      errors.push(new ValidationError('id must be a string', 'id', rule.id, 'string'));
+    }
+
+    if (typeof rule.success !== 'boolean') {
+      errors.push(new ValidationError('success must be a boolean', 'success', rule.success, 'boolean'));
+    }
+
+    return { valid: errors.length === 0, errors, warnings };
+  }
+
+  /**
+   * Validate Target object (for target lists)
+   */
+  static validateTarget(target: any): ValidationResult {
+    return this.validateTargetList(target);
+  }
+
+  /**
+   * Validate Box object
+   */
+  static validateBox(box: any): ValidationResult {
+    const errors: ValidationError[] = [];
+    const warnings: string[] = [];
+
+    if (typeof box.id !== 'string') {
+      errors.push(new ValidationError('id must be a string', 'id', box.id, 'string'));
+    }
+
+    if (typeof box.name !== 'string') {
+      errors.push(new ValidationError('name must be a string', 'name', box.name, 'string'));
+    }
+
+    if (typeof box.online !== 'boolean') {
+      errors.push(new ValidationError('online must be a boolean', 'online', box.online, 'boolean'));
+    }
+
+    return { valid: errors.length === 0, errors, warnings };
+  }
+
+  /**
+   * Validate Statistics object
+   */
+  static validateStatistics(stats: any): ValidationResult {
+    const errors: ValidationError[] = [];
+    const warnings: string[] = [];
+
+    if (typeof stats.box_count !== 'number') {
+      errors.push(new ValidationError('box_count must be a number', 'box_count', stats.box_count, 'number'));
+    }
+
+    if (typeof stats.alarm_count !== 'number') {
+      errors.push(new ValidationError('alarm_count must be a number', 'alarm_count', stats.alarm_count, 'number'));
+    }
+
+    if (typeof stats.rule_count !== 'number') {
+      errors.push(new ValidationError('rule_count must be a number', 'rule_count', stats.rule_count, 'number'));
+    }
+
+    return { valid: errors.length === 0, errors, warnings };
+  }
+
+  /**
+   * Validate Trend object
+   */
+  static validateTrend(trend: any): ValidationResult {
+    const errors: ValidationError[] = [];
+    const warnings: string[] = [];
+
+    if (typeof trend.timestamp !== 'number') {
+      errors.push(new ValidationError('timestamp must be a number', 'timestamp', trend.timestamp, 'number'));
+    }
+
+    if (typeof trend.value !== 'number') {
+      errors.push(new ValidationError('value must be a number', 'value', trend.value, 'number'));
     }
 
     return { valid: errors.length === 0, errors, warnings };
