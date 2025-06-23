@@ -70,7 +70,7 @@ describe('FirewallaClient', () => {
         data: { results: mockAlarms },
       });
 
-      const result = await client.getActiveAlarms('high', 10);
+      const result = await client.getActiveAlarms('high', undefined, undefined, 10);
       
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
         `/v2/alarms`,
@@ -136,8 +136,9 @@ describe('FirewallaClient', () => {
       });
 
       const result = await client.getFlowData(
-        '2023-01-01T00:00:00Z',
-        '2023-01-01T23:59:59Z',
+        undefined,
+        undefined,
+        'ts:desc',
         50,
         'test-cursor'
       );
@@ -154,12 +155,12 @@ describe('FirewallaClient', () => {
       );
       
       // Verify the structure and required fields
-      expect(result).toHaveProperty('flows');
-      expect(result).toHaveProperty('pagination');
-      expect(result.pagination).toEqual({ has_more: true, next_cursor: 'next-cursor' });
-      expect(result.flows).toHaveLength(1);
+      expect(result).toHaveProperty('results');
+      expect(result).toHaveProperty('next_cursor');
+      expect(result.next_cursor).toEqual('next-cursor');
+      expect(result.results).toHaveLength(1);
       
-      const flow = result.flows[0]!;
+      const flow = result.results[0]!;
       expect(flow).toHaveProperty('timestamp');
       expect(flow).toHaveProperty('source_ip', '192.168.1.100');
       expect(flow).toHaveProperty('destination_ip', '8.8.8.8');
@@ -215,8 +216,8 @@ describe('FirewallaClient', () => {
 
       const result = await client.getFlowData();
       
-      expect(result.flows).toHaveLength(1);
-      const flow = result.flows[0]!;
+      expect(result.results).toHaveLength(1);
+      const flow = result.results[0]!;
 
       expect(flow.ts).toBe(1672531200);
       expect(flow.source?.ip).toBe('192.168.1.100');
@@ -283,21 +284,21 @@ describe('FirewallaClient', () => {
         { params: {} }
       );
 
-      expect(result).toHaveLength(3);
+      expect(result.results).toHaveLength(3);
       
       // Verify first device mapping
-      expect(result[0]).toMatchObject({
+      expect(result.results[0]).toMatchObject({
         id: 'device-1',
         name: 'iPhone',
         ip: '192.168.1.10',
         online: true,
       });
-      expect(result.length).toBeGreaterThan(0);
-      expect(result[0]!.lastSeen).toBe(1703980800);
+      expect(result.results.length).toBeGreaterThan(0);
+      expect(result.results[0]!.lastSeen).toBe(1703980800);
 
       // Verify second device mapping with different field names
-      expect(result.length).toBeGreaterThan(1);
-      expect(result[1]).toMatchObject({
+      expect(result.results.length).toBeGreaterThan(1);
+      expect(result.results[1]).toMatchObject({
         id: 'device-2',
         name: 'MacBook-Pro',
         ip: '192.168.1.11',
@@ -392,10 +393,10 @@ describe('FirewallaClient', () => {
         data: mockRawDevices,
       });
 
-      const result = await client.getDeviceStatus(undefined, false);
+      const result = await client.getDeviceStatus(undefined, undefined);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.online).toBe(true);
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0]!.online).toBe(true);
     });
 
     it('should infer device types from names and vendors', async () => {
