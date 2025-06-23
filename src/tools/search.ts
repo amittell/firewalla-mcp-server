@@ -381,7 +381,7 @@ export class SearchEngine {
       
       // Extract correlation values
       const correlationValues = new Set(
-        primaryResult.results.map(item => this.getNestedValue(item, params.correlation_field)).filter(Boolean)
+        (Array.isArray(primaryResult.results) ? primaryResult.results : []).map(item => this.getNestedValue(item, params.correlation_field)).filter(Boolean)
       );
 
       // Execute secondary queries and correlate

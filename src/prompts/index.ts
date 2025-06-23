@@ -102,7 +102,7 @@ Please analyze this data and provide:
 Analyze the following security data to identify patterns, trends, and recommend defensive actions:
 
 **Active Alarms (${severityThreshold}+ severity):**
-${alarms.results.map((alarm: any) => 
+${(Array.isArray(alarms.results) ? alarms.results : []).map((alarm: any) => 
   `- [${alarm.type}] ${alarm.message}
     Source: ${alarm.device?.ip || 'N/A'} → Destination: ${alarm.remote?.ip || 'N/A'}
     Time: ${new Date(alarm.ts * 1000).toISOString()}`
@@ -154,7 +154,7 @@ Please provide:
           ]);
 
           const highUsageDevices = usage.results.filter((u: any) => u.total_bytes > thresholdMb * 1024 * 1024);
-          const flowAnalysis = analyzeFlowPatterns(flows.results.map((f: any) => ({ 
+          const flowAnalysis = analyzeFlowPatterns((Array.isArray(flows.results) ? flows.results : []).map((f: any) => ({ 
             protocol: f.protocol, 
             duration: f.duration || 0, 
             timestamp: new Date(f.ts * 1000).toISOString() 

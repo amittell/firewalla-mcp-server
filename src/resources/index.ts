@@ -73,7 +73,7 @@ export function setupResources(server: Server, firewalla: FirewallaClient): void
                   device_inventory: {
                     statistics: deviceStats,
                     availability_percentage: Math.round((deviceStats.online / deviceStats.total) * 100),
-                    devices: devices.results.map(device => ({
+                    devices: (Array.isArray(devices.results) ? devices.results : []).map(device => ({
                       id: device.id,
                       name: device.name,
                       ip_address: device.ip,
