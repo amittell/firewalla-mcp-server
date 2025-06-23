@@ -102,7 +102,7 @@ function parseFieldExpression(expression: string): QueryComponent | null {
     return {
       field,
       operator: 'range',
-      value: [parseValue(min), parseValue(max)]
+      value: [parseValue(min), parseValue(max)] as Array<string | number | boolean>
     };
   }
   
@@ -137,7 +137,7 @@ function parseFieldExpression(expression: string): QueryComponent | null {
       return {
         field,
         operator: 'in',
-        value: value.split(',').map(v => parseValue(v.trim()))
+        value: value.split(',').map(v => parseValue(v.trim())) as Array<string | number | boolean>
       };
     }
     
