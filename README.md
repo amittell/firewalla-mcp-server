@@ -55,13 +55,13 @@ Create a `.env` file with your Firewalla credentials:
 
 ```env
 FIREWALLA_MSP_TOKEN=your_msp_access_token_here
-FIREWALLA_MSP_ID=your_msp_id_here
+FIREWALLA_MSP_ID=yourdomain.firewalla.net
 FIREWALLA_BOX_ID=your_box_gid_here
 ```
 
 **Getting Your Credentials:**
-1. Log into your Firewalla MSP portal
-2. Your MSP ID is the part before `.firewalla.net` in your portal URL
+1. Log into your Firewalla MSP portal at `https://yourdomain.firewalla.net`
+2. Your MSP ID is the full domain (e.g., `company123.firewalla.net`)
 3. Generate an access token in API settings
 4. Find your Box GID (Group ID) in device settings - this is your unique device identifier
 
@@ -85,7 +85,7 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
       "args": ["firewalla-mcp-server"],
       "env": {
         "FIREWALLA_MSP_TOKEN": "your_msp_access_token_here",
-        "FIREWALLA_MSP_ID": "your_msp_id_here",
+        "FIREWALLA_MSP_ID": "yourdomain.firewalla.net",
         "FIREWALLA_BOX_ID": "your_box_gid_here"
       }
     }
@@ -102,7 +102,7 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
       "args": ["/full/path/to/firewalla-mcp-server/dist/server.js"],
       "env": {
         "FIREWALLA_MSP_TOKEN": "your_msp_access_token_here",
-        "FIREWALLA_MSP_ID": "your_msp_id_here",
+        "FIREWALLA_MSP_ID": "yourdomain.firewalla.net",
         "FIREWALLA_BOX_ID": "your_box_gid_here"
       }
     }
@@ -119,7 +119,7 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
       "args": [
         "run", "-i", "--rm",
         "-e", "FIREWALLA_MSP_TOKEN=your_msp_access_token_here",
-        "-e", "FIREWALLA_MSP_ID=your_msp_id_here", 
+        "-e", "FIREWALLA_MSP_ID=yourdomain.firewalla.net", 
         "-e", "FIREWALLA_BOX_ID=your_box_gid_here",
         "firewalla-mcp-server"
       ]
