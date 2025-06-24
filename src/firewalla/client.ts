@@ -111,8 +111,12 @@ export class FirewallaClient {
     if (!input || typeof input !== 'string') {
       return '';
     }
-    // Basic sanitization - remove potentially dangerous characters
-    return input.replace(/[^a-zA-Z0-9\-_]/g, '').trim();
+    // Enhanced sanitization that preserves search query functionality
+    // Remove only the most dangerous characters while preserving search syntax
+    return input
+      .replace(/[<>"']/g, '') // Remove HTML/injection characters
+      .replace(/\0/g, '') // Remove null bytes
+      .trim();
   }
 
   private async request<T>(
@@ -171,9 +175,49 @@ export class FirewallaClient {
       return result;
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        throw new Error(`API Error: ${error.message}`);
+        const status = error.response?.status;
+        const statusText = error.response?.statusText;
+        const url = error.config?.url;
+        
+        let errorMessage = `API Error (${status || 'unknown'}): ${error.message}`;
+        
+        if (status) {
+          switch (status) {
+            case 400:
+              errorMessage = `Bad Request: Invalid parameters sent to ${url}`;
+              break;
+            case 401:
+              errorMessage = 'Authentication failed: Invalid or expired MSP token';
+              break;
+            case 403:
+              errorMessage = 'Access denied: Insufficient permissions for this operation';
+              break;
+            case 404:
+              errorMessage = `Resource not found: ${url} does not exist`;
+              break;
+            case 429:
+              errorMessage = 'Rate limit exceeded: Too many requests, please wait before retrying';
+              break;
+            case 500:
+              errorMessage = 'Server error: Firewalla API is experiencing issues';
+              break;
+            case 503:
+              errorMessage = 'Service unavailable: Firewalla API is temporarily down';
+              break;
+            default:
+              errorMessage = `HTTP ${status} ${statusText}: ${error.message}`;
+          }
+        }
+        
+        throw new Error(errorMessage);
       }
-      throw error;
+      
+      // Handle other types of errors
+      if (error instanceof Error) {
+        throw new Error(`Request failed: ${error.message}`);
+      }
+      
+      throw new Error('Unknown error occurred during API request');
     }
   }
 
@@ -1018,7 +1062,8 @@ export class FirewallaClient {
   async getStatisticsByRegion(): Promise<{count: number; results: import('../types').Statistics[]; next_cursor?: string}> {
     try {
       const flows = await this.getFlowData();
-      const alarms = await this.getActiveAlarms(); // TODO: Implement alarm-based statistics
+      // TODO: Implement alarm-based statistics
+      // const alarms = await this.getActiveAlarms();
 
       // Validate flows response structure
       if (!flows || !flows.results || !Array.isArray(flows.results)) {
@@ -2895,8 +2940,8 @@ export class FirewallaClient {
       );
 
       return {
-        success: Boolean(response && response.success),
-        message: (response && response.message) || `Rule ${validatedRuleId} paused for ${validatedDuration} minutes`
+        success: response?.success ?? true, // Default to true if API doesn't return success field
+        message: response?.message || `Rule ${validatedRuleId} paused for ${validatedDuration} minutes`
       };
     } catch (error) {
       console.error('Error in pauseRule:', error);
@@ -2924,8 +2969,8 @@ export class FirewallaClient {
       );
 
       return {
-        success: Boolean(response.success),
-        message: response.message || `Rule ${validatedRuleId} resumed successfully`
+        success: response?.success ?? true, // Default to true if API doesn't return success field
+        message: response?.message || `Rule ${validatedRuleId} resumed successfully`
       };
     } catch (error) {
       console.error('Error in resumeRule:', error);

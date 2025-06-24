@@ -3,6 +3,7 @@ import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
 import { ResponseOptimizer, DEFAULT_OPTIMIZATION_CONFIG } from '../optimization/index.js';
 import { createSearchTools } from './search.js';
+import { ErrorHandler, ParameterValidator, SafeAccess, QuerySanitizer } from '../validation/error-handler.js';
 
 /**
  * Sets up MCP tools for Firewalla firewall management
@@ -41,39 +42,69 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
     try {
       switch (name) {
         case 'get_active_alarms': {
-          const query = args?.query as string | undefined;
-          const groupBy = args?.groupBy as string | undefined;
-          const sortBy = args?.sortBy as string | undefined;
-          const limit = (args?.limit as number) || 200;
-          const cursor = args?.cursor as string | undefined;
+          // Parameter validation
+          const queryValidation = ParameterValidator.validateOptionalString(args?.query, 'query');
+          const groupByValidation = ParameterValidator.validateOptionalString(args?.groupBy, 'groupBy');
+          const sortByValidation = ParameterValidator.validateOptionalString(args?.sortBy, 'sortBy');
+          const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
+            required: true, min: 1, max: 10000, integer: true
+          });
+          const cursorValidation = ParameterValidator.validateOptionalString(args?.cursor, 'cursor');
           
-          const response = await firewalla.getActiveAlarms(query, groupBy, sortBy, limit, cursor);
+          const validationResult = ParameterValidator.combineValidationResults([
+            queryValidation, groupByValidation, sortByValidation, limitValidation, cursorValidation
+          ]);
+          
+          if (!validationResult.isValid) {
+            return ErrorHandler.createErrorResponse('get_active_alarms', 'Parameter validation failed', null, validationResult.errors);
+          }
+          
+          // Sanitize query if provided
+          let sanitizedQuery = queryValidation.sanitizedValue;
+          if (sanitizedQuery) {
+            const queryCheck = QuerySanitizer.sanitizeSearchQuery(sanitizedQuery);
+            if (!queryCheck.isValid) {
+              return ErrorHandler.createErrorResponse('get_active_alarms', 'Query validation failed', null, queryCheck.errors);
+            }
+            sanitizedQuery = queryCheck.sanitizedValue;
+          }
+          
+          const response = await firewalla.getActiveAlarms(
+            sanitizedQuery,
+            groupByValidation.sanitizedValue,
+            sortByValidation.sanitizedValue || 'ts:desc',
+            limitValidation.sanitizedValue!,
+            cursorValidation.sanitizedValue
+          );
           
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
-                  count: response.count,
-                  alarms: (Array.isArray(response.results) ? response.results : []).map(alarm => ({
-                    aid: alarm.aid,
-                    timestamp: new Date(alarm.ts * 1000).toISOString(),
-                    type: alarm.type,
-                    status: alarm.status,
-                    message: alarm.message,
-                    direction: alarm.direction,
-                    protocol: alarm.protocol,
-                    gid: alarm.gid,
-                    // Include conditional properties if present
-                    ...(alarm.device && { device: alarm.device }),
-                    ...(alarm.remote && { remote: alarm.remote }),
-                    ...(alarm.transfer && { transfer: alarm.transfer }),
-                    ...(alarm.dataPlan && { dataPlan: alarm.dataPlan }),
-                    ...(alarm.vpn && { vpn: alarm.vpn }),
-                    ...(alarm.port && { port: alarm.port }),
-                    ...(alarm.wan && { wan: alarm.wan }),
-                  })),
-                  next_cursor: response.next_cursor,
+                  count: SafeAccess.getNestedValue(response, 'count', 0),
+                  alarms: SafeAccess.safeArrayMap(
+                    response.results,
+                    (alarm: any) => ({
+                      aid: SafeAccess.getNestedValue(alarm, 'aid', 0),
+                      timestamp: alarm.ts ? new Date(alarm.ts * 1000).toISOString() : new Date().toISOString(),
+                      type: SafeAccess.getNestedValue(alarm, 'type', 'unknown'),
+                      status: SafeAccess.getNestedValue(alarm, 'status', 'unknown'),
+                      message: SafeAccess.getNestedValue(alarm, 'message', 'No message'),
+                      direction: SafeAccess.getNestedValue(alarm, 'direction', 'unknown'),
+                      protocol: SafeAccess.getNestedValue(alarm, 'protocol', 'unknown'),
+                      gid: SafeAccess.getNestedValue(alarm, 'gid', 'unknown'),
+                      // Include conditional properties if present
+                      ...(alarm.device && { device: alarm.device }),
+                      ...(alarm.remote && { remote: alarm.remote }),
+                      ...(alarm.transfer && { transfer: alarm.transfer }),
+                      ...(alarm.dataPlan && { dataPlan: alarm.dataPlan }),
+                      ...(alarm.vpn && { vpn: alarm.vpn }),
+                      ...(alarm.port && { port: alarm.port }),
+                      ...(alarm.wan && { wan: alarm.wan }),
+                    })
+                  ),
+                  next_cursor: SafeAccess.getNestedValue(response, 'next_cursor'),
                 }, null, 2),
               },
             ],
@@ -81,10 +112,19 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'get_flow_data': {
+          // Parameter validation
+          const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
+            required: true, min: 1, max: 10000, integer: true
+          });
+          
+          if (!limitValidation.isValid) {
+            return ErrorHandler.createErrorResponse(name, 'Parameter validation failed', {}, limitValidation.errors);
+          }
+          
           const query = args?.query as string | undefined;
           const groupBy = args?.groupBy as string | undefined;
           const sortBy = args?.sortBy as string | undefined;
-          const limit = (args?.limit as number) || 200;
+          const limit = limitValidation.sanitizedValue!;
           const cursor = args?.cursor as string | undefined;
           
           // Build query for time range if provided
@@ -134,9 +174,18 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'get_device_status': {
+          // Parameter validation
+          const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
+            required: true, min: 1, max: 10000, integer: true
+          });
+          
+          if (!limitValidation.isValid) {
+            return ErrorHandler.createErrorResponse(name, 'Parameter validation failed', {}, limitValidation.errors);
+          }
+          
           const deviceId = args?.device_id as string | undefined;
           const includeOffline = (args?.include_offline as boolean) !== false; // Default to true
-          const limit = args?.limit as number | undefined; // Optional limit for response size
+          const limit = limitValidation.sanitizedValue!;
           const cursor = args?.cursor as string | undefined; // Cursor for pagination
           
           const devicesResponse = await firewalla.getDeviceStatus(deviceId, includeOffline, limit, cursor);
@@ -213,32 +262,50 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'get_bandwidth_usage': {
-          const period = args?.period as string;
-          const top = (args?.top as number) || 50; // Default restored, will implement proper pagination
+          // Parameter validation
+          const periodValidation = ParameterValidator.validateEnum(
+            args?.period,
+            'period',
+            ['1h', '24h', '7d', '30d'],
+            true
+          );
+          const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
+            required: true, min: 1, max: 500, integer: true
+          });
           
-          if (!period) {
-            throw new Error('Period parameter is required');
+          const validationResult = ParameterValidator.combineValidationResults([
+            periodValidation, limitValidation
+          ]);
+          
+          if (!validationResult.isValid) {
+            return ErrorHandler.createErrorResponse('get_bandwidth_usage', 'Parameter validation failed', null, validationResult.errors);
           }
           
-          const usageResponse = await firewalla.getBandwidthUsage(period, top);
+          const usageResponse = await firewalla.getBandwidthUsage(
+            periodValidation.sanitizedValue!,
+            limitValidation.sanitizedValue!
+          );
           
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
-                  period,
-                  top_devices: Array.isArray(usageResponse.results) ? usageResponse.results.length : 0,
-                  bandwidth_usage: (Array.isArray(usageResponse.results) ? usageResponse.results : []).map(item => ({
-                    device_id: item.device_id,
-                    device_name: item.device_name,
-                    ip_address: item.ip_address,
-                    bytes_uploaded: item.bytes_uploaded,
-                    bytes_downloaded: item.bytes_downloaded,
-                    total_bytes: item.total_bytes,
-                    total_mb: Math.round(item.total_bytes / (1024 * 1024)),
-                    total_gb: Math.round(item.total_bytes / (1024 * 1024 * 1024) * 100) / 100,
-                  })),
+                  period: periodValidation.sanitizedValue,
+                  top_devices: SafeAccess.safeArrayAccess(usageResponse.results, (arr) => arr.length, 0),
+                  bandwidth_usage: SafeAccess.safeArrayMap(
+                    usageResponse.results,
+                    (item: any) => ({
+                      device_id: SafeAccess.getNestedValue(item, 'device_id', 'unknown'),
+                      device_name: SafeAccess.getNestedValue(item, 'device_name', 'Unknown Device'),
+                      ip_address: SafeAccess.getNestedValue(item, 'ip_address', 'unknown'),
+                      bytes_uploaded: SafeAccess.getNestedValue(item, 'bytes_uploaded', 0),
+                      bytes_downloaded: SafeAccess.getNestedValue(item, 'bytes_downloaded', 0),
+                      total_bytes: SafeAccess.getNestedValue(item, 'total_bytes', 0),
+                      total_mb: Math.round(SafeAccess.getNestedValue(item, 'total_bytes', 0) / (1024 * 1024)),
+                      total_gb: Math.round(SafeAccess.getNestedValue(item, 'total_bytes', 0) / (1024 * 1024 * 1024) * 100) / 100,
+                    })
+                  ),
                 }, null, 2),
               },
             ],
@@ -246,9 +313,18 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'get_network_rules': {
+          // Parameter validation
+          const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
+            required: true, min: 1, max: 10000, integer: true
+          });
+          
+          if (!limitValidation.isValid) {
+            return ErrorHandler.createErrorResponse(name, 'Parameter validation failed', {}, limitValidation.errors);
+          }
+          
           const query = args?.query as string | undefined;
           const summaryOnly = (args?.summary_only as boolean) ?? false;
-          const limit = (args?.limit as number) || 500; // Increased from 50 to 500
+          const limit = limitValidation.sanitizedValue!;
           
           const response = await firewalla.getNetworkRules(query, limit);
           
@@ -276,12 +352,12 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                   rules: summaryOnly ? optimizedResponse.results : response.results.slice(0, limit).map(rule => ({
                     id: rule.id,
                     action: rule.action,
-                    target: {
+                    target: rule.target ? {
                       type: rule.target.type,
                       value: rule.target.value,
                       ...(rule.target.dnsOnly && { dnsOnly: rule.target.dnsOnly }),
                       ...(rule.target.port && { port: rule.target.port }),
-                    },
+                    } : { type: 'unknown', value: 'unknown' },
                     direction: rule.direction,
                     gid: rule.gid,
                     group: rule.group,
@@ -329,7 +405,8 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
           }, {} as Record<string, number>);
           
           const rulesByTargetType = allRules.reduce((acc, rule) => {
-            acc[rule.target.type] = (acc[rule.target.type] || 0) + 1;
+            const targetType = rule.target && rule.target.type ? rule.target.type : 'unknown';
+            acc[targetType] = (acc[targetType] || 0) + 1;
             return acc;
           }, {} as Record<string, number>);
           
@@ -400,7 +477,16 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'get_most_active_rules': {
-          const limit = (args?.limit as number) || 100; // Increased default from 20 to 100, removed 50 cap
+          // Parameter validation
+          const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
+            required: true, min: 1, max: 1000, integer: true
+          });
+          
+          if (!limitValidation.isValid) {
+            return ErrorHandler.createErrorResponse(name, 'Parameter validation failed', {}, limitValidation.errors);
+          }
+          
+          const limit = limitValidation.sanitizedValue!;
           const minHits = (args?.min_hits as number) || 1;
           const ruleType = args?.rule_type as string | undefined; // TODO: Implement rule type filtering
           
@@ -448,8 +534,17 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'get_recent_rules': {
+          // Parameter validation
+          const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
+            required: true, min: 1, max: 1000, integer: true
+          });
+          
+          if (!limitValidation.isValid) {
+            return ErrorHandler.createErrorResponse(name, 'Parameter validation failed', {}, limitValidation.errors);
+          }
+          
           const hours = Math.min((args?.hours as number) || 24, 168); // Default 24h, max 1 week
-          const limit = (args?.limit as number) || 100; // Increased default from 30 to 100, removed cap
+          const limit = limitValidation.sanitizedValue!;
           const ruleType = args?.rule_type as string | undefined; // TODO: Implement rule type filtering
           const includeModified = (args?.include_modified as boolean) ?? true;
           
@@ -509,24 +604,34 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'pause_rule': {
-          const ruleId = args?.rule_id as string;
-          const duration = (args?.duration as number) || 60;
+          // Parameter validation
+          const ruleIdValidation = ParameterValidator.validateRequiredString(args?.rule_id, 'rule_id');
+          const durationValidation = ParameterValidator.validateNumber(args?.duration, 'duration', {
+            min: 1, max: 1440, defaultValue: 60, integer: true
+          });
           
-          if (!ruleId) {
-            throw new Error('Rule ID parameter is required');
+          const validationResult = ParameterValidator.combineValidationResults([
+            ruleIdValidation, durationValidation
+          ]);
+          
+          if (!validationResult.isValid) {
+            return ErrorHandler.createErrorResponse('pause_rule', 'Parameter validation failed', null, validationResult.errors);
           }
           
-          const result = await firewalla.pauseRule(ruleId, duration);
+          const result = await firewalla.pauseRule(
+            ruleIdValidation.sanitizedValue!,
+            durationValidation.sanitizedValue!
+          );
           
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
-                  success: result.success,
-                  message: result.message,
-                  rule_id: ruleId,
-                  duration_minutes: duration,
+                  success: SafeAccess.getNestedValue(result, 'success', false),
+                  message: SafeAccess.getNestedValue(result, 'message', 'Rule pause completed'),
+                  rule_id: ruleIdValidation.sanitizedValue,
+                  duration_minutes: durationValidation.sanitizedValue,
                   action: 'pause_rule',
                 }, null, 2),
               },
@@ -563,22 +668,23 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'resume_rule': {
-          const ruleId = args?.rule_id as string;
+          // Parameter validation
+          const ruleIdValidation = ParameterValidator.validateRequiredString(args?.rule_id, 'rule_id');
           
-          if (!ruleId) {
-            throw new Error('Rule ID parameter is required');
+          if (!ruleIdValidation.isValid) {
+            return ErrorHandler.createErrorResponse('resume_rule', 'Parameter validation failed', null, ruleIdValidation.errors);
           }
           
-          const result = await firewalla.resumeRule(ruleId);
+          const result = await firewalla.resumeRule(ruleIdValidation.sanitizedValue!);
           
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
-                  success: result.success,
-                  message: result.message,
-                  rule_id: ruleId,
+                  success: SafeAccess.getNestedValue(result, 'success', false),
+                  message: SafeAccess.getNestedValue(result, 'message', 'Rule resume completed'),
+                  rule_id: ruleIdValidation.sanitizedValue,
                   action: 'resume_rule',
                 }, null, 2),
               },
@@ -1220,20 +1326,18 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
           throw new Error(`Unknown tool: ${name}`);
       }
     } catch (error: unknown) {
+      // Use centralized error handling
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              error: true,
-              message: errorMessage,
-              tool: name,
-            }, null, 2),
-          },
-        ],
-        isError: true,
-      };
+      
+      // If error is already a standardized response, return it directly
+      if (error && typeof error === 'object' && 'content' in error && 'isError' in error) {
+        return error as any;
+      }
+      
+      return ErrorHandler.createErrorResponse(name, errorMessage, {
+        timestamp: new Date().toISOString(),
+        error_type: error instanceof Error ? error.constructor.name : 'UnknownError'
+      });
     }
   });
 }

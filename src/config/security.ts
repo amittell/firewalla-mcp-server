@@ -39,7 +39,7 @@ export class SecurityManager {
 
   sanitizeString(input: string): string {
     return input
-      .replace(/[<>\"'&]/g, (match) => {
+      .replace(/[<>"'&]/g, (match) => {
         const map: Record<string, string> = {
           '<': '&lt;',
           '>': '&gt;',

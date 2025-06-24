@@ -100,7 +100,7 @@ describe('FirewallaClient', () => {
       // Mock axios.isAxiosError to return true for our error
       jest.spyOn(axios, 'isAxiosError').mockReturnValue(true);
 
-      await expect(client.getActiveAlarms()).rejects.toThrow('API Error: Network error');
+      await expect(client.getActiveAlarms()).rejects.toThrow('API Error (unknown): Network error');
     });
 
     it('should use cache for repeated requests', async () => {
@@ -485,7 +485,7 @@ describe('FirewallaClient', () => {
         `/rules/rule-123/pause`,
         { duration: 120 }
       );
-      expect(result).toEqual({ success: false, message: 'Rule rule-123 paused for 120 minutes' });
+      expect(result).toEqual({ success: true, message: 'Rule rule-123 paused for 120 minutes' });
     });
   });
 

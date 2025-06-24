@@ -13,7 +13,6 @@ import {
   ComparisonQuery,
   Token,
   TokenType,
-  ParseContext,
   QueryValidation,
   SEARCH_FIELDS
 } from './types.js';

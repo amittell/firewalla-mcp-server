@@ -260,8 +260,137 @@ interface Flow {
 - Validate parameter types and ranges
 - Prevent injection attacks
 
-## Performance Requirements
-- Response time: < 5 seconds for most operations
-- Concurrent requests: Support up to 10 simultaneous requests
-- Memory usage: < 100MB under normal load
-- Cache hit ratio: > 80% for repeated queries
+## ⚠️ Breaking Changes (v2.0.0)
+
+### Mandatory Limit Parameters
+
+**BREAKING CHANGE**: All paginated tools now require explicit `limit` parameter in their schema.
+
+**Updated Tool Schemas:**
+```typescript
+// Before (v1.x)
+interface GetDeviceStatusParams {
+  device_id?: string;
+  include_offline?: boolean;
+  limit?: number; // Optional with default
+}
+
+// After (v2.0.0+)  
+interface GetDeviceStatusParams {
+  device_id?: string;
+  include_offline?: boolean;
+  limit: number; // REQUIRED - no default
+}
+```
+
+**Affected Tools:**
+- `get_active_alarms`: requires `limit`
+- `get_flow_data`: requires `limit`
+- `get_device_status`: requires `limit` 
+- `get_bandwidth_usage`: parameter renamed from `top` to `limit`, required
+- `get_network_rules`: requires `limit`
+- `get_most_active_rules`: requires `limit`
+- `get_recent_rules`: requires `limit`
+- All search tools: require both `query` and `limit`
+
+**Error Response for Missing Limit:**
+```json
+{
+  "error": true,
+  "message": "limit parameter is required",
+  "tool": "get_device_status",
+  "validation_errors": ["limit is required"]
+}
+```
+
+## 🚀 New Architecture (v2.0.0)
+
+### Validation Framework
+
+**Standardized Error Format:**
+All tools now return consistent error structure:
+```typescript
+interface StandardError {
+  error: true;
+  message: string;
+  tool: string;
+  details?: any;
+  validation_errors?: string[];
+}
+```
+
+**Validation Classes:**
+```typescript
+class ParameterValidator {
+  validateRequiredString(value: any, name: string): ValidationResult;
+  validateNumber(value: any, name: string, options?: NumberOptions): ValidationResult;
+  validateEnum(value: any, name: string, allowedValues: string[]): ValidationResult;
+}
+
+class SafeAccess {
+  getNestedValue<T>(obj: any, path: string, defaultValue: T): T;
+  ensureArray<T>(value: any): T[];
+  ensureObject(value: any): Record<string, any>;
+}
+
+class FieldMapper {
+  getCompatibleFields(entityType: string): string[];
+  mapFieldBetweenTypes(field: string, fromType: string, toType: string): string;
+  validateCrossReference(primaryType: string, secondaryType: string, correlationField: string): boolean;
+}
+```
+
+### Performance Monitoring System
+
+**Multi-Tier Caching:**
+```typescript
+interface CacheConfig {
+  realTimeData: { ttl: 30_000 };     // Alarms, flows: 30s
+  mediumFrequencyData: { ttl: 120_000 }; // Devices: 2m
+  stableData: { ttl: 600_000 };      // Rules: 10m  
+  staticData: { ttl: 3_600_000 };    // Statistics: 1h
+}
+```
+
+**Metrics Collection:**
+```typescript
+interface PerformanceMetrics {
+  response_time_ms: number;
+  cache_hit_rate: number;
+  error_rate: number;
+  memory_usage_mb: number;
+  api_calls_per_minute: number;
+}
+```
+
+**DEBUG Environment Variables:**
+- `DEBUG=firewalla:*` - Enable all debugging
+- `DEBUG=cache,performance` - Specific namespaces
+- `DEBUG=validation,error-handler` - Validation debugging
+- `DEBUG=query,optimization` - Query performance
+
+### Enhanced Security
+
+**Input Sanitization:**
+```typescript
+class QuerySanitizer {
+  sanitizeSearchQuery(query: string): string;
+  preventInjection(input: string): string;
+  validateQueryLength(query: string, maxLength: number): boolean;
+}
+```
+
+**Enhanced Authentication:**
+- Comprehensive HTTP status code handling
+- Better error messages with context
+- Rate limiting with exponential backoff
+- Enhanced token validation
+
+## Performance Requirements (v2.0.0)
+- Response time: < 2 seconds for cached operations, < 5 seconds for uncached
+- Concurrent requests: Support up to 20 simultaneous requests  
+- Memory usage: < 150MB under normal load with caching
+- Cache hit ratio: > 85% for repeated queries
+- P95 response time: < 3 seconds
+- P99 response time: < 8 seconds
+- Error rate: < 1% under normal conditions

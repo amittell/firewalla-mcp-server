@@ -66,7 +66,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Results per page (default: 200, use cursor for more)',
+                  description: 'Results per page (use cursor for more)',
                   minimum: 1,
                   maximum: 10000,
                 },
@@ -75,6 +75,7 @@ export class FirewallaMCPServer {
                   description: 'Pagination cursor from previous response',
                 },
               },
+              required: ['limit'],
             },
           },
           {
@@ -93,7 +94,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Results per page (default: 200, use cursor for more)',
+                  description: 'Results per page (use cursor for more)',
                   minimum: 1,
                   maximum: 10000,
                 },
@@ -102,6 +103,7 @@ export class FirewallaMCPServer {
                   description: 'Pagination cursor from previous response',
                 },
               },
+              required: ['limit'],
             },
           },
           {
@@ -120,15 +122,16 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Page size for pagination (default: 100)',
+                  description: 'Maximum number of devices to return',
                   minimum: 1,
-                  maximum: 1000,
+                  maximum: 10000,
                 },
                 cursor: {
                   type: 'string',
                   description: 'Pagination cursor from previous response',
                 },
               },
+              required: ['limit'],
             },
           },
           {
@@ -155,14 +158,14 @@ export class FirewallaMCPServer {
                   enum: ['1h', '24h', '7d', '30d'],
                   description: 'Time period for analysis',
                 },
-                top: {
+                limit: {
                   type: 'number',
-                  description: 'Number of top devices (default: 50)',
+                  description: 'Number of top devices to return',
                   minimum: 1,
                   maximum: 500,
                 },
               },
-              required: ['period'],
+              required: ['period', 'limit'],
             },
           },
           {
@@ -181,7 +184,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum number of rules to return (default: 500)',
+                  description: 'Maximum number of rules to return',
                   minimum: 1,
                   maximum: 10000,
                 },
@@ -190,6 +193,7 @@ export class FirewallaMCPServer {
                   description: 'Return minimal rule information to reduce token usage (default: false)',
                 },
               },
+              required: ['limit'],
             },
           },
           {
@@ -393,7 +397,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (default: 1000)',
+                  description: 'Maximum results',
                   minimum: 1,
                   maximum: 10000,
                 },
@@ -428,7 +432,7 @@ export class FirewallaMCPServer {
                   description: 'Include aggregation statistics (default: false)'
                 }
               },
-              required: ['query'],
+              required: ['query', 'limit'],
             },
           },
           {
@@ -443,7 +447,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (default: 1000)',
+                  description: 'Maximum results',
                   minimum: 1,
                   maximum: 10000,
                 },
@@ -470,7 +474,7 @@ export class FirewallaMCPServer {
                   description: 'Include aggregation statistics (default: false)'
                 }
               },
-              required: ['query'],
+              required: ['query', 'limit'],
             },
           },
           {
@@ -485,7 +489,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (default: 1000)',
+                  description: 'Maximum results',
                   minimum: 1,
                   maximum: 10000,
                 },
@@ -519,7 +523,7 @@ export class FirewallaMCPServer {
                   description: 'Include aggregation statistics (default: false)'
                 }
               },
-              required: ['query'],
+              required: ['query', 'limit'],
             },
           },
           {
@@ -534,7 +538,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (default: 1000)',
+                  description: 'Maximum results',
                   minimum: 1,
                   maximum: 10000,
                 },
@@ -565,7 +569,7 @@ export class FirewallaMCPServer {
                   description: 'Include aggregation statistics (default: false)'
                 }
               },
-              required: ['query'],
+              required: ['query', 'limit'],
             },
           },
           {
@@ -580,7 +584,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (default: 1000)',
+                  description: 'Maximum results',
                   minimum: 1,
                   maximum: 10000,
                 },
@@ -608,7 +612,7 @@ export class FirewallaMCPServer {
                   description: 'Include aggregation statistics (default: false)'
                 }
               },
-              required: ['query'],
+              required: ['query', 'limit'],
             },
           },
           {
@@ -632,12 +636,12 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results per query (default: 1000)',
+                  description: 'Maximum results per query',
                   minimum: 1,
                   maximum: 10000,
                 }
               },
-              required: ['primary_query', 'secondary_queries', 'correlation_field'],
+              required: ['primary_query', 'secondary_queries', 'correlation_field', 'limit'],
             },
           },
           {
@@ -665,7 +669,7 @@ export class FirewallaMCPServer {
               properties: {
                 limit: {
                   type: 'number',
-                  description: 'Number of top rules to return (default: 100)',
+                  description: 'Number of top rules to return',
                   minimum: 1,
                   maximum: 1000,
                 },
@@ -679,6 +683,7 @@ export class FirewallaMCPServer {
                   description: 'Filter by rule type',
                 },
               },
+              required: ['limit'],
             },
           },
           {
@@ -695,7 +700,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum number of rules to return (default: 100)',
+                  description: 'Maximum number of rules to return',
                   minimum: 1,
                   maximum: 1000,
                 },
@@ -708,6 +713,7 @@ export class FirewallaMCPServer {
                   description: 'Include recently modified rules, not just created (default: true)',
                 },
               },
+              required: ['limit'],
             },
           },
         ],

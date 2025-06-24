@@ -1,5 +1,20 @@
 import { productionConfig } from '../production/config';
 
+// DEBUG environment variable support
+const DEBUG_ENABLED = process.env.DEBUG === 'firewalla:*' || process.env.DEBUG === '1' || process.env.DEBUG === 'true';
+const DEBUG_FILTERS = (process.env.DEBUG || '').split(',').map(f => f.trim());
+
+// Check if debug should be enabled for a specific namespace
+function shouldDebug(namespace: string): boolean {
+  if (!DEBUG_ENABLED && DEBUG_FILTERS.length === 0) {return false;}
+  if (DEBUG_ENABLED) {return true;}
+  return DEBUG_FILTERS.some(filter => {
+    if (filter === '*') {return true;}
+    if (filter.endsWith('*')) {return namespace.startsWith(filter.slice(0, -1));}
+    return namespace === filter;
+  });
+}
+
 export interface LogEntry {
   timestamp: string;
   level: 'error' | 'warn' | 'info' | 'debug';
@@ -22,7 +37,12 @@ export class StructuredLogger {
   private logLevel: LogEntry['level'];
 
   constructor(logLevel?: LogEntry['level']) {
-    this.logLevel = logLevel || productionConfig.logLevel || 'info';
+    // Override log level if DEBUG is enabled
+    if (DEBUG_ENABLED) {
+      this.logLevel = 'debug';
+    } else {
+      this.logLevel = logLevel || productionConfig.logLevel || 'info';
+    }
   }
 
   private shouldLog(level: LogEntry['level']): boolean {
@@ -134,6 +154,15 @@ export class StructuredLogger {
     this.output(entry);
   }
 
+  // Namespace-specific debug logging
+  debugNamespace(namespace: string, message: string, metadata?: Record<string, unknown>, traceId?: string, requestId?: string): void {
+    if (!shouldDebug(namespace)) {return;}
+    
+    const namespacedMessage = `[${namespace}] ${message}`;
+    const entry = this.createLogEntry('debug', namespacedMessage, metadata, undefined, traceId, requestId);
+    this.output(entry);
+  }
+
   // Convenience methods for common scenarios
   apiRequest(method: string, endpoint: string, duration: number, statusCode: number, requestId?: string): void {
     this.info('API request completed', {
@@ -165,11 +194,45 @@ export class StructuredLogger {
   }
 
   cacheOperation(operation: string, key: string, hit: boolean, metadata?: Record<string, unknown>): void {
-    this.debug('Cache operation', {
+    this.debugNamespace('cache', `Cache ${operation}: ${hit ? 'HIT' : 'MISS'}`, {
       cache: {
         operation,
         key,
         hit,
+        ...metadata,
+      },
+    });
+  }
+
+  // Performance monitoring logs
+  performanceLog(operation: string, duration: number, metadata?: Record<string, unknown>): void {
+    this.debugNamespace('performance', `${operation} completed in ${duration}ms`, {
+      performance: {
+        operation,
+        duration_ms: duration,
+        ...metadata,
+      },
+    });
+  }
+
+  // Data pipeline troubleshooting logs
+  pipelineLog(stage: string, message: string, metadata?: Record<string, unknown>): void {
+    this.debugNamespace('pipeline', `[${stage}] ${message}`, {
+      pipeline: {
+        stage,
+        ...metadata,
+      },
+    });
+  }
+
+  // Query performance logs
+  queryLog(queryType: string, query: string, duration: number, resultCount: number, metadata?: Record<string, unknown>): void {
+    this.debugNamespace('query', `${queryType} query executed`, {
+      query: {
+        type: queryType,
+        query: query.length > 100 ? query.substring(0, 100) + '...' : query,
+        duration_ms: duration,
+        result_count: resultCount,
         ...metadata,
       },
     });

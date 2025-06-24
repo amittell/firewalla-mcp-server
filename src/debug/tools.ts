@@ -28,7 +28,9 @@ export class DebugTools {
   private startTime: number;
 
   constructor(
+    // eslint-disable-next-line no-unused-vars
     private firewalla: FirewallaClient,
+    // eslint-disable-next-line no-unused-vars  
     private healthCheck: HealthCheckManager
   ) {
     this.startTime = Date.now();

@@ -35,6 +35,39 @@ npm run mcp:test
 npm run mcp:debug
 ```
 
+### Advanced Debugging (v2.0.0)
+```bash
+# Enable comprehensive debugging
+DEBUG=firewalla:* npm run mcp:start
+
+# Enable specific debugging namespaces
+DEBUG=cache,performance,api npm run mcp:start
+DEBUG=validation,error-handler npm run mcp:start
+DEBUG=query,optimization npm run mcp:start
+DEBUG=pipeline,data-processing npm run mcp:start
+
+# Debug with performance monitoring
+DEBUG=firewalla:* npm run dev
+
+# Run tests with debugging
+DEBUG=test,validation npm run test
+```
+
+### Validation and Error Testing
+```bash
+# Test mandatory limit parameter enforcement
+npm run test:validation
+
+# Test error handling consistency
+npm run test:error-handling
+
+# Test parameter validation
+npm run test:parameter-validation
+
+# Test cross-reference field mapping
+npm run test:cross-reference
+```
+
 ## API Credentials Setup
 
 ### Firewalla MSP API Configuration
@@ -197,7 +230,83 @@ npm run mcp:start
 - Rate limiting to respect Firewalla API limits
 - Secure credential handling with environment variables
 
+## ⚠️ Breaking Changes (v2.0.0)
+
+### Mandatory Limit Parameters
+**CRITICAL**: All paginated MCP tools now require explicit `limit` parameter. This prevents artificial defaults that masked missing parameters.
+
+**Required for Tools:**
+- get_active_alarms, get_flow_data, get_device_status
+- get_bandwidth_usage (renamed from `top` to `limit`)  
+- get_network_rules, get_most_active_rules, get_recent_rules
+- All search tools (search_flows, search_alarms, etc.)
+
+**Testing Patterns:**
+```bash
+# ❌ This will now FAIL
+mcp_call get_device_status {}
+
+# ✅ This is required
+mcp_call get_device_status { "limit": 100 }
+
+# Test limit enforcement
+npm run test -- --grep "limit parameter"
+```
+
+### Validation Framework (v2.0.0)
+
+**New Error Format:**
+All tools now return standardized errors:
+```json
+{
+  "error": true,
+  "message": "limit parameter is required", 
+  "tool": "get_device_status",
+  "validation_errors": ["limit is required"]
+}
+```
+
+**Testing Validation:**
+```bash
+# Test parameter validation
+DEBUG=validation npm run test:validation
+
+# Test error handling consistency  
+npm run test:error-handling
+
+# Test null safety improvements
+npm run test:null-safety
+```
+
+**Validation Classes:**
+- `ParameterValidator`: Type and range validation
+- `SafeAccess`: Null-safe property access
+- `FieldMapper`: Cross-reference field compatibility
+- `ErrorHandler`: Standardized error responses
+
+### Performance Monitoring (v2.0.0)
+
+**Cache System:**
+- Alarms/Flows: 30s TTL (real-time data)
+- Devices/Bandwidth: 2m TTL (medium frequency)
+- Rules: 10m TTL (stable data)
+- Statistics: 1h TTL (static data)
+
+**Monitoring Commands:**
+```bash
+# Enable cache debugging
+DEBUG=cache npm run mcp:start
+
+# Monitor performance metrics
+DEBUG=performance,metrics npm run dev
+
+# Track query optimization  
+DEBUG=query,optimization npm run mcp:start
+```
+
 ## Debugging
-- Use `DEBUG=mcp:*` environment variable for detailed logs
+- Use `DEBUG=firewalla:*` for comprehensive debugging (v2.0.0+)
+- Use `DEBUG=mcp:*` for legacy MCP debugging
 - Check server logs in `logs/` directory
-- Monitor API request/response cycles
+- Monitor API request/response cycles with timing
+- Performance metrics available in debug mode

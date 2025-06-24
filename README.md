@@ -468,6 +468,95 @@ target_value:*.facebook.com OR mac_vendor:Apple*
 - Robust caching and rate limiting
 - Modular filter system with extensible architecture
 
+## ⚠️ Breaking Changes (v2.0.0)
+
+### Mandatory Limit Parameters
+
+**BREAKING CHANGE**: All paginated tools now require explicit `limit` parameter. This change prevents artificial defaults that masked missing parameters.
+
+**Affected Tools:**
+- `get_active_alarms`
+- `get_flow_data`  
+- `get_device_status`
+- `get_bandwidth_usage` (parameter renamed from `top` to `limit`)
+- `get_network_rules`
+- `get_most_active_rules`
+- `get_recent_rules`
+- All search tools (`search_flows`, `search_alarms`, etc.)
+
+**Migration:**
+```typescript
+// ❌ Before (would default to 50-200 results)
+await get_device_status({});
+
+// ✅ After (explicit limit required)  
+await get_device_status({ limit: 100 });
+```
+
+**Error Response:**
+Tools will now return clear error: `"limit parameter is required"` when limit is missing.
+
+## 🚀 New Features (v2.0.0)
+
+### Enterprise-Grade Validation Framework
+
+**Standardized Error Handling:**
+- Consistent error format: `{error: true, message: string, tool: string}`
+- Enhanced parameter validation with type checking
+- Comprehensive null safety throughout codebase
+- Input sanitization preventing injection attacks
+
+### Performance Monitoring & Optimization
+
+**DEBUG Environment Variable:**
+```bash
+# Enable comprehensive debugging
+DEBUG=firewalla:* npm run mcp:start
+
+# Enable specific debugging
+DEBUG=cache,performance,api npm run mcp:start
+```
+
+**Multi-Tier Caching System:**
+- Real-time data (alarms/flows): 30s TTL
+- Medium-frequency data (devices): 2m TTL  
+- Stable data (rules): 10m TTL
+- Static data (statistics): 1h TTL
+
+**Performance Metrics:**
+- Response time tracking with P95/P99 percentiles
+- Error rate monitoring by operation type
+- Memory usage optimization with LRU eviction
+- Query performance analysis and optimization
+
+### Enhanced Security & Reliability
+
+**Critical Bug Fixes:**
+- ✅ Fixed null pointer exceptions in rule management
+- ✅ Corrected success status reporting for pause/resume operations  
+- ✅ Enhanced alarm detection with better field mapping
+- ✅ Improved bandwidth usage error handling
+
+**Security Enhancements:**
+- Query sanitization preventing injection attacks
+- Enhanced input validation for all parameters
+- Defensive programming patterns throughout
+- Cross-reference field mapping improvements
+
+### Developer Experience Improvements
+
+**Comprehensive Logging:**
+- Pipeline stage debugging for data flow analysis
+- Performance bottleneck identification
+- API request/response logging with timing
+- Error tracking with detailed context
+
+**Validation Utilities:**
+- `ParameterValidator` for consistent validation patterns
+- `SafeAccess` utilities preventing null pointer exceptions
+- `FieldMapper` for cross-reference compatibility
+- `ErrorHandler` for standardized error responses
+
 ## Publishing to npm
 
 This package is configured for npm publishing. To publish your own version:

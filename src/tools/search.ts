@@ -8,6 +8,8 @@ import { filterFactory } from '../search/filters/index.js';
 import { FilterContext } from '../search/filters/base.js';
 import { SearchParams, SearchResult } from '../search/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
+import { ErrorHandler, ParameterValidator, SafeAccess, QuerySanitizer } from '../validation/error-handler.js';
+import { FieldMapper, EntityType } from '../validation/field-mapper.js';
 
 /**
  * Search Engine for executing complex queries
@@ -23,13 +25,31 @@ export class SearchEngine {
     
     try {
       // Validate input parameters
-      if (!params || !params.query || typeof params.query !== 'string') {
-        throw new Error('Invalid search parameters: query is required and must be a string');
+      const queryValidation = ParameterValidator.validateRequiredString(params?.query, 'query');
+      const limitValidation = ParameterValidator.validateNumber(params?.limit, 'limit', {
+        required: true, min: 1, max: 10000, integer: true
+      });
+      const offsetValidation = ParameterValidator.validateNumber(params?.offset, 'offset', {
+        min: 0, defaultValue: 0, integer: true
+      });
+      
+      const validationResult = ParameterValidator.combineValidationResults([
+        queryValidation, limitValidation, offsetValidation
+      ]);
+      
+      if (!validationResult.isValid) {
+        throw new Error(`Parameter validation failed: ${validationResult.errors.join(', ')}`);
       }
-      // Parse the query
-      const validation = queryParser.parse(params.query, 'flows');
+      
+      // Sanitize query
+      const queryCheck = QuerySanitizer.sanitizeSearchQuery(queryValidation.sanitizedValue!);
+      if (!queryCheck.isValid) {
+        throw new Error(`Query validation failed: ${queryCheck.errors.join(', ')}`);
+      }
+      // Parse the sanitized query
+      const validation = queryParser.parse(queryCheck.sanitizedValue!, 'flows');
       if (!validation.isValid || !validation.ast) {
-        throw new Error(`Invalid query: ${validation.errors.join(', ')}`);
+        throw new Error(`Invalid query syntax: ${validation.errors.join(', ')}`);
       }
 
       // Apply filters to build API parameters
@@ -48,7 +68,7 @@ export class SearchEngine {
       // Execute API call with filtered parameters
       const apiParams = {
         ...filterResult.apiParams,
-        limit: params.limit || 100,
+        limit: params.limit,
         start_time: params.time_range?.start,
         end_time: params.time_range?.end
       };
@@ -100,9 +120,9 @@ export class SearchEngine {
       return {
         results,
         count: results.length,
-        limit: params.limit || 100,
-        offset: params.offset || 0,
-        query: params.query,
+        limit: limitValidation.sanitizedValue!,
+        offset: offsetValidation.sanitizedValue!,
+        query: queryCheck.sanitizedValue!,
         execution_time_ms: Date.now() - startTime,
         aggregations
       };
@@ -122,6 +142,10 @@ export class SearchEngine {
       // Validate input parameters
       if (!params || !params.query || typeof params.query !== 'string') {
         throw new Error('Invalid search parameters: query is required and must be a string');
+      }
+      
+      if (!params.limit) {
+        throw new Error('limit parameter is required');
       }
       const validation = queryParser.parse(params.query, 'alarms');
       if (!validation.isValid || !validation.ast) {
@@ -144,7 +168,7 @@ export class SearchEngine {
         filterResult.queryString || undefined,
         undefined,
         'ts:desc',
-        params.limit || 100
+        params.limit
       );
 
       let results = alarms.results || [];
@@ -165,7 +189,7 @@ export class SearchEngine {
       return {
         results,
         count: results.length,
-        limit: params.limit || 100,
+        limit: params.limit,
         offset: params.offset || 0,
         query: params.query,
         execution_time_ms: Date.now() - startTime,
@@ -187,6 +211,10 @@ export class SearchEngine {
       // Validate input parameters
       if (!params || !params.query || typeof params.query !== 'string') {
         throw new Error('Invalid search parameters: query is required and must be a string');
+      }
+      
+      if (!params.limit) {
+        throw new Error('limit parameter is required');
       }
       const validation = queryParser.parse(params.query, 'rules');
       if (!validation.isValid || !validation.ast) {
@@ -229,7 +257,7 @@ export class SearchEngine {
       return {
         results,
         count: results.length,
-        limit: params.limit || 100,
+        limit: params.limit,
         offset: params.offset || 0,
         query: params.query,
         execution_time_ms: Date.now() - startTime,
@@ -251,6 +279,10 @@ export class SearchEngine {
       // Validate input parameters
       if (!params || !params.query || typeof params.query !== 'string') {
         throw new Error('Invalid search parameters: query is required and must be a string');
+      }
+      
+      if (!params.limit) {
+        throw new Error('limit parameter is required');
       }
       const validation = queryParser.parse(params.query, 'devices');
       if (!validation.isValid || !validation.ast) {
@@ -295,7 +327,7 @@ export class SearchEngine {
       return {
         results,
         count: response.count || results.length,
-        limit: params.limit || 100,
+        limit: params.limit,
         offset: params.offset || 0, // For backward compatibility
         next_cursor: response.next_cursor, // Cursor-based pagination
         query: params.query,
@@ -318,6 +350,10 @@ export class SearchEngine {
       // Validate input parameters
       if (!params || !params.query || typeof params.query !== 'string') {
         throw new Error('Invalid search parameters: query is required and must be a string');
+      }
+      
+      if (!params.limit) {
+        throw new Error('limit parameter is required');
       }
       const validation = queryParser.parse(params.query, 'target_lists');
       if (!validation.isValid || !validation.ast) {
@@ -360,7 +396,7 @@ export class SearchEngine {
       return {
         results,
         count: results.length,
-        limit: params.limit || 100,
+        limit: params.limit,
         offset: params.offset || 0,
         query: params.query,
         execution_time_ms: Date.now() - startTime,
@@ -373,18 +409,54 @@ export class SearchEngine {
   }
 
   /**
-   * Cross-reference search across multiple entity types
+   * Cross-reference search across multiple entity types with improved field mapping
    */
   async crossReferenceSearch(params: { primary_query: string; secondary_queries: string[]; correlation_field: string }): Promise<any> {
     const startTime = Date.now();
     
     try {
-      // Execute primary query (assume it's for flows)
-      const primaryResult = await this.searchFlows({ query: params.primary_query });
+      // Validate cross-reference parameters
+      const validation = FieldMapper.validateCrossReference(
+        params.primary_query,
+        params.secondary_queries,
+        params.correlation_field
+      );
       
-      // Extract correlation values
-      const correlationValues = new Set(
-        (Array.isArray(primaryResult.results) ? primaryResult.results : []).map(item => this.getNestedValue(item, params.correlation_field)).filter(Boolean)
+      if (!validation.isValid) {
+        throw new Error(`Cross-reference validation failed: ${validation.errors.join(', ')}`);
+      }
+      
+      // Determine entity types based on query patterns
+      const primaryType = FieldMapper.suggestEntityType(params.primary_query) || 'flows';
+      const secondaryTypes = params.secondary_queries.map(q => FieldMapper.suggestEntityType(q) || 'alarms');
+      
+      // Execute primary query based on detected type
+      let primaryResult: SearchResult;
+      switch (primaryType) {
+        case 'flows':
+          primaryResult = await this.searchFlows({ query: params.primary_query });
+          break;
+        case 'alarms':
+          primaryResult = await this.searchAlarms({ query: params.primary_query });
+          break;
+        case 'rules':
+          primaryResult = await this.searchRules({ query: params.primary_query });
+          break;
+        case 'devices':
+          primaryResult = await this.searchDevices({ query: params.primary_query });
+          break;
+        case 'target_lists':
+          primaryResult = await this.searchTargetLists({ query: params.primary_query });
+          break;
+        default:
+          primaryResult = await this.searchFlows({ query: params.primary_query });
+      }
+      
+      // Extract correlation values using proper field mapping
+      const correlationValues = FieldMapper.extractCorrelationValues(
+        primaryResult.results,
+        params.correlation_field,
+        primaryType
       );
 
       // Execute secondary queries and correlate
@@ -392,25 +464,51 @@ export class SearchEngine {
         primary: {
           query: params.primary_query,
           results: primaryResult.results,
-          count: primaryResult.count
+          count: primaryResult.count,
+          entity_type: primaryType
         },
         correlations: []
       };
 
-      for (const [, secondaryQuery] of params.secondary_queries.entries()) {
-        // For simplicity, assume secondary queries are for alarms
-        const secondaryResult = await this.searchAlarms({ query: secondaryQuery });
+      for (const [index, secondaryQuery] of params.secondary_queries.entries()) {
+        const secondaryType = secondaryTypes[index];
         
-        const correlatedItems = secondaryResult.results.filter(item => {
-          const value = this.getNestedValue(item, params.correlation_field);
-          return correlationValues.has(value);
-        });
+        // Execute secondary query based on detected type
+        let secondaryResult: SearchResult;
+        switch (secondaryType) {
+          case 'flows':
+            secondaryResult = await this.searchFlows({ query: secondaryQuery });
+            break;
+          case 'alarms':
+            secondaryResult = await this.searchAlarms({ query: secondaryQuery });
+            break;
+          case 'rules':
+            secondaryResult = await this.searchRules({ query: secondaryQuery });
+            break;
+          case 'devices':
+            secondaryResult = await this.searchDevices({ query: secondaryQuery });
+            break;
+          case 'target_lists':
+            secondaryResult = await this.searchTargetLists({ query: secondaryQuery });
+            break;
+          default:
+            secondaryResult = await this.searchAlarms({ query: secondaryQuery });
+        }
+        
+        // Filter by correlation using improved field mapping
+        const correlatedItems = FieldMapper.filterByCorrelation(
+          secondaryResult.results,
+          params.correlation_field,
+          secondaryType,
+          correlationValues
+        );
 
         correlatedResults.correlations.push({
           query: secondaryQuery,
           results: correlatedItems,
           count: correlatedItems.length,
-          correlation_field: params.correlation_field
+          correlation_field: params.correlation_field,
+          entity_type: secondaryType
         });
       }
 
@@ -419,6 +517,7 @@ export class SearchEngine {
         execution_time_ms: Date.now() - startTime,
         correlation_summary: {
           primary_count: primaryResult.count,
+          unique_correlation_values: correlationValues.size,
           correlated_count: correlatedResults.correlations.reduce((sum: number, c: any) => sum + c.count, 0),
           correlation_rate: primaryResult.count > 0 
             ? Math.round((correlatedResults.correlations.reduce((sum: number, c: any) => sum + c.count, 0) / primaryResult.count) * 100)
@@ -537,10 +636,10 @@ export class SearchEngine {
   }
 
   /**
-   * Get nested value from object using dot notation
+   * Get nested value from object using dot notation (enhanced with field mapping)
    */
   private getNestedValue(obj: any, path: string): any {
-    return path.split('.').reduce((current, key) => current?.[key], obj);
+    return SafeAccess.getNestedValue(obj, path);
   }
 }
 

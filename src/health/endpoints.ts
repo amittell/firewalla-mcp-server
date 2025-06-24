@@ -22,6 +22,7 @@ export class HealthCheckManager {
   private security: SecurityManager;
 
   constructor(
+    /* eslint-disable-next-line no-unused-vars */
     private firewalla: FirewallaClient,
     security?: SecurityManager
   ) {
@@ -165,7 +166,7 @@ export class HealthCheckManager {
           heapUsagePercent,
         },
       };
-    } catch (error) {
+    } catch {
       return {
         status: 'fail',
         message: 'Memory check failed',
@@ -202,7 +203,7 @@ export class HealthCheckManager {
           cacheKeys: cacheStats.keys.length,
         },
       };
-    } catch (error) {
+    } catch {
       return {
         status: 'fail',
         message: 'Cache check failed',
@@ -241,7 +242,7 @@ export class HealthCheckManager {
         message: 'Security systems are operational',
         responseTime,
       };
-    } catch (error) {
+    } catch {
       return {
         status: 'fail',
         message: 'Security check failed',
