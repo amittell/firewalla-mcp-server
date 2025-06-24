@@ -169,25 +169,110 @@ The deployment script provides:
 
 ## Usage Examples
 
-Once connected, you can ask Claude questions like:
+### Step-by-Step First Use
 
-**Basic Queries:**
-- "What security alerts do I have right now?"
-- "Show me the top 5 devices using the most bandwidth today"
-- "What firewall rules are currently active?"
-- "Are there any offline devices?"
+**1. Verify Connection**
+After completing the setup, verify the MCP server is working:
 
-**Advanced Analytics:**
-- "Analyze my network traffic patterns from the last 24 hours"
-- "Show me alarm trends for the past week"
-- "What are the top bandwidth consuming regions?"
-- "Give me a security health assessment"
+```bash
+# Start the server
+npm run mcp:start
 
-**Complex Search Queries:**
-- "Find all high severity alarms from suspicious IPs"
-- "Search for blocked traffic from external networks"
-- "Show me devices with high bandwidth usage that went offline recently"
-- "Find firewall rules targeting social media sites"
+# You should see output like:
+# MCP Server starting...
+# Firewalla client initialized
+# Server ready on stdio transport
+```
+
+**2. Test with Claude**
+Open Claude Code and try these starter queries:
+
+**Basic Health Check:**
+```
+"Can you check my Firewalla status and show me a summary?"
+```
+*This uses: `firewall_summary` resource + `get_simple_statistics` tool*
+
+**Security Overview:**
+```
+"What security alerts do I have? Show me the 5 most recent ones."
+```
+*This uses: `get_active_alarms` tool with limit parameter*
+
+### Practical Workflows
+
+**Daily Security Review:**
+```
+"Give me today's security report. Include:
+1. Any new security alerts
+2. Top 3 devices using bandwidth
+3. Any devices that went offline
+4. Status of critical firewall rules"
+```
+
+**Investigating Suspicious Activity:**
+```
+"I noticed unusual traffic. Can you:
+1. Show me all high-severity alarms from the last 4 hours
+2. Find any blocked connections to external IPs
+3. Check which devices had the most network activity"
+```
+
+**Network Troubleshooting:**
+```
+"A device seems to have connectivity issues. Can you:
+1. Check if device 192.168.1.100 is online
+2. Show its recent network flows
+3. See if any rules are blocking its traffic"
+```
+
+**Bandwidth Investigation:**
+```
+"Our internet is slow. Help me find the cause:
+1. Show top 10 bandwidth users in the last hour
+2. Look for any devices with unusual upload/download patterns
+3. Check for any streaming or video traffic"
+```
+
+### Advanced Search Examples
+
+**Find Specific Threats:**
+```
+search for: high severity alarms from IP range 10.0.0.* in the last 24 hours
+```
+*Uses: `search_alarms` with query: "severity:high AND source_ip:10.0.0.* AND timestamp:>24h"*
+
+**Analyze Rule Effectiveness:**
+```
+"Show me firewall rules that blocked the most connections this week"
+```
+*Uses: `get_most_active_rules` + `search_flows` for blocked traffic*
+
+**Device Behavior Analysis:**
+```
+"Find all devices that were online yesterday but are offline now"
+```
+*Uses: `search_devices` with temporal queries + `get_offline_devices`*
+
+### Troubleshooting Common Issues
+
+**Connection Problems:**
+If you get authentication errors:
+1. Verify your `.env` file has correct credentials
+2. Check your MSP token hasn't expired
+3. Confirm your Box ID is the full GID format
+
+**Empty Results:**
+If queries return no data:
+1. Check your Firewalla is online and reporting
+2. Verify the time range isn't too narrow
+3. Try broader search terms first
+
+**Performance Issues:**
+If responses are slow:
+1. Reduce the limit parameter in queries
+2. Use more specific time ranges
+3. Check your network connection to the MSP API
 
 ## Available MCP Components
 
