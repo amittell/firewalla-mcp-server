@@ -95,8 +95,8 @@ export interface SearchParams {
  */
 export interface SearchResult<T = any> {
   results: T[];
-  count?: number; // Optional to match API response format
-  total: number; // Primary field for backward compatibility
+  count: number; // Primary field for consistency across API
+  total?: number; // Optional for backward compatibility
   limit: number;
   offset: number;
   query: string;

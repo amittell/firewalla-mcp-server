@@ -258,7 +258,7 @@ class CoreAPIToolsVerifier {
       }
       
       // Check for v2 API endpoint
-      const v2Pattern = new RegExp(`/v2/\\w+`, 'g');
+      const v2Pattern = /\/v2\/\w+/g;
       const methodStart = clientCode.indexOf(`async ${methodName}(`);
       if (methodStart === -1) continue;
       

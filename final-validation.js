@@ -83,7 +83,7 @@ async function testTool(testCase) {
           if (jsonResponse.result) {
             console.log('✅ SUCCESS - Tool returned valid response');
             console.log('Response type:', typeof jsonResponse.result);
-            if (jsonResponse.result.content && jsonResponse.result.content[0]) {
+            if (jsonResponse.result?.content?.[0]) {
               const content = JSON.parse(jsonResponse.result.content[0].text);
               if (testCase.name === 'get_active_alarms' && content.alarms) {
                 console.log(`📊 Alarms returned: ${content.total || 0}`);

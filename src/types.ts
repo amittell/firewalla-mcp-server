@@ -119,6 +119,8 @@ export interface Flow {
   download?: number;
   /** Bytes uploaded */
   upload?: number;
+  /** Total bytes transferred (download + upload) */
+  bytes?: number;
   /** Flow duration in seconds */
   duration?: number;
   /** TCP connections/UDP sessions or block count */

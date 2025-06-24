@@ -283,6 +283,7 @@ export class FirewallaClient {
         block: Boolean(item.block || item.blocked),
         download: item.download || 0,
         upload: item.upload || 0,
+        bytes: (item.download || 0) + (item.upload || 0),
         duration: item.duration || 0,
         count: item.count || item.packets || 1,
         device: {
@@ -1673,6 +1674,7 @@ export class FirewallaClient {
         block: Boolean(item.block || item.blocked),
         download: item.download || 0,
         upload: item.upload || 0,
+        bytes: (item.download || 0) + (item.upload || 0),
         duration: item.duration || 0,
         count: item.count || item.packets || 1,
         device: {

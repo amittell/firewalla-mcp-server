@@ -99,7 +99,7 @@ export class SearchEngine {
 
       return {
         results,
-        total: results.length,
+        count: results.length,
         limit: params.limit || 100,
         offset: params.offset || 0,
         query: params.query,
@@ -164,7 +164,7 @@ export class SearchEngine {
 
       return {
         results,
-        total: results.length,
+        count: results.length,
         limit: params.limit || 100,
         offset: params.offset || 0,
         query: params.query,
@@ -228,7 +228,7 @@ export class SearchEngine {
 
       return {
         results,
-        total: results.length,
+        count: results.length,
         limit: params.limit || 100,
         offset: params.offset || 0,
         query: params.query,
@@ -292,7 +292,7 @@ export class SearchEngine {
 
       return {
         results,
-        total: results.length,
+        count: results.length,
         limit: params.limit || 100,
         offset: params.offset || 0,
         query: params.query,
@@ -356,7 +356,7 @@ export class SearchEngine {
 
       return {
         results,
-        total: results.length,
+        count: results.length,
         limit: params.limit || 100,
         offset: params.offset || 0,
         query: params.query,
@@ -389,7 +389,7 @@ export class SearchEngine {
         primary: {
           query: params.primary_query,
           results: primaryResult.results,
-          count: primaryResult.total
+          count: primaryResult.count
         },
         correlations: []
       };
@@ -415,10 +415,10 @@ export class SearchEngine {
         ...correlatedResults,
         execution_time_ms: Date.now() - startTime,
         correlation_summary: {
-          primary_count: primaryResult.total,
+          primary_count: primaryResult.count,
           correlated_count: correlatedResults.correlations.reduce((sum: number, c: any) => sum + c.count, 0),
-          correlation_rate: primaryResult.total > 0 
-            ? Math.round((correlatedResults.correlations.reduce((sum: number, c: any) => sum + c.count, 0) / primaryResult.total) * 100)
+          correlation_rate: primaryResult.count > 0 
+            ? Math.round((correlatedResults.correlations.reduce((sum: number, c: any) => sum + c.count, 0) / primaryResult.count) * 100)
             : 0
         }
       };

@@ -735,7 +735,7 @@ class IndividualToolVerifier {
     const methodName = this.getExpectedClientMethod(toolName);
     
     // Test 1: Timeout handling
-    const timeoutPattern = new RegExp(`timeout|Timeout`, 'gi');
+    const timeoutPattern = /timeout|Timeout/gi;
     
     if (timeoutPattern.test(clientCode)) {
       this.addTestResult(toolName, 'timeout-handling', 'passed',
@@ -746,7 +746,7 @@ class IndividualToolVerifier {
     }
     
     // Test 2: Rate limiting awareness
-    const rateLimitPattern = new RegExp(`rate|limit|429|throttle`, 'gi');
+    const rateLimitPattern = /rate|limit|429|throttle/gi;
     
     if (rateLimitPattern.test(clientCode)) {
       this.addTestResult(toolName, 'rate-limit-awareness', 'passed',
