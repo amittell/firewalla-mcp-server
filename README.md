@@ -99,7 +99,7 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
   "mcpServers": {
     "firewalla": {
       "command": "node",
-      "args": ["--loader", "ts-node/esm", "/path/to/firewalla-mcp-server/src/server.ts"],
+      "args": ["/path/to/firewalla-mcp-server/dist/server.js"],
       "env": {
         "FIREWALLA_MSP_TOKEN": "your_msp_access_token_here",
         "FIREWALLA_MSP_ID": "your_msp_id_here",
@@ -222,8 +222,11 @@ npm run mcp:start
 # Production (npm installed)
 npx firewalla-mcp-server
 
-# Direct execution (if globally installed)
+# Direct execution (from source after build)
 node dist/server.js
+
+# Using built-in startup script (from source)
+./start-mcp.sh
 ```
 
 ### Project Structure
