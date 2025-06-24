@@ -99,7 +99,7 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
   "mcpServers": {
     "firewalla": {
       "command": "node",
-      "args": ["/path/to/firewalla-mcp-server/dist/server.js"],
+      "args": ["./dist/server.js"],
       "env": {
         "FIREWALLA_MSP_TOKEN": "your_msp_access_token_here",
         "FIREWALLA_MSP_ID": "your_msp_id_here",
@@ -121,12 +121,15 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
         "-e", "FIREWALLA_MSP_TOKEN=your_msp_access_token_here",
         "-e", "FIREWALLA_MSP_ID=your_msp_id_here", 
         "-e", "FIREWALLA_BOX_ID=your_box_gid_here",
+        "-e", "NODE_ENV=production",
         "firewalla-mcp-server"
       ]
     }
   }
 }
 ```
+
+> **Note**: The args array above is passed verbatim to Docker. When copying to shell scripts, quoting may differ.
 
 **Config file locations:**
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
@@ -141,6 +144,13 @@ To use the Docker configuration option above, first build the image:
 ```bash
 # Build the Docker image
 docker build -t firewalla-mcp-server .
+
+# Optional: Tag with semantic version
+docker build -t firewalla-mcp-server:1.5.0 .
+
+# Push to registry (if deploying to remote)
+docker tag firewalla-mcp-server your-registry/firewalla-mcp-server:latest
+docker push your-registry/firewalla-mcp-server:latest
 ```
 
 ### Advanced Docker Deployment
@@ -184,29 +194,29 @@ Once connected, you can ask Claude questions like:
 
 ### Tools (Actions Claude can perform)
 
-**Security Monitoring**
+#### Security Monitoring
 - `get_active_alarms` - Retrieve current security alerts with complete alarm data, IDs, and descriptions
 - `get_specific_alarm` - Get detailed information for a specific alarm ID
 - `delete_alarm` - Remove specific security alarms
 
-**Network Analysis**
+#### Network Analysis
 - `get_flow_data` - Query network traffic flows with detailed connection data and device context
 - `get_bandwidth_usage` - Get top bandwidth consuming devices with detailed usage statistics
 - `get_offline_devices` - List offline devices with last seen timestamps
 
-**Device Management**
+#### Device Management
 - `get_device_status` - Check device status with comprehensive information including names, types, and vendors
 - `get_boxes` - List all Firewalla devices with status and version information
 
-**Rule Management**
+#### Rule Management
 - `get_network_rules` - Retrieve firewall rules with complete rule names, conditions, and metadata
 - `pause_rule` - Temporarily disable specific firewall rules
 - `resume_rule` - Re-enable previously paused firewall rules
 
-**Threat Intelligence**
+#### Threat Intelligence
 - `get_target_lists` - Access CloudFlare and CrowdSec security target lists
 
-**Statistics and Trends**
+#### Statistics and Trends
 - `get_simple_statistics` - Basic statistics about boxes, alarms, and rules with health scores
 - `get_statistics_by_region` - Flow statistics grouped by country/region
 - `get_statistics_by_box` - Per-device statistics with activity scores
@@ -214,7 +224,7 @@ Once connected, you can ask Claude questions like:
 - `get_alarm_trends` - Historical alarm frequency and patterns
 - `get_rule_trends` - Rule activity trends and stability metrics
 
-**Advanced Search**
+#### Advanced Search
 - `search_flows` - Advanced flow searching with complex query syntax
 - `search_alarms` - Alarm searching with severity, time, and IP filters
 - `search_rules` - Rule searching with target, action, and status filters
@@ -254,7 +264,7 @@ npm run lint:fix     # Fix ESLint issues
 **Why `npx` for MCP servers?**
 - **Version Management**: Always uses the correct/latest version
 - **Dependency Resolution**: Handles package dependencies automatically  
-- **No Global Install Required**: Works without global installation
+- **No global installation required**: Works without global installation
 - **MCP Standard**: Follows Model Context Protocol conventions
 - **Cross-Platform**: Works consistently across different environments
 
@@ -359,7 +369,7 @@ All MCP tools now return complete, well-structured data:
 - Aggregation and statistical analysis
 
 **Search Examples:**
-```
+```text
 severity:high AND source_ip:192.168.*
 timestamp:>2024-01-01 AND bytes:>=1000000
 target_value:*.facebook.com OR mac_vendor:Apple*
@@ -422,6 +432,7 @@ npm install -g firewalla-mcp-server
 - **MCP Convention Compliant** - Uses `npx` for execution as per MCP standards  
 - **Optimized Bundle** - Only includes dist/, README, LICENSE via .npmignore  
 - **Automated Build** - Pre-publish hooks ensure clean builds  
+- **Security Scanning** - Trivy scan integrated into CI pipeline  
 - **Semantic Versioning** - Built-in version management scripts  
 - **TypeScript Support** - Full type safety with compiled output  
 - **Environment Variables** - Secure credential management  
