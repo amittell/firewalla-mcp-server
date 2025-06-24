@@ -282,7 +282,7 @@ node dist/server.js
 ### Project Structure
 
 ```
-firewalla_mcp/
+firewalla-mcp-server/
 ├── src/
 │   ├── server.ts           # Main MCP server
 │   ├── firewalla/          # Firewalla API client
@@ -290,7 +290,6 @@ firewalla_mcp/
 │   ├── resources/          # MCP resource implementations
 │   └── prompts/            # MCP prompt implementations
 ├── tests/                  # Test files
-├── docs/                   # Additional documentation
 ├── CLAUDE.md              # Claude development guide
 ├── SPEC.md                # Technical specifications
 └── README.md              # This file

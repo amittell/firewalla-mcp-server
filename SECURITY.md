@@ -76,7 +76,7 @@ If you discover a security vulnerability in the Firewalla MCP Server, please rep
 
 1. **Do NOT** create a public GitHub issue
 2. **Do NOT** disclose the vulnerability publicly
-3. Email security details to: [your-security-email]
+3. Create a security advisory on GitHub or email: security@firewalla-mcp-server.dev
 4. Include detailed reproduction steps
 5. Allow reasonable time for response (48-72 hours)
 
@@ -237,9 +237,9 @@ Content-Security-Policy: default-src 'self'
 ## Contact
 
 For security-related questions or concerns:
-- Security Email: [your-security-email]
+- Security Email: security@firewalla-mcp-server.dev
+- GitHub Security Advisories: https://github.com/amittell/firewalla-mcp-server/security/advisories
 - Response Time: 48-72 hours
-- PGP Key: [optional PGP key for encrypted communication]
 
 ---
 

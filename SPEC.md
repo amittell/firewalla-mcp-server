@@ -35,8 +35,8 @@ A Model Context Protocol server providing Claude with real-time access to Firewa
 ## Firewalla MSP API Integration
 
 ### Base Configuration
-- **Base URL**: `https://msp.firewalla.com`
-- **Authentication**: Bearer token
+- **Base URL**: `https://{msp_domain}/v2/`
+- **Authentication**: Token-based authentication
 - **Rate Limit**: 100 requests per minute
 - **Timeout**: 30 seconds per request
 
@@ -44,7 +44,7 @@ A Model Context Protocol server providing Claude with real-time access to Firewa
 
 #### Flow Data
 ```
-GET /api/v1/flow/{box_id}
+GET /v2/boxes/{box_gid}/flows
 Query Parameters:
 - page: number (pagination)
 - limit: number (max 100)
@@ -54,7 +54,7 @@ Query Parameters:
 
 #### Active Alarms
 ```
-GET /api/v1/alarms/{box_id}
+GET /v2/boxes/{box_gid}/alarms
 Query Parameters:
 - status: active|resolved
 - severity: low|medium|high|critical
@@ -63,13 +63,13 @@ Query Parameters:
 
 #### Device Status
 ```
-GET /api/v1/devices/{box_id}
+GET /v2/boxes/{box_gid}/devices
 Response includes online/offline status, IP addresses, MAC addresses
 ```
 
 #### Bandwidth Usage
 ```
-GET /api/v1/bandwidth/{box_id}
+GET /v2/boxes/{box_gid}/bandwidth
 Query Parameters:
 - period: 1h|24h|7d|30d
 - top: number (top N devices)
