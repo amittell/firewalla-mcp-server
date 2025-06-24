@@ -7,7 +7,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -81,7 +81,9 @@ class PrecisionDiagnostics {
         const caseMatches = toolsContent.match(/case\s+'([^']+)':/g);
         
         if (!caseMatches) {
-            throw new Error('Could not find tool cases in setupTools function');
+            console.warn('⚠️  Could not find tool cases in setupTools function');
+            console.warn('This might indicate changes in the source file structure');
+            throw new Error('Could not find tool cases in setupTools function - check tools/index.ts structure');
         }
         
         const tools = [];
@@ -156,7 +158,7 @@ class PrecisionDiagnostics {
             }
         }
 
-        const total = result.passed + result.failed + result.warnings.length;
+        const total = result.passed + result.failed;
         result.successRate = total > 0 ? Math.round((result.passed / total) * 100) : 0;
 
         return result;
@@ -179,6 +181,12 @@ class PrecisionDiagnostics {
             case 'edge_cases':
                 return this.testEdgeCasesWithDetails(tool, clientContent);
             default:
+                result.warnings.push({
+                    category: 'unknown',
+                    message: `Unknown test category: ${category}`,
+                    context: `Tool: ${tool.name}`,
+                    suggestedFix: `Add implementation for ${category} test category or remove from testCategories array`
+                });
                 result.failed++;
                 return result;
         }
@@ -381,7 +389,7 @@ class PrecisionDiagnostics {
         
         // Check for error handling
         const methodMatch = clientContent.match(new RegExp(`async\\s+${methodName}[^{]*\\{([\\s\\S]*?)\\n\\s*\\}`));
-        if (methodMatch) {
+        if (methodMatch && methodMatch[1]) {
             const methodBody = methodMatch[1];
             
             if (!methodBody.includes('try') || !methodBody.includes('catch')) {
@@ -546,9 +554,13 @@ async function main() {
         // Save detailed results
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const reportPath = `precision-diagnostics-${timestamp}.json`;
-        fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
-        
-        console.log(`\n💾 Detailed report saved to: ${reportPath}`);
+        try {
+            fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+            console.log(`\n💾 Detailed report saved to: ${reportPath}`);
+        } catch (writeError) {
+            console.error(`❌ Failed to save report: ${writeError.message}`);
+            console.log('📊 Report data:', JSON.stringify(report, null, 2));
+        }
         console.log('🎯 Ready for surgical precision fixes on I-Block targets');
         
     } catch (error) {
@@ -558,7 +570,7 @@ async function main() {
 }
 
 // Execute if this is the main module
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     main();
 }
 
