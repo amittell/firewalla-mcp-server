@@ -99,7 +99,7 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
   "mcpServers": {
     "firewalla": {
       "command": "node",
-      "args": ["./dist/server.js"],
+      "args": ["/full/path/to/firewalla-mcp-server/dist/server.js"],
       "env": {
         "FIREWALLA_MSP_TOKEN": "your_msp_access_token_here",
         "FIREWALLA_MSP_ID": "your_msp_id_here",
