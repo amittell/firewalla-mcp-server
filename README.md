@@ -110,117 +110,53 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
 }
 ```
 
+**If using Docker:**
+```json
+{
+  "mcpServers": {
+    "firewalla": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "FIREWALLA_MSP_TOKEN=your_msp_access_token_here",
+        "-e", "FIREWALLA_MSP_ID=your_msp_id_here", 
+        "-e", "FIREWALLA_BOX_ID=your_box_gid_here",
+        "firewalla-mcp-server"
+      ]
+    }
+  }
+}
+```
+
 **Config file locations:**
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
-## Docker Deployment
+## Docker Usage
 
-For production environments, you can deploy using Docker with the included automation script.
+### Building the Docker Image
 
-### Prerequisites
-- Docker and Docker Compose installed
-- Firewalla MSP credentials configured
-
-### Automated Deployment
-
-The repository includes a comprehensive deployment script that handles building, security scanning, and deployment:
+To use the Docker configuration option above, first build the image:
 
 ```bash
-# Set your Firewalla credentials
-export FIREWALLA_MSP_TOKEN="your_msp_access_token_here"
-export FIREWALLA_MSP_ID="your_msp_id_here"
-export FIREWALLA_BOX_ID="your_box_gid_here"
-
-# Deploy to production
-./scripts/deploy.sh
-
-# Or deploy to staging
-./scripts/deploy.sh --env staging
-
-# Deploy with custom Docker registry
-./scripts/deploy.sh --registry your-registry.com --tag v1.0.0
-```
-
-### Manual Docker Deployment
-
-If you prefer manual deployment:
-
-```bash
-# 1. Build the Docker image
+# Build the Docker image
 docker build -t firewalla-mcp-server .
-
-# 2. Run the container
-docker run -d \
-  --name firewalla-mcp \
-  --restart unless-stopped \
-  -e FIREWALLA_MSP_TOKEN="your_msp_access_token_here" \
-  -e FIREWALLA_MSP_ID="your_msp_id_here" \
-  -e FIREWALLA_BOX_ID="your_box_gid_here" \
-  -v $(pwd)/logs:/app/logs \
-  firewalla-mcp-server
 ```
 
-### Docker Compose
+### Advanced Docker Deployment
 
-For easier management, use the generated `docker-compose.yml`:
+For production server deployments, you can use the included deployment script:
 
 ```bash
-# Start the service
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop the service
-docker-compose down
-
-# Restart the service
-docker-compose restart
+# Deploy with automated testing and security scanning
+./scripts/deploy.sh
 ```
 
-### Deployment Features
-
-The automated deployment script provides:
-
-- **Automated Testing**: Runs linting and unit tests before deployment
-- **Security Scanning**: Uses Trivy to scan Docker images for vulnerabilities
-- **Health Checks**: Configures container health monitoring
-- **Log Management**: Sets up persistent log volumes
-- **Environment Configuration**: Supports development, staging, and production modes
-- **Registry Support**: Can push to custom Docker registries
-
-### Production Configuration
-
-The deployment script automatically creates a production-ready `docker-compose.yml` with:
-
-```yaml
-version: '3.8'
-
-services:
-  firewalla-mcp:
-    image: firewalla-mcp-server:latest
-    container_name: firewalla-mcp-server
-    restart: unless-stopped
-    environment:
-      - NODE_ENV=production
-      - FIREWALLA_MSP_TOKEN=${FIREWALLA_MSP_TOKEN}
-      - FIREWALLA_MSP_ID=${FIREWALLA_MSP_ID}
-      - FIREWALLA_BOX_ID=${FIREWALLA_BOX_ID}
-    volumes:
-      - ./logs:/app/logs
-    healthcheck:
-      test: ["CMD", "node", "-e", "console.log('Health check passed')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - firewalla-net
-
-networks:
-  firewalla-net:
-    driver: bridge
-```
+The deployment script provides:
+- Automated testing and linting
+- Security scanning with Trivy
+- Docker Compose configuration
+- Health checks and monitoring
 
 ## Usage Examples
 
