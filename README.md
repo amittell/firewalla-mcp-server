@@ -121,7 +121,6 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
         "-e", "FIREWALLA_MSP_TOKEN=your_msp_access_token_here",
         "-e", "FIREWALLA_MSP_ID=your_msp_id_here", 
         "-e", "FIREWALLA_BOX_ID=your_box_gid_here",
-        "-e", "NODE_ENV=production",
         "firewalla-mcp-server"
       ]
     }
