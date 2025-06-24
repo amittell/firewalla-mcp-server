@@ -15,7 +15,6 @@ import {
   CrossReferenceResult,
 } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI, buildSearchOptions } from '../search/index.js';
-import { ResponseValidator, validateResponse, ValidationError } from '../validation/index.js';
 import { optimizeResponse, ResponseOptimizer } from '../optimization/index.js';
 
 interface APIResponse<T> {
@@ -165,9 +164,6 @@ export class FirewallaClient {
         result = response.data as T;
       }
       
-      // Sanitize response data
-      result = ResponseValidator.sanitizeResponse(result);
-      
       if (cacheable && method === 'GET') {
         this.setCache(cacheKey, result);
       }
@@ -182,7 +178,6 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('alarms')
-  @validateResponse(ResponseValidator.validateAlarm)
   async getActiveAlarms(
     query?: string, 
     groupBy?: string, 
@@ -240,7 +235,6 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('flows')
-  @validateResponse(ResponseValidator.validateFlow)
   async getFlowData(
     query?: string,
     groupBy?: string,
@@ -346,7 +340,6 @@ export class FirewallaClient {
 
 
   @optimizeResponse('devices')
-  @validateResponse(ResponseValidator.validateDevice)
   async getDeviceStatus(boxId?: string, groupId?: string): Promise<{count: number; results: Device[]; next_cursor?: string}> {
     try {
       // Input validation and sanitization
@@ -366,10 +359,16 @@ export class FirewallaClient {
       
       // Enhanced null safety and error handling
       const rawResults = Array.isArray(response) ? response : [];
+      
+      // Debug logging
+      process.stderr.write(`Raw device response count: ${rawResults.length}\n`);
+      
       const results = rawResults
         .filter(item => item && typeof item === 'object')
         .map(item => this.transformDevice(item))
         .filter(device => device && device.id && device.id !== 'unknown');
+      
+      process.stderr.write(`Filtered device count: ${results.length}\n`);
       
       return {
         count: results.length,
@@ -383,7 +382,6 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('devices')
-  @validateResponse(ResponseValidator.validateDevice)
   async getOfflineDevices(sortByLastSeen: boolean = true): Promise<{count: number; results: Device[]; next_cursor?: string}> {
     try {
       // Input validation
@@ -466,7 +464,6 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('bandwidth')
-  @validateResponse(ResponseValidator.validateBandwidth)
   async getBandwidthUsage(period: string, top = 10): Promise<{count: number; results: BandwidthUsage[]; next_cursor?: string}> {
     try {
       // Enhanced input validation and sanitization
@@ -576,7 +573,6 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('rules')
-  @validateResponse(ResponseValidator.validateNetworkRule)
   async getNetworkRules(query?: string): Promise<{count: number; results: NetworkRule[]; next_cursor?: string}> {
     const params: Record<string, unknown> = {};
     
@@ -634,7 +630,6 @@ export class FirewallaClient {
 
 
   @optimizeResponse('targets')
-  @validateResponse(ResponseValidator.validateTarget)
   async getTargetLists(listType?: string): Promise<{count: number; results: TargetList[]; next_cursor?: string}> {
     const params: Record<string, unknown> = {};
     
@@ -705,10 +700,8 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('rules')
-  @validateResponse(ResponseValidator.validateRule)
 
   @optimizeResponse('boxes')
-  @validateResponse(ResponseValidator.validateBox)
   async getBoxes(groupId?: string): Promise<{count: number; results: Box[]; next_cursor?: string}> {
     try {
       // Input validation and sanitization
@@ -759,7 +752,6 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('alarms')
-  @validateResponse(ResponseValidator.validateAlarm)
   async getSpecificAlarm(alarmId: string): Promise<{count: number; results: Alarm[]; next_cursor?: string}> {
     try {
       // Enhanced input validation and sanitization
@@ -876,7 +868,6 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('alarms')
-  @validateResponse(ResponseValidator.validateAlarm)
   async deleteAlarm(alarmId: string): Promise<{count: number; results: any[]; next_cursor?: string}> {
     try {
       // Enhanced input validation and sanitization
@@ -982,7 +973,6 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('statistics')
-  @validateResponse(ResponseValidator.validateStatistics)
   async getStatisticsByRegion(): Promise<{count: number; results: import('../types').Statistics[]; next_cursor?: string}> {
     try {
       const flows = await this.getFlowData();
@@ -1028,7 +1018,6 @@ export class FirewallaClient {
 
   // Trends API Implementation
   @optimizeResponse('trends')
-  @validateResponse(ResponseValidator.validateTrend)
   async getFlowTrends(period: '1h' | '24h' | '7d' | '30d' = '24h', interval: number = 3600): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
     try {
       // Enhanced input validation and sanitization
@@ -1175,7 +1164,6 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('trends')
-  @validateResponse(ResponseValidator.validateTrend)
   async getAlarmTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
     try {
       // Enhanced input validation and sanitization
@@ -1330,7 +1318,6 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('trends')
-  @validateResponse(ResponseValidator.validateTrend)
   async getRuleTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
     try {
       // Enhanced input validation and sanitization
@@ -1701,7 +1688,6 @@ export class FirewallaClient {
    * Advanced search for security alarms with severity, time, and IP filters
    */
   @optimizeResponse('alarms')
-  @validateResponse(ResponseValidator.validateAlarm)
   async searchAlarms(
     searchQuery: SearchQuery,
     options: SearchOptions = {}
@@ -1908,7 +1894,6 @@ export class FirewallaClient {
    * Advanced search for firewall rules with target, action, and status filters
    */
   @optimizeResponse('rules')
-  @validateResponse(ResponseValidator.validateNetworkRule)
   async searchRules(
     searchQuery: SearchQuery,
     options: SearchOptions = {}
@@ -2119,7 +2104,6 @@ export class FirewallaClient {
    * Advanced search for network devices with network, status, and usage filters
    */
   @optimizeResponse('devices')
-  @validateResponse(ResponseValidator.validateDevice)
   async searchDevices(
     searchQuery: SearchQuery,
     options: SearchOptions = {}
@@ -2260,7 +2244,6 @@ export class FirewallaClient {
    * Advanced search for target lists with category and ownership filters
    */
   @optimizeResponse('targets')
-  @validateResponse(ResponseValidator.validateTarget)
   async searchTargetLists(
     searchQuery: SearchQuery,
     options: SearchOptions = {}
@@ -2452,7 +2435,6 @@ export class FirewallaClient {
    * Multi-entity searches with correlation across different data types
    */
   @optimizeResponse('cross-reference')
-  @validateResponse(ResponseValidator.validateFlow)
   async searchCrossReference(
     primaryQuery: SearchQuery,
     secondaryQueries: Record<string, SearchQuery>,
@@ -2523,7 +2505,6 @@ export class FirewallaClient {
    * Get overview statistics and counts of network rules by category
    */
   @optimizeResponse('rules')
-  @validateResponse(ResponseValidator.validateRule)
   async getNetworkRulesSummary(
     activeOnly: boolean = true,
     ruleType?: string
@@ -2638,7 +2619,6 @@ export class FirewallaClient {
    * Get rules with highest hit counts for traffic analysis
    */
   @optimizeResponse('rules') 
-  @validateResponse(ResponseValidator.validateRule)
   async getMostActiveRules(
     limit: number = 20,
     minHits: number = 1,
@@ -2726,7 +2706,6 @@ export class FirewallaClient {
    * Get recently created or modified firewall rules
    */
   @optimizeResponse('rules')
-  @validateResponse(ResponseValidator.validateRule) 
   async getRecentRules(
     hours: number = 24,
     includeModified: boolean = true,
@@ -2855,7 +2834,6 @@ export class FirewallaClient {
    * Pause a firewall rule temporarily
    */
   @optimizeResponse('rules')
-  @validateResponse(ResponseValidator.validateRule)
   async pauseRule(ruleId: string, durationMinutes: number = 60): Promise<{success: boolean; message: string}> {
     try {
       // Enhanced input validation and sanitization
@@ -2887,7 +2865,6 @@ export class FirewallaClient {
    * Resume a paused firewall rule
    */
   @optimizeResponse('rules')
-  @validateResponse(ResponseValidator.validateRule)
   async resumeRule(ruleId: string): Promise<{success: boolean; message: string}> {
     try {
       // Enhanced input validation and sanitization
