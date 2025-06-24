@@ -32,7 +32,7 @@ export const DEFAULT_OPTIMIZATION_CONFIG: OptimizationConfig = {
   autoTruncate: true,
   truncationStrategy: 'summary',
   summaryMode: {
-    maxItems: 50,
+    maxItems: Number.MAX_SAFE_INTEGER, // No artificial limit - let response size determine truncation
     includeFields: [],
     excludeFields: ['notes', 'description', 'message']
   }

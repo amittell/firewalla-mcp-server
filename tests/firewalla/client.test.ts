@@ -283,12 +283,13 @@ describe('FirewallaClient', () => {
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
         `/boxes/${mockConfig.boxId}/devices`,
-        { params: { limit: 500 } }
+        { params: {} }
       );
 
       expect(result.results).toHaveLength(3);
       
-      // Verify first device mapping
+      // Results are sorted alphabetically by name: "iPhone", "MacBook-Pro", "Smart-TV"
+      // Verify first device mapping (iPhone)
       expect(result.results[0]).toMatchObject({
         id: 'device-1',
         name: 'iPhone',
@@ -297,7 +298,7 @@ describe('FirewallaClient', () => {
       });
       expect(result.results[0]!.lastSeen).toBe(1703980800);
       
-      // Verify second device mapping
+      // Verify second device mapping (MacBook-Pro)  
       expect(result.results[1]).toMatchObject({
         id: 'device-2',
         name: 'MacBook-Pro',
@@ -458,9 +459,10 @@ describe('FirewallaClient', () => {
       const result = await client.getDeviceStatus();
 
       expect(result.results).toHaveLength(3); // All devices returned
-      expect(result.results[0]!.id).toBe('device-1');
-      expect(result.results[1]!.id).toBe('device-2');
-      expect(result.results[2]!.id).toBe('device-3');
+      // Results should be sorted by name: "Alexa Echo", "MacBook Pro", "Samsung Smart TV"
+      expect(result.results[0]!.id).toBe('device-2'); // Alexa Echo
+      expect(result.results[1]!.id).toBe('device-3'); // MacBook Pro
+      expect(result.results[2]!.id).toBe('device-1'); // Samsung Smart TV
       expect(result).toEqual(expect.objectContaining({
         count: 3,
         results: expect.any(Array),
@@ -512,7 +514,7 @@ describe('FirewallaClient', () => {
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
         `/rules`,
-        { params: { limit: 500 } }
+        { params: {} }
       );
     });
 

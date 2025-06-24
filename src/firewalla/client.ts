@@ -3,7 +3,6 @@ import {
   FirewallaConfig,
   Alarm,
   Flow,
-  FlowData, // TODO: Implement FlowData usage
   Device,
   BandwidthUsage,
   NetworkRule,
@@ -14,8 +13,9 @@ import {
   SearchOptions,
   CrossReferenceResult,
 } from '../types.js';
-import { parseSearchQuery, formatQueryForAPI, buildSearchOptions } from '../search/index.js'; // TODO: Implement buildSearchOptions usage
-import { optimizeResponse, ResponseOptimizer } from '../optimization/index.js'; // TODO: Implement ResponseOptimizer usage
+import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
+import { optimizeResponse } from '../optimization/index.js';
+import { createPaginatedResponse } from '../utils/pagination.js';
 
 interface APIResponse<T> {
   success: boolean;
@@ -340,51 +340,69 @@ export class FirewallaClient {
 
 
   @optimizeResponse('devices')
-  async getDeviceStatus(deviceId?: string, includeOffline = true, limit = 500): Promise<{count: number; results: Device[]; next_cursor?: string}> {
+  async getDeviceStatus(
+    deviceId?: string, 
+    includeOffline = true, 
+    limit?: number, 
+    cursor?: string
+  ): Promise<{count: number; results: Device[]; next_cursor?: string; total_count: number; has_more: boolean}> {
     try {
-      // Input validation and sanitization
-      const params: Record<string, unknown> = {
-        limit: limit, // Remove artificial limit - let API handle large datasets
+      const startTime = Date.now();
+      
+      // Create a data fetcher function for pagination
+      const dataFetcher = async (): Promise<Device[]> => {
+        const params: Record<string, unknown> = {};
+
+        const endpoint = this.config.boxId?.trim() 
+          ? `/boxes/${this.config.boxId.trim()}/devices`
+          : `/devices`;
+
+        // API returns direct array of devices
+        const response = await this.request<Device[]>('GET', endpoint, params);
+        
+        // Enhanced null safety and error handling
+        const rawResults = Array.isArray(response) ? response : [];
+        
+        let results = rawResults
+          .filter(item => item && typeof item === 'object')
+          .map(item => this.transformDevice(item))
+          .filter(device => device && device.id && device.id !== 'unknown');
+        
+        // Filter by device ID if provided
+        if (deviceId && deviceId.trim()) {
+          const targetId = deviceId.trim().toLowerCase();
+          results = results.filter(device => 
+            device.id.toLowerCase() === targetId ||
+            (device.mac && device.mac.toLowerCase().replace(/[:-]/g, '') === targetId.replace(/[:-]/g, ''))
+          );
+        }
+        
+        // Filter by online status if requested
+        if (!includeOffline) {
+          results = results.filter(device => device.online);
+        }
+        
+        return results;
       };
-
-      const endpoint = this.config.boxId?.trim() 
-        ? `/boxes/${this.config.boxId.trim()}/devices`
-        : `/devices`;
-
-      // API returns direct array of devices
-      const response = await this.request<Device[]>('GET', endpoint, params);
       
-      // Enhanced null safety and error handling
-      const rawResults = Array.isArray(response) ? response : [];
+      // Use universal pagination for client-side chunking
+      const pageSize = limit || 100; // Default page size
+      const paginatedResult = await createPaginatedResponse(
+        dataFetcher,
+        cursor,
+        pageSize,
+        'name', // Sort by name for consistent ordering
+        'asc'
+      );
       
-      // Debug logging
-      process.stderr.write(`Raw device response count: ${rawResults.length}\n`);
-      
-      let results = rawResults
-        .filter(item => item && typeof item === 'object')
-        .map(item => this.transformDevice(item))
-        .filter(device => device && device.id && device.id !== 'unknown');
-      
-      // Filter by device ID if provided
-      if (deviceId && deviceId.trim()) {
-        const targetId = deviceId.trim().toLowerCase();
-        results = results.filter(device => 
-          device.id.toLowerCase() === targetId ||
-          (device.mac && device.mac.toLowerCase().replace(/[:-]/g, '') === targetId.replace(/[:-]/g, ''))
-        );
-      }
-      
-      // Filter by online status if requested
-      if (!includeOffline) {
-        results = results.filter(device => device.online);
-      }
-      
-      process.stderr.write(`Filtered device count: ${results.length}\n`);
+      process.stderr.write(`Device pagination: ${paginatedResult.results.length}/${paginatedResult.total_count} (${Date.now() - startTime}ms)\n`);
       
       return {
-        count: results.length,
-        results,
-        next_cursor: undefined
+        count: paginatedResult.results.length,
+        results: paginatedResult.results,
+        next_cursor: paginatedResult.next_cursor,
+        total_count: paginatedResult.total_count,
+        has_more: paginatedResult.has_more
       };
     } catch (error) {
       console.error('Error in getDeviceStatus:', error);
@@ -592,13 +610,15 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('rules')
-  async getNetworkRules(query?: string, limit = 500): Promise<{count: number; results: NetworkRule[]; next_cursor?: string}> {
-    const params: Record<string, unknown> = {
-      limit: limit, // Remove artificial limit - let API handle large datasets
-    };
+  async getNetworkRules(query?: string, limit?: number): Promise<{count: number; results: NetworkRule[]; next_cursor?: string}> {
+    const params: Record<string, unknown> = {};
     
     if (query) {
       params.query = query;
+    }
+    
+    if (limit !== undefined) {
+      params.limit = limit;
     }
 
     const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/rules`, params);

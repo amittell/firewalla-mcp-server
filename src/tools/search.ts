@@ -242,7 +242,7 @@ export class SearchEngine {
   }
 
   /**
-   * Execute a search query for devices
+   * Execute a search query for devices using cursor-based pagination
    */
   async searchDevices(params: SearchParams): Promise<SearchResult> {
     const startTime = Date.now();
@@ -257,47 +257,50 @@ export class SearchEngine {
         throw new Error(`Invalid query: ${validation.errors.join(', ')}`);
       }
 
-      const context: FilterContext = {
-        entityType: 'devices',
-        apiParams: {},
-        postProcessing: [],
-        metadata: {
-          filtersApplied: [],
-          optimizations: []
-        }
+      // Use cursor-based pagination with the searchDevices client method
+      const searchQuery = {
+        query: params.query,
+        limit: params.limit,
+        cursor: params.cursor,
+        sort_by: params.sort_by,
+        group_by: params.group_by,
+        aggregate: params.aggregate
       };
 
-      const filterResult = this.applyFiltersRecursively(validation.ast, context);
+      const searchOptions: any = {
+        include_resolved: true // Include all devices for search
+      };
       
-      const devices = await this.firewalla.getDeviceStatus();
-
-      let results = devices.results || [];
-      if (filterResult.postProcessing && results.length > 0) {
-        results = filterResult.postProcessing(results);
+      // Only add time_range if it has both start and end
+      if (params.time_range && params.time_range.start && params.time_range.end) {
+        searchOptions.time_range = {
+          start: params.time_range.start,
+          end: params.time_range.end
+        };
       }
 
-      if (params.sort_by) {
-        results = this.sortResults(results, params.sort_by, params.sort_order);
-      }
+      // Use the proper searchDevices client method with cursor support
+      const response = await this.firewalla.searchDevices(searchQuery, searchOptions);
 
-      if (params.offset) {
+      // Handle backward compatibility for offset-based pagination
+      let results = response.results || [];
+      if (params.offset && !params.cursor) {
+        // Legacy offset support - only if cursor not provided
         results = results.slice(params.offset);
+        if (params.limit) {
+          results = results.slice(0, params.limit);
+        }
       }
-
-      if (params.limit) {
-        results = results.slice(0, params.limit);
-      }
-
-      const aggregations = params.aggregate ? this.generateAggregations(results, params.group_by) : undefined;
 
       return {
         results,
-        count: results.length,
+        count: response.count || results.length,
         limit: params.limit || 100,
-        offset: params.offset || 0,
+        offset: params.offset || 0, // For backward compatibility
+        next_cursor: response.next_cursor, // Cursor-based pagination
         query: params.query,
         execution_time_ms: Date.now() - startTime,
-        aggregations
+        aggregations: response.aggregations
       };
 
     } catch (error) {

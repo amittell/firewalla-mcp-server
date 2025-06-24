@@ -79,7 +79,8 @@ export interface ComparisonQuery {
 export interface SearchParams {
   query: string;
   limit?: number;
-  offset?: number;
+  offset?: number; // Deprecated: use cursor for new implementations
+  cursor?: string; // Cursor-based pagination (preferred)
   sort_by?: string;
   sort_order?: 'asc' | 'desc';
   group_by?: string;
@@ -98,7 +99,8 @@ export interface SearchResult<T = any> {
   count: number; // Primary field for consistency across API
   total?: number; // Optional for backward compatibility
   limit: number;
-  offset: number;
+  offset: number; // Deprecated: use next_cursor for new implementations
+  next_cursor?: string; // Cursor-based pagination (preferred)
   query: string;
   execution_time_ms: number;
   aggregations?: {

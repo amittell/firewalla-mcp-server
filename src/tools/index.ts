@@ -136,18 +136,21 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         case 'get_device_status': {
           const deviceId = args?.device_id as string | undefined;
           const includeOffline = (args?.include_offline as boolean) !== false; // Default to true
-          const limit = (args?.limit as number) || 500; // Default to 500 to get all devices
+          const limit = args?.limit as number | undefined; // Optional limit for response size
+          const cursor = args?.cursor as string | undefined; // Cursor for pagination
           
-          const devicesResponse = await firewalla.getDeviceStatus(deviceId, includeOffline, limit);
+          const devicesResponse = await firewalla.getDeviceStatus(deviceId, includeOffline, limit, cursor);
           
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
-                  total_devices: Array.isArray(devicesResponse.results) ? devicesResponse.results.length : 0,
+                  total_devices: devicesResponse.total_count || 0,
                   online_devices: Array.isArray(devicesResponse.results) ? devicesResponse.results.filter(d => d.online).length : 0,
                   offline_devices: Array.isArray(devicesResponse.results) ? devicesResponse.results.filter(d => !d.online).length : 0,
+                  page_size: Array.isArray(devicesResponse.results) ? devicesResponse.results.length : 0,
+                  has_more: devicesResponse.has_more || false,
                   devices: (Array.isArray(devicesResponse.results) ? devicesResponse.results : []).map(device => ({
                     id: device.id,
                     gid: device.gid,
@@ -162,6 +165,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                     totalDownload: device.totalDownload,
                     totalUpload: device.totalUpload,
                   })),
+                  next_cursor: devicesResponse.next_cursor,
                 }, null, 2),
               },
             ],
@@ -210,7 +214,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
 
         case 'get_bandwidth_usage': {
           const period = args?.period as string;
-          const top = (args?.top as number) || 50; // Increased default from 10 to 50
+          const top = (args?.top as number) || 50; // Default restored, will implement proper pagination
           
           if (!period) {
             throw new Error('Period parameter is required');

@@ -120,9 +120,13 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum number of devices to return (default: 500)',
+                  description: 'Page size for pagination (default: 100)',
                   minimum: 1,
-                  maximum: 10000,
+                  maximum: 1000,
+                },
+                cursor: {
+                  type: 'string',
+                  description: 'Pagination cursor from previous response',
                 },
               },
             },
@@ -536,8 +540,12 @@ export class FirewallaMCPServer {
                 },
                 offset: {
                   type: 'number',
-                  description: 'Results offset for pagination (default: 0)',
+                  description: 'Results offset for pagination (default: 0) - DEPRECATED: use cursor',
                   minimum: 0,
+                },
+                cursor: {
+                  type: 'string',
+                  description: 'Pagination cursor from previous response (preferred over offset)',
                 },
                 include_offline: {
                   type: 'boolean',
