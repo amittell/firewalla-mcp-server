@@ -638,12 +638,13 @@ export class FirewallaClient {
     }
 
     const response = await this.request<TargetList[] | {results: TargetList[]}>('GET', `/target-lists`, params);
+    
     // Handle response format
-    const results = Array.isArray(response) ? response : (response.results || []);
+    const results = Array.isArray(response) ? response : (response?.results || []);
     
     return {
-      count: results.length,
-      results
+      count: Array.isArray(results) ? results.length : 0,
+      results: Array.isArray(results) ? results : []
     };
   }
 
