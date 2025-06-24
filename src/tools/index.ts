@@ -134,10 +134,11 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'get_device_status': {
-          const boxId = args?.box_id as string | undefined;
-          const groupId = args?.group_id as string | undefined;
+          const deviceId = args?.device_id as string | undefined;
+          const includeOffline = (args?.include_offline as boolean) !== false; // Default to true
+          const limit = (args?.limit as number) || 500; // Default to 500 to get all devices
           
-          const devicesResponse = await firewalla.getDeviceStatus(boxId, groupId);
+          const devicesResponse = await firewalla.getDeviceStatus(deviceId, includeOffline, limit);
           
           return {
             content: [
@@ -170,8 +171,8 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         case 'get_offline_devices': {
           const sortByLastSeen = (args?.sort_by_last_seen as boolean) ?? true;
           
-          // Get all devices including offline ones
-          const allDevicesResponse = await firewalla.getDeviceStatus();
+          // Get all devices including offline ones with high limit to ensure no truncation
+          const allDevicesResponse = await firewalla.getDeviceStatus(undefined, undefined, 1000);
           
           // Filter to only offline devices
           let offlineDevices = allDevicesResponse.results.filter(device => !device.online);
@@ -209,7 +210,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
 
         case 'get_bandwidth_usage': {
           const period = args?.period as string;
-          const top = (args?.top as number) || 10;
+          const top = (args?.top as number) || 50; // Increased default from 10 to 50
           
           if (!period) {
             throw new Error('Period parameter is required');
@@ -243,9 +244,9 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         case 'get_network_rules': {
           const query = args?.query as string | undefined;
           const summaryOnly = (args?.summary_only as boolean) ?? false;
-          const limit = (args?.limit as number) || 50;
+          const limit = (args?.limit as number) || 500; // Increased from 50 to 500
           
-          const response = await firewalla.getNetworkRules(query);
+          const response = await firewalla.getNetworkRules(query, limit);
           
           // Apply additional optimization if summary mode requested
           let optimizedResponse = response;
@@ -395,7 +396,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         }
 
         case 'get_most_active_rules': {
-          const limit = Math.min((args?.limit as number) || 20, 50);
+          const limit = (args?.limit as number) || 100; // Increased default from 20 to 100, removed 50 cap
           const minHits = (args?.min_hits as number) || 1;
           const ruleType = args?.rule_type as string | undefined;
           
@@ -444,7 +445,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
 
         case 'get_recent_rules': {
           const hours = Math.min((args?.hours as number) || 24, 168); // Default 24h, max 1 week
-          const limit = Math.min((args?.limit as number) || 30, 100);
+          const limit = (args?.limit as number) || 100; // Increased default from 30 to 100, removed cap
           const ruleType = args?.rule_type as string | undefined;
           const includeModified = (args?.include_modified as boolean) ?? true;
           
@@ -547,7 +548,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
                     owner: list.owner,
                     category: list.category,
                     entry_count: list.targets?.length || 0,
-                    targets: list.targets?.slice(0, 10) || [],
+                    targets: list.targets?.slice(0, 500) || [], // Increased from 100 to 500 targets per list
                     last_updated: new Date(list.lastUpdated * 1000).toISOString(),
                     notes: list.notes,
                   })),

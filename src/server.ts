@@ -66,9 +66,9 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum number of results (default: 20)',
+                  description: 'Results per page (default: 200, use cursor for more)',
                   minimum: 1,
-                  maximum: 100,
+                  maximum: 10000,
                 },
                 cursor: {
                   type: 'string',
@@ -93,9 +93,9 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (default: 50)',
+                  description: 'Results per page (default: 200, use cursor for more)',
                   minimum: 1,
-                  maximum: 100,
+                  maximum: 10000,
                 },
                 cursor: {
                   type: 'string',
@@ -117,6 +117,12 @@ export class FirewallaMCPServer {
                 group_id: {
                   type: 'string',
                   description: 'Filter devices under a specific device group',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of devices to return (default: 500)',
+                  minimum: 1,
+                  maximum: 10000,
                 },
               },
             },
@@ -147,9 +153,9 @@ export class FirewallaMCPServer {
                 },
                 top: {
                   type: 'number',
-                  description: 'Number of top devices (default: 10)',
+                  description: 'Number of top devices (default: 50)',
                   minimum: 1,
-                  maximum: 50,
+                  maximum: 500,
                 },
               },
               required: ['period'],
@@ -171,9 +177,9 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum number of rules to return (default: 50, max: 200)',
+                  description: 'Maximum number of rules to return (default: 500)',
                   minimum: 1,
-                  maximum: 200,
+                  maximum: 10000,
                 },
                 summary_only: {
                   type: 'boolean',
@@ -383,9 +389,9 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (default: 50)',
+                  description: 'Maximum results (default: 1000)',
                   minimum: 1,
-                  maximum: 1000,
+                  maximum: 10000,
                 },
                 offset: {
                   type: 'number',
@@ -433,9 +439,9 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (default: 50)',
+                  description: 'Maximum results (default: 1000)',
                   minimum: 1,
-                  maximum: 1000,
+                  maximum: 10000,
                 },
                 offset: {
                   type: 'number',
@@ -475,9 +481,9 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (default: 50)',
+                  description: 'Maximum results (default: 1000)',
                   minimum: 1,
-                  maximum: 1000,
+                  maximum: 10000,
                 },
                 offset: {
                   type: 'number',
@@ -524,9 +530,9 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (default: 50)',
+                  description: 'Maximum results (default: 1000)',
                   minimum: 1,
-                  maximum: 1000,
+                  maximum: 10000,
                 },
                 offset: {
                   type: 'number',
@@ -566,9 +572,9 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (default: 50)',
+                  description: 'Maximum results (default: 1000)',
                   minimum: 1,
-                  maximum: 1000,
+                  maximum: 10000,
                 },
                 offset: {
                   type: 'number',
@@ -651,9 +657,9 @@ export class FirewallaMCPServer {
               properties: {
                 limit: {
                   type: 'number',
-                  description: 'Number of top rules to return (default: 20, max: 50)',
+                  description: 'Number of top rules to return (default: 100)',
                   minimum: 1,
-                  maximum: 50,
+                  maximum: 1000,
                 },
                 min_hits: {
                   type: 'number',
@@ -681,9 +687,9 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum number of rules to return (default: 30, max: 100)',
+                  description: 'Maximum number of rules to return (default: 100)',
                   minimum: 1,
-                  maximum: 100,
+                  maximum: 1000,
                 },
                 rule_type: {
                   type: 'string',

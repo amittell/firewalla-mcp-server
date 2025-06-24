@@ -187,13 +187,8 @@ export class FirewallaClient {
   ): Promise<{count: number; results: Alarm[]; next_cursor?: string}> {
     const params: Record<string, unknown> = {
       sortBy,
-      limit: Math.min(limit, 500), // API max is 500
+      limit: limit, // Remove artificial limit - let pagination handle large datasets
     };
-    
-    // Add default box filter if configured
-    if (this.config.boxId && this.config.boxId.trim()) {
-      params.gid = this.config.boxId.trim();
-    }
     
     if (query) {
       params.query = query;
@@ -205,7 +200,11 @@ export class FirewallaClient {
       params.cursor = cursor;
     }
 
-    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/alarms`, params);
+    const endpoint = this.config.boxId && this.config.boxId.trim() 
+      ? `/boxes/${this.config.boxId.trim()}/alarms`
+      : `/alarms`;
+
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', endpoint, params);
     
     // API returns {count, results[], next_cursor} format
     const alarms = (Array.isArray(response.results) ? response.results : []).map((item: any): Alarm => ({
@@ -244,7 +243,7 @@ export class FirewallaClient {
   ): Promise<{count: number; results: Flow[]; next_cursor?: string}> {
     const params: Record<string, unknown> = {
       sortBy,
-      limit: Math.min(limit, 500), // API max is 500
+      limit: limit, // Remove artificial limit - let pagination handle large datasets
     };
     
     if (query) {
@@ -257,7 +256,7 @@ export class FirewallaClient {
       params.cursor = cursor;
     }
 
-    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/flows`, params);
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/flows`, params);
     
     // API returns {count, results[], next_cursor} format
     const flows = (Array.isArray(response.results) ? response.results : []).map((item: any): Flow => {
@@ -340,22 +339,19 @@ export class FirewallaClient {
 
 
   @optimizeResponse('devices')
-  async getDeviceStatus(boxId?: string, groupId?: string): Promise<{count: number; results: Device[]; next_cursor?: string}> {
+  async getDeviceStatus(deviceId?: string, includeOffline = true, limit = 500): Promise<{count: number; results: Device[]; next_cursor?: string}> {
     try {
       // Input validation and sanitization
-      const params: Record<string, unknown> = {};
-      
-      if (boxId && boxId.trim()) {
-        params.box = boxId.trim();
-      } else if (this.config.boxId && this.config.boxId.trim()) {
-        params.box = this.config.boxId.trim();
-      }
-      if (groupId && groupId.trim()) {
-        params.group = groupId.trim();
-      }
+      const params: Record<string, unknown> = {
+        limit: limit, // Remove artificial limit - let API handle large datasets
+      };
+
+      const endpoint = this.config.boxId?.trim() 
+        ? `/boxes/${this.config.boxId.trim()}/devices`
+        : `/devices`;
 
       // API returns direct array of devices
-      const response = await this.request<Device[]>('GET', `/v2/devices`, params);
+      const response = await this.request<Device[]>('GET', endpoint, params);
       
       // Enhanced null safety and error handling
       const rawResults = Array.isArray(response) ? response : [];
@@ -363,10 +359,24 @@ export class FirewallaClient {
       // Debug logging
       process.stderr.write(`Raw device response count: ${rawResults.length}\n`);
       
-      const results = rawResults
+      let results = rawResults
         .filter(item => item && typeof item === 'object')
         .map(item => this.transformDevice(item))
         .filter(device => device && device.id && device.id !== 'unknown');
+      
+      // Filter by device ID if provided
+      if (deviceId && deviceId.trim()) {
+        const targetId = deviceId.trim().toLowerCase();
+        results = results.filter(device => 
+          device.id.toLowerCase() === targetId ||
+          (device.mac && device.mac.toLowerCase().replace(/[:-]/g, '') === targetId.replace(/[:-]/g, ''))
+        );
+      }
+      
+      // Filter by online status if requested
+      if (!includeOffline) {
+        results = results.filter(device => device.online);
+      }
       
       process.stderr.write(`Filtered device count: ${results.length}\n`);
       
@@ -431,11 +441,11 @@ export class FirewallaClient {
 
   private transformDevice = (item: any): Device => {
     const device: Device = {
-      id: item.id || 'unknown',
+      id: item.id || item.gid || item._id || 'unknown',
       gid: item.gid || this.config.boxId,
       name: item.name || item.hostname || item.deviceName || 'Unknown Device',
-      ip: item.ip || item.ipAddress || item.local_ip || 'unknown',
-      online: Boolean(item.online),
+      ip: item.ip || item.ipAddress || item.localIP || 'unknown',
+      online: Boolean(item.online || item.isOnline || item.connected),
       ipReserved: Boolean(item.ipReserved),
       network: {
         id: item.network?.id || 'unknown',
@@ -445,12 +455,20 @@ export class FirewallaClient {
       totalUpload: item.totalUpload || 0,
     };
     
-    if (item.macVendor) {
-      device.macVendor = item.macVendor;
+    if (item.mac || item.macAddress || item.hardwareAddr) {
+      device.mac = item.mac || item.macAddress || item.hardwareAddr;
     }
     
-    if (item.lastSeen) {
-      device.lastSeen = item.lastSeen;
+    if (item.macVendor || item.manufacturer || item.vendor) {
+      device.macVendor = item.macVendor || item.manufacturer || item.vendor;
+    }
+    
+    if (item.lastSeen || item.onlineTs || item.lastActivity) {
+      // Handle different timestamp formats
+      const timestamp = item.lastSeen || item.onlineTs || item.lastActivity;
+      device.lastSeen = typeof timestamp === 'number' && timestamp > 1000000000000 
+        ? Math.floor(timestamp / 1000) 
+        : timestamp;
     }
     
     if (item.group) {
@@ -473,7 +491,7 @@ export class FirewallaClient {
       
       const validPeriods = ['1h', '24h', '7d', '30d'];
       const validatedPeriod = validPeriods.includes(period.toLowerCase()) ? period.toLowerCase() : '24h';
-      const validatedTop = Math.max(1, Math.min(Number(top) || 10, 50));
+      const validatedTop = Math.max(1, Number(top) || 50); // Remove artificial cap
       
       // Calculate timestamp range based on period with validation
       const end = Math.floor(Date.now() / 1000);
@@ -573,14 +591,16 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('rules')
-  async getNetworkRules(query?: string): Promise<{count: number; results: NetworkRule[]; next_cursor?: string}> {
-    const params: Record<string, unknown> = {};
+  async getNetworkRules(query?: string, limit = 500): Promise<{count: number; results: NetworkRule[]; next_cursor?: string}> {
+    const params: Record<string, unknown> = {
+      limit: limit, // Remove artificial limit - let API handle large datasets
+    };
     
     if (query) {
       params.query = query;
     }
 
-    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/rules`, params);
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/rules`, params);
     
     // API returns {count, results[]} format
     const rules = (Array.isArray(response.results) ? response.results : []).map((item: any): NetworkRule => ({
@@ -713,7 +733,7 @@ export class FirewallaClient {
       }
 
       // API returns direct array of boxes
-      const response = await this.request<any[]>('GET', `/v2/boxes`, params, true);
+      const response = await this.request<any[]>('GET', `/boxes`, params, true);
       
       // Enhanced null safety and data validation
       const rawResults = Array.isArray(response) ? response : [];
@@ -766,7 +786,7 @@ export class FirewallaClient {
         throw new Error('Alarm ID contains invalid characters');
       }
 
-      const response = await this.request<any>('GET', `/v2/alarms/${this.config.boxId}/${validatedAlarmId}`);
+      const response = await this.request<any>('GET', `/alarms/${this.config.boxId}/${validatedAlarmId}`);
       
       // Enhanced null/undefined checks for response
       if (!response || typeof response !== 'object') {
@@ -889,7 +909,7 @@ export class FirewallaClient {
 
       const response = await this.request<{ success: boolean; message: string; deleted?: boolean; status?: string }>(
         'DELETE',
-        `/v2/alarms/${this.config.boxId}/${validatedAlarmId}`,
+        `/alarms/${this.config.boxId}/${validatedAlarmId}`,
         undefined,
         false
       );
@@ -1596,7 +1616,7 @@ export class FirewallaClient {
     
     const params: Record<string, unknown> = {
       query: optimizedQuery,
-      limit: Math.min(searchQuery.limit || 50, 1000),
+      limit: searchQuery.limit || 1000, // Remove artificial cap
       sortBy: searchQuery.sort_by || 'ts:desc',
     };
     
@@ -1628,7 +1648,7 @@ export class FirewallaClient {
       params.query = params.query ? `${params.query} AND block:false` : 'block:false';
     }
 
-    const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/flows`, params);
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/search/flows`, params);
     
     // Defensive programming: ensure results is an array before mapping
     const resultsList = Array.isArray(response.results) ? response.results : [];
@@ -1725,7 +1745,7 @@ export class FirewallaClient {
       }
       
       // Enhanced parameter validation and construction
-      const limit = searchQuery.limit ? Math.min(Math.max(1, Number(searchQuery.limit)), 1000) : 50;
+      const limit = searchQuery.limit ? Math.max(1, Number(searchQuery.limit)) : 1000; // Remove artificial cap
       const sortBy = searchQuery.sort_by && typeof searchQuery.sort_by === 'string' ? searchQuery.sort_by : 'ts:desc';
       
       const params: Record<string, unknown> = {
@@ -1762,7 +1782,7 @@ export class FirewallaClient {
       // Enhanced API request with better error handling
       let response;
       try {
-        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/alarms`, params);
+        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/search/alarms`, params);
       } catch (apiError) {
         if (apiError instanceof Error) {
           if (apiError.message.includes('timeout')) {
@@ -1931,7 +1951,7 @@ export class FirewallaClient {
       }
       
       // Enhanced parameter validation and construction
-      const limit = searchQuery.limit ? Math.min(Math.max(1, Number(searchQuery.limit)), 1000) : 50;
+      const limit = searchQuery.limit ? Math.max(1, Number(searchQuery.limit)) : 1000; // Remove artificial cap
       const sortBy = searchQuery.sort_by && typeof searchQuery.sort_by === 'string' ? searchQuery.sort_by : 'ts:desc';
       
       const params: Record<string, unknown> = {
@@ -1959,7 +1979,7 @@ export class FirewallaClient {
       // Enhanced API request with better error handling
       let response;
       try {
-        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/rules`, params);
+        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/search/rules`, params);
       } catch (apiError) {
         if (apiError instanceof Error) {
           if (apiError.message.includes('timeout')) {
@@ -2141,7 +2161,7 @@ export class FirewallaClient {
       }
       
       // Enhanced parameter validation and construction
-      const limit = searchQuery.limit ? Math.min(Math.max(1, Number(searchQuery.limit)), 1000) : 50;
+      const limit = searchQuery.limit ? Math.max(1, Number(searchQuery.limit)) : 1000; // Remove artificial cap
       const sortBy = searchQuery.sort_by && typeof searchQuery.sort_by === 'string' ? searchQuery.sort_by : 'name:asc';
       
       const params: Record<string, unknown> = {
@@ -2168,7 +2188,7 @@ export class FirewallaClient {
       // Enhanced API request with better error handling
       let response;
       try {
-        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/devices`, params);
+        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/search/devices`, params);
       } catch (apiError) {
         if (apiError instanceof Error) {
           if (apiError.message.includes('timeout')) {
@@ -2281,7 +2301,7 @@ export class FirewallaClient {
       }
       
       // Enhanced parameter validation and construction
-      const limit = searchQuery.limit ? Math.min(Math.max(1, Number(searchQuery.limit)), 1000) : 50;
+      const limit = searchQuery.limit ? Math.max(1, Number(searchQuery.limit)) : 1000; // Remove artificial cap
       const sortBy = searchQuery.sort_by && typeof searchQuery.sort_by === 'string' ? searchQuery.sort_by : 'name:asc';
       
       const params: Record<string, unknown> = {
@@ -2325,7 +2345,7 @@ export class FirewallaClient {
       // Enhanced API request with better error handling
       let response;
       try {
-        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/target-lists`, params);
+        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/search/target-lists`, params);
       } catch (apiError) {
         if (apiError instanceof Error) {
           if (apiError.message.includes('timeout')) {
@@ -2640,7 +2660,7 @@ export class FirewallaClient {
       }
       
       // Sanitize inputs to prevent injection
-      const sanitizedLimit = Math.min(Math.max(Math.floor(limit), 1), 50);
+      const sanitizedLimit = Math.max(Math.floor(limit), 1); // Remove artificial cap
       const sanitizedMinHits = Math.max(Math.floor(minHits), 0);
       const sanitizedRuleType = ruleType ? this.sanitizeInput(ruleType.trim()) : undefined;
       
@@ -2733,7 +2753,7 @@ export class FirewallaClient {
       
       // Sanitize inputs to prevent issues
       const sanitizedHours = Math.min(Math.max(hours, 0.1), 168); // Min 6 minutes, max 7 days
-      const sanitizedLimit = Math.min(Math.max(Math.floor(limit), 1), 100);
+      const sanitizedLimit = Math.max(Math.floor(limit), 1); // Remove artificial cap
       const sanitizedRuleType = ruleType ? this.sanitizeInput(ruleType.trim()) : undefined;
       
       const rules = await this.getNetworkRules();
@@ -2847,14 +2867,14 @@ export class FirewallaClient {
       
       const response = await this.request<{success: boolean; message: string}>(
         'POST',
-        `/v2/rules/${validatedRuleId}/pause`,
+        `/rules/${validatedRuleId}/pause`,
         { duration: validatedDuration },
         false
       );
 
       return {
-        success: Boolean(response.success),
-        message: response.message || `Rule ${validatedRuleId} paused for ${validatedDuration} minutes`
+        success: Boolean(response && response.success),
+        message: (response && response.message) || `Rule ${validatedRuleId} paused for ${validatedDuration} minutes`
       };
     } catch (error) {
       console.error('Error in pauseRule:', error);
@@ -2876,7 +2896,7 @@ export class FirewallaClient {
 
       const response = await this.request<{success: boolean; message: string}>(
         'POST',
-        `/v2/rules/${validatedRuleId}/resume`,
+        `/rules/${validatedRuleId}/resume`,
         {},
         false
       );

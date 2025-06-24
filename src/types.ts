@@ -192,14 +192,16 @@ export interface Device {
   name: string;
   /** IP address assigned to the device */
   ip: string;
+  /** MAC address of the device */
+  mac?: string;
   /** MAC vendor registered to the MAC address */
   macVendor?: string;
   /** Alternative field name for MAC vendor (for schema compatibility) */
   mac_vendor?: string;
   /** Current connectivity status */
   online: boolean;
-  /** Timestamp when device was last seen (as string) */
-  lastSeen?: string;
+  /** Timestamp when device was last seen (unix timestamp) */
+  lastSeen?: number;
   /** Whether IP is reserved on the box */
   ipReserved: boolean;
   /** Network where device flows were captured */
