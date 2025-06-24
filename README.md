@@ -224,9 +224,6 @@ npx firewalla-mcp-server
 
 # Direct execution (from source after build)
 node dist/server.js
-
-# Using built-in startup script (from source)
-./start-mcp.sh
 ```
 
 ### Project Structure
