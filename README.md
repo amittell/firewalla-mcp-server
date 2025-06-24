@@ -145,7 +145,7 @@ To use the Docker configuration option above, first build the image:
 docker build -t firewalla-mcp-server .
 
 # Optional: Tag with semantic version
-docker build -t firewalla-mcp-server:1.5.0 .
+docker build -t firewalla-mcp-server:1.0.0 .
 
 # Push to registry (if deploying to remote)
 docker tag firewalla-mcp-server your-registry/firewalla-mcp-server:latest
@@ -209,6 +209,9 @@ Once connected, you can ask Claude questions like:
 
 #### Rule Management
 - `get_network_rules` - Retrieve firewall rules with complete rule names, conditions, and metadata
+- `get_network_rules_summary` - Overview statistics and counts by category
+- `get_most_active_rules` - Rules with highest hit counts for traffic analysis
+- `get_recent_rules` - Recently created or modified firewall rules
 - `pause_rule` - Temporarily disable specific firewall rules
 - `resume_rule` - Re-enable previously paused firewall rules
 
@@ -340,7 +343,7 @@ DEBUG=mcp:* npm run mcp:start
 
 ## Recent Improvements
 
-### Enhanced Data Mapping (v1.3.0)
+### Enhanced Data Mapping (v1.0.0)
 All MCP tools now return complete, well-structured data:
 
 **Core Tool Improvements:**
@@ -349,7 +352,7 @@ All MCP tools now return complete, well-structured data:
 - `get_network_rules`: Full rule specifications with names, conditions, and comprehensive metadata
 - `get_flow_data`: Rich connection details with applications, device names, and traffic statistics
 
-### Advanced Analytics (v1.4.0)
+### Advanced Analytics (v1.0.0)
 **New Statistics and Trends Tools:**
 - Health scoring system for network assessment
 - Regional flow analysis with country-level breakdowns
@@ -357,7 +360,7 @@ All MCP tools now return complete, well-structured data:
 - Historical trend analysis for flows, alarms, and rules
 - Comprehensive offline device tracking
 
-### Advanced Search Engine (v1.5.0)
+### Advanced Search Engine (v1.0.0)
 **Powerful Query Capabilities:**
 - Complex search syntax with logical operators (AND, OR, NOT)
 - Field-specific filters with wildcards and ranges
