@@ -291,6 +291,7 @@ export class SuccessCriteriaFramework {
       ...roadmap.criticalIssues
     ];
 
+    const qualifiedSet = new Set(roadmap.qualified100Percent);
     const categories = ['core', 'analytics', 'rules', 'search', 'specialized'];
     
     for (const category of categories) {
@@ -302,7 +303,7 @@ export class SuccessCriteriaFramework {
         averageSuccessRate: successRates.length > 0 
           ? Math.round(successRates.reduce((sum, rate) => sum + rate, 0) / successRates.length)
           : 0,
-        qualified: categoryTools.filter(tool => roadmap.qualified100Percent.includes(tool)).length
+        qualified: categoryTools.filter(tool => qualifiedSet.has(tool)).length
       };
     }
 

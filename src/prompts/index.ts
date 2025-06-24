@@ -429,9 +429,9 @@ function analyzeFlowPatterns(flows: Array<{ protocol: string; duration: number; 
 
 function calculateNetworkHealthScore(data: {
   summary: { status: string; cpu_usage: number; memory_usage: number; uptime: number };
-  devices: { count: number; results: Array<{ online: boolean }> };
+  devices: { count: number; results: Array<{ online: boolean; [key: string]: any }> };
   metrics: { active_alarms: number; threat_level: string };
-  topology: { subnets: unknown[] };
+  topology: { subnets: Array<any> }; // or define proper Subnet type
   rules: { count: number; results: Array<{ status?: string }> };
 }): number {
   let score = 100;

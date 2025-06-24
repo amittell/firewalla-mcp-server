@@ -105,7 +105,7 @@ class PrecisionDiagnostics {
             const toolPattern = new RegExp(`case\\s+'${toolName}':[\\s\\S]*?break;`, 'g');
             const toolMatch = toolsContent.match(toolPattern);
             
-            if (toolMatch && toolMatch[0]) {
+            if (toolMatch?.[0]) {
                 const toolImpl = toolMatch[0];
                 
                 // Extract parameters from args?.parameter patterns
