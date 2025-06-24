@@ -259,4 +259,4 @@ box-id.txt
 
 # Git
 .git/
-.gitconfig
+.gitconfig.claude/settings.local.json
