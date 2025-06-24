@@ -398,7 +398,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         case 'get_most_active_rules': {
           const limit = (args?.limit as number) || 100; // Increased default from 20 to 100, removed 50 cap
           const minHits = (args?.min_hits as number) || 1;
-          const ruleType = args?.rule_type as string | undefined;
+          const ruleType = args?.rule_type as string | undefined; // TODO: Implement rule type filtering
           
           const allRulesResponse = await firewalla.getNetworkRules(); // Only active rules for traffic analysis
           
@@ -446,7 +446,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         case 'get_recent_rules': {
           const hours = Math.min((args?.hours as number) || 24, 168); // Default 24h, max 1 week
           const limit = (args?.limit as number) || 100; // Increased default from 30 to 100, removed cap
-          const ruleType = args?.rule_type as string | undefined;
+          const ruleType = args?.rule_type as string | undefined; // TODO: Implement rule type filtering
           const includeModified = (args?.include_modified as boolean) ?? true;
           
           const allRulesResponse = await firewalla.getNetworkRules();
@@ -1239,7 +1239,7 @@ function calculateHealthScore(stats: { onlineBoxes: number; offlineBoxes: number
   let score = 100;
   
   const totalBoxes = stats.onlineBoxes + stats.offlineBoxes;
-  if (totalBoxes === 0) return 0;
+  if (totalBoxes === 0) {return 0;}
   
   // Penalize for offline boxes (up to -40 points)
   const offlineRatio = stats.offlineBoxes / totalBoxes;
@@ -1258,7 +1258,7 @@ function calculateHealthScore(stats: { onlineBoxes: number; offlineBoxes: number
 
 // Helper function for rule stability calculation
 function calculateRuleStability(trends: Array<{ ts: number; value: number }>): number {
-  if (trends.length < 2) return 100;
+  if (trends.length < 2) {return 100;}
   
   let totalVariation = 0;
   for (let i = 1; i < trends.length; i++) {
@@ -1271,7 +1271,7 @@ function calculateRuleStability(trends: Array<{ ts: number; value: number }>): n
   }
   
   const avgValue = trends.reduce((sum, t) => sum + t.value, 0) / trends.length;
-  if (avgValue === 0) return 100;
+  if (avgValue === 0) {return 100;}
   
   const variationPercentage = (totalVariation / (trends.length - 1)) / avgValue;
   return Math.max(0, Math.min(100, Math.round((1 - variationPercentage) * 100)));

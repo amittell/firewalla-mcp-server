@@ -237,7 +237,7 @@ function formatUptime(seconds: number): string {
 }
 
 function calculatePerformanceScore(summary: { cpu_usage: number; memory_usage: number; status: string }): number {
-  if (summary.status !== 'online') return 0;
+  if (summary.status !== 'online') {return 0;}
   const cpuScore = Math.max(0, 100 - summary.cpu_usage);
   const memScore = Math.max(0, 100 - summary.memory_usage);
   return Math.round((cpuScore + memScore) / 2);
@@ -279,15 +279,15 @@ function calculateSubnetSize(cidr: string): number {
 }
 
 function categorizeConnection(bandwidth: number): 'low' | 'medium' | 'high' {
-  if (bandwidth < 1024 * 1024) return 'low'; // < 1MB
-  if (bandwidth < 100 * 1024 * 1024) return 'medium'; // < 100MB
+  if (bandwidth < 1024 * 1024) {return 'low';} // < 1MB
+  if (bandwidth < 100 * 1024 * 1024) {return 'medium';} // < 100MB
   return 'high';
 }
 
 function calculateConnectivityScore(topology: { subnets: unknown[]; connections: unknown[] }): number {
   const subnetCount = topology.subnets.length;
   const connectionCount = topology.connections.length;
-  if (subnetCount === 0) return 0;
+  if (subnetCount === 0) {return 0;}
   return Math.min(100, (connectionCount / subnetCount) * 50);
 }
 
@@ -299,8 +299,8 @@ function identifyBottlenecks(connections: Array<{ bandwidth: number; source: str
 }
 
 function categorizeThreatLevel(threatCount: number): 'low' | 'medium' | 'high' {
-  if (threatCount < 10) return 'low';
-  if (threatCount < 50) return 'medium';
+  if (threatCount < 10) {return 'low';}
+  if (threatCount < 50) {return 'medium';}
   return 'high';
 }
 
@@ -320,8 +320,8 @@ function getTimeAgo(timestamp: string): string {
   const diffMs = now.getTime() - then.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+  if (diffMins < 60) {return `${diffMins}m ago`;}
+  if (diffMins < 1440) {return `${Math.floor(diffMins / 60)}h ago`;}
   return `${Math.floor(diffMins / 1440)}d ago`;
 }
 

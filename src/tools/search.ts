@@ -394,7 +394,7 @@ export class SearchEngine {
         correlations: []
       };
 
-      for (const [index, secondaryQuery] of params.secondary_queries.entries()) {
+      for (const [, secondaryQuery] of params.secondary_queries.entries()) {
         // For simplicity, assume secondary queries are for alarms
         const secondaryResult = await this.searchAlarms({ query: secondaryQuery });
         
@@ -433,9 +433,9 @@ export class SearchEngine {
    */
   private applyFiltersRecursively(node: any, context: FilterContext): any {
     switch (node.type) {
-      case 'logical':
+      case 'logical': {
         // For logical nodes, apply filters to operands and combine
-        let combinedResult: { apiParams: any, postProcessing?: (items: any[]) => any[] } = { apiParams: {}, postProcessing: undefined };
+        const combinedResult: { apiParams: any, postProcessing?: (items: any[]) => any[] } = { apiParams: {}, postProcessing: undefined };
         
         if (node.left) {
           const leftResult = this.applyFiltersRecursively(node.left, context);
@@ -476,7 +476,7 @@ export class SearchEngine {
         }
         
         return combinedResult;
-        
+      }
       case 'group':
         return this.applyFiltersRecursively(node.query, context);
         
@@ -494,7 +494,7 @@ export class SearchEngine {
       const valueA = this.getNestedValue(a, sortBy);
       const valueB = this.getNestedValue(b, sortBy);
       
-      if (valueA === valueB) return 0;
+      if (valueA === valueB) {return 0;}
       
       const comparison = valueA < valueB ? -1 : 1;
       return sortOrder === 'asc' ? comparison : -comparison;

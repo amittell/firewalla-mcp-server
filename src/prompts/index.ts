@@ -437,10 +437,10 @@ function calculateNetworkHealthScore(data: {
   let score = 100;
 
   // System health (30 points)
-  if (data.summary.status !== 'online') score -= 30;
-  if (data.summary.cpu_usage > 80) score -= 10;
-  if (data.summary.memory_usage > 85) score -= 10;
-  if (data.summary.uptime < 86400) score -= 5; // Less than 1 day
+  if (data.summary.status !== 'online') {score -= 30;}
+  if (data.summary.cpu_usage > 80) {score -= 10;}
+  if (data.summary.memory_usage > 85) {score -= 10;}
+  if (data.summary.uptime < 86400) {score -= 5;} // Less than 1 day
 
   // Connectivity (25 points)
   const onlineRatio = data.devices.results.filter(d => d.online).length / data.devices.count;
@@ -453,14 +453,14 @@ function calculateNetworkHealthScore(data: {
 
   // Configuration (15 points)
   const activeRules = data.rules.results.filter(r => r.status === 'active' || !r.status).length;
-  if (activeRules === 0) score -= 15;
-  if (data.topology.subnets.length === 0) score -= 5;
+  if (activeRules === 0) {score -= 15;}
+  if (data.topology.subnets.length === 0) {score -= 5;}
 
   return Math.max(0, Math.round(score));
 }
 
 function calculatePerformanceScore(summary: { cpu_usage: number; memory_usage: number; status: string }): number {
-  if (summary.status !== 'online') return 0;
+  if (summary.status !== 'online') {return 0;}
   const cpuScore = Math.max(0, 100 - summary.cpu_usage);
   const memScore = Math.max(0, 100 - summary.memory_usage);
   return Math.round((cpuScore + memScore) / 2);

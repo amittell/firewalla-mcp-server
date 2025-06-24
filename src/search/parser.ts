@@ -250,7 +250,7 @@ export class QueryParser {
     
     while (this.match(TokenType.LOGICAL) && this.previous().value === 'OR') {
       const right = this.parseAndExpression();
-      if (!right) break;
+      if (!right) {break;}
       
       left = {
         type: 'logical',
@@ -271,7 +271,7 @@ export class QueryParser {
     
     while (this.match(TokenType.LOGICAL) && this.previous().value === 'AND') {
       const right = this.parseNotExpression();
-      if (!right) break;
+      if (!right) {break;}
       
       left = {
         type: 'logical',
@@ -460,9 +460,9 @@ export class QueryParser {
           }
           break;
         case 'logical':
-          if (n.left) validateNode(n.left);
-          if (n.right) validateNode(n.right);
-          if (n.operand) validateNode(n.operand);
+          if (n.left) {validateNode(n.left);}
+          if (n.right) {validateNode(n.right);}
+          if (n.operand) {validateNode(n.operand);}
           break;
         case 'group':
           validateNode(n.query);
@@ -510,12 +510,12 @@ export class QueryParser {
   }
 
   private check(type: TokenType): boolean {
-    if (this.isAtEnd()) return false;
+    if (this.isAtEnd()) {return false;}
     return this.peek().type === type;
   }
 
   private advance(): Token {
-    if (!this.isAtEnd()) this.current++;
+    if (!this.isAtEnd()) {this.current++;}
     return this.previous();
   }
 

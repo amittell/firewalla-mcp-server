@@ -107,28 +107,28 @@ export class StructuredLogger {
   }
 
   error(message: string, error?: Error, metadata?: Record<string, unknown>, traceId?: string, requestId?: string): void {
-    if (!this.shouldLog('error')) return;
+    if (!this.shouldLog('error')) {return;}
     
     const entry = this.createLogEntry('error', message, metadata, error, traceId, requestId);
     this.output(entry);
   }
 
   warn(message: string, metadata?: Record<string, unknown>, traceId?: string, requestId?: string): void {
-    if (!this.shouldLog('warn')) return;
+    if (!this.shouldLog('warn')) {return;}
     
     const entry = this.createLogEntry('warn', message, metadata, undefined, traceId, requestId);
     this.output(entry);
   }
 
   info(message: string, metadata?: Record<string, unknown>, traceId?: string, requestId?: string): void {
-    if (!this.shouldLog('info')) return;
+    if (!this.shouldLog('info')) {return;}
     
     const entry = this.createLogEntry('info', message, metadata, undefined, traceId, requestId);
     this.output(entry);
   }
 
   debug(message: string, metadata?: Record<string, unknown>, traceId?: string, requestId?: string): void {
-    if (!this.shouldLog('debug')) return;
+    if (!this.shouldLog('debug')) {return;}
     
     const entry = this.createLogEntry('debug', message, metadata, undefined, traceId, requestId);
     this.output(entry);

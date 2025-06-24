@@ -87,7 +87,7 @@ export class SecurityManager {
   }
 
   validateOrigin(origin?: string): boolean {
-    if (!origin) return true; // Allow requests without origin (local tools)
+    if (!origin) {return true;} // Allow requests without origin (local tools)
     
     return SecurityManager.ALLOWED_ORIGINS.some(allowed => 
       origin.includes(allowed)

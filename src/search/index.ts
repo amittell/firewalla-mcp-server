@@ -47,7 +47,7 @@ export function parseSearchQuery(query: string): ParsedQuery {
   
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i]?.trim();
-    if (!token) continue;
+    if (!token) {continue;}
     
     // Check if token is a logical operator
     if (/^(AND|OR|NOT)$/i.test(token)) {

@@ -3,7 +3,7 @@ import {
   FirewallaConfig,
   Alarm,
   Flow,
-  FlowData,
+  FlowData, // TODO: Implement FlowData usage
   Device,
   BandwidthUsage,
   NetworkRule,
@@ -14,8 +14,8 @@ import {
   SearchOptions,
   CrossReferenceResult,
 } from '../types.js';
-import { parseSearchQuery, formatQueryForAPI, buildSearchOptions } from '../search/index.js';
-import { optimizeResponse, ResponseOptimizer } from '../optimization/index.js';
+import { parseSearchQuery, formatQueryForAPI, buildSearchOptions } from '../search/index.js'; // TODO: Implement buildSearchOptions usage
+import { optimizeResponse, ResponseOptimizer } from '../optimization/index.js'; // TODO: Implement ResponseOptimizer usage
 
 interface APIResponse<T> {
   success: boolean;
@@ -261,7 +261,7 @@ export class FirewallaClient {
     // API returns {count, results[], next_cursor} format
     const flows = (Array.isArray(response.results) ? response.results : []).map((item: any): Flow => {
       const parseTimestamp = (ts: any): number => {
-        if (!ts) return Math.floor(Date.now() / 1000);
+        if (!ts) {return Math.floor(Date.now() / 1000);}
         
         if (typeof ts === 'number') {
           return ts > 1000000000000 ? Math.floor(ts / 1000) : ts;
@@ -417,9 +417,9 @@ export class FirewallaClient {
             const aLastSeen = new Date(a.lastSeen || 0).getTime();
             const bLastSeen = new Date(b.lastSeen || 0).getTime();
             // Handle invalid dates
-            if (isNaN(aLastSeen) && isNaN(bLastSeen)) return 0;
-            if (isNaN(aLastSeen)) return 1;
-            if (isNaN(bLastSeen)) return -1;
+            if (isNaN(aLastSeen) && isNaN(bLastSeen)) {return 0;}
+            if (isNaN(aLastSeen)) {return 1;}
+            if (isNaN(bLastSeen)) {return -1;}
             return bLastSeen - aLastSeen; // Most recent first
           });
         } catch (sortError) {
@@ -795,7 +795,7 @@ export class FirewallaClient {
 
       // Enhanced timestamp parsing with better validation
       const parseTimestamp = (ts: any): number => {
-        if (!ts && ts !== 0) return Math.floor(Date.now() / 1000);
+        if (!ts && ts !== 0) {return Math.floor(Date.now() / 1000);}
         
         if (typeof ts === 'number') {
           // Handle milliseconds vs seconds timestamp
@@ -997,7 +997,7 @@ export class FirewallaClient {
   async getStatisticsByRegion(): Promise<{count: number; results: import('../types').Statistics[]; next_cursor?: string}> {
     try {
       const flows = await this.getFlowData();
-      const alarms = await this.getActiveAlarms();
+      const alarms = await this.getActiveAlarms(); // TODO: Implement alarm-based statistics
 
       // Validate flows response structure
       if (!flows || !flows.results || !Array.isArray(flows.results)) {
@@ -1654,7 +1654,7 @@ export class FirewallaClient {
     const resultsList = Array.isArray(response.results) ? response.results : [];
     const flows = resultsList.map((item: any): Flow => {
       const parseTimestamp = (ts: any): number => {
-        if (!ts) return Math.floor(Date.now() / 1000);
+        if (!ts) {return Math.floor(Date.now() / 1000);}
         if (typeof ts === 'number') {
           return ts > 1000000000000 ? Math.floor(ts / 1000) : ts;
         }
@@ -1682,12 +1682,12 @@ export class FirewallaClient {
         },
       };
       
-      if (item.blockType) flow.blockType = item.blockType;
-      if (item.device?.network) flow.device.network = item.device.network;
-      if (item.source) flow.source = item.source;
-      if (item.destination) flow.destination = item.destination;
-      if (item.region) flow.region = item.region;
-      if (item.category) flow.category = item.category;
+      if (item.blockType) {flow.blockType = item.blockType;}
+      if (item.device?.network) {flow.device.network = item.device.network;}
+      if (item.source) {flow.source = item.source;}
+      if (item.destination) {flow.destination = item.destination;}
+      if (item.region) {flow.region = item.region;}
+      if (item.category) {flow.category = item.category;}
       
       return flow;
     });
@@ -2472,7 +2472,7 @@ export class FirewallaClient {
       const correlationValues = new Set<string>();
       primary.results.forEach(flow => {
         const value = this.extractFieldValue(flow, correlationField);
-        if (value) correlationValues.add(String(value));
+        if (value) {correlationValues.add(String(value));}
       });
       
       // Execute secondary searches with correlation filter
@@ -2591,7 +2591,7 @@ export class FirewallaClient {
       
       // Safe counting with comprehensive validation
       filteredRules.forEach(rule => {
-        if (!rule || typeof rule !== 'object') return;
+        if (!rule || typeof rule !== 'object') {return;}
         
         // Count by action with validation
         const action = rule.action && typeof rule.action === 'string' ? rule.action : 'unknown';
@@ -2686,9 +2686,9 @@ export class FirewallaClient {
       
       // Filter by minimum hits with comprehensive validation
       filteredRules = filteredRules.filter(rule => {
-        if (!rule || typeof rule !== 'object') return false;
+        if (!rule || typeof rule !== 'object') {return false;}
         const hitCount = rule.hit?.count;
-        if (typeof hitCount !== 'number' || !Number.isFinite(hitCount)) return sanitizedMinHits === 0;
+        if (typeof hitCount !== 'number' || !Number.isFinite(hitCount)) {return sanitizedMinHits === 0;}
         return hitCount >= sanitizedMinHits;
       });
       
@@ -2781,7 +2781,7 @@ export class FirewallaClient {
       
       // Filter rules by creation/modification time with enhanced safety
       let filteredRules = rules.results.filter(rule => {
-        if (!rule || typeof rule !== 'object') return false;
+        if (!rule || typeof rule !== 'object') {return false;}
         
         const createdTime = rule.ts;
         const updatedTime = rule.updateTs;
@@ -2812,7 +2812,7 @@ export class FirewallaClient {
       
       // Sort by most recent first with enhanced safety
       filteredRules.sort((a, b) => {
-        if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return 0;
+        if (!a || !b || typeof a !== 'object' || typeof b !== 'object') {return 0;}
         
         const aCreated = (typeof a.ts === 'number' && Number.isFinite(a.ts)) ? a.ts : 0;
         const aUpdated = (typeof a.updateTs === 'number' && Number.isFinite(a.updateTs)) ? a.updateTs : 0;
