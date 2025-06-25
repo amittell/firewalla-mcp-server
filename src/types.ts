@@ -421,8 +421,8 @@ export interface Box {
   version: string;
   /** Box online status */
   online: boolean;
-  /** Timestamp of last online time (as string) */
-  lastSeen?: string;
+  /** Timestamp of last online time (Unix timestamp) */
+  lastSeen?: number;
   /** Box license code */
   license: string;
   /** Public IP address */
@@ -530,7 +530,7 @@ export interface SearchResult<T> {
   /** Pagination cursor for next page */
   next_cursor?: string;
   /** Aggregation results if requested */
-  aggregations?: Record<string, any>;
+  aggregations?: Record<string, number | string | boolean | Record<string, unknown>>;
   /** Search metadata */
   metadata?: {
     /** Query execution time in milliseconds */
