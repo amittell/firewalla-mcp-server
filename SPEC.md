@@ -260,7 +260,7 @@ interface Flow {
 - Validate parameter types and ranges
 - Prevent injection attacks
 
-## ⚠️ Breaking Changes (v2.0.0)
+## ⚠️ Breaking Changes (v1.0.0)
 
 ### Mandatory Limit Parameters
 
@@ -275,7 +275,7 @@ interface GetDeviceStatusParams {
   limit?: number; // Optional with default
 }
 
-// After (v2.0.0+)  
+// After (v1.0.0+)  
 interface GetDeviceStatusParams {
   device_id?: string;
   include_offline?: boolean;
@@ -303,7 +303,7 @@ interface GetDeviceStatusParams {
 }
 ```
 
-## 🚀 New Architecture (v2.0.0)
+## 🚀 New Architecture (v1.0.0)
 
 ### Validation Framework
 
@@ -386,7 +386,7 @@ class QuerySanitizer {
 - Rate limiting with exponential backoff
 - Enhanced token validation
 
-## Performance Requirements (v2.0.0)
+## Performance Requirements (v1.0.0)
 - Response time: < 2 seconds for cached operations, < 5 seconds for uncached
 - Concurrent requests: Support up to 20 simultaneous requests  
 - Memory usage: < 150MB under normal load with caching

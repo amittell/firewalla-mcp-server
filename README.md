@@ -468,7 +468,7 @@ target_value:*.facebook.com OR mac_vendor:Apple*
 - Robust caching and rate limiting
 - Modular filter system with extensible architecture
 
-## ⚠️ Breaking Changes (v2.0.0)
+## ⚠️ Breaking Changes (v1.0.0)
 
 ### Mandatory Limit Parameters
 
@@ -496,7 +496,7 @@ await get_device_status({ limit: 100 });
 **Error Response:**
 Tools will now return clear error: `"limit parameter is required"` when limit is missing.
 
-## 🚀 New Features (v2.0.0)
+## 🚀 New Features (v1.0.0)
 
 ### Enterprise-Grade Validation Framework
 

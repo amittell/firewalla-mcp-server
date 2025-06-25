@@ -230,7 +230,7 @@ npm run mcp:start
 - Rate limiting to respect Firewalla API limits
 - Secure credential handling with environment variables
 
-## ⚠️ Breaking Changes (v2.0.0)
+## ⚠️ Breaking Changes (v1.0.0)
 
 ### Mandatory Limit Parameters
 **CRITICAL**: All paginated MCP tools now require explicit `limit` parameter. This prevents artificial defaults that masked missing parameters.
@@ -253,7 +253,7 @@ mcp_call get_device_status { "limit": 100 }
 npm run test -- --grep "limit parameter"
 ```
 
-### Validation Framework (v2.0.0)
+### Validation Framework (v1.0.0)
 
 **New Error Format:**
 All tools now return standardized errors:
@@ -284,7 +284,7 @@ npm run test:null-safety
 - `FieldMapper`: Cross-reference field compatibility
 - `ErrorHandler`: Standardized error responses
 
-### Performance Monitoring (v2.0.0)
+### Performance Monitoring (v1.0.0)
 
 **Cache System:**
 - Alarms/Flows: 30s TTL (real-time data)
