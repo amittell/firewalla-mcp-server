@@ -58,11 +58,12 @@ export function setupResources(server: Server, firewalla: FirewallaClient): void
 
         case 'firewalla://devices': {
           const devices = await firewalla.getDeviceStatus();
+          const safeResults = Array.isArray(devices?.results) ? devices.results : [];
           
           const deviceStats = {
-            total: devices.results.length,
-            online: devices.results.filter(d => d.online).length,
-            offline: devices.results.filter(d => !d.online).length,
+            total: safeResults.length,
+            online: safeResults.filter(d => d?.online).length,
+            offline: safeResults.filter(d => !d?.online).length,
           };
 
           return {
@@ -73,17 +74,17 @@ export function setupResources(server: Server, firewalla: FirewallaClient): void
                 text: JSON.stringify({
                   device_inventory: {
                     statistics: deviceStats,
-                    availability_percentage: Math.round((deviceStats.online / deviceStats.total) * 100),
-                    devices: (Array.isArray(devices.results) ? devices.results : []).map(device => ({
-                      id: device.id,
-                      name: device.name,
-                      ip_address: device.ip,
-                      mac_vendor: device.macVendor,
-                      status: device.online ? 'online' : 'offline',
-                      last_seen: safeUnixToISOString(device.lastSeen, 'Never'),
-                      network: device.network,
-                      group: device.group,
-                      status_indicator: device.online ? '🟢' : '🔴',
+                    availability_percentage: deviceStats.total > 0 ? Math.round((deviceStats.online / deviceStats.total) * 100) : 0,
+                    devices: safeResults.map(device => ({
+                      id: device?.id || 'unknown',
+                      name: device?.name || 'Unknown Device',
+                      ip_address: device?.ip || 'N/A',
+                      mac_vendor: device?.macVendor || 'Unknown',
+                      status: device?.online ? 'online' : 'offline',
+                      last_seen: safeUnixToISOString(device?.lastSeen, 'Never'),
+                      network: device?.network || { id: 'unknown', name: 'Unknown Network' },
+                      group: device?.group || { id: 'unknown', name: 'Default Group' },
+                      status_indicator: device?.online ? '🟢' : '🔴',
                     })),
                   },
                 }, null, 2),

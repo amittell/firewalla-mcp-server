@@ -63,3 +63,11 @@ export function unixToISOStringOrNow(timestamp: number | string | null | undefin
     return new Date().toISOString();
   }
 }
+
+/**
+ * Gets the current timestamp in ISO 8601 format
+ * @returns Current date and time as ISO 8601 string
+ */
+export function getCurrentTimestamp(): string {
+  return new Date().toISOString();
+}

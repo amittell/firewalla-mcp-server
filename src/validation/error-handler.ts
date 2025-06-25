@@ -60,7 +60,7 @@ export class ErrorHandler {
         return await fn(...args);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        throw this.createErrorResponse(toolName, errorMessage);
+        throw ErrorHandler.createErrorResponse(toolName, errorMessage);
       }
     };
   }
@@ -356,7 +356,7 @@ export class SafeAccess {
     accessor: (_: T[]) => any,
     defaultValue: any = undefined
   ): any {
-    const safeArray = this.ensureArray<T>(array);
+    const safeArray = SafeAccess.ensureArray<T>(array);
     if (safeArray.length === 0) {
       return defaultValue;
     }
@@ -378,7 +378,7 @@ export class SafeAccess {
     // eslint-disable-next-line no-unused-vars
     filter: (item: T) => boolean = (item) => item !== null && item !== undefined
   ): R[] {
-    const safeArray = this.ensureArray<T>(array);
+    const safeArray = SafeAccess.ensureArray<T>(array);
     return safeArray
       .filter(filter)
       .map(mapper)
@@ -393,7 +393,7 @@ export class SafeAccess {
     // eslint-disable-next-line no-unused-vars
     predicate: (item: T) => boolean
   ): T[] {
-    const safeArray = this.ensureArray<T>(array);
+    const safeArray = SafeAccess.ensureArray<T>(array);
     return safeArray.filter(item => {
       if (item === null || item === undefined) {
         return false;

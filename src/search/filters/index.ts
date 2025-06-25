@@ -3,7 +3,7 @@
  * Centralized management of all search filters
  */
 
-import { QueryNode } from '../types.js';
+import { QueryNode, FieldQuery, WildcardQuery } from '../types.js';
 import { Filter, FilterContext, FilterResult } from './base.js';
 import { TimeRangeFilter } from './time.js';
 
@@ -13,7 +13,7 @@ class IpAddressFilter implements Filter {
   
   canHandle(node: QueryNode): boolean {
     if (node.type === 'field' || node.type === 'wildcard') {
-      const fieldNode = node as any;
+      const fieldNode = node as FieldQuery | WildcardQuery;
       return ['source_ip', 'destination_ip', 'ip', 'device_ip'].includes(fieldNode.field);
     }
     return false;
@@ -21,14 +21,23 @@ class IpAddressFilter implements Filter {
   
   apply(node: QueryNode, context: FilterContext): FilterResult {
     // Simplified - just pass through for post-processing
-    const fieldNode = node as any;
+    if (node.type === 'wildcard') {
+      const wildcardNode = node as WildcardQuery;
+      return {
+        apiParams: {},
+        postProcessing: (items: any[]) => items.filter(item => {
+          const value = this.getNestedValue(item, wildcardNode.field);
+          return this.matchWildcard(String(value || ''), wildcardNode.pattern);
+        }),
+        cacheKeyComponent: `${this.name}:${JSON.stringify(node)}`
+      };
+    }
+    
+    const fieldNode = node as FieldQuery;
     return {
       apiParams: {},
       postProcessing: (items: any[]) => items.filter(item => {
         const value = this.getNestedValue(item, fieldNode.field);
-        if (node.type === 'wildcard') {
-          return this.matchWildcard(String(value || ''), fieldNode.pattern);
-        }
         return String(value || '') === fieldNode.value;
       }),
       cacheKeyComponent: `${this.name}:${JSON.stringify(node)}`
@@ -41,9 +50,9 @@ class IpAddressFilter implements Filter {
   
   private matchWildcard(value: string, pattern: string): boolean {
     const regexPattern = pattern
-      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      .replace(/\\\*/g, '.*')
-      .replace(/\\\?/g, '.');
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*/g, '.*')
+      .replace(/\?/g, '.');
     const regex = new RegExp(`^${regexPattern}$`, 'i');
     return regex.test(value);
   }

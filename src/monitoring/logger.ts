@@ -1,4 +1,5 @@
 import { productionConfig } from '../production/config';
+import { getCurrentTimestamp } from '../utils/timestamp.js';
 
 // DEBUG environment variable support
 const DEBUG_ENABLED = process.env.DEBUG === 'firewalla:*' || process.env.DEBUG === '1' || process.env.DEBUG === 'true';
@@ -61,7 +62,7 @@ export class StructuredLogger {
     requestId?: string
   ): LogEntry {
     const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
+      timestamp: getCurrentTimestamp(),
       level,
       message,
       service: this.service,

@@ -23,14 +23,18 @@ export class TimeRangeFilter extends BaseFilter {
 
   apply(node: QueryNode, context: FilterContext): FilterResult {
     switch (node.type) {
-      case 'field':
+      case 'field': {
         return this.handleFieldQuery(node as FieldQuery, context);
-      case 'range':
+      }
+      case 'range': {
         return this.handleRangeQuery(node as RangeQuery, context);
-      case 'comparison':
+      }
+      case 'comparison': {
         return this.handleComparisonQuery(node as ComparisonQuery, context);
-      default:
+      }
+      default: {
         return { apiParams: {} };
+      }
     }
   }
 
@@ -68,18 +72,22 @@ export class TimeRangeFilter extends BaseFilter {
     let maxTime: number | null = null;
 
     switch (node.operator) {
-      case '>':
+      case '>': {
         minTime = timestamp + 1;
         break;
-      case '>=':
+      }
+      case '>=': {
         minTime = timestamp;
         break;
-      case '<':
+      }
+      case '<': {
         maxTime = timestamp - 1;
         break;
-      case '<=':
+      }
+      case '<=': {
         maxTime = timestamp;
         break;
+      }
     }
 
     return {
@@ -93,29 +101,34 @@ export class TimeRangeFilter extends BaseFilter {
 
     // Different entities use different parameter names
     switch (context.entityType) {
-      case 'flows':
+      case 'flows': {
         if (minTime) params.start_time = unixToISOString(minTime);
         if (maxTime) params.end_time = unixToISOString(maxTime);
         break;
+      }
       
-      case 'alarms':
+      case 'alarms': {
         if (minTime) params.since = minTime;
         if (maxTime) params.until = maxTime;
         break;
+      }
       
-      case 'rules':
+      case 'rules': {
         // Rules API might not support time filtering directly
         // Will need post-processing
         break;
+      }
       
-      case 'devices':
+      case 'devices': {
         // Device API doesn't typically support time filtering
         break;
+      }
       
-      case 'target_lists':
+      case 'target_lists': {
         // Target lists might filter by last_updated
         if (minTime) params.updated_since = minTime;
         break;
+      }
     }
 
     return params;
@@ -149,11 +162,12 @@ export class TimeRangeFilter extends BaseFilter {
 
   private matchesTimeCondition(timestamp: number, node: QueryNode): boolean {
     switch (node.type) {
-      case 'field':
+      case 'field': {
         const targetTime = this.parseTimestamp((node as FieldQuery).value);
         return targetTime ? Math.abs(timestamp - targetTime) <= 60 : false;
+      }
 
-      case 'range':
+      case 'range': {
         const rangeNode = node as RangeQuery;
         const min = rangeNode.min ? this.parseTimestamp(rangeNode.min) : null;
         const max = rangeNode.max ? this.parseTimestamp(rangeNode.max) : null;
@@ -161,19 +175,31 @@ export class TimeRangeFilter extends BaseFilter {
         if (min && timestamp < min) return false;
         if (max && timestamp > max) return false;
         return true;
+      }
 
-      case 'comparison':
+      case 'comparison': {
         const compNode = node as ComparisonQuery;
         const compTime = this.parseTimestamp(compNode.value);
         if (!compTime) return false;
 
         switch (compNode.operator) {
-          case '>': return timestamp > compTime;
-          case '>=': return timestamp >= compTime;
-          case '<': return timestamp < compTime;
-          case '<=': return timestamp <= compTime;
-          default: return false;
+          case '>': {
+            return timestamp > compTime;
+          }
+          case '>=': {
+            return timestamp >= compTime;
+          }
+          case '<': {
+            return timestamp < compTime;
+          }
+          case '<=': {
+            return timestamp <= compTime;
+          }
+          default: {
+            return false;
+          }
         }
+      }
     }
     return false;
   }

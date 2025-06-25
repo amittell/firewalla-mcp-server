@@ -86,216 +86,211 @@ export const CORRELATION_FIELDS: Record<string, EntityType[]> = {
 };
 
 /**
- * Field mapping and validation utilities
+ * Get compatible correlation fields between two entity types
  */
-export class FieldMapper {
-  /**
-   * Get compatible correlation fields between two entity types
-   */
-  static getCompatibleFields(primaryType: EntityType, secondaryType: EntityType): string[] {
-    const compatibleFields: string[] = [];
-    
-    for (const [field, supportedTypes] of Object.entries(CORRELATION_FIELDS)) {
-      if (supportedTypes.includes(primaryType) && supportedTypes.includes(secondaryType)) {
-        compatibleFields.push(field);
-      }
+export function getCompatibleFields(primaryType: EntityType, secondaryType: EntityType): string[] {
+  const compatibleFields: string[] = [];
+  
+  for (const [field, supportedTypes] of Object.entries(CORRELATION_FIELDS)) {
+    if (supportedTypes.includes(primaryType) && supportedTypes.includes(secondaryType)) {
+      compatibleFields.push(field);
     }
-    
-    return compatibleFields;
   }
+  
+  return compatibleFields;
+}
 
-  /**
-   * Validate if a correlation field is compatible with given entity types
-   */
-  static isFieldCompatible(field: string, entityTypes: EntityType[]): boolean {
-    const supportedTypes = CORRELATION_FIELDS[field];
-    if (!supportedTypes) {
-      return false;
-    }
-    
-    return entityTypes.every(type => supportedTypes.includes(type));
+/**
+ * Validate if a correlation field is compatible with given entity types
+ */
+export function isFieldCompatible(field: string, entityTypes: EntityType[]): boolean {
+  const supportedTypes = CORRELATION_FIELDS[field];
+  if (!supportedTypes) {
+    return false;
   }
+  
+  return entityTypes.every(type => supportedTypes.includes(type));
+}
 
-  /**
-   * Get field value from an entity using mapped field paths
-   */
-  static getFieldValue(entity: any, field: string, entityType: EntityType): any {
-    if (!entity || typeof entity !== 'object') {
-      return undefined;
-    }
-
-    const mappings = FIELD_MAPPINGS[entityType];
-    if (!mappings || !mappings[field]) {
-      // Fallback to direct field access
-      return SafeAccess.getNestedValue(entity, field);
-    }
-
-    const fieldPaths = mappings[field];
-    
-    // Try each mapped field path until we find a value
-    for (const path of fieldPaths) {
-      const value = SafeAccess.getNestedValue(entity, path);
-      if (value !== undefined && value !== null) {
-        return value;
-      }
-    }
-
+/**
+ * Get field value from an entity using mapped field paths
+ */
+export function getFieldValue(entity: any, field: string, entityType: EntityType): any {
+  if (!entity || typeof entity !== 'object') {
     return undefined;
   }
 
-  /**
-   * Extract correlation values from a result set
-   */
-  static extractCorrelationValues(
-    results: any[],
-    field: string,
-    entityType: EntityType
-  ): Set<any> {
-    const values = new Set<any>();
-    
-    const safeResults = SafeAccess.ensureArray(results);
-    
-    for (const entity of safeResults) {
-      const value = this.getFieldValue(entity, field, entityType);
-      if (value !== undefined && value !== null && value !== '') {
-        // Normalize IP addresses and other common field types
-        const normalizedValue = this.normalizeFieldValue(value, field);
-        values.add(normalizedValue);
-      }
-    }
-    
-    return values;
+  const mappings = FIELD_MAPPINGS[entityType];
+  if (!mappings || !mappings[field]) {
+    // Fallback to direct field access
+    return SafeAccess.getNestedValue(entity, field);
   }
 
-  /**
-   * Normalize field values for consistent comparison
-   */
-  static normalizeFieldValue(value: any, field: string): any {
-    if (typeof value !== 'string') {
+  const fieldPaths = mappings[field];
+  
+  // Try each mapped field path until we find a value
+  for (const path of fieldPaths) {
+    const value = SafeAccess.getNestedValue(entity, path);
+    if (value !== undefined && value !== null) {
       return value;
     }
+  }
 
-    // Normalize IP addresses
-    if (field.includes('ip')) {
-      return value.trim().toLowerCase();
+  return undefined;
+}
+
+/**
+ * Extract correlation values from a result set
+ */
+export function extractCorrelationValues(
+  results: any[],
+  field: string,
+  entityType: EntityType
+): Set<any> {
+  const values = new Set<any>();
+  
+  const safeResults = SafeAccess.ensureArray(results);
+  
+  for (const entity of safeResults) {
+    const value = getFieldValue(entity, field, entityType);
+    if (value !== undefined && value !== null && value !== '') {
+      // Normalize IP addresses and other common field types
+      const normalizedValue = normalizeFieldValue(value, field);
+      values.add(normalizedValue);
     }
+  }
+  
+  return values;
+}
 
-    // Normalize MAC addresses
-    if (field === 'mac') {
-      return value.replace(/[:-]/g, '').toLowerCase();
-    }
-
-    // Normalize protocol names
-    if (field === 'protocol') {
-      return value.toLowerCase();
-    }
-
+/**
+ * Normalize field values for consistent comparison
+ */
+export function normalizeFieldValue(value: any, field: string): any {
+  if (typeof value !== 'string') {
     return value;
   }
 
-  /**
-   * Filter results by correlation field and values
-   */
-  static filterByCorrelation(
-    results: any[],
-    field: string,
-    entityType: EntityType,
-    correlationValues: Set<any>
-  ): any[] {
-    const safeResults = SafeAccess.ensureArray(results);
-    
-    return safeResults.filter(entity => {
-      const value = this.getFieldValue(entity, field, entityType);
-      if (value === undefined || value === null) {
-        return false;
-      }
-      
-      const normalizedValue = this.normalizeFieldValue(value, field);
-      return correlationValues.has(normalizedValue);
-    });
+  // Normalize IP addresses
+  if (field.includes('ip')) {
+    return value.trim().toLowerCase();
   }
 
-  /**
-   * Get suggested entity type for a query based on field usage
-   */
-  static suggestEntityType(query: string): EntityType | null {
-    const lowerQuery = query.toLowerCase();
-    
-    // Look for entity-specific field patterns
-    if (lowerQuery.includes('target_value') || lowerQuery.includes('action:') || lowerQuery.includes('hit_count')) {
-      return 'rules';
+  // Normalize MAC addresses
+  if (field === 'mac') {
+    return value.replace(/[:-]/g, '').toLowerCase();
+  }
+
+  // Normalize protocol names
+  if (field === 'protocol') {
+    return value.toLowerCase();
+  }
+
+  return value;
+}
+
+/**
+ * Filter results by correlation field and values
+ */
+export function filterByCorrelation(
+  results: any[],
+  field: string,
+  entityType: EntityType,
+  correlationValues: Set<any>
+): any[] {
+  const safeResults = SafeAccess.ensureArray(results);
+  
+  return safeResults.filter(entity => {
+    const value = getFieldValue(entity, field, entityType);
+    if (value === undefined || value === null) {
+      return false;
     }
     
-    if (lowerQuery.includes('severity:') || lowerQuery.includes('alarm') || lowerQuery.includes('status:')) {
-      return 'alarms';
-    }
-    
-    if (lowerQuery.includes('online:') || lowerQuery.includes('mac_vendor') || lowerQuery.includes('last_seen')) {
-      return 'devices';
-    }
-    
-    if (lowerQuery.includes('download') || lowerQuery.includes('upload') || lowerQuery.includes('blocked:')) {
-      return 'flows';
-    }
-    
-    if (lowerQuery.includes('category:') || lowerQuery.includes('owner:') || lowerQuery.includes('targets')) {
-      return 'target_lists';
-    }
-    
-    // Default to flows for generic queries
+    const normalizedValue = normalizeFieldValue(value, field);
+    return correlationValues.has(normalizedValue);
+  });
+}
+
+/**
+ * Get suggested entity type for a query based on field usage
+ */
+export function suggestEntityType(query: string): EntityType | null {
+  const lowerQuery = query.toLowerCase();
+  
+  // Look for entity-specific field patterns
+  if (lowerQuery.includes('target_value') || lowerQuery.includes('action:') || lowerQuery.includes('hit_count')) {
+    return 'rules';
+  }
+  
+  if (lowerQuery.includes('severity:') || lowerQuery.includes('alarm') || lowerQuery.includes('status:')) {
+    return 'alarms';
+  }
+  
+  if (lowerQuery.includes('online:') || lowerQuery.includes('mac_vendor') || lowerQuery.includes('last_seen')) {
+    return 'devices';
+  }
+  
+  if (lowerQuery.includes('download') || lowerQuery.includes('upload') || lowerQuery.includes('blocked:')) {
     return 'flows';
   }
-
-  /**
-   * Validate cross-reference search parameters
-   */
-  static validateCrossReference(
-    primaryQuery: string,
-    secondaryQueries: string[],
-    correlationField: string
-  ): { isValid: boolean; errors: string[]; entityTypes?: EntityType[] } {
-    const errors: string[] = [];
-    
-    // Validate queries are not empty
-    if (!primaryQuery || primaryQuery.trim().length === 0) {
-      errors.push('Primary query cannot be empty');
-    }
-    
-    if (!secondaryQueries || secondaryQueries.length === 0) {
-      errors.push('At least one secondary query is required');
-    }
-    
-    if (secondaryQueries && secondaryQueries.some(q => !q || q.trim().length === 0)) {
-      errors.push('Secondary queries cannot be empty');
-    }
-    
-    // Validate correlation field
-    if (!correlationField || correlationField.trim().length === 0) {
-      errors.push('Correlation field cannot be empty');
-    }
-    
-    if (errors.length > 0) {
-      return { isValid: false, errors };
-    }
-    
-    // Suggest entity types
-    const primaryType = this.suggestEntityType(primaryQuery);
-    const secondaryTypes = secondaryQueries.map(q => this.suggestEntityType(q));
-    const allTypes = [primaryType, ...secondaryTypes].filter(Boolean) as EntityType[];
-    
-    // Validate field compatibility
-    if (!this.isFieldCompatible(correlationField, allTypes)) {
-      const compatibleTypes = CORRELATION_FIELDS[correlationField] || [];
-      errors.push(
-        `Correlation field '${correlationField}' is not compatible with detected entity types. ` +
-        `Field is supported by: ${compatibleTypes.join(', ')}`
-      );
-    }
-    
-    return {
-      isValid: errors.length === 0,
-      errors,
-      entityTypes: allTypes
-    };
+  
+  if (lowerQuery.includes('category:') || lowerQuery.includes('owner:') || lowerQuery.includes('targets')) {
+    return 'target_lists';
   }
+  
+  // Default to flows for generic queries
+  return 'flows';
+}
+
+/**
+ * Validate cross-reference search parameters
+ */
+export function validateCrossReference(
+  primaryQuery: string,
+  secondaryQueries: string[],
+  correlationField: string
+): { isValid: boolean; errors: string[]; entityTypes?: EntityType[] } {
+  const errors: string[] = [];
+  
+  // Validate queries are not empty
+  if (!primaryQuery || primaryQuery.trim().length === 0) {
+    errors.push('Primary query cannot be empty');
+  }
+  
+  if (!secondaryQueries || secondaryQueries.length === 0) {
+    errors.push('At least one secondary query is required');
+  }
+  
+  if (secondaryQueries?.some(q => !q || q.trim().length === 0)) {
+    errors.push('Secondary queries cannot be empty');
+  }
+  
+  // Validate correlation field
+  if (!correlationField || correlationField.trim().length === 0) {
+    errors.push('Correlation field cannot be empty');
+  }
+  
+  if (errors.length > 0) {
+    return { isValid: false, errors };
+  }
+  
+  // Suggest entity types
+  const primaryType = suggestEntityType(primaryQuery);
+  const secondaryTypes = secondaryQueries.map(q => suggestEntityType(q));
+  const allTypes = [primaryType, ...secondaryTypes].filter(Boolean) as EntityType[];
+  
+  // Validate field compatibility
+  if (!isFieldCompatible(correlationField, allTypes)) {
+    const compatibleTypes = CORRELATION_FIELDS[correlationField] || [];
+    errors.push(
+      `Correlation field '${correlationField}' is not compatible with detected entity types. ` +
+      `Field is supported by: ${compatibleTypes.join(', ')}`
+    );
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors,
+    entityTypes: allTypes
+  };
 }

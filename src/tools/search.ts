@@ -9,7 +9,7 @@ import { FilterContext } from '../search/filters/base.js';
 import { SearchParams, SearchResult } from '../search/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
 import { ParameterValidator, SafeAccess, QuerySanitizer } from '../validation/error-handler.js';
-import { FieldMapper } from '../validation/field-mapper.js';
+import { validateCrossReference, suggestEntityType, extractCorrelationValues, filterByCorrelation } from '../validation/field-mapper.js';
 
 /**
  * Strategy interface for different entity search implementations
@@ -40,10 +40,10 @@ interface SearchValidationConfig {
 export class SearchEngine {
   private strategies: Map<string, SearchStrategy> = new Map();
 
-  constructor(private firewalla: FirewallaClient) {
-    // FirewallaClient is stored for use in search methods
-    // Explicitly reference to avoid unused variable warning
-    this.firewalla = firewalla;
+  constructor(
+    // eslint-disable-next-line no-unused-vars
+    private firewalla: FirewallaClient
+  ) {
     this.initializeStrategies();
   }
 
@@ -92,10 +92,10 @@ export class SearchEngine {
         const searchQuery = {
           query: params.query,
           limit: params.limit,
-          cursor: params.cursor,
-          sort_by: params.sort_by,
-          group_by: params.group_by,
-          aggregate: params.aggregate
+          cursor: params?.cursor,
+          sort_by: params?.sort_by,
+          group_by: params?.group_by,
+          aggregate: params?.aggregate
         };
         return await client.searchDevices(searchQuery, searchOptions);
       },
@@ -321,6 +321,30 @@ export class SearchEngine {
   }
 
   /**
+   * Execute search for a specific entity type and query
+   */
+  private async executeSearchByType(
+    entityType: string,
+    query: string,
+    limit: number = 1000
+  ): Promise<SearchResult> {
+    switch (entityType) {
+      case 'flows':
+        return this.searchFlows({ query, limit });
+      case 'alarms':
+        return this.searchAlarms({ query, limit });
+      case 'rules':
+        return this.searchRules({ query, limit });
+      case 'devices':
+        return this.searchDevices({ query, limit });
+      case 'target_lists':
+        return this.searchTargetLists({ query, limit });
+      default:
+        return this.searchFlows({ query, limit });
+    }
+  }
+
+  /**
    * Cross-reference search across multiple entity types with improved field mapping
    */
   async crossReferenceSearch(params: { primary_query: string; secondary_queries: string[]; correlation_field: string }): Promise<any> {
@@ -328,7 +352,7 @@ export class SearchEngine {
     
     try {
       // Validate cross-reference parameters
-      const validation = FieldMapper.validateCrossReference(
+      const validation = validateCrossReference(
         params.primary_query,
         params.secondary_queries,
         params.correlation_field
@@ -339,40 +363,14 @@ export class SearchEngine {
       }
       
       // Determine entity types based on query patterns
-      const primaryType = FieldMapper.suggestEntityType(params.primary_query) || 'flows';
-      const secondaryTypes = params.secondary_queries.map(q => FieldMapper.suggestEntityType(q) || 'alarms');
+      const primaryType = suggestEntityType(params.primary_query) || 'flows';
+      const secondaryTypes = params.secondary_queries.map(q => suggestEntityType(q) || 'alarms');
       
-      // Execute primary query based on detected type
-      let primaryResult: SearchResult;
-      switch (primaryType) {
-        case 'flows': {
-          primaryResult = await this.searchFlows({ query: params.primary_query, limit: 1000 });
-          break;
-        }
-        case 'alarms': {
-          primaryResult = await this.searchAlarms({ query: params.primary_query, limit: 1000 });
-          break;
-        }
-        case 'rules': {
-          primaryResult = await this.searchRules({ query: params.primary_query, limit: 1000 });
-          break;
-        }
-        case 'devices': {
-          primaryResult = await this.searchDevices({ query: params.primary_query, limit: 1000 });
-          break;
-        }
-        case 'target_lists': {
-          primaryResult = await this.searchTargetLists({ query: params.primary_query, limit: 1000 });
-          break;
-        }
-        default: {
-          primaryResult = await this.searchFlows({ query: params.primary_query, limit: 1000 });
-          break;
-        }
-      }
+      // Execute primary query using generic method
+      const primaryResult = await this.executeSearchByType(primaryType, params.primary_query, 1000);
       
       // Extract correlation values using proper field mapping
-      const correlationValues = FieldMapper.extractCorrelationValues(
+      const correlationValues = extractCorrelationValues(
         primaryResult.results,
         params.correlation_field,
         primaryType
@@ -393,37 +391,11 @@ export class SearchEngine {
         const secondaryQuery = params.secondary_queries[index];
         const secondaryType = secondaryTypes[index];
         
-        // Execute secondary query based on detected type
-        let secondaryResult: SearchResult;
-        switch (secondaryType) {
-          case 'flows': {
-            secondaryResult = await this.searchFlows({ query: secondaryQuery, limit: 1000 });
-            break;
-          }
-          case 'alarms': {
-            secondaryResult = await this.searchAlarms({ query: secondaryQuery, limit: 1000 });
-            break;
-          }
-          case 'rules': {
-            secondaryResult = await this.searchRules({ query: secondaryQuery, limit: 1000 });
-            break;
-          }
-          case 'devices': {
-            secondaryResult = await this.searchDevices({ query: secondaryQuery, limit: 1000 });
-            break;
-          }
-          case 'target_lists': {
-            secondaryResult = await this.searchTargetLists({ query: secondaryQuery, limit: 1000 });
-            break;
-          }
-          default: {
-            secondaryResult = await this.searchAlarms({ query: secondaryQuery, limit: 1000 });
-            break;
-          }
-        }
+        // Execute secondary query using generic method
+        const secondaryResult = await this.executeSearchByType(secondaryType, secondaryQuery, 1000);
         
         // Filter by correlation using improved field mapping
-        const correlatedItems = FieldMapper.filterByCorrelation(
+        const correlatedItems = filterByCorrelation(
           secondaryResult.results,
           params.correlation_field,
           secondaryType,

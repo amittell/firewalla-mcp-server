@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { getCurrentTimestamp } from '../utils/timestamp.js';
 
 export class SecurityManager {
   private static readonly ALLOWED_ORIGINS = [
@@ -142,7 +143,7 @@ export class SecurityManager {
   }
 
   logSecurityEvent(event: string, details: Record<string, unknown>): void {
-    const timestamp = new Date().toISOString();
+    const timestamp = getCurrentTimestamp();
     const logEntry = {
       timestamp,
       event,

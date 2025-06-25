@@ -127,7 +127,7 @@ export function paginateArray<T>(
     results,
     next_cursor,
     total_count,
-    page_size: results.length,
+    page_size,
     has_more
   };
 }

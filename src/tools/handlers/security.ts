@@ -5,7 +5,7 @@
 import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
 import { FirewallaClient } from '../../firewalla/client.js';
 import { ParameterValidator, SafeAccess, QuerySanitizer, ErrorHandler } from '../../validation/error-handler.js';
-import { unixToISOStringOrNow } from '../../utils/timestamp.js';
+import { unixToISOStringOrNow, getCurrentTimestamp } from '../../utils/timestamp.js';
 
 export class GetActiveAlarmsHandler extends BaseToolHandler {
   name = 'get_active_alarms';
@@ -101,7 +101,7 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
       
       return this.createSuccessResponse({
         alarm: response,
-        retrieved_at: new Date().toISOString()
+        retrieved_at: getCurrentTimestamp()
       });
       
     } catch (error: unknown) {
@@ -130,7 +130,7 @@ export class DeleteAlarmHandler extends BaseToolHandler {
         success: true,
         alarm_id: alarmIdValidation.sanitizedValue,
         message: 'Alarm deleted successfully',
-        deleted_at: new Date().toISOString(),
+        deleted_at: getCurrentTimestamp(),
         details: response
       });
       

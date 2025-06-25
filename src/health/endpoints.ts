@@ -1,6 +1,7 @@
 import { FirewallaClient } from '../firewalla/client';
 import { SecurityManager } from '../config/security';
 import { config } from '../config/config';
+import { getCurrentTimestamp } from '../utils/timestamp.js';
 
 export interface HealthStatus {
   status: 'healthy' | 'degraded' | 'unhealthy';
@@ -36,7 +37,7 @@ export class HealthCheckManager {
 
     return {
       status: overallStatus,
-      timestamp: new Date().toISOString(),
+      timestamp: getCurrentTimestamp(),
       version: '1.0.0',
       uptime: Math.floor((Date.now() - this.startTime) / 1000),
       checks,

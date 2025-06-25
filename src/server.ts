@@ -286,34 +286,6 @@ export class FirewallaMCPServer {
             },
           },
           {
-            name: 'get_specific_alarm',
-            description: 'Get detailed information for a specific alarm',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                alarm_id: {
-                  type: 'string',
-                  description: 'Alarm identifier to retrieve',
-                },
-              },
-              required: ['alarm_id'],
-            },
-          },
-          {
-            name: 'delete_alarm',
-            description: 'Delete/dismiss a specific alarm',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                alarm_id: {
-                  type: 'string',
-                  description: 'Alarm identifier to delete',
-                },
-              },
-              required: ['alarm_id'],
-            },
-          },
-          {
             name: 'get_simple_statistics',
             description: 'Get basic statistics about boxes, alarms, and rules',
             inputSchema: {

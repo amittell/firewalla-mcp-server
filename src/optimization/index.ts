@@ -125,7 +125,7 @@ export class ResponseOptimizer {
         timestamp: alarm.timestamp || unixToISOString(alarm.ts),
         type: alarm.type,
         status: alarm.status,
-        message: this.truncateText(alarm.message || '', 80),
+        message: ResponseOptimizer.truncateText(alarm.message || '', 80),
         direction: alarm.direction,
         protocol: alarm.protocol,
         gid: alarm.gid,
@@ -170,7 +170,7 @@ export class ResponseOptimizer {
         direction: flow.direction,
         blocked: flow.block,
         ...(flow.blockType && { block_type: flow.blockType }),
-        device_name: this.truncateText(flow.device?.name || '', 25),
+        device_name: ResponseOptimizer.truncateText(flow.device?.name || '', 25),
         ...(flow.region && { region: flow.region }),
         ...(flow.category && { category: flow.category })
       })),
@@ -204,7 +204,7 @@ export class ResponseOptimizer {
         last_hit: safeUnixToISOString(rule.hit?.lastHitTs, 'Never'),
         created_at: unixToISOString(rule.ts),
         updated_at: unixToISOString(rule.updateTs),
-        notes: this.truncateText(rule.notes || '', 60),
+        notes: ResponseOptimizer.truncateText(rule.notes || '', 60),
         ...(rule.resumeTs && { resume_at: unixToISOString(rule.resumeTs) })
       })),
       next_cursor: response.next_cursor

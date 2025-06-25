@@ -2,6 +2,7 @@ import { FirewallaClient } from '../firewalla/client';
 import { logger } from '../monitoring/logger';
 import { metricsCollector } from '../monitoring/metrics';
 import { HealthCheckManager } from '../health/endpoints';
+import { getCurrentTimestamp } from '../utils/timestamp.js';
 
 export interface DebugInfo {
   timestamp: string;
@@ -30,7 +31,7 @@ export class DebugTools {
   constructor(
     // eslint-disable-next-line no-unused-vars
     private firewalla: FirewallaClient,
-    // eslint-disable-next-line no-unused-vars  
+    // eslint-disable-next-line no-unused-vars
     private healthCheck: HealthCheckManager
   ) {
     this.startTime = Date.now();
@@ -43,7 +44,7 @@ export class DebugTools {
     const health = await this.healthCheck.performHealthCheck();
 
     return {
-      timestamp: new Date().toISOString(),
+      timestamp: getCurrentTimestamp(),
       version: '1.0.0',
       environment: process.env.NODE_ENV || 'development',
       uptime: Math.floor((Date.now() - this.startTime) / 1000),
@@ -231,7 +232,7 @@ export class DebugTools {
     
     return `
 Firewalla MCP Server System Report
-Generated: ${new Date().toISOString()}
+Generated: ${getCurrentTimestamp()}
 
 Environment Information:
 - Node.js Version: ${process.version}

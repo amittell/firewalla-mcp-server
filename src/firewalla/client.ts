@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import { getCurrentTimestamp } from '../utils/timestamp.js';
 import {
   FirewallaConfig,
   Alarm,
@@ -1003,7 +1004,7 @@ export class FirewallaClient {
             ? `Alarm ${validatedAlarmId} deleted successfully` 
             : `Failed to delete alarm ${validatedAlarmId}`
         ),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentTimestamp(),
         // Add additional fields if available
         ...(response.status && { status: response.status }),
         ...(typeof response.deleted === 'boolean' && { deleted: response.deleted })

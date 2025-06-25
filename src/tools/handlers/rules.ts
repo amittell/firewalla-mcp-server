@@ -6,7 +6,7 @@ import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
 import { FirewallaClient } from '../../firewalla/client.js';
 import { ParameterValidator, SafeAccess, ErrorHandler } from '../../validation/error-handler.js';
 import { ResponseOptimizer, DEFAULT_OPTIMIZATION_CONFIG } from '../../optimization/index.js';
-import { unixToISOString, safeUnixToISOString } from '../../utils/timestamp.js';
+import { unixToISOString, safeUnixToISOString, getCurrentTimestamp } from '../../utils/timestamp.js';
 
 export class GetNetworkRulesHandler extends BaseToolHandler {
   name = 'get_network_rules';
@@ -269,7 +269,7 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
       
       return this.createSuccessResponse({
         total_rules: allRules.length,
-        summary_timestamp: new Date().toISOString(),
+        summary_timestamp: getCurrentTimestamp(),
         breakdown: {
           by_action: rulesByAction,
           by_direction: rulesByDirection,
@@ -365,7 +365,7 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
         summary: {
           total_hits: activeRules.reduce((sum, rule) => sum + SafeAccess.getNestedValue(rule, 'hit.count', 0), 0),
           top_rule_hits: activeRules.length > 0 ? SafeAccess.getNestedValue(activeRules[0], 'hit.count', 0) : 0,
-          analysis_timestamp: new Date().toISOString(),
+          analysis_timestamp: getCurrentTimestamp(),
         },
       });
       
@@ -461,7 +461,7 @@ export class GetRecentRulesHandler extends BaseToolHandler {
             const updateTs = SafeAccess.getNestedValue(r, 'updateTs', 0);
             return updateTs > ts && updateTs >= hoursAgoTs;
           }).length,
-          analysis_timestamp: new Date().toISOString(),
+          analysis_timestamp: getCurrentTimestamp(),
         },
       });
       

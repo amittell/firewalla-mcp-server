@@ -6,6 +6,44 @@
 import { SearchFilter, SearchOptions } from '../types.js';
 
 /**
+ * Smart comma splitting that respects quoted values
+ */
+function smartSplitCommas(value: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  let quoteChar = '';
+  
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i];
+    const prevChar = i > 0 ? value[i - 1] : '';
+    
+    if ((char === '"' || char === "'") && prevChar !== '\\') {
+      if (!inQuotes) {
+        inQuotes = true;
+        quoteChar = char;
+      } else if (char === quoteChar) {
+        inQuotes = false;
+        quoteChar = '';
+      }
+    }
+    
+    if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  if (current.trim()) {
+    result.push(current.trim());
+  }
+  
+  return result;
+}
+
+/**
  * Parsed query component interface
  */
 interface QueryComponent {
@@ -47,7 +85,9 @@ export function parseSearchQuery(query: string): ParsedQuery {
   
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i]?.trim();
-    if (!token) {continue;}
+    if (!token) {
+      continue;
+    }
     
     // Check if token is a logical operator
     if (/^(AND|OR|NOT)$/i.test(token)) {
@@ -132,12 +172,13 @@ function parseFieldExpression(expression: string): QueryComponent | null {
       };
     }
     
-    // Detect array values (comma-separated)
+    // Detect array values (comma-separated), but handle commas within quotes
     if (value.includes(',')) {
+      const arrayValues = smartSplitCommas(value);
       return {
         field,
         operator: 'in',
-        value: value.split(',').map(v => parseValue(v.trim())) as Array<string | number | boolean>
+        value: arrayValues.map(v => parseValue(v.trim())).filter(v => v !== null) as Array<string | number | boolean>
       };
     }
     
@@ -171,10 +212,12 @@ function parseValue(value: string): string | number | boolean {
     return parseFloat(trimmed);
   }
   
-  // Remove quotes if present
+  // Remove quotes if present and handle escaped quotes
   if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
       (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-    return trimmed.slice(1, -1);
+    const unquoted = trimmed.slice(1, -1);
+    // Handle escaped quotes within the string
+    return unquoted.replace(/\\(.)/g, '$1');
   }
   
   return trimmed;
@@ -246,7 +289,7 @@ function optimizeQuery(components: QueryComponent[]): string {
     const logical = component.logical ? `${component.logical} ` : '';
     const field = component.field ? `${component.field}:` : '';
     const value = Array.isArray(component.value) 
-      ? `[${component.value.join(' TO ')}]`
+      ? (component.value.length === 2 ? `[${component.value.join(' TO ')}]` : `[${component.value.filter(v => v !== null).join(' TO ')}]`)
       : component.value;
     
     return `${logical}${field}${value}`;
