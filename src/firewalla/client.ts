@@ -624,7 +624,7 @@ export class FirewallaClient {
           return {
             device_id: deviceId,
             device_name: deviceName,
-            ip_address: ipAddress,
+            ip: ipAddress,
             bytes_uploaded: bytesUploaded,
             bytes_downloaded: bytesDownloaded,
             total_bytes: totalBytes,
@@ -635,8 +635,8 @@ export class FirewallaClient {
           item.device_id && 
           item.device_id !== 'unknown' && 
           item.device_id !== 'unknown_device' &&
-          item.ip_address && 
-          item.ip_address !== 'unknown' &&
+          item.ip && 
+          item.ip !== 'unknown' &&
           item.total_bytes > 0
         )
         .sort((a, b) => b.total_bytes - a.total_bytes)

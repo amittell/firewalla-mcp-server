@@ -234,7 +234,7 @@ export interface BandwidthUsage {
   /** Human-readable name of the device */
   device_name: string;
   /** IP address of the device */
-  ip_address: string;
+  ip: string;
   /** Total bytes uploaded by the device */
   bytes_uploaded: number;
   /** Total bytes downloaded by the device */

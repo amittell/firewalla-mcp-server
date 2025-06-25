@@ -116,7 +116,7 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
           (item: any) => ({
             device_id: SafeAccess.getNestedValue(item, 'device_id', 'unknown'),
             device_name: SafeAccess.getNestedValue(item, 'device_name', 'Unknown Device'),
-            ip_address: SafeAccess.getNestedValue(item, 'ip_address', 'unknown'),
+            ip: SafeAccess.getNestedValue(item, 'ip', 'unknown'),
             bytes_uploaded: SafeAccess.getNestedValue(item, 'bytes_uploaded', 0),
             bytes_downloaded: SafeAccess.getNestedValue(item, 'bytes_downloaded', 0),
             total_bytes: SafeAccess.getNestedValue(item, 'total_bytes', 0),
