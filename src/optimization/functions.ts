@@ -274,6 +274,6 @@ export function getOptimizationStats(original: any, optimized: any): {
     original_size: originalSize,
     optimized_size: optimizedSize,
     compression_ratio: Math.round((1 - optimizedSize / originalSize) * 100),
-    token_savings: estimateTokenCount(originalSize.toString()) - estimateTokenCount(optimizedSize.toString())
+    token_savings: estimateTokenCount(JSON.stringify(original)) - estimateTokenCount(JSON.stringify(optimized))
   };
 }

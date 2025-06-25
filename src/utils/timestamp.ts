@@ -17,7 +17,7 @@ export function unixToISOString(timestamp: number | string | null | undefined): 
 
   const numTimestamp = typeof timestamp === 'string' ? Number(timestamp) : timestamp;
   
-  if (isNaN(numTimestamp) || !isFinite(numTimestamp)) {
+  if (isNaN(numTimestamp) || !Number.isFinite(numTimestamp)) {
     throw new Error(`Invalid timestamp: ${timestamp}`);
   }
 

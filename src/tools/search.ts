@@ -114,6 +114,15 @@ export class SearchEngine {
           group_by: params?.group_by,
           aggregate: params?.aggregate
         };
+        
+        // Add time range to searchOptions if provided
+        if (params.time_range?.start && params.time_range?.end) {
+          searchOptions.time_range = {
+            start: params.time_range.start,
+            end: params.time_range.end
+          };
+        }
+        
         return await client.searchDevices(searchQuery, searchOptions);
       },
       processResults: (results, params) => {
@@ -215,12 +224,7 @@ export class SearchEngine {
         searchOptions.include_resolved = true;
       }
       
-      if (params.time_range?.start && params.time_range?.end && validationConfig.supportsTimeRange) {
-        searchOptions.time_range = {
-          start: params.time_range.start,
-          end: params.time_range.end
-        };
-      }
+      // Time range handling is done within individual strategies to avoid duplication
 
       // Execute API call using strategy
       const response = await strategy.executeApiCall(this.firewalla, params, apiParams, searchOptions);
@@ -513,7 +517,9 @@ export class SearchEngine {
       const valueA = this.getNestedValue(a, sortBy);
       const valueB = this.getNestedValue(b, sortBy);
       
-      if (valueA === valueB) {return 0;}
+      if (valueA === valueB) {
+        return 0;
+      }
       
       const comparison = valueA < valueB ? -1 : 1;
       return sortOrder === 'asc' ? comparison : -comparison;

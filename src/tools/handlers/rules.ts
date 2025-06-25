@@ -164,6 +164,14 @@ export class GetTargetListsHandler extends BaseToolHandler {
     try {
       const listType = args?.list_type as string | undefined;
       
+      // Validate list_type parameter if provided
+      if (listType !== undefined) {
+        const validTypes = ['cloudflare', 'crowdsec', 'all'];
+        if (!validTypes.includes(listType)) {
+          return ErrorHandler.createErrorResponse(this.name, 'Invalid list_type parameter', null, [`list_type must be one of: ${validTypes.join(', ')}`]);
+        }
+      }
+      
       const listsResponse = await firewalla.getTargetLists(listType);
       
       return this.createSuccessResponse({
