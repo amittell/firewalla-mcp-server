@@ -10,6 +10,7 @@ import { TimeRangeFilter } from './time.js';
 /**
  * Determines whether a query node is a field query.
  *
+ * @param node - The query node to check
  * @returns True if the node is of type 'field' and contains both 'field' and 'value' properties.
  */
 function isFieldQuery(node: QueryNode): node is FieldQuery {
@@ -19,6 +20,7 @@ function isFieldQuery(node: QueryNode): node is FieldQuery {
 /**
  * Determines whether a query node is a wildcard query.
  *
+ * @param node - The query node to check
  * @returns True if the node is of type 'wildcard' and contains both 'field' and 'pattern' properties.
  */
 function isWildcardQuery(node: QueryNode): node is WildcardQuery {

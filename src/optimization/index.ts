@@ -415,6 +415,9 @@ export class ResponseOptimizer {
  * Method decorator that automatically optimizes the response of an asynchronous method based on the specified response type and optional configuration.
  *
  * Applies response truncation, summarization, and token management strategies to reduce payload size. If debug mode is enabled, logs optimization statistics to standard error.
+ *
+ * @param responseType - The type of response to optimize (e.g., 'alarms', 'flows', 'rules', 'devices')
+ * @param config - Optional optimization configuration to override defaults
  */
 export function optimizeResponse(responseType: string, config?: Partial<OptimizationConfig>) {
   // Input validation for responseType parameter

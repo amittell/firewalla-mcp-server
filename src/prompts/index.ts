@@ -511,6 +511,7 @@ function calculateNetworkHealthScore(data: HealthScoreData): number {
  *
  * Returns 0 if the system is not online. Otherwise, computes the score as the average of (100 minus CPU usage) and (100 minus memory usage), rounded to the nearest integer.
  *
+ * @param summary - The system summary containing status, CPU usage, and memory usage
  * @returns The calculated performance score, or 0 if the system is offline.
  */
 function calculatePerformanceScore(summary: SystemSummary): number {
@@ -525,6 +526,7 @@ function calculatePerformanceScore(summary: SystemSummary): number {
  *
  * The score starts at 100, deducts 5 points for each active alarm, and adds up to 10 bonus points based on the number of blocked connections (1 point per 100 blocked connections, capped at 10). The final score is clamped between 0 and 100.
  *
+ * @param metrics - The security metrics containing active alarms and blocked connections
  * @returns The computed security score as an integer between 0 and 100.
  */
 function calculateSecurityScore(metrics: SecurityMetrics & { blocked_connections: number }): number {
