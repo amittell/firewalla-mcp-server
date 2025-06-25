@@ -1,6 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { GetPromptRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
+import { unixToISOString, safeUnixToISOString } from '../utils/timestamp.js';
 
 /**
  * Sets up MCP prompts for Firewalla security analysis
@@ -56,7 +57,7 @@ Generate a comprehensive security report based on the following data:
 
 **Active Alarms (${alarms.count}):**
 ${alarms.results.slice(0, 10).map((alarm: any) => 
-  `- ${alarm.type}: ${alarm.message} (${new Date(alarm.ts * 1000).toISOString()})`
+  `- ${alarm.type}: ${alarm.message} (${unixToISOString(alarm.ts)})`
 ).join('\\n')}
 
 **Recent Threats (${threats.length}):**
@@ -105,7 +106,7 @@ Analyze the following security data to identify patterns, trends, and recommend 
 ${(Array.isArray(alarms.results) ? alarms.results : []).map((alarm: any) => 
   `- [${alarm.type}] ${alarm.message}
     Source: ${alarm.device?.ip || 'N/A'} → Destination: ${alarm.remote?.ip || 'N/A'}
-    Time: ${new Date(alarm.ts * 1000).toISOString()}`
+    Time: ${unixToISOString(alarm.ts)}`
 ).join('\\n\\n')}
 
 **Recent Threat Patterns:**
@@ -157,7 +158,7 @@ Please provide:
           const flowAnalysis = analyzeFlowPatterns((Array.isArray(flows.results) ? flows.results : []).map((f: any) => ({ 
             protocol: f.protocol, 
             duration: f.duration || 0, 
-            timestamp: new Date(f.ts * 1000).toISOString() 
+            timestamp: unixToISOString(f.ts) 
           })));
 
           const prompt = `# Bandwidth Usage Analysis (${period})
@@ -246,7 +247,7 @@ Investigate potential security issues and unusual behavior for this device:
 - MAC Vendor: ${targetDevice.macVendor || 'Unknown'}
 - Status: ${targetDevice.online ? 'online' : 'offline'}
 - Network: ${targetDevice.network.name}
-- Last Seen: ${targetDevice.lastSeen ? new Date(Number(targetDevice.lastSeen) * 1000).toISOString() : 'Never'}
+- Last Seen: ${safeUnixToISOString(targetDevice.lastSeen, 'Never')}
 
 **Network Activity (${lookbackHours}h lookback):**
 - Total flows involving this device: ${deviceFlows.length}
@@ -260,7 +261,7 @@ Investigate potential security issues and unusual behavior for this device:
 **Security Alerts:**
 ${deviceAlarms.length > 0 ? 
   deviceAlarms.map((alarm: any) => 
-    `- [${alarm.type}] ${alarm.message} (${new Date(alarm.ts * 1000).toISOString()})`
+    `- [${alarm.type}] ${alarm.message} (${unixToISOString(alarm.ts)})`
   ).join('\\n') : 
   'No security alerts found for this device'
 }

@@ -435,7 +435,7 @@ export class QueryParser {
   private parseValue(value: string): string | number {
     // Try to parse as number
     const num = parseFloat(value);
-    if (!isNaN(num) && isFinite(num)) {
+    if (!isNaN(num) && Number.isFinite(num)) {
       return num;
     }
     return value;

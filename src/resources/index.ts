@@ -1,6 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { ReadResourceRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
+import { safeUnixToISOString } from '../utils/timestamp.js';
 
 /**
  * Sets up MCP resources for Firewalla data access
@@ -77,9 +78,9 @@ export function setupResources(server: Server, firewalla: FirewallaClient): void
                       id: device.id,
                       name: device.name,
                       ip_address: device.ip,
-                      mac_vendor: device.mac_vendor || device.macVendor,
+                      mac_vendor: device.macVendor,
                       status: device.online ? 'online' : 'offline',
-                      last_seen: device.lastSeen ? new Date(Number(device.lastSeen) * 1000).toISOString() : 'Never',
+                      last_seen: safeUnixToISOString(device.lastSeen, 'Never'),
                       network: device.network,
                       group: device.group,
                       status_indicator: device.online ? '🟢' : '🔴',

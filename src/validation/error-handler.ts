@@ -33,7 +33,7 @@ export class ErrorHandler {
       message: message,
       tool: tool,
       ...(details && { details }),
-      ...(validationErrors && validationErrors.length > 0 && { validation_errors: validationErrors })
+      ...(validationErrors?.length && { validation_errors: validationErrors })
     };
 
     return {
@@ -383,6 +383,27 @@ export class SafeAccess {
       .filter(filter)
       .map(mapper)
       .filter(result => result !== null && result !== undefined);
+  }
+
+  /**
+   * Safely filter array with null/undefined checking
+   */
+  static safeArrayFilter<T>(
+    array: any,
+    // eslint-disable-next-line no-unused-vars
+    predicate: (item: T) => boolean
+  ): T[] {
+    const safeArray = this.ensureArray<T>(array);
+    return safeArray.filter(item => {
+      if (item === null || item === undefined) {
+        return false;
+      }
+      try {
+        return predicate(item);
+      } catch {
+        return false;
+      }
+    });
   }
 }
 

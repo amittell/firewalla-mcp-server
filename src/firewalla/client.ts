@@ -451,7 +451,7 @@ export class FirewallaClient {
         has_more: paginatedResult.has_more
       };
     } catch (error) {
-      console.error('Error in getDeviceStatus:', error);
+      logger.error('Error in getDeviceStatus:', error instanceof Error ? error : new Error(String(error)));
       throw new Error(`Failed to get device status: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -499,7 +499,7 @@ export class FirewallaClient {
         next_cursor: undefined
       };
     } catch (error) {
-      console.error('Error in getOfflineDevices:', error);
+      logger.error('Error in getOfflineDevices:', error instanceof Error ? error : new Error(String(error)));
       throw new Error(`Failed to get offline devices: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -647,7 +647,7 @@ export class FirewallaClient {
         next_cursor: undefined
       };
     } catch (error) {
-      console.error('Error in getBandwidthUsage:', error);
+      logger.error('Error in getBandwidthUsage:', error instanceof Error ? error : new Error(String(error)));
       if (error instanceof Error && error.message.includes('Failed to get bandwidth usage')) {
         throw error; // Re-throw already formatted errors
       }
@@ -834,7 +834,7 @@ export class FirewallaClient {
         next_cursor: undefined
       };
     } catch (error) {
-      console.error('Error in getBoxes:', error);
+      logger.error('Error in getBoxes:', error instanceof Error ? error : new Error(String(error)));
       throw new Error(`Failed to get boxes: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -941,7 +941,7 @@ export class FirewallaClient {
         next_cursor: undefined
       };
     } catch (error) {
-      console.error('Error in getSpecificAlarm:', error);
+      logger.error('Error in getSpecificAlarm:', error instanceof Error ? error : new Error(String(error)));
       // Enhanced error handling
       if (error instanceof Error) {
         if (error.message.includes('Invalid') || error.message.includes('validation')) {
@@ -1015,7 +1015,7 @@ export class FirewallaClient {
         next_cursor: undefined
       };
     } catch (error) {
-      console.error('Error in deleteAlarm:', error);
+      logger.error('Error in deleteAlarm:', error instanceof Error ? error : new Error(String(error)));
       // Enhanced error handling with specific error types
       if (error instanceof Error) {
         if (error.message.includes('Invalid') || error.message.includes('validation')) {
@@ -1100,7 +1100,7 @@ export class FirewallaClient {
         results
       };
     } catch (error) {
-      console.error('Error in getStatisticsByRegion:', error);
+      logger.error('Error in getStatisticsByRegion:', error instanceof Error ? error : new Error(String(error)));
       throw new Error(`Failed to get statistics by region: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -1244,7 +1244,7 @@ export class FirewallaClient {
         next_cursor: undefined
       };
     } catch (error) {
-      console.error('Error in getFlowTrends:', error);
+      logger.error('Error in getFlowTrends:', error instanceof Error ? error : new Error(String(error)));
       if (error instanceof Error && (error.message.includes('Period') || error.message.includes('Interval') || error.message.includes('Invalid'))) {
         throw error; // Re-throw validation errors
       }
@@ -1398,7 +1398,7 @@ export class FirewallaClient {
         next_cursor: undefined
       };
     } catch (error) {
-      console.error('Error in getAlarmTrends:', error);
+      logger.error('Error in getAlarmTrends:', error instanceof Error ? error : new Error(String(error)));
       if (error instanceof Error && (error.message.includes('Period') || error.message.includes('Invalid'))) {
         throw error; // Re-throw validation errors
       }
@@ -1580,7 +1580,7 @@ export class FirewallaClient {
         next_cursor: undefined
       };
     } catch (error) {
-      console.error('Error in getRuleTrends:', error);
+      logger.error('Error in getRuleTrends:', error instanceof Error ? error : new Error(String(error)));
       if (error instanceof Error && (error.message.includes('Period') || error.message.includes('Invalid'))) {
         throw error; // Re-throw validation errors
       }
@@ -1649,7 +1649,7 @@ export class FirewallaClient {
       };
     } catch (error) {
       // Handle errors in statistics aggregation gracefully
-      console.error('Error in getStatisticsByBox:', error);
+      logger.error('Error in getStatisticsByBox:', error instanceof Error ? error : new Error(String(error)));
       throw new Error(`Failed to get statistics by box: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -1972,7 +1972,7 @@ export class FirewallaClient {
         }
       };
     } catch (error) {
-      console.error('Error in searchAlarms:', error);
+      logger.error('Error in searchAlarms:', error instanceof Error ? error : new Error(String(error)));
       if (error instanceof Error && (error.message.includes('SearchQuery') || error.message.includes('Invalid search') || error.message.includes('required'))) {
         throw error; // Re-throw validation errors
       }
@@ -2182,7 +2182,7 @@ export class FirewallaClient {
         }
       };
     } catch (error) {
-      console.error('Error in searchRules:', error);
+      logger.error('Error in searchRules:', error instanceof Error ? error : new Error(String(error)));
       if (error instanceof Error && (error.message.includes('SearchQuery') || error.message.includes('Invalid search') || error.message.includes('required'))) {
         throw error; // Re-throw validation errors
       }
@@ -2322,7 +2322,7 @@ export class FirewallaClient {
         }
       };
     } catch (error) {
-      console.error('Error in searchDevices:', error);
+      logger.error('Error in searchDevices:', error instanceof Error ? error : new Error(String(error)));
       if (error instanceof Error && (error.message.includes('SearchQuery') || error.message.includes('Invalid search') || error.message.includes('required'))) {
         throw error; // Re-throw validation errors
       }
@@ -2513,7 +2513,7 @@ export class FirewallaClient {
         }
       };
     } catch (error) {
-      console.error('Error in searchTargetLists:', error);
+      logger.error('Error in searchTargetLists:', error instanceof Error ? error : new Error(String(error)));
       if (error instanceof Error && (error.message.includes('SearchQuery') || error.message.includes('Invalid search') || error.message.includes('required'))) {
         throw error; // Re-throw validation errors
       }
@@ -2584,7 +2584,7 @@ export class FirewallaClient {
         }
       };
     } catch (error) {
-      console.error('Error in searchCrossReference:', error);
+      logger.error('Error in searchCrossReference:', error instanceof Error ? error : new Error(String(error)));
       throw new Error(`Failed to search cross reference: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -2692,7 +2692,7 @@ export class FirewallaClient {
         results: [summary]
       };
     } catch (error) {
-      console.error('Error in getNetworkRulesSummary:', error);
+      logger.error('Error in getNetworkRulesSummary:', error instanceof Error ? error : new Error(String(error)));
       // Enhanced error handling with more specific error types
       if (error instanceof TypeError) {
         throw new Error(`Data type error in network rules summary: ${error.message}`);
@@ -2779,7 +2779,7 @@ export class FirewallaClient {
         results: validatedResults
       };
     } catch (error) {
-      console.error('Error in getMostActiveRules:', error);
+      logger.error('Error in getMostActiveRules:', error instanceof Error ? error : new Error(String(error)));
       // Enhanced error handling with specific error types
       if (error instanceof TypeError) {
         throw new Error(`Data type error in most active rules: ${error.message}`);
@@ -2905,7 +2905,7 @@ export class FirewallaClient {
         results: validatedResults
       };
     } catch (error) {
-      console.error('Error in getRecentRules:', error);
+      logger.error('Error in getRecentRules:', error instanceof Error ? error : new Error(String(error)));
       // Enhanced error handling with specific error types
       if (error instanceof TypeError) {
         throw new Error(`Data type error in recent rules: ${error.message}`);
@@ -2944,7 +2944,7 @@ export class FirewallaClient {
         message: response?.message || `Rule ${validatedRuleId} paused for ${validatedDuration} minutes`
       };
     } catch (error) {
-      console.error('Error in pauseRule:', error);
+      logger.error('Error in pauseRule:', error instanceof Error ? error : new Error(String(error)));
       throw new Error(`Failed to pause rule: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -2973,7 +2973,7 @@ export class FirewallaClient {
         message: response?.message || `Rule ${validatedRuleId} resumed successfully`
       };
     } catch (error) {
-      console.error('Error in resumeRule:', error);
+      logger.error('Error in resumeRule:', error instanceof Error ? error : new Error(String(error)));
       throw new Error(`Failed to resume rule: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

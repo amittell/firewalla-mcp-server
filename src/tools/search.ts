@@ -12,404 +12,312 @@ import { ParameterValidator, SafeAccess, QuerySanitizer } from '../validation/er
 import { FieldMapper } from '../validation/field-mapper.js';
 
 /**
+ * Strategy interface for different entity search implementations
+ */
+interface SearchStrategy {
+  entityType: string;
+  // eslint-disable-next-line no-unused-vars
+  executeApiCall(client: FirewallaClient, params: SearchParams, apiParams: any, searchOptions: any): Promise<any>;
+  // eslint-disable-next-line no-unused-vars
+  validateParams?(params: SearchParams): { isValid: boolean; errors: string[] };
+  // eslint-disable-next-line no-unused-vars
+  processResults?(results: any[], params: SearchParams): any[];
+}
+
+/**
+ * Configuration for search parameter validation
+ */
+interface SearchValidationConfig {
+  requireQuery?: boolean;
+  requireLimit?: boolean;
+  supportsCursor?: boolean;
+  supportsTimeRange?: boolean;
+}
+
+/**
  * Search Engine for executing complex queries
  */
 export class SearchEngine {
+  private strategies: Map<string, SearchStrategy> = new Map();
+
   constructor(private firewalla: FirewallaClient) {
     // FirewallaClient is stored for use in search methods
     // Explicitly reference to avoid unused variable warning
     this.firewalla = firewalla;
+    this.initializeStrategies();
+  }
+
+  /**
+   * Initialize search strategies for different entity types
+   */
+  private initializeStrategies(): void {
+    this.strategies.set('flows', {
+      entityType: 'flows',
+      executeApiCall: async (client, params, apiParams, searchOptions) => {
+        const queryString = searchOptions.time_range ? 
+          `ts:${Math.floor(new Date(searchOptions.time_range.start).getTime() / 1000)}-${Math.floor(new Date(searchOptions.time_range.end).getTime() / 1000)} AND (${params.query})` : 
+          params.query;
+        return await client.searchFlows({ query: queryString, limit: apiParams.limit }, searchOptions);
+      }
+    });
+
+    this.strategies.set('alarms', {
+      entityType: 'alarms',
+      executeApiCall: async (client, params, apiParams) => {
+        return await client.getActiveAlarms(
+          apiParams.queryString || undefined,
+          undefined,
+          'ts:desc',
+          params.limit
+        );
+      }
+    });
+
+    this.strategies.set('rules', {
+      entityType: 'rules',
+      executeApiCall: async (client) => {
+        return await client.getNetworkRules();
+      },
+      processResults: (results, params) => {
+        if (params.limit) {
+          return results.slice(0, params.limit);
+        }
+        return results;
+      }
+    });
+
+    this.strategies.set('devices', {
+      entityType: 'devices',
+      executeApiCall: async (client, params, apiParams, searchOptions) => {
+        const searchQuery = {
+          query: params.query,
+          limit: params.limit,
+          cursor: params.cursor,
+          sort_by: params.sort_by,
+          group_by: params.group_by,
+          aggregate: params.aggregate
+        };
+        return await client.searchDevices(searchQuery, searchOptions);
+      },
+      processResults: (results, params) => {
+        if (params.offset && !params.cursor) {
+          // Legacy offset support - only if cursor not provided
+          let processedResults = results.slice(params.offset);
+          if (params.limit) {
+            processedResults = processedResults.slice(0, params.limit);
+          }
+          return processedResults;
+        }
+        return results;
+      }
+    });
+
+    this.strategies.set('target_lists', {
+      entityType: 'target_lists',
+      executeApiCall: async (client) => {
+        return await client.getTargetLists();
+      },
+      processResults: (results, params) => {
+        if (params.limit) {
+          return results.slice(0, params.limit);
+        }
+        return results;
+      }
+    });
+  }
+
+  /**
+   * Generic search execution method that handles common patterns
+   */
+  private async executeSearch(params: SearchParams, entityType: string, validationConfig: SearchValidationConfig = {}): Promise<SearchResult> {
+    const startTime = Date.now();
+    
+    try {
+      // Get strategy for entity type
+      const strategy = this.strategies.get(entityType);
+      if (!strategy) {
+        throw new Error(`No search strategy found for entity type: ${entityType}`);
+      }
+
+      // Validate parameters based on configuration
+      if (validationConfig.requireQuery !== false) {
+        const queryValidation = entityType === 'flows' ?
+          ParameterValidator.validateRequiredString(params?.query, 'query') :
+          this.validateBasicQuery(params);
+        
+        if (!queryValidation.isValid) {
+          throw new Error(`Parameter validation failed: ${queryValidation.errors?.join(', ') || 'Invalid query'}`);
+        }
+      }
+      
+      if (validationConfig.requireLimit !== false) {
+        if (!params.limit) {
+          throw new Error('limit parameter is required');
+        }
+      }
+
+      // Parse and validate query
+      let queryCheck;
+      if (entityType === 'flows') {
+        queryCheck = QuerySanitizer.sanitizeSearchQuery(params.query);
+        if (!queryCheck.isValid) {
+          throw new Error(`Query validation failed: ${queryCheck.errors.join(', ')}`);
+        }
+      }
+      
+      const validation = queryParser.parse(queryCheck?.sanitizedValue || params.query, entityType as 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists');
+      if (!validation.isValid || !validation.ast) {
+        throw new Error(`Invalid query syntax: ${validation.errors.join(', ')}`);
+      }
+
+      // Set up filter context
+      const context: FilterContext = {
+        entityType: entityType as 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists',
+        apiParams: {},
+        postProcessing: [],
+        metadata: {
+          filtersApplied: [],
+          optimizations: []
+        }
+      };
+
+      const filterResult = this.applyFiltersRecursively(validation.ast, context);
+      
+      // Prepare API parameters
+      const apiParams = {
+        ...filterResult.apiParams,
+        limit: params.limit,
+        start_time: params.time_range?.start,
+        end_time: params.time_range?.end,
+        queryString: filterResult.queryString
+      };
+
+      // Prepare search options
+      const searchOptions: any = {};
+      if (entityType === 'devices') {
+        searchOptions.include_resolved = true;
+      }
+      
+      if (params.time_range?.start && params.time_range?.end && validationConfig.supportsTimeRange) {
+        searchOptions.time_range = {
+          start: params.time_range.start,
+          end: params.time_range.end
+        };
+      }
+
+      // Execute API call using strategy
+      const response = await strategy.executeApiCall(this.firewalla, params, apiParams, searchOptions);
+
+      // Process results
+      let results = response.results || [];
+      
+      // Apply post-processing filters
+      if (filterResult.postProcessing && results.length > 0) {
+        results = filterResult.postProcessing(results);
+      }
+
+      // Apply strategy-specific result processing
+      if (strategy.processResults) {
+        results = strategy.processResults(results, params);
+      }
+
+      // Apply sorting
+      if (params.sort_by) {
+        results = this.sortResults(results, params.sort_by, params.sort_order);
+      }
+
+      // Apply pagination (for non-cursor based)
+      if (params.offset && entityType !== 'devices') {
+        results = results.slice(params.offset);
+      }
+
+      // Generate aggregations
+      const aggregations = params.aggregate ? this.generateAggregations(results, params.group_by) : undefined;
+
+      // Build result object
+      const result: SearchResult = {
+        results,
+        count: response.count || results.length,
+        limit: params.limit,
+        offset: params.offset || 0,
+        query: queryCheck?.sanitizedValue || params.query,
+        execution_time_ms: Date.now() - startTime,
+        aggregations
+      };
+
+      // Add cursor for devices
+      if (entityType === 'devices' && response.next_cursor) {
+        (result as any).next_cursor = response.next_cursor;
+      }
+
+      return result;
+
+    } catch (error) {
+      throw new Error(`${entityType} search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Validate basic query parameters
+   */
+  private validateBasicQuery(params: SearchParams): { isValid: boolean; errors?: string[] } {
+    if (!params || !params.query || typeof params.query !== 'string') {
+      return { isValid: false, errors: ['Invalid search parameters: query is required and must be a string'] };
+    }
+    return { isValid: true };
   }
 
   /**
    * Execute a search query for flows
    */
   async searchFlows(params: SearchParams): Promise<SearchResult> {
-    const startTime = Date.now();
-    
-    try {
-      // Validate input parameters
-      const queryValidation = ParameterValidator.validateRequiredString(params?.query, 'query');
-      const limitValidation = ParameterValidator.validateNumber(params?.limit, 'limit', {
-        required: true, min: 1, max: 10000, integer: true
-      });
-      const offsetValidation = ParameterValidator.validateNumber(params?.offset, 'offset', {
-        min: 0, defaultValue: 0, integer: true
-      });
-      
-      const validationResult = ParameterValidator.combineValidationResults([
-        queryValidation, limitValidation, offsetValidation
-      ]);
-      
-      if (!validationResult.isValid) {
-        throw new Error(`Parameter validation failed: ${validationResult.errors.join(', ')}`);
-      }
-      
-      // Sanitize query
-      const queryCheck = QuerySanitizer.sanitizeSearchQuery(queryValidation.sanitizedValue!);
-      if (!queryCheck.isValid) {
-        throw new Error(`Query validation failed: ${queryCheck.errors.join(', ')}`);
-      }
-      // Parse the sanitized query
-      const validation = queryParser.parse(queryCheck.sanitizedValue!, 'flows');
-      if (!validation.isValid || !validation.ast) {
-        throw new Error(`Invalid query syntax: ${validation.errors.join(', ')}`);
-      }
-
-      // Apply filters to build API parameters
-      const context: FilterContext = {
-        entityType: 'flows',
-        apiParams: {},
-        postProcessing: [],
-        metadata: {
-          filtersApplied: [],
-          optimizations: []
-        }
-      };
-
-      const filterResult = this.applyFiltersRecursively(validation.ast, context);
-      
-      // Execute API call with filtered parameters
-      const apiParams = {
-        ...filterResult.apiParams,
-        limit: params.limit,
-        start_time: params.time_range?.start,
-        end_time: params.time_range?.end
-      };
-
-      // Build query string for Firewalla API
-      let queryString = '';
-      
-      // Add time range to query if provided
-      if (params.time_range?.start && params.time_range?.end) {
-        const startTs = Math.floor(new Date(params.time_range.start).getTime() / 1000);
-        const endTs = Math.floor(new Date(params.time_range.end).getTime() / 1000);
-        queryString += `ts:${startTs}-${endTs}`;
-      }
-      
-      // Combine with the parsed query
-      const finalQuery = queryString ? `${queryString} AND (${params.query})` : params.query;
-      
-      const searchOptions: any = {};
-      if (params.time_range && params.time_range.start && params.time_range.end) {
-        searchOptions.time_range = {
-          start: params.time_range.start,
-          end: params.time_range.end
-        };
-      }
-      
-      const flowData = await this.firewalla.searchFlows(
-        { query: finalQuery, limit: apiParams.limit },
-        searchOptions
-      );
-
-      // Apply post-processing filters
-      let results = flowData.results || [];
-      if (filterResult.postProcessing && results.length > 0) {
-        results = filterResult.postProcessing(results);
-      }
-
-      // Apply sorting and pagination
-      if (params.sort_by) {
-        results = this.sortResults(results, params.sort_by, params.sort_order);
-      }
-
-      if (params.offset) {
-        results = results.slice(params.offset);
-      }
-
-      // Generate aggregations if requested
-      const aggregations = params.aggregate ? this.generateAggregations(results, params.group_by) : undefined;
-
-      return {
-        results,
-        count: results.length,
-        limit: limitValidation.sanitizedValue!,
-        offset: offsetValidation.sanitizedValue!,
-        query: queryCheck.sanitizedValue!,
-        execution_time_ms: Date.now() - startTime,
-        aggregations
-      };
-
-    } catch (error) {
-      throw new Error(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.executeSearch(params, 'flows', {
+      requireQuery: true,
+      requireLimit: true,
+      supportsTimeRange: true
+    });
   }
 
   /**
    * Execute a search query for alarms
    */
   async searchAlarms(params: SearchParams): Promise<SearchResult> {
-    const startTime = Date.now();
-    
-    try {
-      // Validate input parameters
-      if (!params || !params.query || typeof params.query !== 'string') {
-        throw new Error('Invalid search parameters: query is required and must be a string');
-      }
-      
-      if (!params.limit) {
-        throw new Error('limit parameter is required');
-      }
-      const validation = queryParser.parse(params.query, 'alarms');
-      if (!validation.isValid || !validation.ast) {
-        throw new Error(`Invalid query: ${validation.errors.join(', ')}`);
-      }
-
-      const context: FilterContext = {
-        entityType: 'alarms',
-        apiParams: {},
-        postProcessing: [],
-        metadata: {
-          filtersApplied: [],
-          optimizations: []
-        }
-      };
-
-      const filterResult = this.applyFiltersRecursively(validation.ast, context);
-      
-      const alarms = await this.firewalla.getActiveAlarms(
-        filterResult.queryString || undefined,
-        undefined,
-        'ts:desc',
-        params.limit
-      );
-
-      let results = alarms.results || [];
-      if (filterResult.postProcessing && results.length > 0) {
-        results = filterResult.postProcessing(results);
-      }
-
-      if (params.sort_by) {
-        results = this.sortResults(results, params.sort_by, params.sort_order);
-      }
-
-      if (params.offset) {
-        results = results.slice(params.offset);
-      }
-
-      const aggregations = params.aggregate ? this.generateAggregations(results, params.group_by) : undefined;
-
-      return {
-        results,
-        count: results.length,
-        limit: params.limit,
-        offset: params.offset || 0,
-        query: params.query,
-        execution_time_ms: Date.now() - startTime,
-        aggregations
-      };
-
-    } catch (error) {
-      throw new Error(`Alarm search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.executeSearch(params, 'alarms', {
+      requireQuery: true,
+      requireLimit: true
+    });
   }
 
   /**
    * Execute a search query for rules
    */
   async searchRules(params: SearchParams): Promise<SearchResult> {
-    const startTime = Date.now();
-    
-    try {
-      // Validate input parameters
-      if (!params || !params.query || typeof params.query !== 'string') {
-        throw new Error('Invalid search parameters: query is required and must be a string');
-      }
-      
-      if (!params.limit) {
-        throw new Error('limit parameter is required');
-      }
-      const validation = queryParser.parse(params.query, 'rules');
-      if (!validation.isValid || !validation.ast) {
-        throw new Error(`Invalid query: ${validation.errors.join(', ')}`);
-      }
-
-      const context: FilterContext = {
-        entityType: 'rules',
-        apiParams: {},
-        postProcessing: [],
-        metadata: {
-          filtersApplied: [],
-          optimizations: []
-        }
-      };
-
-      const filterResult = this.applyFiltersRecursively(validation.ast, context);
-      
-      const rules = await this.firewalla.getNetworkRules();
-
-      let results = rules.results || [];
-      if (filterResult.postProcessing && results.length > 0) {
-        results = filterResult.postProcessing(results);
-      }
-
-      if (params.sort_by) {
-        results = this.sortResults(results, params.sort_by, params.sort_order);
-      }
-
-      if (params.offset) {
-        results = results.slice(params.offset);
-      }
-
-      if (params.limit) {
-        results = results.slice(0, params.limit);
-      }
-
-      const aggregations = params.aggregate ? this.generateAggregations(results, params.group_by) : undefined;
-
-      return {
-        results,
-        count: results.length,
-        limit: params.limit,
-        offset: params.offset || 0,
-        query: params.query,
-        execution_time_ms: Date.now() - startTime,
-        aggregations
-      };
-
-    } catch (error) {
-      throw new Error(`Rule search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.executeSearch(params, 'rules', {
+      requireQuery: true,
+      requireLimit: true
+    });
   }
 
   /**
    * Execute a search query for devices using cursor-based pagination
    */
   async searchDevices(params: SearchParams): Promise<SearchResult> {
-    const startTime = Date.now();
-    
-    try {
-      // Validate input parameters
-      if (!params || !params.query || typeof params.query !== 'string') {
-        throw new Error('Invalid search parameters: query is required and must be a string');
-      }
-      
-      if (!params.limit) {
-        throw new Error('limit parameter is required');
-      }
-      const validation = queryParser.parse(params.query, 'devices');
-      if (!validation.isValid || !validation.ast) {
-        throw new Error(`Invalid query: ${validation.errors.join(', ')}`);
-      }
-
-      // Use cursor-based pagination with the searchDevices client method
-      const searchQuery = {
-        query: params.query,
-        limit: params.limit,
-        cursor: params.cursor,
-        sort_by: params.sort_by,
-        group_by: params.group_by,
-        aggregate: params.aggregate
-      };
-
-      const searchOptions: any = {
-        include_resolved: true // Include all devices for search
-      };
-      
-      // Only add time_range if it has both start and end
-      if (params.time_range && params.time_range.start && params.time_range.end) {
-        searchOptions.time_range = {
-          start: params.time_range.start,
-          end: params.time_range.end
-        };
-      }
-
-      // Use the proper searchDevices client method with cursor support
-      const response = await this.firewalla.searchDevices(searchQuery, searchOptions);
-
-      // Handle backward compatibility for offset-based pagination
-      let results = response.results || [];
-      if (params.offset && !params.cursor) {
-        // Legacy offset support - only if cursor not provided
-        results = results.slice(params.offset);
-        if (params.limit) {
-          results = results.slice(0, params.limit);
-        }
-      }
-
-      return {
-        results,
-        count: response.count || results.length,
-        limit: params.limit,
-        offset: params.offset || 0, // For backward compatibility
-        next_cursor: response.next_cursor, // Cursor-based pagination
-        query: params.query,
-        execution_time_ms: Date.now() - startTime,
-        aggregations: response.aggregations
-      };
-
-    } catch (error) {
-      throw new Error(`Device search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.executeSearch(params, 'devices', {
+      requireQuery: true,
+      requireLimit: true,
+      supportsCursor: true,
+      supportsTimeRange: true
+    });
   }
 
   /**
    * Execute a search query for target lists
    */
   async searchTargetLists(params: SearchParams): Promise<SearchResult> {
-    const startTime = Date.now();
-    
-    try {
-      // Validate input parameters
-      if (!params || !params.query || typeof params.query !== 'string') {
-        throw new Error('Invalid search parameters: query is required and must be a string');
-      }
-      
-      if (!params.limit) {
-        throw new Error('limit parameter is required');
-      }
-      const validation = queryParser.parse(params.query, 'target_lists');
-      if (!validation.isValid || !validation.ast) {
-        throw new Error(`Invalid query: ${validation.errors.join(', ')}`);
-      }
-
-      const context: FilterContext = {
-        entityType: 'target_lists',
-        apiParams: {},
-        postProcessing: [],
-        metadata: {
-          filtersApplied: [],
-          optimizations: []
-        }
-      };
-
-      const filterResult = this.applyFiltersRecursively(validation.ast, context);
-      
-      const targetLists = await this.firewalla.getTargetLists();
-
-      let results = targetLists.results || [];
-      if (filterResult.postProcessing && results.length > 0) {
-        results = filterResult.postProcessing(results);
-      }
-
-      if (params.sort_by) {
-        results = this.sortResults(results, params.sort_by, params.sort_order);
-      }
-
-      if (params.offset) {
-        results = results.slice(params.offset);
-      }
-
-      if (params.limit) {
-        results = results.slice(0, params.limit);
-      }
-
-      const aggregations = params.aggregate ? this.generateAggregations(results, params.group_by) : undefined;
-
-      return {
-        results,
-        count: results.length,
-        limit: params.limit,
-        offset: params.offset || 0,
-        query: params.query,
-        execution_time_ms: Date.now() - startTime,
-        aggregations
-      };
-
-    } catch (error) {
-      throw new Error(`Target list search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    return this.executeSearch(params, 'target_lists', {
+      requireQuery: true,
+      requireLimit: true
+    });
   }
 
   /**
@@ -437,23 +345,30 @@ export class SearchEngine {
       // Execute primary query based on detected type
       let primaryResult: SearchResult;
       switch (primaryType) {
-        case 'flows':
-          primaryResult = await this.searchFlows({ query: params.primary_query });
+        case 'flows': {
+          primaryResult = await this.searchFlows({ query: params.primary_query, limit: 1000 });
           break;
-        case 'alarms':
-          primaryResult = await this.searchAlarms({ query: params.primary_query });
+        }
+        case 'alarms': {
+          primaryResult = await this.searchAlarms({ query: params.primary_query, limit: 1000 });
           break;
-        case 'rules':
-          primaryResult = await this.searchRules({ query: params.primary_query });
+        }
+        case 'rules': {
+          primaryResult = await this.searchRules({ query: params.primary_query, limit: 1000 });
           break;
-        case 'devices':
-          primaryResult = await this.searchDevices({ query: params.primary_query });
+        }
+        case 'devices': {
+          primaryResult = await this.searchDevices({ query: params.primary_query, limit: 1000 });
           break;
-        case 'target_lists':
-          primaryResult = await this.searchTargetLists({ query: params.primary_query });
+        }
+        case 'target_lists': {
+          primaryResult = await this.searchTargetLists({ query: params.primary_query, limit: 1000 });
           break;
-        default:
-          primaryResult = await this.searchFlows({ query: params.primary_query });
+        }
+        default: {
+          primaryResult = await this.searchFlows({ query: params.primary_query, limit: 1000 });
+          break;
+        }
       }
       
       // Extract correlation values using proper field mapping
@@ -474,29 +389,37 @@ export class SearchEngine {
         correlations: []
       };
 
-      for (const [index, secondaryQuery] of params.secondary_queries.entries()) {
+      for (let index = 0; index < params.secondary_queries.length; index++) {
+        const secondaryQuery = params.secondary_queries[index];
         const secondaryType = secondaryTypes[index];
         
         // Execute secondary query based on detected type
         let secondaryResult: SearchResult;
         switch (secondaryType) {
-          case 'flows':
-            secondaryResult = await this.searchFlows({ query: secondaryQuery });
+          case 'flows': {
+            secondaryResult = await this.searchFlows({ query: secondaryQuery, limit: 1000 });
             break;
-          case 'alarms':
-            secondaryResult = await this.searchAlarms({ query: secondaryQuery });
+          }
+          case 'alarms': {
+            secondaryResult = await this.searchAlarms({ query: secondaryQuery, limit: 1000 });
             break;
-          case 'rules':
-            secondaryResult = await this.searchRules({ query: secondaryQuery });
+          }
+          case 'rules': {
+            secondaryResult = await this.searchRules({ query: secondaryQuery, limit: 1000 });
             break;
-          case 'devices':
-            secondaryResult = await this.searchDevices({ query: secondaryQuery });
+          }
+          case 'devices': {
+            secondaryResult = await this.searchDevices({ query: secondaryQuery, limit: 1000 });
             break;
-          case 'target_lists':
-            secondaryResult = await this.searchTargetLists({ query: secondaryQuery });
+          }
+          case 'target_lists': {
+            secondaryResult = await this.searchTargetLists({ query: secondaryQuery, limit: 1000 });
             break;
-          default:
-            secondaryResult = await this.searchAlarms({ query: secondaryQuery });
+          }
+          default: {
+            secondaryResult = await this.searchAlarms({ query: secondaryQuery, limit: 1000 });
+            break;
+          }
         }
         
         // Filter by correlation using improved field mapping
@@ -542,7 +465,7 @@ export class SearchEngine {
       case 'logical': {
         // For logical nodes, apply filters to operands and combine
         // eslint-disable-next-line no-unused-vars
-        const combinedResult: { apiParams: any, postProcessing?: ((items: any[]) => any[]) } = { apiParams: {}, postProcessing: undefined };
+        const combinedResult: { apiParams: any, postProcessing?: ((items: any[]) => any[]) } = { apiParams: {} };
         
         if (node.left) {
           const leftResult = this.applyFiltersRecursively(node.left, context);

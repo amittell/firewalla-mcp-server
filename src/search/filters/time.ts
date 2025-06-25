@@ -5,6 +5,7 @@
 
 import { QueryNode, FieldQuery, RangeQuery, ComparisonQuery } from '../types.js';
 import { BaseFilter, FilterContext, FilterResult } from './base.js';
+import { unixToISOString } from '../../utils/timestamp.js';
 
 export class TimeRangeFilter extends BaseFilter {
   readonly name = 'time_range';
@@ -93,8 +94,8 @@ export class TimeRangeFilter extends BaseFilter {
     // Different entities use different parameter names
     switch (context.entityType) {
       case 'flows':
-        if (minTime) params.start_time = new Date(minTime * 1000).toISOString();
-        if (maxTime) params.end_time = new Date(maxTime * 1000).toISOString();
+        if (minTime) params.start_time = unixToISOString(minTime);
+        if (maxTime) params.end_time = unixToISOString(maxTime);
         break;
       
       case 'alarms':

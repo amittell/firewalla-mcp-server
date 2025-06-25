@@ -3,6 +3,8 @@
  * Implements response truncation, summary modes, and token management
  */
 
+import { safeUnixToISOString, unixToISOString } from '../utils/timestamp.js';
+
 /**
  * Optimization configuration interface
  */
@@ -120,7 +122,7 @@ export class ResponseOptimizer {
       count: response.count,
       results: response.results.slice(0, config.summaryMode.maxItems).map(alarm => ({
         aid: alarm.aid,
-        timestamp: alarm.timestamp || new Date(alarm.ts * 1000).toISOString(),
+        timestamp: alarm.timestamp || unixToISOString(alarm.ts),
         type: alarm.type,
         status: alarm.status,
         message: this.truncateText(alarm.message || '', 80),
@@ -156,7 +158,7 @@ export class ResponseOptimizer {
     const optimized = {
       count: response.count,
       results: response.results.slice(0, config.summaryMode.maxItems).map(flow => ({
-        timestamp: flow.timestamp || new Date(flow.ts * 1000).toISOString(),
+        timestamp: flow.timestamp || unixToISOString(flow.ts),
         source_ip: flow.source?.ip || flow.device?.ip || 'unknown',
         destination_ip: flow.destination?.ip || 'unknown',
         protocol: flow.protocol,
@@ -199,11 +201,11 @@ export class ResponseOptimizer {
         direction: rule.direction,
         status: rule.status || 'active',
         hit_count: rule.hit?.count || 0,
-        last_hit: rule.hit?.lastHitTs ? new Date(rule.hit.lastHitTs * 1000).toISOString() : 'Never',
-        created_at: new Date(rule.ts * 1000).toISOString(),
-        updated_at: new Date(rule.updateTs * 1000).toISOString(),
+        last_hit: safeUnixToISOString(rule.hit?.lastHitTs, 'Never'),
+        created_at: unixToISOString(rule.ts),
+        updated_at: unixToISOString(rule.updateTs),
         notes: this.truncateText(rule.notes || '', 60),
-        ...(rule.resumeTs && { resume_at: new Date(rule.resumeTs * 1000).toISOString() })
+        ...(rule.resumeTs && { resume_at: unixToISOString(rule.resumeTs) })
       })),
       next_cursor: response.next_cursor
     };
