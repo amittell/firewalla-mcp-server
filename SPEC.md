@@ -260,11 +260,11 @@ interface Flow {
 - Validate parameter types and ranges
 - Prevent injection attacks
 
-## ⚠️ Breaking Changes (v1.0.0)
+## v1.0.0 Implementation Features
 
 ### Mandatory Limit Parameters
 
-**BREAKING CHANGE**: All paginated tools now require explicit `limit` parameter in their schema.
+**REQUIRED**: All paginated tools now require explicit `limit` parameter in their schema.
 
 **Updated Tool Schemas:**
 ```typescript
@@ -303,7 +303,7 @@ interface GetDeviceStatusParams {
 }
 ```
 
-## 🚀 New Architecture (v1.0.0)
+## New Architecture (v1.0.0)
 
 ### Validation Framework
 

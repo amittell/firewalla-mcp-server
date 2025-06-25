@@ -230,10 +230,10 @@ npm run mcp:start
 - Rate limiting to respect Firewalla API limits
 - Secure credential handling with environment variables
 
-## ⚠️ Breaking Changes (v1.0.0)
+## v1.0.0 Implementation Features
 
 ### Mandatory Limit Parameters
-**CRITICAL**: All paginated MCP tools now require explicit `limit` parameter. This prevents artificial defaults that masked missing parameters.
+**REQUIRED**: All paginated MCP tools require explicit `limit` parameter. This prevents artificial defaults that mask missing parameters.
 
 **Required for Tools:**
 - get_active_alarms, get_flow_data, get_device_status
@@ -243,10 +243,10 @@ npm run mcp:start
 
 **Testing Patterns:**
 ```bash
-# ❌ This will now FAIL
+# Invalid - missing required parameter
 mcp_call get_device_status {}
 
-# ✅ This is required
+# Valid - includes required limit parameter
 mcp_call get_device_status { "limit": 100 }
 
 # Test limit enforcement
@@ -255,8 +255,8 @@ npm run test -- --grep "limit parameter"
 
 ### Validation Framework (v1.0.0)
 
-**New Error Format:**
-All tools now return standardized errors:
+**Error Format:**
+All tools return standardized errors:
 ```json
 {
   "error": true,

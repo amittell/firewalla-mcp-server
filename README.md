@@ -468,11 +468,11 @@ target_value:*.facebook.com OR mac_vendor:Apple*
 - Robust caching and rate limiting
 - Modular filter system with extensible architecture
 
-## ⚠️ Breaking Changes (v1.0.0)
+## v1.0.0 Implementation Features
 
 ### Mandatory Limit Parameters
 
-**BREAKING CHANGE**: All paginated tools now require explicit `limit` parameter. This change prevents artificial defaults that masked missing parameters.
+**REQUIRED**: All paginated tools now require explicit `limit` parameter. This prevents artificial defaults that masked missing parameters.
 
 **Affected Tools:**
 - `get_active_alarms`
@@ -486,17 +486,17 @@ target_value:*.facebook.com OR mac_vendor:Apple*
 
 **Migration:**
 ```typescript
-// ❌ Before (would default to 50-200 results)
+// Before (would default to 50-200 results)
 await get_device_status({});
 
-// ✅ After (explicit limit required)  
+// After (explicit limit required)  
 await get_device_status({ limit: 100 });
 ```
 
 **Error Response:**
 Tools will now return clear error: `"limit parameter is required"` when limit is missing.
 
-## 🚀 New Features (v1.0.0)
+## New Features (v1.0.0)
 
 ### Enterprise-Grade Validation Framework
 
@@ -532,10 +532,10 @@ DEBUG=cache,performance,api npm run mcp:start
 ### Enhanced Security & Reliability
 
 **Critical Bug Fixes:**
-- ✅ Fixed null pointer exceptions in rule management
-- ✅ Corrected success status reporting for pause/resume operations  
-- ✅ Enhanced alarm detection with better field mapping
-- ✅ Improved bandwidth usage error handling
+- Fixed null pointer exceptions in rule management
+- Corrected success status reporting for pause/resume operations  
+- Enhanced alarm detection with better field mapping
+- Improved bandwidth usage error handling
 
 **Security Enhancements:**
 - Query sanitization preventing injection attacks
