@@ -56,18 +56,12 @@ interface HealthScoreData {
 }
 
 /**
- * Sets up MCP prompts for Firewalla security analysis
- * Provides intelligent prompts that generate comprehensive security reports
- * 
- * Available prompts:
- * - security_report: Comprehensive security status and threat analysis
- * - threat_analysis: Detailed analysis of security threats and incidents
- * - bandwidth_analysis: Network bandwidth usage patterns and insights
- * - device_investigation: Deep dive into specific device security posture
- * - network_health_check: Overall network health and performance assessment
- * 
- * @param server - MCP server instance to register prompts with
- * @param firewalla - Firewalla client for API communication
+ * Registers intelligent prompt handlers on the MCP server for Firewalla security and network analysis.
+ *
+ * Sets up handlers for various prompt types, including security reports, threat analysis, bandwidth usage, device investigations, and network health checks. Each prompt gathers relevant data from the Firewalla client, formats a comprehensive prompt for analysis, and returns it as a user message. Handles errors by returning descriptive error messages.
+ *
+ * @param server - The MCP server instance to register prompt handlers with
+ * @param firewalla - The Firewalla client used for retrieving security and network data
  */
 export function setupPrompts(server: Server, firewalla: FirewallaClient): void {
   server.setRequestHandler(GetPromptRequestSchema, async (request) => {
@@ -432,7 +426,12 @@ Please assess and provide:
   });
 }
 
-// Helper functions for analysis
+/**
+ * Analyzes a list of threats to aggregate counts by threat type and by hour of occurrence.
+ *
+ * @param threats - Array of threat objects containing type, timestamp, and severity
+ * @returns An object with counts of threats by type and a distribution of threats by hour (0–23)
+ */
 function analyzeThreatPatterns(threats: Array<{ type: string; timestamp: string; severity: string }>): { byType: Record<string, number>; timeDistribution: Record<number, number> } {
   const byType = threats.reduce((acc, threat) => {
     acc[threat.type] = (acc[threat.type] || 0) + 1;
@@ -449,6 +448,12 @@ function analyzeThreatPatterns(threats: Array<{ type: string; timestamp: string;
 }
 
 
+/**
+ * Analyzes network flow data to extract unique protocols, average flow duration, and peak activity periods.
+ *
+ * @param flows - Array of flow objects containing protocol, duration, and timestamp information
+ * @returns An object with a list of unique protocols, the rounded average duration, and up to three peak hourly periods of flow activity
+ */
 function analyzeFlowPatterns(flows: Array<{ protocol: string; duration: number; timestamp: string }>): { protocols: string[]; avgDuration: number; peakPeriods: string[] } {
   const protocols = [...new Set(flows.map(f => f.protocol))];
   const avgDuration = flows.reduce((sum, f) => sum + f.duration, 0) / flows.length;
@@ -467,6 +472,14 @@ function analyzeFlowPatterns(flows: Array<{ protocol: string; duration: number; 
   return { protocols, avgDuration: Math.round(avgDuration), peakPeriods };
 }
 
+/**
+ * Calculates an overall network health score based on system status, device connectivity, security metrics, network topology, and rule configuration.
+ *
+ * The score starts at 100 and deducts points for offline status, high resource usage, short uptime, offline devices, active alarms, threat severity, lack of active rules, and missing subnets. The result is a non-negative integer representing the network's health.
+ *
+ * @param data - Aggregated network and security data used for scoring
+ * @returns The computed network health score as an integer between 0 and 100
+ */
 function calculateNetworkHealthScore(data: HealthScoreData): number {
   let score = 100;
 
@@ -493,6 +506,13 @@ function calculateNetworkHealthScore(data: HealthScoreData): number {
   return Math.max(0, Math.round(score));
 }
 
+/**
+ * Calculates a performance score for the system based on CPU and memory usage.
+ *
+ * Returns 0 if the system is not online. Otherwise, computes the score as the average of (100 minus CPU usage) and (100 minus memory usage), rounded to the nearest integer.
+ *
+ * @returns The calculated performance score, or 0 if the system is offline.
+ */
 function calculatePerformanceScore(summary: SystemSummary): number {
   if (summary.status !== 'online') {return 0;}
   const cpuScore = Math.max(0, 100 - summary.cpu_usage);
@@ -500,6 +520,13 @@ function calculatePerformanceScore(summary: SystemSummary): number {
   return Math.round((cpuScore + memScore) / 2);
 }
 
+/**
+ * Calculates a security score based on the number of active alarms and blocked connections.
+ *
+ * The score starts at 100, deducts 5 points for each active alarm, and adds up to 10 bonus points based on the number of blocked connections (1 point per 100 blocked connections, capped at 10). The final score is clamped between 0 and 100.
+ *
+ * @returns The computed security score as an integer between 0 and 100.
+ */
 function calculateSecurityScore(metrics: SecurityMetrics & { blocked_connections: number }): number {
   const baseScore = 100;
   const alarmPenalty = metrics.active_alarms * 5;

@@ -7,11 +7,20 @@ import { QueryNode, FieldQuery, WildcardQuery } from '../types.js';
 import { Filter, FilterContext, FilterResult } from './base.js';
 import { TimeRangeFilter } from './time.js';
 
-// Type guard functions for better type safety
+/**
+ * Determines whether a query node is a field query.
+ *
+ * @returns True if the node is of type 'field' and contains both 'field' and 'value' properties.
+ */
 function isFieldQuery(node: QueryNode): node is FieldQuery {
   return node.type === 'field' && 'field' in node && 'value' in node;
 }
 
+/**
+ * Determines whether a query node is a wildcard query.
+ *
+ * @returns True if the node is of type 'wildcard' and contains both 'field' and 'pattern' properties.
+ */
 function isWildcardQuery(node: QueryNode): node is WildcardQuery {
   return node.type === 'wildcard' && 'field' in node && 'pattern' in node;
 }

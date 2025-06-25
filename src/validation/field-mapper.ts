@@ -86,7 +86,11 @@ export const CORRELATION_FIELDS: Record<string, EntityType[]> = {
 };
 
 /**
- * Get compatible correlation fields between two entity types
+ * Returns the list of correlation fields that are supported by both specified entity types.
+ *
+ * @param primaryType - The first entity type to compare
+ * @param secondaryType - The second entity type to compare
+ * @returns An array of correlation field names compatible with both entity types
  */
 export function getCompatibleFields(primaryType: EntityType, secondaryType: EntityType): string[] {
   const compatibleFields: string[] = [];
@@ -101,7 +105,11 @@ export function getCompatibleFields(primaryType: EntityType, secondaryType: Enti
 }
 
 /**
- * Validate if a correlation field is compatible with given entity types
+ * Determines whether a correlation field is supported by all specified entity types.
+ *
+ * @param field - The correlation field to check
+ * @param entityTypes - The list of entity types to validate against
+ * @returns True if the field is supported by every entity type in the list; otherwise, false
  */
 export function isFieldCompatible(field: string, entityTypes: EntityType[]): boolean {
   const supportedTypes = CORRELATION_FIELDS[field];
@@ -113,7 +121,14 @@ export function isFieldCompatible(field: string, entityTypes: EntityType[]): boo
 }
 
 /**
- * Get field value from an entity using mapped field paths
+ * Retrieves the value of a specified field from an entity object of a given type, using mapped field paths when available.
+ *
+ * If the field has mapped paths for the entity type, attempts each path in order and returns the first non-null, non-undefined value found. Falls back to direct field access if no mapping exists.
+ *
+ * @param entity - The entity object to extract the field value from
+ * @param field - The standardized field name to retrieve
+ * @param entityType - The type of the entity, used to determine field mappings
+ * @returns The value of the field if found, otherwise `undefined`
  */
 export function getFieldValue(entity: any, field: string, entityType: EntityType): any {
   if (!entity || typeof entity !== 'object') {
@@ -140,7 +155,14 @@ export function getFieldValue(entity: any, field: string, entityType: EntityType
 }
 
 /**
- * Extract correlation values from a result set
+ * Extracts and returns a set of normalized values for a specified correlation field from an array of entities of a given type.
+ *
+ * Normalization ensures consistent comparison of values such as IP addresses, MAC addresses, and protocol names.
+ *
+ * @param results - The array of entity objects to extract values from
+ * @param field - The correlation field to extract and normalize
+ * @param entityType - The type of entities in the results array
+ * @returns A set of normalized correlation field values found in the input entities
  */
 export function extractCorrelationValues(
   results: any[],
@@ -164,7 +186,13 @@ export function extractCorrelationValues(
 }
 
 /**
- * Normalize field values for consistent comparison
+ * Normalizes a field value for consistent comparison across entities.
+ *
+ * Trims and lowercases IP addresses, removes separators and lowercases MAC addresses, lowercases protocol names, and returns other values unchanged.
+ *
+ * @param value - The field value to normalize
+ * @param field - The name of the field being normalized
+ * @returns The normalized value suitable for comparison
  */
 export function normalizeFieldValue(value: any, field: string): any {
   if (typeof value !== 'string') {
@@ -190,7 +218,15 @@ export function normalizeFieldValue(value: any, field: string): any {
 }
 
 /**
- * Filter results by correlation field and values
+ * Returns entities whose normalized value for a specified correlation field matches any value in the provided set.
+ *
+ * Filters the input array to include only those entities where the normalized value of the given field is present in `correlationValues`.
+ *
+ * @param results - The array of entities to filter
+ * @param field - The correlation field to evaluate
+ * @param entityType - The type of entity being filtered
+ * @param correlationValues - Set of normalized values to match against
+ * @returns An array of entities matching the correlation criteria
  */
 export function filterByCorrelation(
   results: any[],
@@ -212,7 +248,12 @@ export function filterByCorrelation(
 }
 
 /**
- * Get suggested entity type for a query based on field usage
+ * Suggests the most likely entity type for a query string based on the presence of keywords or field patterns.
+ *
+ * Returns the matching entity type if recognized, or defaults to 'flows' if no specific pattern is found.
+ *
+ * @param query - The input query string to analyze
+ * @returns The suggested entity type, or null if no match is found
  */
 export function suggestEntityType(query: string): EntityType | null {
   const lowerQuery = query.toLowerCase();
@@ -243,7 +284,14 @@ export function suggestEntityType(query: string): EntityType | null {
 }
 
 /**
- * Validate cross-reference search parameters
+ * Validates parameters for a cross-reference search, ensuring queries and correlation field are present and compatible.
+ *
+ * Checks that the primary query, secondary queries, and correlation field are non-empty, suggests entity types for each query, and verifies that the correlation field is supported by all detected entity types.
+ *
+ * @param primaryQuery - The main search query string
+ * @param secondaryQueries - An array of secondary search query strings
+ * @param correlationField - The field name used for correlating entities
+ * @returns An object indicating whether the parameters are valid, any error messages, and the detected entity types
  */
 export function validateCrossReference(
   primaryQuery: string,

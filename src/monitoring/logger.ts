@@ -5,7 +5,14 @@ import { getCurrentTimestamp } from '../utils/timestamp.js';
 const DEBUG_ENABLED = process.env.DEBUG === 'firewalla:*' || process.env.DEBUG === '1' || process.env.DEBUG === 'true';
 const DEBUG_FILTERS = (process.env.DEBUG || '').split(',').map(f => f.trim());
 
-// Check if debug should be enabled for a specific namespace
+/**
+ * Determines if debug logging is enabled for a given namespace based on environment variable filters.
+ *
+ * Returns true if global debug is enabled or if the namespace matches any filter (with wildcard support) specified in the `DEBUG` environment variable.
+ *
+ * @param namespace - The debug namespace to check
+ * @returns True if debug logging is enabled for the specified namespace
+ */
 function shouldDebug(namespace: string): boolean {
   if (!DEBUG_ENABLED && DEBUG_FILTERS.length === 0) {return false;}
   if (DEBUG_ENABLED) {return true;}

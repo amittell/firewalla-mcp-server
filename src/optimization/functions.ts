@@ -39,15 +39,24 @@ export const DEFAULT_OPTIMIZATION_CONFIG: OptimizationConfig = {
 };
 
 /**
- * Calculate approximate token count for text
- * Rough approximation: 1 token ≈ 4 characters
+ * Estimates the number of tokens in a string, assuming approximately one token per four characters.
+ *
+ * @param text - The input string to estimate token count for
+ * @returns The estimated token count
  */
 export function estimateTokenCount(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
 /**
- * Truncate text to specified length with smart truncation
+ * Truncates a string to a specified maximum length, optionally preserving whole words and appending an ellipsis.
+ *
+ * If the text exceeds `maxLength`, the function truncates at the nearest word boundary before the limit (when using the 'word' strategy and a suitable space is found), or strictly at the character limit minus space for an ellipsis.
+ *
+ * @param text - The input string to be truncated
+ * @param maxLength - The maximum allowed length of the output string, including the ellipsis
+ * @param strategy - The truncation strategy: 'word' preserves whole words when possible, 'ellipsis' truncates strictly at the limit
+ * @returns The truncated string, with an ellipsis appended if truncation occurred
  */
 export function truncateText(text: string, maxLength: number, strategy: 'ellipsis' | 'word' = 'word'): string {
   if (text.length <= maxLength) {return text;}
@@ -66,7 +75,11 @@ export function truncateText(text: string, maxLength: number, strategy: 'ellipsi
 }
 
 /**
- * Create summary version of object by removing verbose fields
+ * Produces a summarized version of an object by recursively removing excluded fields, including only specified fields if set, truncating long strings, and limiting arrays to a maximum of five summarized items.
+ *
+ * @param obj - The object to be summarized
+ * @param config - Summary mode configuration specifying fields to include or exclude
+ * @returns A summarized object with verbose content reduced according to the provided configuration
  */
 export function summarizeObject(obj: any, config: OptimizationConfig['summaryMode']): any {
   if (!obj || typeof obj !== 'object') {return obj;}
@@ -105,7 +118,11 @@ export function summarizeObject(obj: any, config: OptimizationConfig['summaryMod
 }
 
 /**
- * Optimize response based on configuration
+ * Optimizes a response object or array according to the provided configuration, reducing its size if it exceeds the maximum allowed.
+ *
+ * If `autoTruncate` is disabled or the data is within the configured size limit, returns the original data unchanged. Otherwise, applies the specified truncation strategy (`summary`, `head`, `tail`, or `middle`) to reduce the response size, returning an optimized version with metadata describing the optimization.
+ *
+ * @returns The original or optimized response, depending on configuration and size constraints.
  */
 export function optimizeResponse(data: any, config: OptimizationConfig = DEFAULT_OPTIMIZATION_CONFIG): any {
   if (!config.autoTruncate) {return data;}
@@ -133,7 +150,11 @@ export function optimizeResponse(data: any, config: OptimizationConfig = DEFAULT
 }
 
 /**
- * Apply summary-based optimization
+ * Optimizes an object by summarizing its content and appending metadata about the optimization.
+ *
+ * Applies summary-based truncation to reduce verbose fields and nested structures according to the provided configuration. The result includes an `_optimization` property detailing the strategy used, original and optimized sizes, and compression ratio.
+ *
+ * @returns The summarized object with optimization metadata.
  */
 function applySummaryOptimization(data: any, config: OptimizationConfig): any {
   const optimized = summarizeObject(data, config.summaryMode);
@@ -151,7 +172,9 @@ function applySummaryOptimization(data: any, config: OptimizationConfig): any {
 }
 
 /**
- * Apply head-based optimization (keep first N items)
+ * Returns the first N items of an array, along with metadata describing the truncation.
+ *
+ * If the input is not an array, returns the data unchanged.
  */
 function applyHeadOptimization(data: any, config: OptimizationConfig): any {
   if (Array.isArray(data)) {
@@ -171,7 +194,9 @@ function applyHeadOptimization(data: any, config: OptimizationConfig): any {
 }
 
 /**
- * Apply tail-based optimization (keep last N items)
+ * Returns the last N items of an array, along with metadata describing the tail-based optimization.
+ *
+ * If the input is not an array, returns the data unchanged.
  */
 function applyTailOptimization(data: any, config: OptimizationConfig): any {
   if (Array.isArray(data)) {
@@ -192,7 +217,11 @@ function applyTailOptimization(data: any, config: OptimizationConfig): any {
 }
 
 /**
- * Apply middle-based optimization (keep items from middle)
+ * Returns a middle slice of items from an array, limited by the configured maximum, and includes metadata about the optimization.
+ *
+ * If the input is not an array, returns the data unchanged.
+ *
+ * @returns An object containing the middle items and optimization metadata, or the original data if not an array.
  */
 function applyMiddleOptimization(data: any, config: OptimizationConfig): any {
   if (Array.isArray(data)) {
@@ -215,14 +244,22 @@ function applyMiddleOptimization(data: any, config: OptimizationConfig): any {
 }
 
 /**
- * Check if response needs optimization
+ * Determines whether the serialized data exceeds the specified maximum size and requires optimization.
+ *
+ * @param data - The data to evaluate for optimization need
+ * @param maxSize - The maximum allowed size in characters for the serialized data
+ * @returns True if the data's serialized length is greater than `maxSize`; otherwise, false
  */
 export function needsOptimization(data: any, maxSize: number = DEFAULT_OPTIMIZATION_CONFIG.maxResponseSize): boolean {
   return JSON.stringify(data).length > maxSize;
 }
 
 /**
- * Get optimization statistics for a response
+ * Calculates statistics comparing the size and token usage of original and optimized data.
+ *
+ * @param original - The original data before optimization
+ * @param optimized - The data after optimization
+ * @returns An object containing the original and optimized sizes (in characters), compression ratio (percentage), and estimated token savings
  */
 export function getOptimizationStats(original: any, optimized: any): {
   original_size: number;

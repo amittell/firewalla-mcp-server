@@ -20,7 +20,11 @@ export interface PaginatedResult<T> {
 }
 
 /**
- * Encode cursor data to base64 string
+ * Encodes a `CursorData` object into a base64 string for use as a pagination cursor.
+ *
+ * @param data - The cursor data to encode
+ * @returns The base64-encoded string representing the cursor
+ * @throws If the cursor data cannot be serialized or encoded
  */
 export function encodeCursor(data: CursorData): string {
   try {
@@ -32,7 +36,12 @@ export function encodeCursor(data: CursorData): string {
 }
 
 /**
- * Decode base64 cursor string to cursor data
+ * Decodes a base64-encoded cursor string into a validated `CursorData` object.
+ *
+ * Throws an error if the cursor is not valid base64, cannot be parsed as JSON, or does not contain required pagination fields.
+ *
+ * @param cursor - The base64-encoded cursor string to decode
+ * @returns The decoded and validated cursor data
  */
 export function decodeCursor(cursor: string): CursorData {
   try {
@@ -59,7 +68,16 @@ export function decodeCursor(cursor: string): CursorData {
 }
 
 /**
- * Create client-side pagination for APIs that don't support native pagination
+ * Performs client-side cursor-based pagination and optional sorting on an array of items.
+ *
+ * Decodes the provided cursor to determine the current offset and page size, sorts the array by the specified field and order if requested, and returns a paginated result with metadata and a next cursor if more items remain.
+ *
+ * @param items - The array of items to paginate
+ * @param cursor - Optional base64-encoded cursor string indicating the current pagination state
+ * @param page_size - Number of items per page (default is 100)
+ * @param sort_by - Optional field name to sort by
+ * @param sort_order - Sort order, either 'asc' or 'desc' (default is 'asc')
+ * @returns A paginated result containing the current page of items, pagination metadata, and a next cursor if more items are available
  */
 export function paginateArray<T>(
   items: T[],
@@ -133,7 +151,15 @@ export function paginateArray<T>(
 }
 
 /**
- * Universal pagination wrapper for consistent pagination across all tools
+ * Fetches all items using the provided data fetcher and returns a paginated result based on the given cursor, page size, and sorting options.
+ *
+ * @param dataFetcher - A function that asynchronously retrieves all items to be paginated
+ * @param cursor - An optional base64-encoded cursor string representing the current pagination state
+ * @param page_size - The number of items per page (default is 100)
+ * @param sort_by - Optional field name to sort the items by
+ * @param sort_order - Sort order, either 'asc' or 'desc' (default is 'asc')
+ * @returns A paginated result containing the current page of items, pagination metadata, and next cursor if more items remain
+ * @throws If data fetching or pagination fails
  */
 export async function createPaginatedResponse<T>(
   dataFetcher: () => Promise<T[]>,
@@ -151,7 +177,12 @@ export async function createPaginatedResponse<T>(
 }
 
 /**
- * Create a consistent pagination response format for MCP tools
+ * Formats a paginated result into a standardized response object for MCP tools.
+ *
+ * @param paginatedResult - The paginated data and metadata to include in the response
+ * @param query - The original query string associated with the request
+ * @param execution_time_ms - The time taken to execute the query, in milliseconds
+ * @returns An object containing the current page of results, counts, pagination metadata, the original query, and execution time
  */
 export function formatPaginationResponse<T>(
   paginatedResult: PaginatedResult<T>,

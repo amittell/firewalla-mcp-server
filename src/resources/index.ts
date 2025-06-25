@@ -4,20 +4,9 @@ import { FirewallaClient } from '../firewalla/client.js';
 import { safeUnixToISOString } from '../utils/timestamp.js';
 
 /**
- * Sets up MCP resources for Firewalla data access
- * Provides structured access to firewall data through URI-based resources
- * 
- * Available resources:
- * - firewalla://summary: Real-time firewall health and status
- * - firewalla://devices: Complete device inventory with metadata
- * - firewalla://metrics/security: Aggregated security statistics
- * - firewalla://topology: Network topology and subnet information
- * - firewalla://threats/recent: Recent security threats and incidents
- * - firewalla://rules: Active firewall rules and policies
- * - firewalla://bandwidth: Bandwidth usage statistics
- * 
- * @param server - MCP server instance to register resources with
- * @param firewalla - Firewalla client for API communication
+ * Registers MCP resource handlers on the server to provide structured Firewalla firewall data via URI-based endpoints.
+ *
+ * Exposes real-time firewall status, device inventory, security metrics, network topology, and recent threat information as JSON resources. Each resource URI triggers a corresponding Firewalla API call and formats the response for MCP clients. Returns error details in JSON format if a request fails or an unknown URI is requested.
  */
 export function setupResources(server: Server, firewalla: FirewallaClient): void {
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
@@ -230,7 +219,12 @@ export function setupResources(server: Server, firewalla: FirewallaClient): void
   });
 }
 
-// Helper functions
+/**
+ * Converts a duration in seconds to a formatted string in days, hours, and minutes.
+ *
+ * @param seconds - The total number of seconds to format
+ * @returns A string representing the duration in the format 'Xd Xh Xm'
+ */
 function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
@@ -238,6 +232,12 @@ function formatUptime(seconds: number): string {
   return `${days}d ${hours}h ${minutes}m`;
 }
 
+/**
+ * Calculates a performance score for the firewall based on CPU and memory usage if the status is 'online'.
+ *
+ * @param summary - An object containing `cpu_usage`, `memory_usage`, and `status` of the firewall.
+ * @returns A score from 0 to 100 representing overall performance, or 0 if the firewall is not online.
+ */
 function calculatePerformanceScore(summary: { cpu_usage: number; memory_usage: number; status: string }): number {
   if (summary.status !== 'online') {return 0;}
   const cpuScore = Math.max(0, 100 - summary.cpu_usage);
@@ -275,17 +275,37 @@ function getSecurityRecommendation(threatLevel: string, activeAlarms: number): s
   return 'Security status is good - maintain current monitoring';
 }
 
+/**
+ * Calculates the number of possible IP addresses in a subnet given its CIDR notation.
+ *
+ * @param cidr - The subnet in CIDR notation (e.g., "192.168.1.0/24")
+ * @returns The total number of IP addresses in the subnet
+ */
 function calculateSubnetSize(cidr: string): number {
   const prefix = parseInt(cidr.split('/')[1] || '24', 10);
   return Math.pow(2, 32 - prefix);
 }
 
+/**
+ * Categorizes a network connection's bandwidth as 'low', 'medium', or 'high'.
+ *
+ * @param bandwidth - The bandwidth of the connection in bytes per second
+ * @returns The bandwidth category: 'low' for less than 1MB, 'medium' for less than 100MB, or 'high'
+ */
 function categorizeConnection(bandwidth: number): 'low' | 'medium' | 'high' {
   if (bandwidth < 1024 * 1024) {return 'low';} // < 1MB
   if (bandwidth < 100 * 1024 * 1024) {return 'medium';} // < 100MB
   return 'high';
 }
 
+/**
+ * Calculates a connectivity score for a network topology based on the ratio of connections to subnets.
+ *
+ * The score is scaled so that a higher number of connections per subnet increases the score, up to a maximum of 100.
+ *
+ * @param topology - An object containing arrays of subnets and connections
+ * @returns The connectivity score as a number between 0 and 100
+ */
 function calculateConnectivityScore(topology: { subnets: unknown[]; connections: unknown[] }): number {
   const subnetCount = topology.subnets.length;
   const connectionCount = topology.connections.length;
@@ -293,6 +313,12 @@ function calculateConnectivityScore(topology: { subnets: unknown[]; connections:
   return Math.min(100, (connectionCount / subnetCount) * 50);
 }
 
+/**
+ * Identifies up to five network connections with bandwidth below 10MB as bottlenecks.
+ *
+ * @param connections - List of network connections with bandwidth, source, and destination information
+ * @returns An array of strings describing the source and destination of each identified bottleneck connection
+ */
 function identifyBottlenecks(connections: Array<{ bandwidth: number; source: string; destination: string }>): string[] {
   return connections
     .filter(conn => conn.bandwidth < 10 * 1024 * 1024) // < 10MB
@@ -300,6 +326,12 @@ function identifyBottlenecks(connections: Array<{ bandwidth: number; source: str
     .slice(0, 5);
 }
 
+/**
+ * Categorizes the threat level based on the number of threats.
+ *
+ * @param threatCount - The total number of detected threats
+ * @returns 'low' if fewer than 10 threats, 'medium' if fewer than 50, otherwise 'high'
+ */
 function categorizeThreatLevel(threatCount: number): 'low' | 'medium' | 'high' {
   if (threatCount < 10) {return 'low';}
   if (threatCount < 50) {return 'medium';}
@@ -316,6 +348,14 @@ function getSeverityEmoji(severity: string): string {
   return emojis[severity] || '⚪';
 }
 
+/**
+ * Returns a human-readable string indicating how long ago the given timestamp occurred.
+ *
+ * The output is formatted as minutes (`Xm ago`), hours (`Xh ago`), or days (`Xd ago`) depending on the elapsed time.
+ *
+ * @param timestamp - An ISO 8601 date string representing the past time to compare.
+ * @returns A string describing the elapsed time since the timestamp.
+ */
 function getTimeAgo(timestamp: string): string {
   const now = new Date();
   const then = new Date(timestamp);
