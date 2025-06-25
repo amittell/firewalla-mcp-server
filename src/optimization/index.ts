@@ -57,7 +57,9 @@ export class ResponseOptimizer {
    * Truncate text to specified length with smart truncation
    */
   static truncateText(text: string, maxLength: number, strategy: 'ellipsis' | 'word' = 'word'): string {
-    if (text.length <= maxLength) {return text;}
+    if (text.length <= maxLength) {
+      return text;
+    }
     
     if (strategy === 'word') {
       // Find last complete word before maxLength
@@ -76,16 +78,22 @@ export class ResponseOptimizer {
    * Create summary version of object by removing verbose fields
    */
   static summarizeObject(obj: any, config: OptimizationConfig['summaryMode']): any {
-    if (!obj || typeof obj !== 'object') {return obj;}
+    if (!obj || typeof obj !== 'object') {
+      return obj;
+    }
     
     const summarized: any = {};
     
     for (const [key, value] of Object.entries(obj)) {
       // Skip excluded fields
-      if (config.excludeFields.includes(key)) {continue;}
+      if (config.excludeFields.includes(key)) {
+        continue;
+      }
       
       // Include specific fields if specified
-      if (config.includeFields.length > 0 && !config.includeFields.includes(key)) {continue;}
+      if (config.includeFields.length > 0 && !config.includeFields.includes(key)) {
+        continue;
+      }
       
       // Handle nested objects
       if (typeof value === 'object' && value !== null) {
@@ -256,7 +264,9 @@ export class ResponseOptimizer {
    * Auto-optimize response based on size and type
    */
   static autoOptimizeResponse(response: any, responseType: string, config: OptimizationConfig = DEFAULT_OPTIMIZATION_CONFIG): any {
-    if (!config.autoTruncate) {return response;}
+    if (!config.autoTruncate) {
+      return response;
+    }
     
     const responseText = JSON.stringify(response);
     
