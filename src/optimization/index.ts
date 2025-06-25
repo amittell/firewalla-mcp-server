@@ -20,6 +20,23 @@ const TRUNCATION_LIMITS = {
 } as const;
 
 /**
+ * Base response interface with optional pagination metadata
+ */
+export interface BaseResponse {
+  count: number;
+  results: any[];
+  next_cursor?: string;
+}
+
+/**
+ * Optimized response interface with truncation metadata
+ */
+export interface OptimizedResponse extends BaseResponse {
+  truncated?: boolean;
+  truncation_note?: string;
+}
+
+/**
  * Optimization configuration interface
  */
 export interface OptimizationConfig {
@@ -158,9 +175,9 @@ export function summarizeObject(obj: any, config: OptimizationConfig['summaryMod
  * @returns The optimized response
  */
 export function optimizeAlarmResponse(
-  response: {count: number; results: any[]; next_cursor?: string},
+  response: BaseResponse,
   config: OptimizationConfig
-): any {
+): OptimizedResponse {
   if (!response || typeof response !== 'object') {
     return response;
   }
@@ -193,12 +210,13 @@ export function optimizeAlarmResponse(
     next_cursor: response.next_cursor
   };
 
+  const result: OptimizedResponse = optimized;
   if (response.count > config.summaryMode.maxItems) {
-    (optimized as any).truncated = true;
-    (optimized as any).truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
+    result.truncated = true;
+    result.truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
   }
 
-  return optimized;
+  return result;
 }
 
 /**
@@ -209,9 +227,9 @@ export function optimizeAlarmResponse(
  * @returns The optimized response
  */
 export function optimizeFlowResponse(
-  response: {count: number; results: any[]; next_cursor?: string},
+  response: BaseResponse,
   config: OptimizationConfig
-): any {
+): OptimizedResponse {
   if (!response || typeof response !== 'object') {
     return response;
   }
@@ -241,12 +259,13 @@ export function optimizeFlowResponse(
     next_cursor: response.next_cursor
   };
 
+  const result: OptimizedResponse = optimized;
   if (response.count > config.summaryMode.maxItems) {
-    (optimized as any).truncated = true;
-    (optimized as any).truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
+    result.truncated = true;
+    result.truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
   }
 
-  return optimized;
+  return result;
 }
 
 /**
@@ -257,9 +276,9 @@ export function optimizeFlowResponse(
  * @returns The optimized response
  */
 export function optimizeRuleResponse(
-  response: {count: number; results: any[]; next_cursor?: string},
+  response: BaseResponse,
   config: OptimizationConfig
-): any {
+): OptimizedResponse {
   if (!response || typeof response !== 'object') {
     return response;
   }
@@ -286,12 +305,13 @@ export function optimizeRuleResponse(
     next_cursor: response.next_cursor
   };
 
+  const result: OptimizedResponse = optimized;
   if (response.count > config.summaryMode.maxItems) {
-    (optimized as any).truncated = true;
-    (optimized as any).truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
+    result.truncated = true;
+    result.truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
   }
 
-  return optimized;
+  return result;
 }
 
 /**
@@ -302,9 +322,9 @@ export function optimizeRuleResponse(
  * @returns The optimized response
  */
 export function optimizeDeviceResponse(
-  response: {count: number; results: any[]; next_cursor?: string},
+  response: BaseResponse,
   config: OptimizationConfig
-): any {
+): OptimizedResponse {
   if (!response || typeof response !== 'object') {
     return response;
   }
@@ -333,12 +353,13 @@ export function optimizeDeviceResponse(
     next_cursor: response.next_cursor
   };
 
+  const result: OptimizedResponse = optimized;
   if (response.count > config.summaryMode.maxItems) {
-    (optimized as any).truncated = true;
-    (optimized as any).truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
+    result.truncated = true;
+    result.truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
   }
 
-  return optimized;
+  return result;
 }
 
 /**
@@ -393,12 +414,12 @@ export function autoOptimizeResponse(response: any, responseType: string, config
  * @param config - The optimization configuration
  * @returns The optimized response
  */
-export function genericOptimization(response: any, config: OptimizationConfig): any {
+export function genericOptimization(response: BaseResponse, config: OptimizationConfig): OptimizedResponse {
   if (!response.results || !Array.isArray(response.results)) {
     return response;
   }
 
-  const optimized = {
+  const optimized: OptimizedResponse = {
     count: typeof response.count === 'number' ? response.count : response.results?.length || 0,
     results: response.results.slice(0, config.summaryMode.maxItems).map((item: any) => 
       summarizeObject(item, config.summaryMode)
@@ -407,8 +428,8 @@ export function genericOptimization(response: any, config: OptimizationConfig): 
   };
 
   if (response.count > config.summaryMode.maxItems) {
-    (optimized as any).truncated = true;
-    (optimized as any).truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
+    optimized.truncated = true;
+    optimized.truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
   }
 
   return optimized;
@@ -490,7 +511,7 @@ export function optimizeResponse(responseType: string, config?: Partial<Optimiza
           process.stderr.write(`[${propertyKey}] ${summary}\n`);
         }
         
-        return optimized;
+        return result;
       } catch (error) {
         // Log error and re-throw with context
         console.error(`[${propertyKey}] Optimization failed:`, error);
