@@ -38,14 +38,16 @@ export class TimeRangeFilter extends BaseFilter {
     }
   }
 
+  private readonly DEFAULT_TIME_MARGIN = 10; // 10 seconds
+
   private handleFieldQuery(node: FieldQuery, context: FilterContext): FilterResult {
     const timestamp = this.parseTimestamp(node.value);
     if (timestamp === null) {
       return { apiParams: {} };
     }
 
-    // For exact timestamp matches, use a small range (±1 minute)
-    const margin = 60; // 1 minute
+    // For exact timestamp matches, use a configurable small range
+    const margin = context.timeMargin || this.DEFAULT_TIME_MARGIN;
     return {
       apiParams: this.buildTimeParams(timestamp - margin, timestamp + margin, context),
       cacheKeyComponent: this.createCacheKey(node)

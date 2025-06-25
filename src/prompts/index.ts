@@ -3,6 +3,58 @@ import { GetPromptRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
 import { unixToISOString, safeUnixToISOString } from '../utils/timestamp.js';
 
+// Type definitions for health score calculation
+interface DeviceInfo {
+  online: boolean;
+  id?: string;
+  name?: string;
+  ip?: string;
+  macVendor?: string;
+  lastSeen?: number;
+  network?: Record<string, unknown>;
+  group?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+interface SystemSummary {
+  status: string;
+  cpu_usage: number;
+  memory_usage: number;
+  uptime: number;
+}
+
+interface SecurityMetrics {
+  active_alarms: number;
+  threat_level: string;
+  blocked_connections?: number;
+}
+
+interface NetworkTopology {
+  subnets: Array<Record<string, unknown>>;
+}
+
+interface RuleInfo {
+  status?: string;
+  id?: string;
+  action?: string;
+  target?: Record<string, unknown>;
+  direction?: string;
+  hit?: Record<string, unknown>;
+  ts?: number;
+  updateTs?: number;
+  notes?: string;
+  resumeTs?: number;
+  [key: string]: unknown;
+}
+
+interface HealthScoreData {
+  summary: SystemSummary;
+  devices: { count: number; results: DeviceInfo[] };
+  metrics: SecurityMetrics;
+  topology: NetworkTopology;
+  rules: { count: number; results: RuleInfo[] };
+}
+
 /**
  * Sets up MCP prompts for Firewalla security analysis
  * Provides intelligent prompts that generate comprehensive security reports
@@ -304,10 +356,10 @@ Please investigate and provide:
 
           const healthScore = calculateNetworkHealthScore({
             summary,
-            devices,
+            devices: devices as unknown as { count: number; results: DeviceInfo[] },
             metrics,
             topology,
-            rules,
+            rules: rules as unknown as { count: number; results: RuleInfo[] },
           });
 
           const prompt = `# Network Health Assessment
@@ -415,13 +467,7 @@ function analyzeFlowPatterns(flows: Array<{ protocol: string; duration: number; 
   return { protocols, avgDuration: Math.round(avgDuration), peakPeriods };
 }
 
-function calculateNetworkHealthScore(data: {
-  summary: { status: string; cpu_usage: number; memory_usage: number; uptime: number };
-  devices: { count: number; results: Array<{ online: boolean; [key: string]: any }> };
-  metrics: { active_alarms: number; threat_level: string };
-  topology: { subnets: Array<any> }; // or define proper Subnet type
-  rules: { count: number; results: Array<{ status?: string }> };
-}): number {
+function calculateNetworkHealthScore(data: HealthScoreData): number {
   let score = 100;
 
   // System health (30 points)
@@ -447,14 +493,14 @@ function calculateNetworkHealthScore(data: {
   return Math.max(0, Math.round(score));
 }
 
-function calculatePerformanceScore(summary: { cpu_usage: number; memory_usage: number; status: string }): number {
+function calculatePerformanceScore(summary: SystemSummary): number {
   if (summary.status !== 'online') {return 0;}
   const cpuScore = Math.max(0, 100 - summary.cpu_usage);
   const memScore = Math.max(0, 100 - summary.memory_usage);
   return Math.round((cpuScore + memScore) / 2);
 }
 
-function calculateSecurityScore(metrics: { blocked_connections: number; active_alarms: number }): number {
+function calculateSecurityScore(metrics: SecurityMetrics & { blocked_connections: number }): number {
   const baseScore = 100;
   const alarmPenalty = metrics.active_alarms * 5;
   const connectionBonus = Math.min(metrics.blocked_connections / 100, 10);

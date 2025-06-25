@@ -128,29 +128,29 @@ export interface ParseContext {
  * Token types for lexical analysis
  */
 export interface Token {
-  type: TokenType;
+  type: TokenTypeValue;
   value: string;
   position: number;
   length: number;
 }
 
-/* eslint-disable no-unused-vars */
-export enum TokenType {
-  FIELD = 'FIELD',
-  VALUE = 'VALUE',
-  QUOTED_VALUE = 'QUOTED_VALUE',
-  OPERATOR = 'OPERATOR',
-  LOGICAL = 'LOGICAL',
-  LPAREN = 'LPAREN',
-  RPAREN = 'RPAREN',
-  LBRACKET = 'LBRACKET',
-  RBRACKET = 'RBRACKET',
-  COLON = 'COLON',
-  WILDCARD = 'WILDCARD',
-  TO = 'TO',
-  EOF = 'EOF'
-}
-/* eslint-enable no-unused-vars */
+export const TokenType = {
+  FIELD: 'FIELD',
+  VALUE: 'VALUE',
+  QUOTED_VALUE: 'QUOTED_VALUE',
+  OPERATOR: 'OPERATOR',
+  LOGICAL: 'LOGICAL',
+  LPAREN: 'LPAREN',
+  RPAREN: 'RPAREN',
+  LBRACKET: 'LBRACKET',
+  RBRACKET: 'RBRACKET',
+  COLON: 'COLON',
+  WILDCARD: 'WILDCARD',
+  TO: 'TO',
+  EOF: 'EOF'
+} as const;
+
+export type TokenTypeValue = typeof TokenType[keyof typeof TokenType];
 
 /**
  * Filter application result

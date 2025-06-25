@@ -118,12 +118,21 @@ export class FilterFactory {
       // Merge API parameters
       Object.assign(result.apiParams, filterResult.apiParams);
       
-      // Combine post-processing functions
+      // Combine post-processing functions with debugging support
       if (filterResult.postProcessing) {
         const existingPostProcessing = result.postProcessing;
         if (existingPostProcessing) {
-          result.postProcessing = (items: any[]) => 
-            filterResult.postProcessing!(existingPostProcessing(items));
+          result.postProcessing = (items: any[]) => {
+            if (context.debug) {
+              console.log(`Applying ${filter.name} after existing filters`);
+            }
+            const intermediate = existingPostProcessing(items);
+            const final = filterResult.postProcessing!(intermediate);
+            if (context.debug) {
+              console.log(`${filter.name}: ${items.length} → ${intermediate.length} → ${final.length} items`);
+            }
+            return final;
+          };
         } else {
           result.postProcessing = filterResult.postProcessing;
         }

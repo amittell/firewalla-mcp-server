@@ -41,6 +41,12 @@ export interface FilterContext {
     optimizations: string[];
     cacheKey?: string;
   };
+  
+  /** Optional time margin for timestamp matching (in seconds) */
+  timeMargin?: number;
+  
+  /** Debug mode for filter composition */
+  debug?: boolean;
 }
 
 /**

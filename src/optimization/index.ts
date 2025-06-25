@@ -132,12 +132,12 @@ export class ResponseOptimizer {
         // Include only essential device info
         ...(alarm.device && {
           device_ip: alarm.device.ip,
-          device_name: this.truncateText(alarm.device.name || '', 30)
+          device_name: ResponseOptimizer.truncateText(alarm.device.name || '', 30)
         }),
         // Include only essential remote info
         ...(alarm.remote && {
           remote_ip: alarm.remote.ip,
-          remote_name: this.truncateText(alarm.remote.name || '', 30)
+          remote_name: ResponseOptimizer.truncateText(alarm.remote.name || '', 30)
         })
       })),
       next_cursor: response.next_cursor
@@ -197,7 +197,7 @@ export class ResponseOptimizer {
         id: rule.id,
         action: rule.action,
         target_type: rule.target?.type,
-        target_value: this.truncateText(rule.target?.value || '', 60),
+        target_value: ResponseOptimizer.truncateText(rule.target?.value || '', 60),
         direction: rule.direction,
         status: rule.status || 'active',
         hit_count: rule.hit?.count || 0,

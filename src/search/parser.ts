@@ -8,6 +8,7 @@ import {
   FieldQuery,
   LogicalQuery,
   GroupQuery,
+  TokenTypeValue,
   WildcardQuery,
   RangeQuery,
   ComparisonQuery,
@@ -499,7 +500,7 @@ export class QueryParser {
   }
 
   // Utility methods for token management
-  private match(...types: TokenType[]): boolean {
+  private match(...types: TokenTypeValue[]): boolean {
     for (const type of types) {
       if (this.check(type)) {
         this.advance();
@@ -509,7 +510,7 @@ export class QueryParser {
     return false;
   }
 
-  private check(type: TokenType): boolean {
+  private check(type: TokenTypeValue): boolean {
     if (this.isAtEnd()) {return false;}
     return this.peek().type === type;
   }

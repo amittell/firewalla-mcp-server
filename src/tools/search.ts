@@ -88,7 +88,7 @@ export class SearchEngine {
 
     this.strategies.set('devices', {
       entityType: 'devices',
-      executeApiCall: async (client, params, apiParams, searchOptions) => {
+      executeApiCall: async (client, params, searchOptions) => {
         const searchQuery = {
           query: params.query,
           limit: params.limit,
