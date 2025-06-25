@@ -61,10 +61,20 @@ export class ResponseOptimizer {
   
   /**
    * Calculate approximate token count for text
-   * Rough approximation: 1 token ≈ 4 characters
+   * Sophisticated estimation accounting for word boundaries, punctuation, and content characteristics
    */
   static estimateTokenCount(text: string): number {
-    return Math.ceil(text.length / 4);
+    // More sophisticated estimation accounting for word boundaries and punctuation
+    const words = text.split(/\s+/).length;
+    const chars = text.length;
+    const punctuation = (text.match(/[.,;:!?(){}[\]]/g) || []).length;
+    
+    // Adjust ratio based on content characteristics
+    const baseRatio = 4;
+    const wordAdjustment = words > chars / 6 ? 0.8 : 1.2; // Short words = more tokens
+    const punctAdjustment = punctuation / chars > 0.1 ? 1.1 : 1.0; // Heavy punctuation
+    
+    return Math.ceil(chars / (baseRatio * wordAdjustment * punctAdjustment));
   }
 
   /**
@@ -316,9 +326,18 @@ export class ResponseOptimizer {
       return response;
     }
     
-    const responseText = JSON.stringify(response);
+    // Quick size estimation before expensive JSON.stringify
+    const estimatedSize = response?.results?.length 
+      ? response.results.length * 200 + JSON.stringify(response).length / response.results.length
+      : JSON.stringify(response).length;
     
-    // If response is within limits, return as-is
+    // If estimated size is well within limits, return as-is
+    if (estimatedSize <= config.maxResponseSize * 0.8) {
+      return response;
+    }
+    
+    // Only do expensive size check if we're close to the limit
+    const responseText = JSON.stringify(response);
     if (responseText.length <= config.maxResponseSize) {
       return response;
     }
