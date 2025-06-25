@@ -561,7 +561,9 @@ export class SearchEngine {
 }
 
 /**
- * Create search tools for MCP server
+ * Creates and returns a set of advanced search functions for querying Firewalla MCP server entities.
+ *
+ * The returned object provides methods for searching flows, alarms, rules, devices, target lists, and performing cross-reference searches, all using the provided Firewalla client instance.
  */
 export function createSearchTools(firewalla: FirewallaClient): {
   search_flows: typeof SearchEngine.prototype.searchFlows;

@@ -4,10 +4,11 @@
  */
 
 /**
- * Converts a Unix timestamp (seconds) to ISO 8601 string format
- * @param timestamp - Unix timestamp in seconds (number or string)
- * @returns ISO 8601 formatted date string
- * @throws Error if timestamp is invalid
+ * Converts a Unix timestamp in seconds to an ISO 8601 formatted date string.
+ *
+ * @param timestamp - The Unix timestamp in seconds, as a number or string.
+ * @returns The ISO 8601 formatted date string representing the given timestamp.
+ * @throws Error if the timestamp is null, undefined, not a finite number, or negative.
  */
 export function unixToISOString(timestamp: number | string | null | undefined): string {
   if (timestamp === null || timestamp === undefined) {
@@ -29,10 +30,11 @@ export function unixToISOString(timestamp: number | string | null | undefined): 
 }
 
 /**
- * Safely converts a Unix timestamp to ISO string with fallback
- * @param timestamp - Unix timestamp in seconds (number or string)
- * @param fallback - Fallback value if timestamp is invalid (default: 'Never')
- * @returns ISO 8601 formatted date string or fallback value
+ * Converts a Unix timestamp (in seconds) to an ISO 8601 string, returning a fallback value if the input is invalid.
+ *
+ * @param timestamp - The Unix timestamp in seconds to convert.
+ * @param fallback - The value to return if the timestamp is null, undefined, or invalid. Defaults to 'Never'.
+ * @returns The ISO 8601 formatted date string, or the fallback value if conversion fails.
  */
 export function safeUnixToISOString(
   timestamp: number | string | null | undefined, 
@@ -49,9 +51,10 @@ export function safeUnixToISOString(
 }
 
 /**
- * Converts Unix timestamp to ISO string or returns current time if invalid
- * @param timestamp - Unix timestamp in seconds (number or string)
- * @returns ISO 8601 formatted date string (current time if timestamp invalid)
+ * Converts a Unix timestamp (in seconds) to an ISO 8601 string, or returns the current time if the input is invalid or missing.
+ *
+ * @param timestamp - The Unix timestamp in seconds, as a number or string
+ * @returns The ISO 8601 formatted date string, or the current date and time if the timestamp is invalid
  */
 export function unixToISOStringOrNow(timestamp: number | string | null | undefined): string {
   try {
@@ -65,8 +68,9 @@ export function unixToISOStringOrNow(timestamp: number | string | null | undefin
 }
 
 /**
- * Gets the current timestamp in ISO 8601 format
- * @returns Current date and time as ISO 8601 string
+ * Returns the current date and time as an ISO 8601 formatted string.
+ *
+ * @returns The current timestamp in ISO 8601 format
  */
 export function getCurrentTimestamp(): string {
   return new Date().toISOString();
