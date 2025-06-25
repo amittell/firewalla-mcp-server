@@ -134,6 +134,7 @@ export interface Token {
   length: number;
 }
 
+/* eslint-disable no-unused-vars */
 export enum TokenType {
   FIELD = 'FIELD',
   VALUE = 'VALUE',
@@ -147,15 +148,16 @@ export enum TokenType {
   COLON = 'COLON',
   WILDCARD = 'WILDCARD',
   TO = 'TO',
-  WHITESPACE = 'WHITESPACE',
   EOF = 'EOF'
 }
+/* eslint-enable no-unused-vars */
 
 /**
  * Filter application result
  */
 export interface FilterResult {
   apiParams: Record<string, any>;
+  // eslint-disable-next-line no-unused-vars
   postProcessing: ((items: any[]) => any[])[];
   metadata: {
     filtersApplied: string[];

@@ -12,10 +12,12 @@ import {
   SearchQuery,
   SearchOptions,
   CrossReferenceResult,
+  Trend,
 } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
 import { optimizeResponse } from '../optimization/index.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
+import { logger } from '../monitoring/logger.js';
 
 interface APIResponse<T> {
   success: boolean;
@@ -486,7 +488,7 @@ export class FirewallaClient {
             return bLastSeen - aLastSeen; // Most recent first
           });
         } catch (sortError) {
-          console.warn('Error sorting offline devices by lastSeen:', sortError);
+          logger.debugNamespace('api', 'Error sorting offline devices by lastSeen', { error: sortError });
           // Continue without sorting if sort fails
         }
       }
@@ -599,7 +601,7 @@ export class FirewallaClient {
       const rawData = Array.isArray(response) ? response : (response.results || []);
       
       if (!Array.isArray(rawData)) {
-        console.warn('Invalid response format for bandwidth usage');
+        logger.debugNamespace('validation', 'Invalid response format for bandwidth usage');
         return { count: 0, results: [], next_cursor: undefined };
       }
       
@@ -1067,7 +1069,7 @@ export class FirewallaClient {
 
       // Validate flows response structure
       if (!flows || !flows.results || !Array.isArray(flows.results)) {
-        console.warn('getStatisticsByRegion: flows data missing or invalid structure', {
+        logger.debugNamespace('validation', 'getStatisticsByRegion: flows data missing or invalid structure', {
           flows_exists: !!flows,
           results_exists: !!(flows && flows.results),
           results_is_array: !!(flows && flows.results && Array.isArray(flows.results))
@@ -1181,7 +1183,7 @@ export class FirewallaClient {
           }
           
           batchPromises.push(
-            (async () => {
+            (async (): Promise<Trend> => {
               try {
                 // Enhanced query with time range filtering
                 const query = `ts:${intervalStart}-${intervalEnd}`;
@@ -1202,7 +1204,7 @@ export class FirewallaClient {
                   value: Math.max(0, filteredFlows.length)
                 };
               } catch (error) {
-                console.warn(`Failed to get flow data for interval ${intervalStart}-${intervalEnd}:`, error);
+                logger.debugNamespace('api', `Failed to get flow data for interval ${intervalStart}-${intervalEnd}`, { error });
                 return { ts: intervalEnd, value: 0 };
               }
             })()
@@ -1216,12 +1218,12 @@ export class FirewallaClient {
             if (result.status === 'fulfilled') {
               trends.push(result.value);
             } else {
-              console.warn('Batch result failed:', result.reason);
+              logger.debugNamespace('api', 'Batch result failed', { reason: result.reason });
               trends.push({ ts: end, value: 0 });
             }
           });
         } catch (batchError) {
-          console.warn('Batch processing failed:', batchError);
+          logger.debugNamespace('api', 'Batch processing failed', { error: batchError });
           // Fill remaining with zeros
           for (let i = batchStart; i < batchEnd; i++) {
             const intervalEnd = begin + ((i + 1) * actualInterval);
@@ -1266,7 +1268,7 @@ export class FirewallaClient {
       try {
         alarms = await this.getActiveAlarms(undefined, undefined, 'ts:desc', 5000); // Get more alarms for better trends
       } catch (alarmError) {
-        console.warn('Failed to get active alarms for trends:', alarmError);
+        logger.debugNamespace('api', 'Failed to get active alarms for trends', { error: alarmError });
         alarms = { results: [], count: 0 };
       }
       
@@ -1319,7 +1321,7 @@ export class FirewallaClient {
       
       // Validate alarms response
       if (!alarms || !alarms.results || !Array.isArray(alarms.results)) {
-        console.warn('Invalid alarms response structure');
+        logger.debugNamespace('validation', 'Invalid alarms response structure');
         // Generate empty trends
         for (let i = 0; i < points; i++) {
           const intervalEnd = begin + ((i + 1) * interval);
@@ -1365,7 +1367,7 @@ export class FirewallaClient {
               value: Math.max(0, alarmsByInterval.get(intervalEnd) || 0)
             });
           } else {
-            console.warn(`Invalid interval end timestamp: ${intervalEnd}`);
+            logger.debugNamespace('validation', `Invalid interval end timestamp: ${intervalEnd}`);
             trends.push({ ts: intervalEnd, value: 0 });
           }
         }
@@ -1420,7 +1422,7 @@ export class FirewallaClient {
       try {
         rules = await this.getNetworkRules();
       } catch (rulesError) {
-        console.warn('Failed to get network rules for trends:', rulesError);
+        logger.debugNamespace('api', 'Failed to get network rules for trends', { error: rulesError });
         rules = { results: [], count: 0 };
       }
       
@@ -1470,7 +1472,7 @@ export class FirewallaClient {
       
       // Enhanced rule analysis with comprehensive null safety
       if (!rules || !rules.results || !Array.isArray(rules.results)) {
-        console.warn('Invalid rules response structure');
+        logger.debugNamespace('validation', 'Invalid rules response structure');
         // Generate empty trends
         for (let i = 0; i < points; i++) {
           const intervalEnd = begin + ((i + 1) * interval);
@@ -1534,7 +1536,7 @@ export class FirewallaClient {
               value: finalCount
             });
           } else {
-            console.warn(`Invalid interval end timestamp: ${intervalEnd}`);
+            logger.debugNamespace('validation', `Invalid interval end timestamp: ${intervalEnd}`);
             trends.push({ ts: intervalEnd, value: finalCount });
           }
         }
@@ -1842,7 +1844,7 @@ export class FirewallaClient {
         if (minSeverity) {
           params.query = params.query ? `${params.query} AND type:>=${minSeverity}` : `type:>=${minSeverity}`;
         } else {
-          console.warn(`Invalid severity level: ${options.min_severity}`);
+          logger.debugNamespace('validation', `Invalid severity level: ${options.min_severity}`);
         }
       }
 
@@ -1869,7 +1871,7 @@ export class FirewallaClient {
       
       const rawResults = response.results || [];
       if (!Array.isArray(rawResults)) {
-        console.warn('Invalid results format in search response');
+        logger.debugNamespace('validation', 'Invalid results format in search response');
         return {
           count: 0,
           results: [],
@@ -2066,7 +2068,7 @@ export class FirewallaClient {
       
       const rawResults = response.results || [];
       if (!Array.isArray(rawResults)) {
-        console.warn('Invalid results format in search response');
+        logger.debugNamespace('validation', 'Invalid results format in search response');
         return {
           count: 0,
           results: [],
@@ -2275,7 +2277,7 @@ export class FirewallaClient {
       
       const rawResults = response.results || [];
       if (!Array.isArray(rawResults)) {
-        console.warn('Invalid results format in search response');
+        logger.debugNamespace('validation', 'Invalid results format in search response');
         return {
           count: 0,
           results: [],
@@ -2296,7 +2298,7 @@ export class FirewallaClient {
           try {
             return this.transformDevice(item);
           } catch (transformError) {
-            console.warn('Failed to transform device:', transformError, item);
+            logger.debugNamespace('api', 'Failed to transform device', { error: transformError, item });
             return null;
           }
         })
@@ -2432,7 +2434,7 @@ export class FirewallaClient {
       
       const rawResults = response.results || [];
       if (!Array.isArray(rawResults)) {
-        console.warn('Invalid results format in search response');
+        logger.debugNamespace('validation', 'Invalid results format in search response');
         return {
           count: 0,
           results: [],
@@ -2530,8 +2532,6 @@ export class FirewallaClient {
     options: SearchOptions = {}
   ): Promise<CrossReferenceResult> {
     try {
-      const startTime = Date.now();
-      
       // Execute primary search first
       const primary = await this.searchFlows(primaryQuery, options);
       

@@ -380,7 +380,7 @@ Please assess and provide:
 }
 
 // Helper functions for analysis
-function analyzeThreatPatterns(threats: Array<{ type: string; timestamp: string; severity: string }>) {
+function analyzeThreatPatterns(threats: Array<{ type: string; timestamp: string; severity: string }>): { byType: Record<string, number>; timeDistribution: Record<number, number> } {
   const byType = threats.reduce((acc, threat) => {
     acc[threat.type] = (acc[threat.type] || 0) + 1;
     return acc;
@@ -395,21 +395,8 @@ function analyzeThreatPatterns(threats: Array<{ type: string; timestamp: string;
   return { byType, timeDistribution };
 }
 
-function analyzeAlarmPatterns(alarms: Array<{ type: string; severity: string; source_ip?: string }>) {
-  const bySeverity = alarms.reduce((acc, alarm) => {
-    acc[alarm.severity] = (acc[alarm.severity] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
 
-  const byType = alarms.reduce((acc, alarm) => {
-    acc[alarm.type] = (acc[alarm.type] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  return { bySeverity, byType };
-}
-
-function analyzeFlowPatterns(flows: Array<{ protocol: string; duration: number; timestamp: string }>) {
+function analyzeFlowPatterns(flows: Array<{ protocol: string; duration: number; timestamp: string }>): { protocols: string[]; avgDuration: number; peakPeriods: string[] } {
   const protocols = [...new Set(flows.map(f => f.protocol))];
   const avgDuration = flows.reduce((sum, f) => sum + f.duration, 0) / flows.length;
   

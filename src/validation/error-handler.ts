@@ -7,7 +7,7 @@ export interface StandardError {
   error: true;
   message: string;
   tool: string;
-  details?: any;
+  details?: Record<string, any>;
   validation_errors?: string[];
 }
 
@@ -24,7 +24,7 @@ export class ErrorHandler {
   /**
    * Create a standard error response
    */
-  static createErrorResponse(tool: string, message: string, details?: any, validationErrors?: string[]): {
+  static createErrorResponse(tool: string, message: string, details?: Record<string, any>, validationErrors?: string[]): {
     content: Array<{ type: string; text: string }>;
     isError: true;
   } {
@@ -52,6 +52,7 @@ export class ErrorHandler {
    */
   static wrapTool<T extends any[], R>(
     toolName: string,
+    // eslint-disable-next-line no-unused-vars
     fn: (..._args: T) => Promise<R>
   ) {
     return async (...args: T): Promise<R> => {
@@ -351,7 +352,8 @@ export class SafeAccess {
    */
   static safeArrayAccess<T>(
     array: any,
-    accessor: (_arr: T[]) => any,
+    // eslint-disable-next-line no-unused-vars
+    accessor: (_: T[]) => any,
     defaultValue: any = undefined
   ): any {
     const safeArray = this.ensureArray<T>(array);
@@ -371,7 +373,9 @@ export class SafeAccess {
    */
   static safeArrayMap<T, R>(
     array: any,
-    mapper: (_item: T, _index: number) => R,
+    // eslint-disable-next-line no-unused-vars
+    mapper: (_: T, __: number) => R,
+    // eslint-disable-next-line no-unused-vars
     filter: (item: T) => boolean = (item) => item !== null && item !== undefined
   ): R[] {
     const safeArray = this.ensureArray<T>(array);

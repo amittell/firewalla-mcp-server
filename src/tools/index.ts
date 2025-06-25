@@ -4,6 +4,7 @@ import { FirewallaClient } from '../firewalla/client.js';
 import { ResponseOptimizer, DEFAULT_OPTIMIZATION_CONFIG } from '../optimization/index.js';
 import { createSearchTools } from './search.js';
 import { ErrorHandler, ParameterValidator, SafeAccess, QuerySanitizer } from '../validation/error-handler.js';
+import { logger } from '../monitoring/logger.js';
 
 /**
  * Sets up MCP tools for Firewalla firewall management
@@ -488,7 +489,8 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
           
           const limit = limitValidation.sanitizedValue!;
           const minHits = (args?.min_hits as number) || 1;
-          const ruleType = args?.rule_type as string | undefined; // TODO: Implement rule type filtering
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars, no-unused-vars
+          const _ruleType = args?.rule_type as string | undefined; // TODO: Implement rule type filtering
           
           const allRulesResponse = await firewalla.getNetworkRules(); // Only active rules for traffic analysis
           
@@ -545,7 +547,8 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
           
           const hours = Math.min((args?.hours as number) || 24, 168); // Default 24h, max 1 week
           const limit = limitValidation.sanitizedValue!;
-          const ruleType = args?.rule_type as string | undefined; // TODO: Implement rule type filtering
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars, no-unused-vars
+          const _ruleType = args?.rule_type as string | undefined; // TODO: Implement rule type filtering
           const includeModified = (args?.include_modified as boolean) ?? true;
           
           const allRulesResponse = await firewalla.getNetworkRules();
@@ -938,7 +941,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
               ],
             };
           } catch (error) {
-            console.error('Error in get_statistics_by_box:', error);
+            logger.error('Error in get_statistics_by_box', error instanceof Error ? error : new Error(String(error)));
             
             return {
               content: [

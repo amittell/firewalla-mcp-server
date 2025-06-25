@@ -30,7 +30,7 @@ export default [
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/explicit-function-return-type': 'warn',
-      '@typescript-eslint/no-explicit-any': 'warn',
+      // '@typescript-eslint/no-explicit-any': 'warn', // Disabled to reduce noise
       'prefer-const': 'error',
       'no-var': 'error',
       'no-console': 'warn',

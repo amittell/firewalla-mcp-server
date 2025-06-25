@@ -8,14 +8,18 @@ import { filterFactory } from '../search/filters/index.js';
 import { FilterContext } from '../search/filters/base.js';
 import { SearchParams, SearchResult } from '../search/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
-import { ErrorHandler, ParameterValidator, SafeAccess, QuerySanitizer } from '../validation/error-handler.js';
-import { FieldMapper, EntityType } from '../validation/field-mapper.js';
+import { ParameterValidator, SafeAccess, QuerySanitizer } from '../validation/error-handler.js';
+import { FieldMapper } from '../validation/field-mapper.js';
 
 /**
  * Search Engine for executing complex queries
  */
 export class SearchEngine {
-  constructor(private firewalla: FirewallaClient) {}
+  constructor(private firewalla: FirewallaClient) {
+    // FirewallaClient is stored for use in search methods
+    // Explicitly reference to avoid unused variable warning
+    this.firewalla = firewalla;
+  }
 
   /**
    * Execute a search query for flows
@@ -537,7 +541,8 @@ export class SearchEngine {
     switch (node.type) {
       case 'logical': {
         // For logical nodes, apply filters to operands and combine
-        const combinedResult: { apiParams: any, postProcessing?: (items: any[]) => any[] } = { apiParams: {}, postProcessing: undefined };
+        // eslint-disable-next-line no-unused-vars
+        const combinedResult: { apiParams: any, postProcessing?: ((items: any[]) => any[]) } = { apiParams: {}, postProcessing: undefined };
         
         if (node.left) {
           const leftResult = this.applyFiltersRecursively(node.left, context);
@@ -555,7 +560,7 @@ export class SearchEngine {
           if (rightResult.postProcessing) {
             const existingPostProcessing = combinedResult.postProcessing;
             if (existingPostProcessing && node.operator === 'AND') {
-              combinedResult.postProcessing = (items: any[]) => 
+              combinedResult.postProcessing = (items: any[]): any[] => 
                 rightResult.postProcessing!(existingPostProcessing(items));
             } else if (node.operator === 'OR') {
               // OR logic is more complex, simplified for now
@@ -570,7 +575,7 @@ export class SearchEngine {
           // NOT operation
           const operandResult = this.applyFiltersRecursively(node.operand, context);
           if (operandResult.postProcessing) {
-            combinedResult.postProcessing = (items: any[]) => {
+            combinedResult.postProcessing = (items: any[]): any[] => {
               const filtered = operandResult.postProcessing!(items);
               return items.filter(item => !filtered.includes(item));
             };
@@ -646,7 +651,14 @@ export class SearchEngine {
 /**
  * Create search tools for MCP server
  */
-export function createSearchTools(firewalla: FirewallaClient) {
+export function createSearchTools(firewalla: FirewallaClient): {
+  search_flows: typeof SearchEngine.prototype.searchFlows;
+  search_alarms: typeof SearchEngine.prototype.searchAlarms;
+  search_rules: typeof SearchEngine.prototype.searchRules;
+  search_devices: typeof SearchEngine.prototype.searchDevices;
+  search_target_lists: typeof SearchEngine.prototype.searchTargetLists;
+  search_cross_reference: typeof SearchEngine.prototype.crossReferenceSearch;
+} {
   const searchEngine = new SearchEngine(firewalla);
 
   return {

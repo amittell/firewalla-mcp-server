@@ -157,7 +157,15 @@ export function formatPaginationResponse<T>(
   paginatedResult: PaginatedResult<T>,
   query: string,
   execution_time_ms: number
-) {
+): {
+  results: T[];
+  count: number;
+  total_count: number;
+  next_cursor?: string;
+  has_more: boolean;
+  query: string;
+  execution_time_ms: number;
+} {
   return {
     results: paginatedResult.results,
     count: paginatedResult.results.length,

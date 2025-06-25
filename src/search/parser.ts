@@ -452,12 +452,13 @@ export class QueryParser {
         case 'field':
         case 'wildcard':
         case 'range':
-        case 'comparison':
-          const fieldNode = n as any;
-          if (!validFields.includes(fieldNode.field as any)) {
+        case 'comparison': {
+          const fieldNode = n as FieldQuery | WildcardQuery | RangeQuery | ComparisonQuery;
+          if (!validFields.includes(fieldNode.field)) {
             this.errors.push(`Invalid field '${fieldNode.field}' for ${entityType}. Valid fields: ${validFields.join(', ')}`);
           }
           break;
+        }
         case 'logical':
           if (n.left) {validateNode(n.left);}
           if (n.right) {validateNode(n.right);}

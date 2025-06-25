@@ -335,11 +335,11 @@ export class ResponseOptimizer {
  * Decorator for automatic response optimization
  */
 export function optimizeResponse(responseType: string, config?: Partial<OptimizationConfig>) {
-  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor): PropertyDescriptor {
     const originalMethod = descriptor.value;
     const finalConfig = { ...DEFAULT_OPTIMIZATION_CONFIG, ...config };
 
-    descriptor.value = async function (...args: any[]) {
+    descriptor.value = async function (...args: any[]): Promise<any> {
       const result = await originalMethod.apply(this, args);
       
       const optimized = ResponseOptimizer.autoOptimizeResponse(result, responseType, finalConfig);
