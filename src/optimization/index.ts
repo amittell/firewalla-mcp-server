@@ -158,10 +158,10 @@ export class ResponseOptimizer {
       return { ...response, results: [] };
     }
     const optimized = {
-      count: response.count,
+      count: typeof response.count === 'number' ? response.count : response.results?.length || 0,
       results: response.results.slice(0, config.summaryMode.maxItems).map(alarm => ({
-        aid: alarm.aid,
-        timestamp: alarm.timestamp || unixToISOString(alarm.ts),
+        aid: alarm?.aid || 'unknown',
+        timestamp: alarm?.timestamp || (alarm?.ts ? unixToISOString(alarm.ts) : new Date().toISOString()),
         type: alarm.type,
         status: alarm.status,
         message: ResponseOptimizer.truncateText(alarm.message || '', TRUNCATION_LIMITS.MESSAGE),
@@ -205,7 +205,7 @@ export class ResponseOptimizer {
       return { ...response, results: [] };
     }
     const optimized = {
-      count: response.count,
+      count: typeof response.count === 'number' ? response.count : response.results?.length || 0,
       results: response.results.slice(0, config.summaryMode.maxItems).map(flow => ({
         timestamp: flow.timestamp || unixToISOString(flow.ts),
         source_ip: flow.source?.ip || flow.device?.ip || 'unknown',
@@ -249,7 +249,7 @@ export class ResponseOptimizer {
       return { ...response, results: [] };
     }
     const optimized = {
-      count: response.count,
+      count: typeof response.count === 'number' ? response.count : response.results?.length || 0,
       results: response.results.slice(0, config.summaryMode.maxItems).map(rule => ({
         id: rule.id,
         action: rule.action,
@@ -290,7 +290,7 @@ export class ResponseOptimizer {
       return { ...response, results: [] };
     }
     const optimized = {
-      count: response.count,
+      count: typeof response.count === 'number' ? response.count : response.results?.length || 0,
       online_count: response.results.filter(d => d.online).length,
       offline_count: response.results.filter(d => !d.online).length,
       results: response.results.slice(0, config.summaryMode.maxItems).map(device => ({
@@ -328,7 +328,7 @@ export class ResponseOptimizer {
     
     // Quick size estimation before expensive JSON.stringify
     const estimatedSize = response?.results?.length 
-      ? response.results.length * 200 + JSON.stringify(response).length / response.results.length
+      ? response.results.length * 200 + (JSON.stringify(response).length / Math.max(response.results.length, 1))
       : JSON.stringify(response).length;
     
     // If estimated size is well within limits, return as-is
@@ -367,7 +367,7 @@ export class ResponseOptimizer {
     }
 
     const optimized = {
-      count: response.count,
+      count: typeof response.count === 'number' ? response.count : response.results?.length || 0,
       results: response.results.slice(0, config.summaryMode.maxItems).map((item: any) => 
         ResponseOptimizer.summarizeObject(item, config.summaryMode)
       ),
@@ -415,23 +415,44 @@ export class ResponseOptimizer {
  * Decorator for automatic response optimization
  */
 export function optimizeResponse(responseType: string, config?: Partial<OptimizationConfig>) {
+  // Input validation for responseType parameter
+  if (!responseType || typeof responseType !== 'string') {
+    throw new Error('ResponseType parameter must be a non-empty string');
+  }
+
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor): PropertyDescriptor {
+    // Type checking for originalMethod
+    if (!descriptor || typeof descriptor.value !== 'function') {
+      throw new Error('Decorator can only be applied to methods');
+    }
+
     const originalMethod = descriptor.value;
     const finalConfig = { ...DEFAULT_OPTIMIZATION_CONFIG, ...config };
 
     descriptor.value = async function (...args: any[]): Promise<any> {
-      const result = await originalMethod.apply(this, args);
-      
-      const optimized = ResponseOptimizer.autoOptimizeResponse(result, responseType, finalConfig);
-      
-      // Log optimization stats in debug mode
-      if (process.env.DEBUG) {
-        const stats = ResponseOptimizer.getOptimizationStats(result, optimized);
-        const summary = ResponseOptimizer.createOptimizationSummary(stats);
-        process.stderr.write(`[${propertyKey}] ${summary}\n`);
+      try {
+        const result = await originalMethod.apply(this, args);
+        
+        // Null checking for result before optimization
+        if (result === null || result === undefined) {
+          return result;
+        }
+        
+        const optimized = ResponseOptimizer.autoOptimizeResponse(result, responseType, finalConfig);
+        
+        // Log optimization stats in debug mode
+        if (process.env.DEBUG) {
+          const stats = ResponseOptimizer.getOptimizationStats(result, optimized);
+          const summary = ResponseOptimizer.createOptimizationSummary(stats);
+          process.stderr.write(`[${propertyKey}] ${summary}\n`);
+        }
+        
+        return optimized;
+      } catch (error) {
+        // Log error and re-throw with context
+        console.error(`[${propertyKey}] Optimization failed:`, error);
+        throw error;
       }
-      
-      return optimized;
     };
 
     return descriptor;
