@@ -54,9 +54,26 @@ export class SearchEngine {
     this.strategies.set('flows', {
       entityType: 'flows',
       executeApiCall: async (client, params, apiParams, searchOptions) => {
-        const queryString = searchOptions.time_range ? 
-          `ts:${Math.floor(new Date(searchOptions.time_range.start).getTime() / 1000)}-${Math.floor(new Date(searchOptions.time_range.end).getTime() / 1000)} AND (${params.query})` : 
-          params.query;
+        let queryString = params.query;
+        
+        // Add time range to query if provided
+        if (searchOptions.time_range?.start && searchOptions.time_range?.end) {
+          const startDate = new Date(searchOptions.time_range.start);
+          const endDate = new Date(searchOptions.time_range.end);
+          
+          if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            throw new Error('Invalid time range format');
+          }
+          
+          if (startDate >= endDate) {
+            throw new Error('Start time must be before end time');
+          }
+          
+          const startTs = Math.floor(startDate.getTime() / 1000);
+          const endTs = Math.floor(endDate.getTime() / 1000);
+          queryString = `ts:${startTs}-${endTs} AND (${params.query})`;
+        }
+        
         return await client.searchFlows({ query: queryString, limit: apiParams.limit }, searchOptions);
       }
     });
