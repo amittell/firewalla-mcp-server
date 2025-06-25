@@ -515,9 +515,15 @@ export class SearchEngine {
    * Sort results by a field
    */
   private sortResults(results: any[], sortBy: string, sortOrder: 'asc' | 'desc' = 'desc'): any[] {
-    return results.sort((a, b) => {
-      const valueA = this.getNestedValue(a, sortBy);
-      const valueB = this.getNestedValue(b, sortBy);
+    // Pre-compute values for efficient sorting
+    const itemsWithValues = results.map(item => ({
+      item,
+      value: this.getNestedValue(item, sortBy)
+    }));
+    
+    itemsWithValues.sort((a, b) => {
+      const valueA = a.value;
+      const valueB = b.value;
       
       if (valueA === valueB) {
         return 0;
@@ -526,6 +532,8 @@ export class SearchEngine {
       const comparison = valueA < valueB ? -1 : 1;
       return sortOrder === 'asc' ? comparison : -comparison;
     });
+    
+    return itemsWithValues.map(({ item }) => item);
   }
 
   /**
@@ -569,18 +577,23 @@ export class SearchEngine {
 }
 
 /**
+ * Search tools interface for type safety
+ */
+interface SearchTools {
+  search_flows: SearchEngine['searchFlows'];
+  search_alarms: SearchEngine['searchAlarms'];
+  search_rules: SearchEngine['searchRules'];
+  search_devices: SearchEngine['searchDevices'];
+  search_target_lists: SearchEngine['searchTargetLists'];
+  search_cross_reference: SearchEngine['crossReferenceSearch'];
+}
+
+/**
  * Creates and returns a set of advanced search functions for querying Firewalla MCP server entities.
  *
  * The returned object provides methods for searching flows, alarms, rules, devices, target lists, and performing cross-reference searches, all using the provided Firewalla client instance.
  */
-export function createSearchTools(firewalla: FirewallaClient): {
-  search_flows: typeof SearchEngine.prototype.searchFlows;
-  search_alarms: typeof SearchEngine.prototype.searchAlarms;
-  search_rules: typeof SearchEngine.prototype.searchRules;
-  search_devices: typeof SearchEngine.prototype.searchDevices;
-  search_target_lists: typeof SearchEngine.prototype.searchTargetLists;
-  search_cross_reference: typeof SearchEngine.prototype.crossReferenceSearch;
-} {
+export function createSearchTools(firewalla: FirewallaClient): SearchTools {
   const searchEngine = new SearchEngine(firewalla);
 
   return {
