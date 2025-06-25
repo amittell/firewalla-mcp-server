@@ -92,8 +92,10 @@ export class SearchEngine {
 
     this.strategies.set('rules', {
       entityType: 'rules',
-      executeApiCall: async (client) => {
-        return await client.getNetworkRules();
+      executeApiCall: async (client, params) => {
+        // Use reasonable limit for search operations to prevent memory issues
+        const searchLimit = params.limit ? Math.min(params.limit * 2, 2000) : 2000;
+        return await client.getNetworkRules(undefined, searchLimit);
       },
       processResults: (results, params) => {
         if (params.limit) {
