@@ -6,6 +6,20 @@
 import { safeUnixToISOString, unixToISOString } from '../utils/timestamp.js';
 
 /**
+ * Truncation limits for different text types
+ */
+const TRUNCATION_LIMITS = {
+  MESSAGE: 80,
+  DEVICE_NAME: 30,
+  REMOTE_NAME: 30,
+  TARGET_VALUE: 60,
+  NOTES: 60,
+  VENDOR_NAME: 20,
+  GENERIC_TEXT: 100,
+  FLOW_DEVICE_NAME: 25
+} as const;
+
+/**
  * Optimization configuration interface
  */
 export interface OptimizationConfig {
@@ -110,7 +124,7 @@ export class ResponseOptimizer {
         }
       } else if (typeof value === 'string') {
         // Truncate long strings
-        summarized[key] = ResponseOptimizer.truncateText(value, 100);
+        summarized[key] = ResponseOptimizer.truncateText(value, TRUNCATION_LIMITS.GENERIC_TEXT);
       } else {
         summarized[key] = value;
       }
@@ -126,6 +140,13 @@ export class ResponseOptimizer {
     response: {count: number; results: any[]; next_cursor?: string},
     config: OptimizationConfig
   ): any {
+    if (!response || typeof response !== 'object') {
+      return response;
+    }
+    
+    if (!Array.isArray(response.results)) {
+      return { ...response, results: [] };
+    }
     const optimized = {
       count: response.count,
       results: response.results.slice(0, config.summaryMode.maxItems).map(alarm => ({
@@ -133,25 +154,28 @@ export class ResponseOptimizer {
         timestamp: alarm.timestamp || unixToISOString(alarm.ts),
         type: alarm.type,
         status: alarm.status,
-        message: ResponseOptimizer.truncateText(alarm.message || '', 80),
+        message: ResponseOptimizer.truncateText(alarm.message || '', TRUNCATION_LIMITS.MESSAGE),
         direction: alarm.direction,
         protocol: alarm.protocol,
         gid: alarm.gid,
         // Include only essential device info
         ...(alarm.device && {
           device_ip: alarm.device.ip,
-          device_name: ResponseOptimizer.truncateText(alarm.device.name || '', 30)
+          device_name: ResponseOptimizer.truncateText(alarm.device.name || '', TRUNCATION_LIMITS.DEVICE_NAME)
         }),
         // Include only essential remote info
         ...(alarm.remote && {
           remote_ip: alarm.remote.ip,
-          remote_name: ResponseOptimizer.truncateText(alarm.remote.name || '', 30)
+          remote_name: ResponseOptimizer.truncateText(alarm.remote.name || '', TRUNCATION_LIMITS.REMOTE_NAME)
         })
       })),
       next_cursor: response.next_cursor
     };
 
-    // Note: Showing limited results based on configuration
+    if (response.count > config.summaryMode.maxItems) {
+      (optimized as any).truncated = true;
+      (optimized as any).truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
+    }
 
     return optimized;
   }
@@ -163,6 +187,13 @@ export class ResponseOptimizer {
     response: {count: number; results: any[]; next_cursor?: string},
     config: OptimizationConfig
   ): any {
+    if (!response || typeof response !== 'object') {
+      return response;
+    }
+    
+    if (!Array.isArray(response.results)) {
+      return { ...response, results: [] };
+    }
     const optimized = {
       count: response.count,
       results: response.results.slice(0, config.summaryMode.maxItems).map(flow => ({
@@ -178,7 +209,7 @@ export class ResponseOptimizer {
         direction: flow.direction,
         blocked: flow.block,
         ...(flow.blockType && { block_type: flow.blockType }),
-        device_name: ResponseOptimizer.truncateText(flow.device?.name || '', 25),
+        device_name: ResponseOptimizer.truncateText(flow.device?.name || '', TRUNCATION_LIMITS.FLOW_DEVICE_NAME),
         ...(flow.region && { region: flow.region }),
         ...(flow.category && { category: flow.category })
       })),
@@ -186,7 +217,8 @@ export class ResponseOptimizer {
     };
 
     if (response.count > config.summaryMode.maxItems) {
-      // Note: Showing limited results based on configuration
+      (optimized as any).truncated = true;
+      (optimized as any).truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
     }
 
     return optimized;
@@ -199,27 +231,35 @@ export class ResponseOptimizer {
     response: {count: number; results: any[]; next_cursor?: string},
     config: OptimizationConfig
   ): any {
+    if (!response || typeof response !== 'object') {
+      return response;
+    }
+    
+    if (!Array.isArray(response.results)) {
+      return { ...response, results: [] };
+    }
     const optimized = {
       count: response.count,
       results: response.results.slice(0, config.summaryMode.maxItems).map(rule => ({
         id: rule.id,
         action: rule.action,
         target_type: rule.target?.type,
-        target_value: ResponseOptimizer.truncateText(rule.target?.value || '', 60),
+        target_value: ResponseOptimizer.truncateText(rule.target?.value || '', TRUNCATION_LIMITS.TARGET_VALUE),
         direction: rule.direction,
         status: rule.status || 'active',
         hit_count: rule.hit?.count || 0,
         last_hit: safeUnixToISOString(rule.hit?.lastHitTs, 'Never'),
         created_at: unixToISOString(rule.ts),
         updated_at: unixToISOString(rule.updateTs),
-        notes: ResponseOptimizer.truncateText(rule.notes || '', 60),
+        notes: ResponseOptimizer.truncateText(rule.notes || '', TRUNCATION_LIMITS.NOTES),
         ...(rule.resumeTs && { resume_at: unixToISOString(rule.resumeTs) })
       })),
       next_cursor: response.next_cursor
     };
 
     if (response.count > config.summaryMode.maxItems) {
-      // Note: Showing limited results based on configuration
+      (optimized as any).truncated = true;
+      (optimized as any).truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
     }
 
     return optimized;
@@ -232,6 +272,13 @@ export class ResponseOptimizer {
     response: {count: number; results: any[]; next_cursor?: string},
     config: OptimizationConfig
   ): any {
+    if (!response || typeof response !== 'object') {
+      return response;
+    }
+    
+    if (!Array.isArray(response.results)) {
+      return { ...response, results: [] };
+    }
     const optimized = {
       count: response.count,
       online_count: response.results.filter(d => d.online).length,
@@ -239,9 +286,9 @@ export class ResponseOptimizer {
       results: response.results.slice(0, config.summaryMode.maxItems).map(device => ({
         id: device.id,
         gid: device.gid,
-        name: ResponseOptimizer.truncateText(device.name || '', 30),
+        name: ResponseOptimizer.truncateText(device.name || '', TRUNCATION_LIMITS.DEVICE_NAME),
         ip: device.ip,
-        macVendor: ResponseOptimizer.truncateText(device.macVendor || '', 20),
+        macVendor: ResponseOptimizer.truncateText(device.macVendor || '', TRUNCATION_LIMITS.VENDOR_NAME),
         online: device.online,
         lastSeen: device.lastSeen,
         network_name: device.network?.name,
@@ -254,7 +301,8 @@ export class ResponseOptimizer {
     };
 
     if (response.count > config.summaryMode.maxItems) {
-      // Note: Showing limited results based on configuration
+      (optimized as any).truncated = true;
+      (optimized as any).truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
     }
 
     return optimized;
@@ -308,7 +356,8 @@ export class ResponseOptimizer {
     };
 
     if (response.count > config.summaryMode.maxItems) {
-      // Note: Showing limited results based on configuration
+      (optimized as any).truncated = true;
+      (optimized as any).truncation_note = `Showing ${config.summaryMode.maxItems} of ${response.count} results`;
     }
 
     return optimized;
