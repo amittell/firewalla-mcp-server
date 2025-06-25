@@ -213,7 +213,10 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
       const ruleType = args?.rule_type as string | undefined;
       const activeOnly = (args?.active_only as boolean) ?? true;
       
-      const allRulesResponse = await firewalla.getNetworkRules();
+      // Add reasonable limit to prevent memory issues with large rule sets
+      // Summary analysis doesn't need all rules, 5000 should be sufficient for statistics
+      const analysisLimit = 5000;
+      const allRulesResponse = await firewalla.getNetworkRules(undefined, analysisLimit);
       const allRules = SafeAccess.getNestedValue(allRulesResponse, 'results', []);
       
       // Group rules by various categories for overview
@@ -328,7 +331,10 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
       const limit = limitValidation.sanitizedValue!;
       const minHits = (args?.min_hits as number) || 1;
       
-      const allRulesResponse = await firewalla.getNetworkRules(); // Only active rules for traffic analysis
+      // Fetch rules with a reasonable buffer to account for filtering by minHits
+      // Use 3x the limit to ensure we have enough rules after filtering
+      const fetchLimit = Math.min(limit * 3, 3000);
+      const allRulesResponse = await firewalla.getNetworkRules(undefined, fetchLimit);
       
       // Filter and sort by hit count
       const activeRules = SafeAccess.safeArrayFilter(
@@ -395,16 +401,25 @@ export class GetRecentRulesHandler extends BaseToolHandler {
       const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
         required: true, min: 1, max: 1000, integer: true
       });
+      const hoursValidation = ParameterValidator.validateNumber(args?.hours, 'hours', {
+        min: 1, max: 168, defaultValue: 24, integer: true
+      });
       
-      if (!limitValidation.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, limitValidation.errors);
+      const validationResult = ParameterValidator.combineValidationResults([
+        limitValidation, hoursValidation
+      ]);
+      
+      if (!validationResult.isValid) {
+        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, validationResult.errors);
       }
       
-      const hours = Math.min((args?.hours as number) || 24, 168); // Default 24h, max 1 week
+      const hours = hoursValidation.sanitizedValue!;
       const limit = limitValidation.sanitizedValue!;
       const includeModified = (args?.include_modified as boolean) ?? true;
       
-      const allRulesResponse = await firewalla.getNetworkRules();
+      // Use limit to reduce data fetching for better performance
+      const fetchLimit = Math.min(limit * 5, 2000); // Fetch 5x limit to account for time filtering
+      const allRulesResponse = await firewalla.getNetworkRules(undefined, fetchLimit);
       
       const hoursAgoTs = Math.floor(Date.now() / 1000) - (hours * 3600);
       
