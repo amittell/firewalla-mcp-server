@@ -21,13 +21,48 @@ export interface FirewallaConfig {
 
 /**
  * Alarm types supported by Firewalla API
+ * 1: Intrusion Detection - Network intrusion attempts
+ * 2: Malware Detection - Malicious software identified
+ * 3: DDoS Attack - Distributed denial of service
+ * 4: Large Upload - Suspicious large data uploads
+ * 5: Video Streaming - High video streaming activity
+ * 6: Gaming Activity - Gaming protocol usage
+ * 7: Social Media - Social media platform access
+ * 8: Porn Content - Adult content access
+ * 9: VPN Usage - Virtual private network usage
+ * 10: New Device - Unrecognized device connected
+ * 11: Vulnerability - Security vulnerability detected
+ * 12: Intel Feed - Threat intelligence match
+ * 13: DNS Hijack - DNS redirection detected
+ * 14: Data Breach - Potential data breach activity
+ * 15: Abnormal Traffic - Unusual traffic patterns
+ * 16: Policy Violation - Security policy breach
  */
 export type AlarmType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
 
 /**
  * Alarm status values
+ * 1: Active - Alarm is currently active and requires attention
+ * 2: Resolved - Alarm has been acknowledged and resolved
  */
 export type AlarmStatus = 1 | 2;
+
+/**
+ * Common categories used across Firewalla data types
+ * ad: Advertisement content
+ * edu: Educational content
+ * games: Gaming platforms and content
+ * gamble: Gambling and betting sites
+ * intel: Threat intelligence sources
+ * p2p: Peer-to-peer networking
+ * porn: Adult content
+ * private: Private or internal traffic
+ * social: Social media platforms
+ * shopping: E-commerce and shopping
+ * video: Video streaming services
+ * vpn: Virtual private network traffic
+ */
+export type CategoryType = 'ad' | 'edu' | 'games' | 'gamble' | 'intel' | 'p2p' | 'porn' | 'private' | 'social' | 'shopping' | 'video' | 'vpn';
 
 /**
  * Security alarm/alert from Firewalla - API Compliant
@@ -162,7 +197,7 @@ export interface Flow {
   /** Remote IP region (ISO 3166 code) */
   region?: string;
   /** Remote host category */
-  category?: 'ad' | 'edu' | 'games' | 'gamble' | 'intel' | 'p2p' | 'porn' | 'private' | 'social' | 'shopping' | 'video' | 'vpn';
+  category?: CategoryType;
 }
 
 /**
@@ -331,7 +366,7 @@ export interface TargetList {
   /** List of domains, IPs, IP ranges */
   targets: string[];
   /** Optional category */
-  category?: 'ad' | 'edu' | 'games' | 'gamble' | 'intel' | 'p2p' | 'porn' | 'private' | 'social' | 'shopping' | 'video' | 'vpn';
+  category?: CategoryType;
   /** Optional additional description */
   notes?: string;
   /** Unix timestamp (immutable) */
