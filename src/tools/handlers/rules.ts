@@ -5,7 +5,7 @@
 import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
 import { FirewallaClient } from '../../firewalla/client.js';
 import { ParameterValidator, SafeAccess, ErrorHandler } from '../../validation/error-handler.js';
-import { ResponseOptimizer, DEFAULT_OPTIMIZATION_CONFIG } from '../../optimization/index.js';
+import { optimizeRuleResponse, DEFAULT_OPTIMIZATION_CONFIG } from '../../optimization/index.js';
 import { unixToISOString, safeUnixToISOString, getCurrentTimestamp } from '../../utils/timestamp.js';
 
 export class GetNetworkRulesHandler extends BaseToolHandler {
@@ -33,7 +33,7 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
       // Apply additional optimization if summary mode requested
       let optimizedResponse = response;
       if (summaryOnly) {
-        optimizedResponse = ResponseOptimizer.optimizeRuleResponse(response, {
+        optimizedResponse = optimizeRuleResponse(response, {
           ...DEFAULT_OPTIMIZATION_CONFIG,
           summaryMode: {
             maxItems: limit,
