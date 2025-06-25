@@ -231,9 +231,9 @@ export class ResponseOptimizer {
       results: response.results.slice(0, config.summaryMode.maxItems).map(device => ({
         id: device.id,
         gid: device.gid,
-        name: this.truncateText(device.name || '', 30),
+        name: ResponseOptimizer.truncateText(device.name || '', 30),
         ip: device.ip,
-        macVendor: this.truncateText(device.macVendor || '', 20),
+        macVendor: ResponseOptimizer.truncateText(device.macVendor || '', 20),
         online: device.online,
         lastSeen: device.lastSeen,
         network_name: device.network?.name,
@@ -268,16 +268,16 @@ export class ResponseOptimizer {
     // Apply type-specific optimization
     switch (responseType) {
       case 'alarms':
-        return this.optimizeAlarmResponse(response, config);
+        return ResponseOptimizer.optimizeAlarmResponse(response, config);
       case 'flows':
-        return this.optimizeFlowResponse(response, config);
+        return ResponseOptimizer.optimizeFlowResponse(response, config);
       case 'rules':
-        return this.optimizeRuleResponse(response, config);
+        return ResponseOptimizer.optimizeRuleResponse(response, config);
       case 'devices':
-        return this.optimizeDeviceResponse(response, config);
+        return ResponseOptimizer.optimizeDeviceResponse(response, config);
       default:
         // Generic optimization
-        return this.genericOptimization(response, config);
+        return ResponseOptimizer.genericOptimization(response, config);
     }
   }
 
@@ -292,7 +292,7 @@ export class ResponseOptimizer {
     const optimized = {
       count: response.count,
       results: response.results.slice(0, config.summaryMode.maxItems).map((item: any) => 
-        this.summarizeObject(item, config.summaryMode)
+        ResponseOptimizer.summarizeObject(item, config.summaryMode)
       ),
       next_cursor: response.next_cursor
     };
@@ -320,7 +320,7 @@ export class ResponseOptimizer {
       originalSize: originalText.length,
       optimizedSize: optimizedText.length,
       compressionRatio: optimizedText.length / originalText.length,
-      tokensSaved: this.estimateTokenCount(originalText) - this.estimateTokenCount(optimizedText)
+      tokensSaved: ResponseOptimizer.estimateTokenCount(originalText) - ResponseOptimizer.estimateTokenCount(optimizedText)
     };
   }
 
