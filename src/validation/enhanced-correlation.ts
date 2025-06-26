@@ -6,6 +6,23 @@
 import { EntityType, getFieldValue, normalizeFieldValue } from './field-mapper.js';
 
 /**
+ * Utility function for consistent rounding to 3 decimal places
+ */
+function roundScore(score: number): number {
+  return Math.round(score * 1000) / 1000;
+}
+
+/**
+ * Validate that a correlation score is within expected bounds
+ */
+function validateScore(score: number, context: string): number {
+  if (score < 0 || score > 1 || isNaN(score)) {
+    throw new Error(`Invalid correlation score ${score} in ${context}. Scores must be between 0 and 1.`);
+  }
+  return roundScore(score);
+}
+
+/**
  * Configuration for correlation scoring weights
  */
 export interface CorrelationWeights {
@@ -83,6 +100,7 @@ export interface ScoredCorrelationResult {
   entity: any;
   correlationScore: number;
   fieldScores: { [field: string]: number };
+  fieldMatchTypes: { [field: string]: 'exact' | 'fuzzy' | 'partial' };
   matchType: 'exact' | 'fuzzy' | 'partial';
   confidence: 'high' | 'medium' | 'low';
 }
@@ -213,6 +231,7 @@ function scoreEntityCorrelation(
 ): ScoredCorrelationResult {
   
   const fieldScores: { [field: string]: number } = {};
+  const fieldMatchTypes: { [field: string]: 'exact' | 'fuzzy' | 'partial' } = {};
   let totalWeightedScore = 0;
   let totalWeight = 0;
   let exactMatches = 0;
@@ -227,6 +246,7 @@ function scoreEntityCorrelation(
     const entityValue = getFieldValue(entity, field, entityType);
     if (entityValue === undefined || entityValue === null) {
       fieldScores[field] = 0;
+      fieldMatchTypes[field] = 'partial';
       totalWeight += fieldWeight;
       continue;
     }
@@ -242,6 +262,7 @@ function scoreEntityCorrelation(
     );
     
     fieldScores[field] = fieldScore.score;
+    fieldMatchTypes[field] = fieldScore.matchType;
     totalWeightedScore += fieldScore.score * fieldWeight;
     totalWeight += fieldWeight;
     
@@ -271,8 +292,9 @@ function scoreEntityCorrelation(
   
   return {
     entity,
-    correlationScore: Math.round(finalScore * 1000) / 1000, // 3 decimal places
+    correlationScore: validateScore(finalScore, `entity correlation for ${correlationFields.join(', ')}`),
     fieldScores,
+    fieldMatchTypes,
     matchType,
     confidence
   };
@@ -290,10 +312,9 @@ function calculateFieldScore(
   
   // Check for exact match first
   if (primaryValues.values.has(entityValue)) {
-    const metadata = primaryValues.metadata.get(entityValue);
-    const qualityBonus = metadata ? metadata.quality * 0.1 : 0;
-    // Allow the score to exceed 1.0 if qualityBonus is applied
-    return { score: 1.0 + qualityBonus, matchType: 'exact' };
+    // Cap exact matches at 1.0 to maintain scoring consistency
+    // Quality information could be preserved separately if needed
+    return { score: 1.0, matchType: 'exact' };
   }
   
   // Try fuzzy matching if enabled
@@ -508,13 +529,9 @@ function generateEnhancedStats(
   // Field statistics
   const fieldStatistics: { [field: string]: any } = {};
   for (const field of correlationFields) {
-    const exactMatches = correlatedResults.filter(r => r.fieldScores[field] === 1.0).length;
-    const fuzzyMatches = correlatedResults.filter(r => 
-      r.fieldScores[field] > 0 && r.fieldScores[field] < 1.0 && r.matchType === 'fuzzy'
-    ).length;
-    const partialMatches = correlatedResults.filter(r => 
-      r.fieldScores[field] > 0 && r.matchType === 'partial'
-    ).length;
+    const exactMatches = correlatedResults.filter(r => r.fieldMatchTypes[field] === 'exact').length;
+    const fuzzyMatches = correlatedResults.filter(r => r.fieldMatchTypes[field] === 'fuzzy').length;
+    const partialMatches = correlatedResults.filter(r => r.fieldMatchTypes[field] === 'partial').length;
     
     const fieldScores = correlatedResults
       .map(r => r.fieldScores[field] || 0)
@@ -528,14 +545,14 @@ function generateEnhancedStats(
       exactMatches,
       fuzzyMatches,
       partialMatches,
-      averageScore: Math.round(averageFieldScore * 1000) / 1000
+      averageScore: roundScore(averageFieldScore)
     };
   }
   
   return {
     totalSecondaryResults,
     correlatedResults: correlatedResults.length,
-    averageScore: Math.round(averageScore * 1000) / 1000,
+    averageScore: roundScore(averageScore),
     scoreDistribution,
     fieldStatistics,
     fuzzyMatchingEnabled: fuzzyEnabled,
