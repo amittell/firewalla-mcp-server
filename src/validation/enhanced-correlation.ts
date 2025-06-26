@@ -349,10 +349,31 @@ function calculateFuzzyScore(
 }
 
 /**
+ * Validate IPv4 address format
+ */
+function isValidIPv4Address(ip: string): boolean {
+  const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+  const match = ip.match(ipv4Regex);
+  
+  if (!match) {return false;}
+  
+  // Check that each octet is 0-255
+  for (let i = 1; i <= 4; i++) {
+    const octet = parseInt(match[i], 10);
+    if (octet < 0 || octet > 255) {return false;}
+  }
+  
+  return true;
+}
+
+/**
  * Calculate IP address similarity (subnet matching)
  */
 export function calculateIPSimilarity(ip1: string, ip2: string): number {
   if (typeof ip1 !== 'string' || typeof ip2 !== 'string') {return 0;}
+  
+  // Validate IP address format before processing
+  if (!isValidIPv4Address(ip1) || !isValidIPv4Address(ip2)) {return 0;}
   
   const parts1 = ip1.split('.');
   const parts2 = ip2.split('.');
@@ -446,7 +467,9 @@ function assessDataQuality(value: any, field: string): number {
   let quality = 1.0;
   
   // Penalize empty or default values
-  if (!value || value === '' || value === '0.0.0.0' || value === 'unknown') {
+  if (!value || value === '' || value === '0.0.0.0' || value === 'unknown' || 
+      value === '127.0.0.1' || value === '255.255.255.255' || value === '::1' ||
+      value === '0.0.0.0/0' || value === 'localhost') {
     quality -= 0.3;
   }
   

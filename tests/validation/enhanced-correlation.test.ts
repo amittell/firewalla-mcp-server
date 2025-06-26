@@ -283,7 +283,7 @@ describe('Enhanced Correlation Algorithms', () => {
     });
 
     test('should calculate numeric similarity correctly', () => {
-      // Test exact match (should return high score for identical values)
+      // Test exact match (returns capped score of 0.7 even for identical values to maintain consistency with fuzzy matching bounds)
       expect(calculateNumericSimilarity(100, 100, 0.1)).toBe(0.7);
       
       // Test within tolerance

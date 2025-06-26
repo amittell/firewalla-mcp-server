@@ -362,7 +362,9 @@ export function validateSearchQuery(
     for (const component of parsed.components) {
       if (component.operator === 'regex' && typeof component.value === 'string') {
         try {
-          new RegExp(component.value);
+          const regex = new RegExp(component.value);
+          // Test if the regex is valid by using it
+          regex.test('');
         } catch {
           errors.push(`Invalid regex pattern: ${component.value}`);
         }

@@ -199,19 +199,19 @@ The v1.0.0 implementation introduces advanced cross-reference capabilities with 
 
 #### Enhanced Correlation Features
 
-**Multi-Field Correlation**
+##### Multi-Field Correlation
 - Correlate entities across multiple fields simultaneously
 - Support for AND/OR correlation logic
 - Temporal window filtering for time-based correlation
 - Network and device scope expansion
 
-**Intelligent Scoring System**
+##### Intelligent Scoring System
 - Confidence scoring for correlation matches (0.0-1.0)
 - Field importance weighting system
 - Match type classification (exact, fuzzy, partial)
 - Confidence levels (high ≥0.8, medium ≥0.5, low <0.5)
 
-**Fuzzy Matching Algorithms**
+##### Fuzzy Matching Algorithms
 - IP subnet matching (/8, /16, /24 networks)
 - String similarity using Levenshtein distance
 - Numeric tolerance matching with configurable thresholds
@@ -219,7 +219,7 @@ The v1.0.0 implementation introduces advanced cross-reference capabilities with 
 
 #### Enhanced Search Tools
 
-**search_enhanced_cross_reference**
+##### search_enhanced_cross_reference
 ```javascript
 {
   primary_query: "protocol:tcp AND bytes:>1000",
@@ -267,7 +267,7 @@ The v1.0.0 implementation introduces advanced cross-reference capabilities with 
 }
 ```
 
-**get_correlation_suggestions**
+##### get_correlation_suggestions
 ```javascript
 {
   primary_query: "blocked:true",
@@ -278,7 +278,7 @@ The v1.0.0 implementation introduces advanced cross-reference capabilities with 
 
 #### Advanced Correlation Fields
 
-**Application-Level Fields**
+##### Application-Level Fields
 - `user_agent`: Browser/application user agent strings
 - `application`: Application name (Chrome, Firefox, etc.)
 - `application_category`: Application category (browser, social media)
@@ -286,14 +286,14 @@ The v1.0.0 implementation introduces advanced cross-reference capabilities with 
 - `ssl_subject`: SSL certificate subject
 - `ssl_issuer`: SSL certificate issuer
 
-**Behavioral Pattern Fields**
+##### Behavioral Pattern Fields
 - `session_duration`: Connection duration
 - `frequency_score`: Activity frequency rating
 - `bytes_per_session`: Average data transfer per session
 - `connection_pattern`: Connection behavior pattern
 - `activity_level`: User/device activity level
 
-**Enhanced Geographic Fields**
+##### Enhanced Geographic Fields
 - `country`, `country_code`, `continent`, `city`
 - `timezone`, `isp`, `organization`
 - `hosting_provider`, `asn`
@@ -338,7 +338,7 @@ Default field importance weights for correlation scoring:
 
 #### Geographic Cross-Reference Tools
 
-**search_flows_by_geography**
+##### search_flows_by_geography
 ```javascript
 {
   query: "protocol:tcp",
@@ -351,7 +351,7 @@ Default field importance weights for correlation scoring:
 }
 ```
 
-**search_alarms_by_geography**
+##### search_alarms_by_geography
 ```javascript
 {
   query: "severity:>=medium",
@@ -364,7 +364,7 @@ Default field importance weights for correlation scoring:
 }
 ```
 
-**get_geographic_statistics**
+##### get_geographic_statistics
 ```javascript
 {
   entity_type: "flows",
@@ -458,13 +458,13 @@ npm run mcp:start
 ### Mandatory Limit Parameters
 **REQUIRED**: All paginated MCP tools require explicit `limit` parameter. This prevents artificial defaults that mask missing parameters.
 
-**Required for Tools:**
+##### Required for Tools:
 - get_active_alarms, get_flow_data, get_device_status
 - get_bandwidth_usage (renamed from `top` to `limit`)  
 - get_network_rules, get_most_active_rules, get_recent_rules
 - All search tools (search_flows, search_alarms, etc.)
 
-**Testing Patterns:**
+##### Testing Patterns:
 ```bash
 # Invalid - missing required parameter
 mcp_call get_device_status {}
@@ -478,7 +478,7 @@ npm run test -- --grep "limit parameter"
 
 ### Validation Framework (v1.0.0)
 
-**Error Format:**
+##### Error Format:
 All tools return standardized errors:
 ```json
 {
@@ -489,7 +489,7 @@ All tools return standardized errors:
 }
 ```
 
-**Testing Validation:**
+##### Testing Validation:
 ```bash
 # Test parameter validation
 DEBUG=validation npm run test:validation
@@ -501,7 +501,7 @@ npm run test:error-handling
 npm run test:null-safety
 ```
 
-**Validation Classes:**
+##### Validation Classes:
 - `ParameterValidator`: Type and range validation
 - `SafeAccess`: Null-safe property access
 - `FieldMapper`: Cross-reference field compatibility
@@ -509,13 +509,13 @@ npm run test:null-safety
 
 ### Performance Monitoring (v1.0.0)
 
-**Cache System:**
+##### Cache System:
 - Alarms/Flows: 30s TTL (real-time data)
 - Devices/Bandwidth: 2m TTL (medium frequency)
 - Rules: 10m TTL (stable data)
 - Statistics: 1h TTL (static data)
 
-**Monitoring Commands:**
+##### Monitoring Commands:
 ```bash
 # Enable cache debugging
 DEBUG=cache npm run mcp:start

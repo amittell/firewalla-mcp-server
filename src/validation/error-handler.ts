@@ -197,7 +197,7 @@ export class ParameterValidator {
     }
 
     if (min !== undefined && numValue < min) {
-      const contextualMessage = this.getContextualBoundaryMessage(paramName, numValue, min, max, 'minimum');
+      const contextualMessage = ParameterValidator.getContextualBoundaryMessage(paramName, numValue, min, max, 'minimum');
       return {
         isValid: false,
         errors: [contextualMessage]
@@ -205,7 +205,7 @@ export class ParameterValidator {
     }
 
     if (max !== undefined && numValue > max) {
-      const contextualMessage = this.getContextualBoundaryMessage(paramName, numValue, min, max, 'maximum');
+      const contextualMessage = ParameterValidator.getContextualBoundaryMessage(paramName, numValue, min, max, 'maximum');
       return {
         isValid: false,
         errors: [contextualMessage]
@@ -336,7 +336,7 @@ export class ParameterValidator {
     max?: number, 
     violationType: 'minimum' | 'maximum' = 'minimum'
   ): string {
-    const paramContext = this.getParameterContext(paramName);
+    const paramContext = ParameterValidator.getParameterContext(paramName);
     
     if (violationType === 'minimum') {
       if (value <= 0) {

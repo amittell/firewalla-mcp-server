@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "sequential-thinking": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
+    },
+    "firewalla": {
+      "command": "node",
+      "args": ["/Users/alex/git/firewalla-mcp-server/dist/server.js"],
+      "env": {
+        "FIREWALLA_MSP_TOKEN": "c1ecdc13bf0888c6784bdeeeb4c4a6c5",
+        "FIREWALLA_MSP_ID": "dn-k7evgj",
+        "FIREWALLA_BOX_ID": "1eb71e38-3a95-4371-8903-ace24c83ab49"
+      }
+    }
+  }
+}

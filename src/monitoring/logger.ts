@@ -14,7 +14,9 @@ const DEBUG_FILTERS = (process.env.DEBUG || '').split(',').map(f => f.trim());
  * @returns True if debug logging is enabled for the specified namespace
  */
 function shouldDebug(namespace: string): boolean {
-  if (!DEBUG_ENABLED && DEBUG_FILTERS.length === 0) {return false;}
+  if (!DEBUG_ENABLED && DEBUG_FILTERS.length === 0) {
+    return false;
+  }
   if (DEBUG_ENABLED) {return true;}
   return DEBUG_FILTERS.some(filter => {
     if (filter === '*') {return true;}

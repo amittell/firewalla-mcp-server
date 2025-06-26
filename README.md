@@ -472,7 +472,7 @@ target_value:*.facebook.com OR mac_vendor:Apple*
 
 ### Mandatory Limit Parameters
 
-**REQUIRED**: All paginated tools now require explicit `limit` parameter. This prevents artificial defaults that masked missing parameters.
+**REQUIRED**: All paginated tools now require explicit `limit` parameter. This prevents artificial defaults that mask missing parameters.
 
 **Affected Tools:**
 - `get_active_alarms`

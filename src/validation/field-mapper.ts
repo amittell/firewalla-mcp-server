@@ -596,6 +596,71 @@ export function validateEnhancedCrossReference(
 }
 
 /**
+ * Calculate correlation rate for a specific field
+ */
+function calculateFieldCorrelationRate(
+  field: string,
+  index: number,
+  secondaryResults: any[],
+  secondaryType: EntityType,
+  correlationValueSets: Set<any>[]
+): { field: string; matchingItems: number; correlationRate: number } {
+  const matchingItems = filterItemsByFieldValue(secondaryResults, field, secondaryType, correlationValueSets[index]);
+  
+  return {
+    field,
+    matchingItems: matchingItems.length,
+    correlationRate: secondaryResults.length > 0 
+      ? Math.round((matchingItems.length / secondaryResults.length) * 100)
+      : 0
+  };
+}
+
+/**
+ * Filter items that have matching field values in the correlation set
+ */
+function filterItemsByFieldValue(
+  items: any[],
+  field: string,
+  entityType: EntityType,
+  correlationValues: Set<any>
+): any[] {
+  return items.filter(item => {
+    const itemValue = getFieldValue(item, field, entityType);
+    if (itemValue === undefined || itemValue === null) {return false;}
+    const normalizedValue = normalizeFieldValue(itemValue, field);
+    return correlationValues.has(normalizedValue);
+  });
+}
+
+/**
+ * Filter results based on multi-field correlation logic (AND/OR)
+ */
+function filterByCorrelationLogic(
+  results: any[],
+  correlationFields: string[],
+  correlationValueSets: Set<any>[],
+  entityType: EntityType,
+  correlationType: 'AND' | 'OR'
+): any[] {
+  return results.filter(item => {
+    const fieldMatches = correlationFields.map((field, index) => {
+      const itemValue = getFieldValue(item, field, entityType);
+      if (itemValue === undefined || itemValue === null) {
+        return false;
+      }
+      const normalizedValue = normalizeFieldValue(itemValue, field);
+      return correlationValueSets[index].has(normalizedValue);
+    });
+    
+    // Apply correlation logic
+    return correlationType === 'AND' 
+      ? fieldMatches.every(match => match)
+      : fieldMatches.some(match => match);
+  });
+}
+
+/**
  * Perform multi-field correlation between entity results
  */
 export function performMultiFieldCorrelation(
@@ -613,23 +678,13 @@ export function performMultiFieldCorrelation(
   );
   
   // Filter secondary results based on correlation logic
-  const correlatedResults = secondaryResults.filter(item => {
-    const fieldMatches = correlationFields.map((field, index) => {
-      const itemValue = getFieldValue(item, field, secondaryType);
-      if (itemValue === undefined || itemValue === null) {
-        return false;
-      }
-      const normalizedValue = normalizeFieldValue(itemValue, field);
-      return correlationValueSets[index].has(normalizedValue);
-    });
-    
-    // Apply correlation logic
-    if (correlationType === 'AND') {
-      return fieldMatches.every(match => match);
-    } else {
-      return fieldMatches.some(match => match);
-    }
-  });
+  const correlatedResults = filterByCorrelationLogic(
+    secondaryResults,
+    correlationFields,
+    correlationValueSets,
+    secondaryType,
+    correlationType
+  );
   
   // Apply temporal window filtering if specified
   let temporallyFilteredResults = correlatedResults;
@@ -651,23 +706,9 @@ export function performMultiFieldCorrelation(
     correlationRate: secondaryResults.length > 0 
       ? Math.round((temporallyFilteredResults.length / secondaryResults.length) * 100) 
       : 0,
-    fieldCorrelationRates: correlationFields.map((field, index) => ({
-      field,
-      matchingItems: secondaryResults.filter(item => {
-        const itemValue = getFieldValue(item, field, secondaryType);
-        if (itemValue === undefined || itemValue === null) {return false;}
-        const normalizedValue = normalizeFieldValue(itemValue, field);
-        return correlationValueSets[index].has(normalizedValue);
-      }).length,
-      correlationRate: secondaryResults.length > 0 
-        ? Math.round((secondaryResults.filter(item => {
-            const itemValue = getFieldValue(item, field, secondaryType);
-            if (itemValue === undefined || itemValue === null) {return false;}
-            const normalizedValue = normalizeFieldValue(itemValue, field);
-            return correlationValueSets[index].has(normalizedValue);
-          }).length / secondaryResults.length) * 100)
-        : 0
-    }))
+    fieldCorrelationRates: correlationFields.map((field, index) => 
+      calculateFieldCorrelationRate(field, index, secondaryResults, secondaryType, correlationValueSets)
+    )
   };
   
   return {

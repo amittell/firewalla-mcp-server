@@ -39,6 +39,7 @@ export class TimeRangeFilter extends BaseFilter {
   }
 
   private readonly DEFAULT_TIME_MARGIN = 10; // 10 seconds
+  private readonly DEFAULT_POST_PROCESSING_MARGIN = 60; // 60 seconds for post-processing
 
   private handleFieldQuery(node: FieldQuery, context: FilterContext): FilterResult {
     const timestamp = this.parseTimestamp(node.value);
@@ -166,7 +167,7 @@ export class TimeRangeFilter extends BaseFilter {
     switch (node.type) {
       case 'field': {
         const targetTime = this.parseTimestamp((node as FieldQuery).value);
-        return targetTime ? Math.abs(timestamp - targetTime) <= 60 : false;
+        return targetTime ? Math.abs(timestamp - targetTime) <= this.DEFAULT_POST_PROCESSING_MARGIN : false;
       }
 
       case 'range': {

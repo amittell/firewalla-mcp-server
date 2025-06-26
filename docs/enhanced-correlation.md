@@ -204,7 +204,7 @@ Typical performance on modern hardware:
 - **Small datasets** (< 100 entities): < 10ms
 - **Medium datasets** (100-1000 entities): 10-100ms  
 - **Large datasets** (1000-10000 entities): 100ms-1s
-- **Very large datasets** (> 10000 entities): 1-10s
+- **Extra large datasets** (> 10000 entities): 1-10s
 
 ## Statistical Output
 
@@ -379,7 +379,7 @@ Test coverage includes:
 
 2. **Algorithmic Improvements**
    - More efficient string similarity algorithms
-   - Approximate matching for very large datasets
+   - Approximate matching for extra large datasets
    - Incremental correlation updates
 
 3. **Caching Enhancements**

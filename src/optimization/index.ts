@@ -189,7 +189,7 @@ export function optimizeAlarmResponse(
     count: typeof response.count === 'number' ? response.count : response.results?.length || 0,
     results: response.results.slice(0, config.summaryMode.maxItems).map(alarm => ({
       aid: alarm?.aid || 'unknown',
-      timestamp: alarm?.timestamp || (alarm?.ts ? unixToISOString(alarm.ts) : new Date().toISOString()),
+      timestamp: alarm?.timestamp || (alarm?.ts ? safeUnixToISOString(alarm.ts, new Date().toISOString()) : new Date().toISOString()),
       type: alarm.type,
       status: alarm.status,
       message: truncateText(alarm.message || '', TRUNCATION_LIMITS.MESSAGE),
@@ -240,7 +240,7 @@ export function optimizeFlowResponse(
   const optimized = {
     count: typeof response.count === 'number' ? response.count : response.results?.length || 0,
     results: response.results.slice(0, config.summaryMode.maxItems).map(flow => ({
-      timestamp: flow.timestamp || unixToISOString(flow.ts),
+      timestamp: flow.timestamp || safeUnixToISOString(flow.ts, new Date().toISOString()),
       source_ip: flow.source?.ip || flow.device?.ip || 'unknown',
       destination_ip: flow.destination?.ip || 'unknown',
       protocol: flow.protocol,
@@ -297,10 +297,10 @@ export function optimizeRuleResponse(
       status: rule.status || 'active',
       hit_count: rule.hit?.count || 0,
       last_hit: safeUnixToISOString(rule.hit?.lastHitTs, 'Never'),
-      created_at: unixToISOString(rule.ts),
-      updated_at: unixToISOString(rule.updateTs),
+      created_at: safeUnixToISOString(rule.ts, new Date().toISOString()),
+      updated_at: safeUnixToISOString(rule.updateTs, new Date().toISOString()),
       notes: truncateText(rule.notes || '', TRUNCATION_LIMITS.NOTES),
-      ...(rule.resumeTs && { resume_at: unixToISOString(rule.resumeTs) })
+      ...(rule.resumeTs && { resume_at: safeUnixToISOString(rule.resumeTs, new Date().toISOString()) })
     })),
     next_cursor: response.next_cursor
   };
@@ -376,9 +376,16 @@ export function autoOptimizeResponse(response: any, responseType: string, config
   }
   
   // Quick size estimation before expensive JSON.stringify
-  const estimatedSize = response?.results?.length 
-    ? response.results.length * 200 + (JSON.stringify(response).length / Math.max(response.results.length, 1))
-    : JSON.stringify(response).length;
+  let estimatedSize: number;
+  try {
+    estimatedSize = response?.results?.length 
+      ? response.results.length * 200 + (JSON.stringify(response).length / Math.max(response.results.length, 1))
+      : JSON.stringify(response).length;
+  } catch (error) {
+    // Fallback for circular references or other JSON.stringify errors
+    console.warn('JSON.stringify failed for size estimation, using fallback:', error instanceof Error ? error.message : 'Unknown error');
+    estimatedSize = response?.results?.length ? response.results.length * 1000 : 10000;
+  }
   
   // If estimated size is well within limits, return as-is
   if (estimatedSize <= config.maxResponseSize * 0.8) {
@@ -386,8 +393,17 @@ export function autoOptimizeResponse(response: any, responseType: string, config
   }
   
   // Only do expensive size check if we're close to the limit
-  const responseText = JSON.stringify(response);
-  if (responseText.length <= config.maxResponseSize) {
+  let responseText: string;
+  try {
+    responseText = JSON.stringify(response);
+  } catch (error) {
+    // Handle circular references or other JSON.stringify errors
+    console.warn('JSON.stringify failed for response size check, applying optimization:', error instanceof Error ? error.message : 'Unknown error');
+    // Force optimization since we can't measure the response size
+    responseText = '';
+  }
+  
+  if (responseText && responseText.length <= config.maxResponseSize) {
     return response;
   }
 
@@ -448,8 +464,22 @@ export function getOptimizationStats(original: any, optimized: any): {
   compressionRatio: number;
   tokensSaved: number;
 } {
-  const originalText = JSON.stringify(original);
-  const optimizedText = JSON.stringify(optimized);
+  let originalText: string;
+  let optimizedText: string;
+  
+  try {
+    originalText = JSON.stringify(original);
+  } catch (error) {
+    console.warn('JSON.stringify failed for original data, using fallback size:', error instanceof Error ? error.message : 'Unknown error');
+    originalText = '[circular or invalid data]';
+  }
+  
+  try {
+    optimizedText = JSON.stringify(optimized);
+  } catch (error) {
+    console.warn('JSON.stringify failed for optimized data, using fallback size:', error instanceof Error ? error.message : 'Unknown error');
+    optimizedText = '[circular or invalid data]';
+  }
   
   return {
     originalSize: originalText.length,
@@ -511,7 +541,7 @@ export function optimizeResponse(responseType: string, config?: Partial<Optimiza
           process.stderr.write(`[${propertyKey}] ${summary}\n`);
         }
         
-        return result;
+        return optimized;
       } catch (error) {
         // Log error and re-throw with context
         console.error(`[${propertyKey}] Optimization failed:`, error);

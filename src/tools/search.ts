@@ -24,6 +24,18 @@ import {
 } from '../validation/field-mapper.js';
 
 /**
+ * Risk threshold constants for geographic analysis
+ */
+const RISK_THRESHOLDS = {
+  LOW_MAX: 3,
+  MEDIUM_MAX: 6,
+  HIGH_MAX: 8,
+  HIGH_RISK_COUNTRY_MIN: 6,
+  HIGH_RISK_FLOW_MIN: 7,
+  SUSPICIOUS_ASN_MIN: 7
+} as const;
+
+/**
  * Strategy interface for different entity search implementations
  */
 interface SearchStrategy {
@@ -1305,9 +1317,9 @@ export class SearchEngine {
         analysis.top_asns[asn] = (analysis.top_asns[asn] || 0) + 1;
       }
       
-      if (isCloud) {analysis.cloud_provider_flows++;}
-      if (isVpn) {analysis.vpn_flows++;}
-      if (riskScore && riskScore >= 7) {analysis.high_risk_flows++;}
+      if (isCloud) { analysis.cloud_provider_flows++; }
+      if (isVpn) { analysis.vpn_flows++; }
+      if (riskScore && riskScore >= RISK_THRESHOLDS.HIGH_RISK_FLOW_MIN) { analysis.high_risk_flows++; }
     });
 
     // Convert sets to counts
@@ -1319,11 +1331,17 @@ export class SearchEngine {
       top_countries: Object.entries(analysis.top_countries)
         .sort(([,a], [,b]) => b - a)
         .slice(0, 10)
-        .reduce((acc, [country, count]) => ({ ...acc, [country]: count }), {}),
+        .reduce((acc, [country, count]) => {
+          acc[country] = count;
+          return acc;
+        }, {} as Record<string, number>),
       top_asns: Object.entries(analysis.top_asns)
         .sort(([,a], [,b]) => b - a)
         .slice(0, 5)
-        .reduce((acc, [asn, count]) => ({ ...acc, [asn]: count }), {})
+        .reduce((acc, [asn, count]) => {
+          acc[asn] = count;
+          return acc;
+        }, {} as Record<string, number>)
     };
   }
 
@@ -1356,7 +1374,7 @@ export class SearchEngine {
       const isProxy = getFieldValue(alarm, 'is_proxy', 'alarms');
       const riskScore = getFieldValue(alarm, 'geographic_risk_score', 'alarms') || 0;
 
-      if (country && riskScore >= 6) {
+      if (country && riskScore >= RISK_THRESHOLDS.HIGH_RISK_COUNTRY_MIN) {
         threats.high_risk_countries[country] = (threats.high_risk_countries[country] || 0) + 1;
       }
       
@@ -1364,18 +1382,18 @@ export class SearchEngine {
         threats.threat_by_continent[continent] = (threats.threat_by_continent[continent] || 0) + 1;
       }
       
-      if (asn && riskScore >= 7) {
+      if (asn && riskScore >= RISK_THRESHOLDS.SUSPICIOUS_ASN_MIN) {
         threats.suspicious_asns[asn] = (threats.suspicious_asns[asn] || 0) + 1;
       }
       
-      if (isCloud) {threats.cloud_threats++;}
-      if (isVpn) {threats.vpn_threats++;}
-      if (isProxy) {threats.proxy_threats++;}
+      if (isCloud) { threats.cloud_threats++; }
+      if (isVpn) { threats.vpn_threats++; }
+      if (isProxy) { threats.proxy_threats++; }
 
       // Categorize risk
-      if (riskScore <= 3) {threats.risk_distribution.low++;}
-      else if (riskScore <= 6) {threats.risk_distribution.medium++;}
-      else if (riskScore <= 8) {threats.risk_distribution.high++;}
+      if (riskScore <= RISK_THRESHOLDS.LOW_MAX) {threats.risk_distribution.low++;}
+      else if (riskScore <= RISK_THRESHOLDS.MEDIUM_MAX) {threats.risk_distribution.medium++;}
+      else if (riskScore <= RISK_THRESHOLDS.HIGH_MAX) {threats.risk_distribution.high++;}
       else {threats.risk_distribution.critical++;}
     });
 

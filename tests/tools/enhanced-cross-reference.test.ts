@@ -67,8 +67,69 @@ describe('Enhanced Cross-Reference Search Tools', () => {
     };
 
     beforeEach(() => {
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(mockFlowsData);
-      mockFirewallaClient.getActiveAlarms = jest.fn().mockResolvedValue(mockAlarmsData);
+      // Create more specific mock data structures that accurately reflect real API responses
+      const enhancedMockFlowsData = {
+        results: [
+          {
+            source: { ip: '192.168.1.1', port: 54321 },
+            destination: { ip: '203.0.113.1', port: 443 },
+            protocol: 'tcp',
+            bytes: 5124,
+            ts: 1640995200,
+            geo: { country: 'United States', asn: '12345', region: 'CA', city: 'San Francisco' },
+            app: { name: 'Chrome', category: 'browser' },
+            ssl: { subject: '*.google.com', issuer: 'Google Trust Services' },
+            session_duration: 125,
+            frequency_score: 8.5
+          },
+          {
+            source: { ip: '192.168.1.2', port: 49152 },
+            destination: { ip: '198.51.100.1', port: 80 },
+            protocol: 'https',
+            bytes: 2048,
+            ts: 1640995260,
+            geo: { country: 'Germany', asn: '67890', region: 'NRW', city: 'Cologne' },
+            app: { name: 'Firefox', category: 'browser' },
+            ssl: { subject: '*.example.com', issuer: 'Let\'s Encrypt' },
+            session_duration: 89,
+            frequency_score: 3.2
+          }
+        ],
+        count: 2,
+        metadata: { queryTime: 45, cacheHit: false }
+      };
+
+      const enhancedMockAlarmsData = {
+        results: [
+          {
+            device: { ip: '192.168.1.1', mac: 'aa:bb:cc:dd:ee:ff' },
+            remote: { ip: '203.0.113.1', country: 'United States', asn: '12345' },
+            severity: 'high',
+            type: 'network_intrusion',
+            ts: 1640995250,
+            target_value: 'malicious-domain.com',
+            action: 'block',
+            resolved: false,
+            confidence: 0.95
+          },
+          {
+            device: { ip: '192.168.1.3', mac: '11:22:33:44:55:66' },
+            remote: { ip: '198.51.100.2', country: 'France', asn: '33891' },
+            severity: 'medium',
+            type: 'policy_violation',
+            ts: 1640995300,
+            target_value: 'social-media.com',
+            action: 'timelimit',
+            resolved: true,
+            confidence: 0.78
+          }
+        ],
+        count: 2,
+        metadata: { queryTime: 23, cacheHit: true }
+      };
+
+      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(enhancedMockFlowsData);
+      mockFirewallaClient.getActiveAlarms = jest.fn().mockResolvedValue(enhancedMockAlarmsData);
     });
 
     test('should perform multi-field correlation with AND logic', async () => {
@@ -409,7 +470,7 @@ describe('Enhanced Cross-Reference Search Tools', () => {
       const executionTime = Date.now() - startTime;
 
       expect(result.correlation_summary.total_correlated_count).toBeGreaterThanOrEqual(0);
-      expect(executionTime).toBeLessThan(5000); // Should complete within 5 seconds
+      expect(executionTime).toBeLessThan(1000); // Should complete within 1 second
     });
 
     test('should handle API errors gracefully', async () => {
