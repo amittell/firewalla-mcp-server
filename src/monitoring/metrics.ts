@@ -105,7 +105,7 @@ export class MetricsCollector {
     // Format each metric group
     for (const [name, metrics] of metricsByName) {
       const firstMetric = metrics[0];
-      if (!firstMetric) continue;
+      if (!firstMetric) {continue;}
       
       // Add help comment if available
       if (firstMetric.help) {
@@ -166,7 +166,7 @@ export class MetricsCollector {
   }
 
   private percentile(sortedArray: number[], p: number): number {
-    if (sortedArray.length === 0) return 0;
+    if (sortedArray.length === 0) {return 0;}
     
     const index = Math.ceil(sortedArray.length * p) - 1;
     const value = sortedArray[Math.max(0, Math.min(index, sortedArray.length - 1))];
@@ -176,6 +176,7 @@ export class MetricsCollector {
 
 // Pre-defined metrics for common use cases
 export class FirewallaMetrics {
+  // eslint-disable-next-line no-unused-vars
   constructor(private collector: MetricsCollector) {}
 
   // API metrics

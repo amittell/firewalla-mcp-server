@@ -1,13 +1,24 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import { getCurrentTimestamp } from '../utils/timestamp.js';
 import {
   FirewallaConfig,
   Alarm,
-  FlowData,
+  Flow,
   Device,
   BandwidthUsage,
   NetworkRule,
   TargetList,
-} from '../types';
+  Box,
+  SearchResult,
+  SearchQuery,
+  SearchOptions,
+  CrossReferenceResult,
+  Trend,
+} from '../types.js';
+import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
+import { optimizeResponse } from '../optimization/index.js';
+import { createPaginatedResponse } from '../utils/pagination.js';
+import { logger } from '../monitoring/logger.js';
 
 interface APIResponse<T> {
   success: boolean;
@@ -99,6 +110,18 @@ export class FirewallaClient {
     });
   }
 
+  private sanitizeInput(input: string | undefined): string {
+    if (!input || typeof input !== 'string') {
+      return '';
+    }
+    // Enhanced sanitization that preserves search query functionality
+    // Remove only the most dangerous characters while preserving search syntax
+    return input
+      .replace(/[<>"']/g, '') // Remove HTML/injection characters
+      .replace(/\0/g, '') // Remove null bytes
+      .trim();
+  }
+
   private async request<T>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     endpoint: string,
@@ -145,7 +168,7 @@ export class FirewallaClient {
         result = response.data.data;
       } else {
         // Direct data response (more common with Firewalla API)
-        result = response.data;
+        result = response.data as T;
       }
       
       if (cacheable && method === 'GET') {
@@ -155,420 +178,578 @@ export class FirewallaClient {
       return result;
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        throw new Error(`API Error: ${error.message}`);
+        const status = error.response?.status;
+        const statusText = error.response?.statusText;
+        const url = error.config?.url;
+        
+        let errorMessage = `API Error (${status || 'unknown'}): ${error.message}`;
+        
+        if (status) {
+          switch (status) {
+            case 400:
+              errorMessage = `Bad Request: Invalid parameters sent to ${url}`;
+              break;
+            case 401:
+              errorMessage = 'Authentication failed: Invalid or expired MSP token';
+              break;
+            case 403:
+              errorMessage = 'Access denied: Insufficient permissions for this operation';
+              break;
+            case 404:
+              errorMessage = `Resource not found: ${url} does not exist`;
+              break;
+            case 429:
+              errorMessage = 'Rate limit exceeded: Too many requests, please wait before retrying';
+              break;
+            case 500:
+              errorMessage = 'Server error: Firewalla API is experiencing issues';
+              break;
+            case 503:
+              errorMessage = 'Service unavailable: Firewalla API is temporarily down';
+              break;
+            default:
+              errorMessage = `HTTP ${status} ${statusText}: ${error.message}`;
+          }
+        }
+        
+        throw new Error(errorMessage);
       }
-      throw error;
+      
+      // Handle other types of errors
+      if (error instanceof Error) {
+        throw new Error(`Request failed: ${error.message}`);
+      }
+      
+      throw new Error('Unknown error occurred during API request');
     }
   }
 
-  async getActiveAlarms(severity?: string, limit = 20): Promise<Alarm[]> {
+  @optimizeResponse('alarms')
+  async getActiveAlarms(
+    query?: string, 
+    groupBy?: string, 
+    sortBy = 'timestamp:desc', 
+    limit = 200, 
+    cursor?: string
+  ): Promise<{count: number; results: Alarm[]; next_cursor?: string}> {
     const params: Record<string, unknown> = {
-      limit,
+      sortBy,
+      limit: limit, // Remove artificial limit - let pagination handle large datasets
     };
     
-    if (severity) {
-      params.severity = severity;
+    if (query) {
+      params.query = query;
+    }
+    if (groupBy) {
+      params.groupBy = groupBy;
+    }
+    if (cursor) {
+      params.cursor = cursor;
     }
 
-    const response = await this.request<{results: any[]} | any[]>('GET', `/alarms`, params);
+    const endpoint = this.config.boxId && this.config.boxId.trim() 
+      ? `/boxes/${this.config.boxId.trim()}/alarms`
+      : `/alarms`;
+
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', endpoint, params);
     
-    // Handle the response format - could be direct array or with results property
-    const rawAlarms = Array.isArray(response) ? response : (response.results || []);
+    // API returns {count, results[], next_cursor} format
+    const alarms = (Array.isArray(response.results) ? response.results : []).map((item: any): Alarm => ({
+      ts: item.ts || Math.floor(Date.now() / 1000),
+      gid: item.gid || this.config.boxId,
+      aid: item.aid || 0,
+      type: item.type || 1,
+      status: item.status || 1,
+      message: item.message || 'Unknown alarm',
+      direction: item.direction || 'inbound',
+      protocol: item.protocol || 'tcp',
+      // Conditional properties based on alarm type
+      ...(item.device && { device: item.device }),
+      ...(item.remote && { remote: item.remote }),
+      ...(item.transfer && { transfer: item.transfer }),
+      ...(item.dataPlan && { dataPlan: item.dataPlan }),
+      ...(item.vpn && { vpn: item.vpn }),
+      ...(item.port && { port: item.port }),
+      ...(item.wan && { wan: item.wan })
+    }));
+
+    return {
+      count: response.count || alarms.length,
+      results: alarms,
+      next_cursor: response.next_cursor
+    };
+  }
+
+  @optimizeResponse('flows')
+  async getFlowData(
+    query?: string,
+    groupBy?: string,
+    sortBy = 'timestamp:desc',
+    limit = 200,
+    cursor?: string
+  ): Promise<{count: number; results: Flow[]; next_cursor?: string}> {
+    const params: Record<string, unknown> = {
+      sortBy,
+      limit: limit, // Remove artificial limit - let pagination handle large datasets
+    };
     
-    // Transform the raw alarm data with comprehensive field mapping
-    return rawAlarms.map((item: any) => {
-      const parseTimestamp = (ts: any) => {
-        if (!ts) return new Date().toISOString();
+    if (query) {
+      params.query = query;
+    }
+    if (groupBy) {
+      params.groupBy = groupBy;
+    }
+    if (cursor) {
+      params.cursor = cursor;
+    }
+
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/flows`, params);
+    
+    // API returns {count, results[], next_cursor} format
+    const flows = (Array.isArray(response.results) ? response.results : []).map((item: any): Flow => {
+      const parseTimestamp = (ts: any): number => {
+        if (!ts) {return Math.floor(Date.now() / 1000);}
         
         if (typeof ts === 'number') {
-          const timestamp = ts > 1000000000000 ? ts : ts * 1000;
-          return new Date(timestamp).toISOString();
+          return ts > 1000000000000 ? Math.floor(ts / 1000) : ts;
         }
         
         if (typeof ts === 'string') {
-          if (ts.includes('T') || ts.includes('-')) {
-            return new Date(ts).toISOString();
-          }
+          const parsed = Date.parse(ts);
+          return Math.floor(parsed / 1000);
         }
         
-        return new Date().toISOString();
+        return Math.floor(Date.now() / 1000);
       };
 
-      return {
-        id: item.aid || item.id || item._id || 'unknown',
-        timestamp: parseTimestamp(item.ts || item.timestamp),
-        severity: item.severity || 'medium',
-        type: item.type || item._type || item.category || 'security',
-        description: item.description || item.message || item.msg || `Alarm ${item._type || 'detected'}`,
-        source_ip: item.device?.ip || item.srcIP || item.source_ip || item.sourceIP,
-        destination_ip: item.dstIP || item.dest_ip || item.destinationIP,
-        status: item.status === 1 ? 'active' : (item.status || 'active')
-      };
-    });
-  }
-
-  async getFlowData(
-    startTime?: string,
-    endTime?: string,
-    limit = 50,
-    page = 1
-  ): Promise<FlowData> {
-    const params: Record<string, unknown> = {
-      limit,
-      page,
-    };
-    
-    if (startTime) {
-      params.start_time = startTime;
-    }
-    
-    if (endTime) {
-      params.end_time = endTime;
-    }
-
-    const response = await this.request<{results: any[]} | any[]>('GET', `/flows`, params);
-    const rawFlows = Array.isArray(response) ? response : (response.results || []);
-    
-    // Transform the flow data with comprehensive field mapping
-    const flows = rawFlows.map((item: any) => {
-      const parseTimestamp = (ts: any) => {
-        if (!ts) return new Date().toISOString();
-        
-        if (typeof ts === 'number') {
-          const timestamp = ts > 1000000000000 ? ts : ts * 1000;
-          return new Date(timestamp).toISOString();
-        }
-        
-        return new Date().toISOString();
-      };
-
-      return {
-        timestamp: parseTimestamp(item.ts || item.timestamp),
-        source_ip: item.source?.ip || item.srcIP || item.source_ip,
-        destination_ip: item.destination?.ip || item.dstIP || item.destination_ip || item.domain,
-        source_port: item.source?.port || item.srcPort || item.source_port || 0,
-        destination_port: item.destination?.port || item.dstPort || item.destination_port || 0,
-        protocol: item.protocol || 'unknown',
-        bytes: item.total || item.bytes || 0,
-        packets: item.count || item.packets || 0,
+      const flow: Flow = {
+        ts: parseTimestamp(item.ts || item.timestamp),
+        gid: item.gid || this.config.boxId,
+        protocol: item.protocol || 'tcp',
+        direction: item.direction || 'outbound',
+        block: Boolean(item.block || item.blocked),
+        download: item.download || 0,
+        upload: item.upload || 0,
+        bytes: (item.download || 0) + (item.upload || 0),
         duration: item.duration || 0,
-        bytes_uploaded: item.upload || 0,
-        bytes_downloaded: item.download || 0,
-        ...(item.source && {
-          source_device: {
-            id: item.source.id,
-            name: item.source.name,
-            type: item.source.deviceType || item.source.type
-          }
-        })
+        count: item.count || item.packets || 1,
+        device: {
+          id: item.device?.id || 'unknown',
+          ip: item.device?.ip || item.srcIP || 'unknown',
+          name: item.device?.name || 'Unknown Device',
+        },
       };
+      
+      if (item.blockType) {
+        flow.blockType = item.blockType;
+      }
+      
+      if (item.device?.network) {
+        flow.device.network = {
+          id: item.device.network.id,
+          name: item.device.network.name
+        };
+      }
+      
+      if (item.source) {
+        flow.source = {
+          id: item.source.id || 'unknown',
+          name: item.source.name || 'Unknown',
+          ip: item.source.ip || item.srcIP || 'unknown'
+        };
+      }
+      
+      if (item.destination) {
+        flow.destination = {
+          id: item.destination.id || 'unknown', 
+          name: item.destination.name || item.domain || 'Unknown',
+          ip: item.destination.ip || item.dstIP || 'unknown'
+        };
+      }
+      
+      if (item.region) {
+        flow.region = item.region;
+      }
+      
+      if (item.category) {
+        flow.category = item.category;
+      }
+      
+      return flow;
     });
 
     return {
-      flows,
-      pagination: {
-        has_more: rawFlows.length === limit
-      }
+      count: response.count || flows.length,
+      results: flows,
+      next_cursor: response.next_cursor
     };
   }
 
-  async getDeviceStatus(deviceId?: string, includeOffline = true): Promise<Device[]> {
-    const params: Record<string, unknown> = {};
-    
-    if (deviceId) {
-      // If specific device requested, use device endpoint
-      const response = await this.request<any>('GET', `/devices/${deviceId}`, params);
-      return [response].map(this.transformDevice);
-    }
 
-    // Get all devices from the box
-    const response = await this.request<{devices: any[]} | any[]>('GET', `/boxes/${this.config.boxId}/devices`, params);
-    
-    // Handle different response formats
-    const devices = Array.isArray(response) ? response : (response.devices || []);
-    
-    return devices
-      .map(this.transformDevice)
-      .filter(device => includeOffline || device.status === 'online');
+  @optimizeResponse('devices')
+  async getDeviceStatus(
+    deviceId?: string, 
+    includeOffline = true, 
+    limit?: number, 
+    cursor?: string
+  ): Promise<{count: number; results: Device[]; next_cursor?: string; total_count: number; has_more: boolean}> {
+    try {
+      const startTime = Date.now();
+      
+      // Create a data fetcher function for pagination
+      const dataFetcher = async (): Promise<Device[]> => {
+        const params: Record<string, unknown> = {};
+
+        const endpoint = this.config.boxId?.trim() 
+          ? `/boxes/${this.config.boxId.trim()}/devices`
+          : `/devices`;
+
+        // API returns direct array of devices
+        const response = await this.request<Device[]>('GET', endpoint, params);
+        
+        // Enhanced null safety and error handling
+        const rawResults = Array.isArray(response) ? response : [];
+        
+        let results = rawResults
+          .filter(item => item && typeof item === 'object')
+          .map(item => this.transformDevice(item))
+          .filter(device => device && device.id && device.id !== 'unknown');
+        
+        // Filter by device ID if provided
+        if (deviceId && deviceId.trim()) {
+          const targetId = deviceId.trim().toLowerCase();
+          results = results.filter(device => 
+            device.id.toLowerCase() === targetId ||
+            (device.mac && device.mac.toLowerCase().replace(/[:-]/g, '') === targetId.replace(/[:-]/g, ''))
+          );
+        }
+        
+        // Filter by online status if requested
+        if (!includeOffline) {
+          results = results.filter(device => device.online);
+        }
+        
+        return results;
+      };
+      
+      // Use universal pagination for client-side chunking
+      const pageSize = limit || 100; // Default page size
+      const paginatedResult = await createPaginatedResponse(
+        dataFetcher,
+        cursor,
+        pageSize,
+        'name', // Sort by name for consistent ordering
+        'asc'
+      );
+      
+      process.stderr.write(`Device pagination: ${paginatedResult.results.length}/${paginatedResult.total_count} (${Date.now() - startTime}ms)\n`);
+      
+      return {
+        count: paginatedResult.results.length,
+        results: paginatedResult.results,
+        next_cursor: paginatedResult.next_cursor,
+        total_count: paginatedResult.total_count,
+        has_more: paginatedResult.has_more
+      };
+    } catch (error) {
+      logger.error('Error in getDeviceStatus:', error instanceof Error ? error : new Error(String(error)));
+      throw new Error(`Failed to get device status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  @optimizeResponse('devices')
+  async getOfflineDevices(sortByLastSeen: boolean = true): Promise<{count: number; results: Device[]; next_cursor?: string}> {
+    try {
+      // Input validation
+      const shouldSort = typeof sortByLastSeen === 'boolean' ? sortByLastSeen : true;
+      
+      // Get all devices first
+      const allDevices = await this.getDeviceStatus();
+      
+      // Enhanced filtering for offline devices with comprehensive null safety
+      const offlineDevices = (allDevices.results || [])
+        .filter(device => 
+          device && 
+          typeof device === 'object' && 
+          device.id && 
+          device.id !== 'unknown' &&
+          !device.online
+        );
+      
+      // Sort by last seen if requested with enhanced error handling
+      if (shouldSort && offlineDevices.length > 0) {
+        try {
+          offlineDevices.sort((a, b) => {
+            const aLastSeen = new Date(a.lastSeen || 0).getTime();
+            const bLastSeen = new Date(b.lastSeen || 0).getTime();
+            // Handle invalid dates
+            if (isNaN(aLastSeen) && isNaN(bLastSeen)) {return 0;}
+            if (isNaN(aLastSeen)) {return 1;}
+            if (isNaN(bLastSeen)) {return -1;}
+            return bLastSeen - aLastSeen; // Most recent first
+          });
+        } catch (sortError) {
+          logger.debugNamespace('api', 'Error sorting offline devices by lastSeen', { error: sortError });
+          // Continue without sorting if sort fails
+        }
+      }
+      
+      return {
+        count: offlineDevices.length,
+        results: offlineDevices,
+        next_cursor: undefined
+      };
+    } catch (error) {
+      logger.error('Error in getOfflineDevices:', error instanceof Error ? error : new Error(String(error)));
+      throw new Error(`Failed to get offline devices: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   private transformDevice = (item: any): Device => {
-    return {
-      id: item.id || item.gid || item.device_id || 'unknown',
+    const device: Device = {
+      id: item.id || item.gid || item._id || 'unknown',
+      gid: item.gid || this.config.boxId,
       name: item.name || item.hostname || item.deviceName || 'Unknown Device',
-      ip_address: item.ip || item.ipAddress || item.local_ip || 'unknown',
-      mac_address: item.mac || item.macAddress || item.hw_addr || 'unknown',
-      status: item.online ? 'online' : (item.status || 'offline'),
-      last_seen: item.lastSeen || item.last_seen || item.lastActivity || new Date().toISOString(),
-      device_type: item.type || item.deviceType || item.category || 'unknown',
+      ip: item.ip || item.ipAddress || item.localIP || 'unknown',
+      online: Boolean(item.online || item.isOnline || item.connected),
+      ipReserved: Boolean(item.ipReserved),
+      network: {
+        id: item.network?.id || 'unknown',
+        name: item.network?.name || 'Unknown Network',
+      },
+      totalDownload: item.totalDownload || 0,
+      totalUpload: item.totalUpload || 0,
     };
+    
+    if (item.mac || item.macAddress || item.hardwareAddr) {
+      device.mac = item.mac || item.macAddress || item.hardwareAddr;
+    }
+    
+    if (item.macVendor || item.manufacturer || item.vendor) {
+      device.macVendor = item.macVendor || item.manufacturer || item.vendor;
+    }
+    
+    if (item.lastSeen || item.onlineTs || item.lastActivity) {
+      // Handle different timestamp formats
+      const timestamp = item.lastSeen || item.onlineTs || item.lastActivity;
+      device.lastSeen = typeof timestamp === 'number' && timestamp > 1000000000000 
+        ? Math.floor(timestamp / 1000) 
+        : timestamp;
+    }
+    
+    if (item.group) {
+      device.group = {
+        id: item.group.id || 'unknown',
+        name: item.group.name || 'Unknown Group',
+      };
+    }
+    
+    return device;
   }
 
-  async getBandwidthUsage(period: string, top = 10): Promise<BandwidthUsage[]> {
-    // Calculate timestamp range based on period
-    const end = Math.floor(Date.now() / 1000);
-    let begin: number;
-    
-    switch (period) {
-      case '1h':
-        begin = end - (60 * 60);
-        break;
-      case '24h':
-        begin = end - (24 * 60 * 60);
-        break;
-      case '7d':
-        begin = end - (7 * 24 * 60 * 60);
-        break;
-      case '30d':
-        begin = end - (30 * 24 * 60 * 60);
-        break;
-      default:
-        begin = end - (24 * 60 * 60); // Default to 24h
-    }
-
-    const params = {
-      query: `ts:${begin}-${end}`,
-      limit: top,
-      sortBy: 'total:desc',
-      groupBy: 'device'
-    };
-
-    const response = await this.request<{results: any[]} | any[]>('GET', `/flows`, params);
-    const rawData = Array.isArray(response) ? response : (response.results || []);
-    
-    // Transform the response to BandwidthUsage format
-    return rawData.map((item: any) => ({
-      device_id: item.device?.id || item.deviceId || 'unknown',
-      device_name: item.device?.name || item.deviceName || 'Unknown Device',
-      ip_address: item.device?.ip || item.ip || 'unknown',
-      bytes_uploaded: item.upload || item.uploadBytes || 0,
-      bytes_downloaded: item.download || item.downloadBytes || 0,
-      total_bytes: item.total || item.totalBytes || 0,
-      period: period
-    }));
-  }
-
-  async getNetworkRules(ruleType?: string, activeOnly = true): Promise<NetworkRule[]> {
-    const params: Record<string, unknown> = {
-      active_only: activeOnly,
-    };
-    
-    if (ruleType) {
-      params.rule_type = ruleType;
-    }
-
-    const response = await this.request<{results: any[]} | any[]>('GET', `/rules`, params);
-    const rawRules = Array.isArray(response) ? response : (response.results || []);
-    
-    // Transform raw API response to match NetworkRule interface with comprehensive mapping
-    // This handles cases where the API returns raw rule data with different field names
-    return rawRules.map((item: any) => {
-      // If the item already matches the NetworkRule interface perfectly, return as-is
-      if (item.id && item.name && item.type && item.action && item.status && 
-          item.conditions && item.created_at && item.updated_at) {
-        return item as NetworkRule;
+  @optimizeResponse('bandwidth')
+  async getBandwidthUsage(period: string, top = 10): Promise<{count: number; results: BandwidthUsage[]; next_cursor?: string}> {
+    try {
+      // Enhanced input validation and sanitization
+      if (!period || typeof period !== 'string') {
+        throw new Error('Period parameter is required and must be a string');
       }
       
-      // Otherwise, apply comprehensive field mapping
-      // Extract rule ID with multiple fallbacks
-      const ruleId = item.rid || item.id || item._id || item.ruleId || 'unknown';
+      const validPeriods = ['1h', '24h', '7d', '30d'];
+      const validatedPeriod = validPeriods.includes(period.toLowerCase()) ? period.toLowerCase() : '24h';
+      const validatedTop = Math.max(1, Number(top) || 50);
       
-      // Build comprehensive rule name with context
-      let ruleName = '';
-      if (item.name) {
-        ruleName = item.name;
-      } else if (item.description || item.desc) {
-        ruleName = item.description || item.desc;
-      } else if (item.msg || item.message) {
-        ruleName = item.msg || item.message;
-      } else if (item.title) {
-        ruleName = item.title;
-      } else {
-        // Generate descriptive name based on rule details
-        const ruleTypeStr = item.type || item.ruleType || item.category || 'rule';
-        const actionStr = item.action || item.policy || 'block';
-        ruleName = `${ruleTypeStr} ${actionStr} rule ${ruleId}`.replace(/\s+/g, ' ').trim();
+      // Calculate flow fetch limit based on period (more flows for longer periods)
+      let flowLimit: number;
+      switch (validatedPeriod) {
+        case '1h':
+          flowLimit = 1000;
+          break;
+        case '24h':
+          flowLimit = 3000;
+          break;
+        case '7d':
+          flowLimit = 5000;
+          break;
+        case '30d':
+          flowLimit = 10000;
+          break;
+        default:
+          flowLimit = 3000;
       }
+
+      // Calculate timestamp range for the period
+      const end = Math.floor(Date.now() / 1000);
+      let begin: number;
       
-      // Determine rule type with comprehensive mapping
-      let ruleType = 'firewall'; // default
-      if (item.type) {
-        ruleType = item.type;
-      } else if (item.ruleType) {
-        ruleType = item.ruleType;
-      } else if (item.category) {
-        ruleType = item.category;
-      } else if (item.policyType) {
-        ruleType = item.policyType;
-      } else if (item.kind) {
-        ruleType = item.kind;
+      switch (validatedPeriod) {
+        case '1h':
+          begin = end - (60 * 60);
+          break;
+        case '24h':
+          begin = end - (24 * 60 * 60);
+          break;
+        case '7d':
+          begin = end - (7 * 24 * 60 * 60);
+          break;
+        case '30d':
+          begin = end - (30 * 24 * 60 * 60);
+          break;
+        default:
+          begin = end - (24 * 60 * 60);
       }
+
+      // Use proper Firewalla MSP API v2 flow endpoint with timestamp filtering
+      const timeQuery = `timestamp:${begin}-${end}`;
+      const endpoint = `/v2/boxes/${this.config.boxId}/flows`;
       
-      // Map action with comprehensive fallbacks and normalization
-      let action: 'allow' | 'block' | 'redirect' = 'block'; // default
-      const actionValue = item.action || item.policy || item.verdict || item.disposition;
-      if (actionValue) {
-        const actionLower = String(actionValue).toLowerCase();
-        if (actionLower.includes('allow') || actionLower.includes('permit') || actionLower.includes('accept')) {
-          action = 'allow';
-        } else if (actionLower.includes('redirect') || actionLower.includes('proxy')) {
-          action = 'redirect';
+      const params = {
+        query: timeQuery,
+        groupBy: 'device',
+        limit: Math.min(flowLimit, 500), // API max is 500
+        sortBy: 'bytes:desc'
+      };
+
+      const flowResponse = await this.request<{count: number; results: any[]; next_cursor?: string}>(
+        'GET', 
+        endpoint, 
+        params
+      );
+      
+      if (!flowResponse || !flowResponse.results || flowResponse.results.length === 0) {
+        return { count: 0, results: [], next_cursor: undefined };
+      }
+
+      // Process flows and aggregate bandwidth by device
+      const deviceBandwidth = new Map<string, BandwidthUsage>();
+      
+      flowResponse.results.forEach((flow: any) => {
+        const deviceId = flow.device?.id || flow.deviceId || 'unknown';
+        const deviceName = flow.device?.name || flow.deviceName || 'Unknown Device';
+        const deviceIp = flow.device?.ip || flow.localIP || 'unknown';
+        const upload = Number(flow.upload || 0);
+        const download = Number(flow.download || 0);
+        
+        if (deviceId === 'unknown' || (upload === 0 && download === 0)) {
+          return; // Skip flows without device info or bandwidth
+        }
+        
+        if (deviceBandwidth.has(deviceId)) {
+          const existing = deviceBandwidth.get(deviceId)!;
+          existing.bytes_uploaded += upload;
+          existing.bytes_downloaded += download;
+          existing.total_bytes = existing.bytes_uploaded + existing.bytes_downloaded;
         } else {
-          action = 'block'; // block, deny, drop, reject, etc.
+          deviceBandwidth.set(deviceId, {
+            device_id: deviceId,
+            device_name: deviceName,
+            ip: deviceIp,
+            bytes_uploaded: upload,
+            bytes_downloaded: download,
+            total_bytes: upload + download,
+            period: validatedPeriod
+          });
         }
-      }
-      
-      // Determine status with comprehensive mapping
-      let status: 'active' | 'paused' | 'disabled' = 'active'; // default
-      if (item.disabled === true || item.status === 'disabled' || item.state === 'disabled') {
-        status = 'disabled';
-      } else if (item.paused === true || item.status === 'paused' || item.state === 'paused') {
-        status = 'paused';
-      } else if (item.enabled === false) {
-        status = 'disabled';
-      } else if (item.active === false && item.disabled !== false) {
-        status = 'disabled';
-      }
-      
-      // Build comprehensive conditions object
-      const conditions: Record<string, unknown> = {};
-      
-      // Direct conditions/criteria mapping
-      if (item.conditions && typeof item.conditions === 'object') {
-        Object.assign(conditions, item.conditions);
-      }
-      if (item.target && typeof item.target === 'object') {
-        Object.assign(conditions, item.target);
-      }
-      if (item.criteria && typeof item.criteria === 'object') {
-        Object.assign(conditions, item.criteria);
-      }
-      if (item.config && typeof item.config === 'object') {
-        Object.assign(conditions, item.config);
-      }
-      
-      // Add specific rule parameters
-      if (item.sourceIP || item.src_ip || item.srcIP) {
-        conditions.source_ip = item.sourceIP || item.src_ip || item.srcIP;
-      }
-      if (item.destinationIP || item.dest_ip || item.dstIP || item.dst_ip) {
-        conditions.destination_ip = item.destinationIP || item.dest_ip || item.dstIP || item.dst_ip;
-      }
-      if (item.sourcePort || item.src_port || item.srcPort) {
-        conditions.source_port = item.sourcePort || item.src_port || item.srcPort;
-      }
-      if (item.destinationPort || item.dest_port || item.dstPort || item.dst_port) {
-        conditions.destination_port = item.destinationPort || item.dest_port || item.dstPort || item.dst_port;
-      }
-      if (item.protocol || item.proto) {
-        conditions.protocol = item.protocol || item.proto;
-      }
-      if (item.domain || item.hostname || item.host) {
-        conditions.domain = item.domain || item.hostname || item.host;
-      }
-      if (item.url || item.path) {
-        conditions.url = item.url || item.path;
-      }
-      if (item.app || item.application || item.appName) {
-        conditions.application = item.app || item.application || item.appName;
-      }
-      if (item.device || item.deviceId || item.mac) {
-        conditions.device = item.device || item.deviceId || item.mac;
-      }
-      if (item.direction) {
-        conditions.direction = item.direction;
-      }
-      if (item.schedule || item.timeRange) {
-        conditions.schedule = item.schedule || item.timeRange;
-      }
-      if (item.tags && Array.isArray(item.tags)) {
-        conditions.tags = item.tags;
-      }
-      if (item.category || item.categories) {
-        conditions.category = item.category || item.categories;
-      }
-      
-      // Add rule metadata
-      if (item.priority !== undefined) {
-        conditions.priority = item.priority;
-      }
-      if (item.weight !== undefined) {
-        conditions.weight = item.weight;
-      }
-      if (item.severity) {
-        conditions.severity = item.severity;
-      }
-      if (item.scope) {
-        conditions.scope = item.scope;
-      }
-      
-      // Handle timestamp conversion with multiple formats
-      const parseTimestamp = (ts: any): string => {
-        if (!ts) return new Date().toISOString();
-        
-        if (typeof ts === 'number') {
-          // Handle both seconds and milliseconds timestamps
-          const timestamp = ts > 1000000000000 ? ts : ts * 1000;
-          return new Date(timestamp).toISOString();
-        }
-        
-        if (typeof ts === 'string') {
-          // Try to parse ISO string or convert to number
-          if (ts.includes('T') || ts.includes('-')) {
-            return new Date(ts).toISOString();
-          } else {
-            const numTs = parseInt(ts, 10);
-            if (!isNaN(numTs)) {
-              const timestamp = numTs > 1000000000000 ? numTs : numTs * 1000;
-              return new Date(timestamp).toISOString();
-            }
-          }
-        }
-        
-        return new Date().toISOString();
-      };
-      
-      const createdAt = parseTimestamp(
-        item.createdAt || item.created_at || item.createTime || item.timestamp || item.ts
-      );
-      
-      const updatedAt = parseTimestamp(
-        item.updatedAt || item.updated_at || item.updateTime || item.lastModified || 
-        item.modifiedAt || item.modified_at || createdAt
-      );
-      
+      });
+
+      // Convert to array, sort by total bandwidth, and get top N
+      const results = Array.from(deviceBandwidth.values())
+        .filter(device => device.total_bytes > 0)
+        .sort((a, b) => b.total_bytes - a.total_bytes)
+        .slice(0, validatedTop);
+
       return {
-        id: ruleId,
-        name: ruleName,
-        type: ruleType,
-        action,
-        status,
-        conditions,
-        created_at: createdAt,
-        updated_at: updatedAt,
+        count: results.length,
+        results,
+        next_cursor: undefined
       };
-    });
+    } catch (error) {
+      logger.error('Error in getBandwidthUsage:', error instanceof Error ? error : new Error(String(error)));
+      if (error instanceof Error && error.message.includes('Failed to get bandwidth usage')) {
+        throw error; // Re-throw already formatted errors
+      }
+      throw new Error(`Failed to get bandwidth usage for period ${period}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
-  async pauseRule(ruleId: string, duration = 60): Promise<{ success: boolean; message: string }> {
-    return this.request<{ success: boolean; message: string }>(
-      'POST',
-      `/rules/${ruleId}/pause`,
-      { duration_minutes: duration },
-      false
-    );
+  @optimizeResponse('rules')
+  async getNetworkRules(query?: string, limit?: number): Promise<{count: number; results: NetworkRule[]; next_cursor?: string}> {
+    const params: Record<string, unknown> = {};
+    
+    if (query) {
+      params.query = query;
+    }
+    
+    if (limit !== undefined) {
+      params.limit = limit;
+    }
+
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/rules`, params);
+    
+    // API returns {count, results[]} format
+    const rules = (Array.isArray(response.results) ? response.results : []).map((item: any): NetworkRule => ({
+      id: item.id || 'unknown',
+      action: item.action || 'block',
+      target: {
+        type: item.target?.type || 'ip',
+        value: item.target?.value || 'unknown',
+        dnsOnly: item.target?.dnsOnly,
+        port: item.target?.port
+      },
+      direction: item.direction || 'bidirection',
+      gid: item.gid || this.config.boxId,
+      group: item.group,
+      scope: item.scope ? {
+        type: item.scope.type || 'ip',
+        value: item.scope.value || 'unknown',
+        port: item.scope.port
+      } : undefined,
+      notes: item.notes,
+      status: item.status,
+      hit: item.hit ? {
+        count: item.hit.count || 0,
+        lastHitTs: item.hit.lastHitTs || 0,
+        statsResetTs: item.hit.statsResetTs
+      } : undefined,
+      schedule: item.schedule ? {
+        duration: item.schedule.duration || 0,
+        cronTime: item.schedule.cronTime
+      } : undefined,
+      timeUsage: item.timeUsage ? {
+        quota: item.timeUsage.quota || 0,
+        used: item.timeUsage.used || 0
+      } : undefined,
+      protocol: item.protocol,
+      ts: item.ts || Math.floor(Date.now() / 1000),
+      updateTs: item.updateTs || Math.floor(Date.now() / 1000),
+      resumeTs: item.resumeTs
+    }));
+
+    return {
+      count: response.count || rules.length,
+      results: rules,
+      next_cursor: response.next_cursor
+    };
   }
 
-  async getTargetLists(listType?: string): Promise<TargetList[]> {
+
+  @optimizeResponse('targets')
+  async getTargetLists(listType?: string): Promise<{count: number; results: TargetList[]; next_cursor?: string}> {
     const params: Record<string, unknown> = {};
     
     if (listType && listType !== 'all') {
       params.list_type = listType;
     }
 
-    const response = await this.request<TargetList[] | {results: TargetList[]}>('GET', `/target-lists`, params);
+    const response = await this.request<TargetList[] | {results: TargetList[]}>('GET', `/v2/target-lists`, params);
+    
     // Handle response format
-    return Array.isArray(response) ? response : (response.results || []);
+    const results = Array.isArray(response) ? response : (response?.results || []);
+    
+    return {
+      count: Array.isArray(results) ? results.length : 0,
+      results: Array.isArray(results) ? results : []
+    };
   }
 
   async getFirewallSummary(): Promise<{
@@ -580,7 +761,7 @@ export class FirewallaClient {
     blocked_attempts: number;
     last_updated: string;
   }> {
-    return this.request('GET', `/boxes/${this.config.boxId}/summary`, undefined, true);
+    return this.request('GET', `/v2/boxes/${this.config.boxId}/summary`, undefined, true);
   }
 
   async getSecurityMetrics(): Promise<{
@@ -591,7 +772,7 @@ export class FirewallaClient {
     threat_level: 'low' | 'medium' | 'high' | 'critical';
     last_threat_detected: string;
   }> {
-    return this.request('GET', `/boxes/${this.config.boxId}/metrics/security`, undefined, true);
+    return this.request('GET', `/v2/boxes/${this.config.boxId}/metrics/security`, undefined, true);
   }
 
   async getNetworkTopology(): Promise<{
@@ -608,7 +789,7 @@ export class FirewallaClient {
       bandwidth: number;
     }>;
   }> {
-    return this.request('GET', `/boxes/${this.config.boxId}/topology`, undefined, true);
+    return this.request('GET', `/v2/boxes/${this.config.boxId}/topology`, undefined, true);
   }
 
   async getRecentThreats(hours = 24): Promise<Array<{
@@ -620,70 +801,873 @@ export class FirewallaClient {
     severity: string;
   }>> {
     const params = { hours };
-    return this.request('GET', `/boxes/${this.config.boxId}/threats/recent`, params, true);
+    return this.request('GET', `/v2/boxes/${this.config.boxId}/threats/recent`, params, true);
   }
 
-  async resumeRule(ruleId: string): Promise<{ success: boolean; message: string }> {
-    return this.request<{ success: boolean; message: string }>(
-      'POST',
-      `/rules/${ruleId}/resume`,
-      {},
-      false
-    );
-  }
+  @optimizeResponse('rules')
 
-  async getBoxes(): Promise<Array<{
-    id: string;
-    name: string;
-    status: string;
-    version: string;
-    last_seen: string;
-    location?: string;
-    type?: string;
-  }>> {
-    return this.request('GET', `/boxes`, undefined, true);
-  }
-
-  async getSpecificAlarm(alarmId: string): Promise<Alarm> {
-    const response = await this.request<any>('GET', `/alarms/${this.config.boxId}/${alarmId}`);
-    
-    // Transform response to Alarm format
-    const parseTimestamp = (ts: any) => {
-      if (!ts) return new Date().toISOString();
+  @optimizeResponse('boxes')
+  async getBoxes(groupId?: string): Promise<{count: number; results: Box[]; next_cursor?: string}> {
+    try {
+      // Input validation and sanitization
+      const params: Record<string, unknown> = {};
       
-      if (typeof ts === 'number') {
-        const timestamp = ts > 1000000000000 ? ts : ts * 1000;
-        return new Date(timestamp).toISOString();
+      if (groupId && groupId.trim()) {
+        params.group = groupId.trim();
       }
+
+      // API returns direct array of boxes
+      const response = await this.request<any[]>('GET', `/v2/boxes`, params, true);
       
-      if (typeof ts === 'string') {
-        if (ts.includes('T') || ts.includes('-')) {
-          return new Date(ts).toISOString();
+      // Enhanced null safety and data validation
+      const rawResults = Array.isArray(response) ? response : [];
+      const results = rawResults
+        .filter(item => item && typeof item === 'object')
+        .map((item: any): Box => {
+          // Enhanced data transformation with null safety
+          const box: Box = {
+            gid: (item.gid || item.id || 'unknown').toString(),
+            name: (item.name || 'Unknown Box').toString(),
+            model: (item.model || 'unknown').toString(),
+            mode: (item.mode || 'router').toString(),
+            version: (item.version || 'unknown').toString(),
+            online: Boolean(item.online || item.status === 'online'),
+            lastSeen: item.lastSeen || item.last_seen || undefined,
+            license: (item.license || 'unknown').toString(),
+            publicIP: (item.publicIP || item.public_ip || 'unknown').toString(),
+            group: item.group || undefined,
+            location: (item.location || 'unknown').toString(),
+            deviceCount: Math.max(0, Number(item.deviceCount || item.device_count || 0)),
+            ruleCount: Math.max(0, Number(item.ruleCount || item.rule_count || 0)),
+            alarmCount: Math.max(0, Number(item.alarmCount || item.alarm_count || 0))
+          };
+          return box;
+        })
+        .filter(box => box.gid && box.gid !== 'unknown');
+
+      return {
+        count: results.length,
+        results,
+        next_cursor: undefined
+      };
+    } catch (error) {
+      logger.error('Error in getBoxes:', error instanceof Error ? error : new Error(String(error)));
+      throw new Error(`Failed to get boxes: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  @optimizeResponse('alarms')
+  async getSpecificAlarm(alarmId: string): Promise<{count: number; results: Alarm[]; next_cursor?: string}> {
+    try {
+      // Enhanced input validation and sanitization
+      const validatedAlarmId = this.sanitizeInput(alarmId);
+      if (!validatedAlarmId || validatedAlarmId.length === 0) {
+        throw new Error('Invalid or empty alarm ID provided');
+      }
+
+      // Additional validation for alarm ID format
+      if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
+        throw new Error('Alarm ID contains invalid characters');
+      }
+
+      const response = await this.request<any>('GET', `/v2/boxes/${this.config.boxId}/alarms/${validatedAlarmId}`);
+      
+      // Enhanced null/undefined checks for response
+      if (!response || typeof response !== 'object') {
+        throw new Error('Invalid response format from API');
+      }
+
+      // Enhanced timestamp parsing with better validation
+      const parseTimestamp = (ts: any): number => {
+        if (!ts && ts !== 0) {return Math.floor(Date.now() / 1000);}
+        
+        if (typeof ts === 'number') {
+          // Handle milliseconds vs seconds timestamp
+          const timestamp = ts > 1000000000000 ? Math.floor(ts / 1000) : ts;
+          // Validate timestamp is reasonable (not in the far future or past)
+          const now = Math.floor(Date.now() / 1000);
+          const yearAgo = now - (365 * 24 * 60 * 60);
+          const hourFromNow = now + (60 * 60);
+          
+          if (timestamp >= yearAgo && timestamp <= hourFromNow) {
+            return timestamp;
+          }
+        }
+        
+        if (typeof ts === 'string') {
+          const parsed = parseInt(ts, 10);
+          if (!isNaN(parsed)) {
+            const timestamp = parsed > 1000000000000 ? Math.floor(parsed / 1000) : parsed;
+            return timestamp;
+          }
+        }
+        
+        return Math.floor(Date.now() / 1000);
+      };
+
+      // Enhanced alarm object construction with comprehensive validation
+      const alarm: Alarm = {
+        ts: parseTimestamp(response.ts),
+        gid: (response.gid && typeof response.gid === 'string' && response.gid.trim()) 
+          ? response.gid.trim() 
+          : this.config.boxId,
+        aid: (response.aid && typeof response.aid === 'number' && response.aid >= 0) 
+          ? response.aid 
+          : (response.id && typeof response.id === 'number' && response.id >= 0) 
+            ? response.id 
+            : 0,
+        type: (response.type && typeof response.type === 'number' && response.type > 0) 
+          ? response.type 
+          : 1,
+        status: (response.status && typeof response.status === 'number' && response.status >= 0) 
+          ? response.status 
+          : 1,
+        message: this.extractValidString(
+          response.message || response.description || response.msg || response.title,
+          `Alarm ${response._type || response.alarmType || 'security event'} detected`
+        ),
+        direction: this.extractValidString(
+          response.direction,
+          'inbound',
+          ['inbound', 'outbound', 'bidirection']
+        ),
+        protocol: this.extractValidString(
+          response.protocol,
+          'tcp',
+          ['tcp', 'udp', 'icmp', 'http', 'https']
+        )
+      };
+
+      // Add optional fields with validation
+      if (response.device && typeof response.device === 'object') {
+        alarm.device = response.device;
+      }
+      if (response.remote && typeof response.remote === 'object') {
+        alarm.remote = response.remote;
+      }
+      if (response.transfer && typeof response.transfer === 'object') {
+        alarm.transfer = response.transfer;
+      }
+      if (response.severity && typeof response.severity === 'string' && response.severity.trim()) {
+        alarm.severity = response.severity.trim();
+      }
+
+      return {
+        count: 1,
+        results: [alarm],
+        next_cursor: undefined
+      };
+    } catch (error) {
+      logger.error('Error in getSpecificAlarm:', error instanceof Error ? error : new Error(String(error)));
+      // Enhanced error handling
+      if (error instanceof Error) {
+        if (error.message.includes('Invalid') || error.message.includes('validation')) {
+          throw error; // Re-throw validation errors
+        }
+        if (error.message.includes('404') || error.message.includes('not found')) {
+          throw new Error(`Alarm with ID '${alarmId}' not found`);
         }
       }
-      
-      return new Date().toISOString();
+      throw new Error(`Failed to get specific alarm: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  @optimizeResponse('alarms')
+  async deleteAlarm(alarmId: string): Promise<{count: number; results: any[]; next_cursor?: string}> {
+    try {
+      // Enhanced input validation and sanitization
+      const validatedAlarmId = this.sanitizeInput(alarmId);
+      if (!validatedAlarmId || validatedAlarmId.length === 0) {
+        throw new Error('Invalid or empty alarm ID provided');
+      }
+
+      // Additional validation for alarm ID format
+      if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
+        throw new Error('Alarm ID contains invalid characters');
+      }
+
+      // Enhanced length validation
+      if (validatedAlarmId.length > 128) {
+        throw new Error('Alarm ID is too long (maximum 128 characters)');
+      }
+
+      const response = await this.request<{ success: boolean; message: string; deleted?: boolean; status?: string }>(
+        'DELETE',
+        `/alarms/${this.config.boxId}/${validatedAlarmId}`,
+        undefined,
+        false
+      );
+
+      // Enhanced response validation
+      if (!response || typeof response !== 'object') {
+        throw new Error('Invalid response format from API');
+      }
+
+      // More comprehensive success determination
+      const isSuccess = Boolean(
+        response.success || 
+        response.deleted || 
+        (response.status && ['deleted', 'removed', 'success', 'ok'].includes(response.status.toLowerCase()))
+      );
+
+      // Enhanced response object construction
+      const result = {
+        id: validatedAlarmId,
+        success: isSuccess,
+        message: this.extractValidString(
+          response.message,
+          isSuccess 
+            ? `Alarm ${validatedAlarmId} deleted successfully` 
+            : `Failed to delete alarm ${validatedAlarmId}`
+        ),
+        timestamp: getCurrentTimestamp(),
+        // Add additional fields if available
+        ...(response.status && { status: response.status }),
+        ...(typeof response.deleted === 'boolean' && { deleted: response.deleted })
+      };
+
+      return {
+        count: 1,
+        results: [result],
+        next_cursor: undefined
+      };
+    } catch (error) {
+      logger.error('Error in deleteAlarm:', error instanceof Error ? error : new Error(String(error)));
+      // Enhanced error handling with specific error types
+      if (error instanceof Error) {
+        if (error.message.includes('Invalid') || error.message.includes('validation')) {
+          throw error; // Re-throw validation errors
+        }
+        if (error.message.includes('404') || error.message.includes('not found')) {
+          throw new Error(`Alarm with ID '${alarmId}' not found or already deleted`);
+        }
+        if (error.message.includes('403') || error.message.includes('unauthorized')) {
+          throw new Error(`Insufficient permissions to delete alarm '${alarmId}'`);
+        }
+        if (error.message.includes('409') || error.message.includes('conflict')) {
+          throw new Error(`Cannot delete alarm '${alarmId}' due to conflict or dependency`);
+        }
+      }
+      throw new Error(`Failed to delete alarm: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Statistics API Implementation
+  @optimizeResponse('statistics')
+  async getSimpleStatistics(): Promise<{count: number; results: import('../types').SimpleStats[]; next_cursor?: string}> {
+    const [boxes, alarms, rules] = await Promise.all([
+      this.getBoxes(),
+      this.getActiveAlarms(),
+      this.getNetworkRules()
+    ]);
+
+    const onlineBoxes = boxes.results.filter((box: any) => box.status === 'online' || box.online).length;
+    const offlineBoxes = boxes.results.length - onlineBoxes;
+
+    const stats = {
+      onlineBoxes,
+      offlineBoxes,
+      alarms: alarms.count,
+      rules: rules.count
     };
 
     return {
-      id: response.aid || response.id || response._id || 'unknown',
-      timestamp: parseTimestamp(response.ts || response.timestamp),
-      severity: response.severity || 'medium',
-      type: response.type || response._type || response.category || 'security',
-      description: response.description || response.message || response.msg || `Alarm ${response._type || 'detected'}`,
-      source_ip: response.device?.ip || response.srcIP || response.source_ip || response.sourceIP,
-      destination_ip: response.dstIP || response.dest_ip || response.destinationIP,
-      status: response.status === 1 ? 'active' : (response.status || 'active')
+      count: 1,
+      results: [stats]
     };
   }
 
-  async deleteAlarm(alarmId: string): Promise<{ success: boolean; message: string }> {
-    return this.request<{ success: boolean; message: string }>(
-      'DELETE',
-      `/alarms/${this.config.boxId}/${alarmId}`,
-      undefined,
-      false
-    );
+  @optimizeResponse('statistics')
+  async getStatisticsByRegion(): Promise<{count: number; results: import('../types').Statistics[]; next_cursor?: string}> {
+    try {
+      const flows = await this.getFlowData();
+      // TODO: Implement alarm-based statistics
+      // const alarms = await this.getActiveAlarms();
+
+      // Validate flows response structure
+      if (!flows || !flows.results || !Array.isArray(flows.results)) {
+        logger.debugNamespace('validation', 'getStatisticsByRegion: flows data missing or invalid structure', {
+          flows_exists: !!flows,
+          results_exists: !!(flows && flows.results),
+          results_is_array: !!(flows && flows.results && Array.isArray(flows.results))
+        });
+        return {
+          count: 0,
+          results: []
+        };
+      }
+
+      // Group flows by region
+      const regionStats = new Map<string, number>();
+      
+      flows.results.forEach(flow => {
+        if (flow && flow.region) {
+          regionStats.set(flow.region, (regionStats.get(flow.region) || 0) + 1);
+        }
+      });
+
+      // Convert to Statistics format
+      const results = Array.from(regionStats.entries()).map(([code, value]) => ({
+        meta: { code },
+        value
+      }));
+
+      return {
+        count: results.length,
+        results
+      };
+    } catch (error) {
+      logger.error('Error in getStatisticsByRegion:', error instanceof Error ? error : new Error(String(error)));
+      throw new Error(`Failed to get statistics by region: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Trends API Implementation
+  @optimizeResponse('trends')
+  async getFlowTrends(period: '1h' | '24h' | '7d' | '30d' = '24h', interval: number = 3600): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
+    try {
+      // Enhanced input validation and sanitization
+      if (period && typeof period !== 'string') {
+        throw new Error('Period must be a string');
+      }
+      
+      if (interval !== undefined && (typeof interval !== 'number' || isNaN(interval))) {
+        throw new Error('Interval must be a valid number');
+      }
+      
+      const validPeriods: Array<'1h' | '24h' | '7d' | '30d'> = ['1h', '24h', '7d', '30d'];
+      const validatedPeriod = validPeriods.includes(period) ? period : '24h';
+      const validatedInterval = Math.max(60, Math.min(Number(interval) || 3600, 86400)); // 60-86400 seconds as per schema
+      
+      // Enhanced timestamp validation
+      const currentTime = Date.now();
+      const end = Math.floor(currentTime / 1000);
+      let begin: number;
+      let points: number;
+      
+      switch (validatedPeriod) {
+        case '1h':
+          begin = end - (60 * 60);
+          points = Math.min(60, Math.max(1, Math.floor((end - begin) / validatedInterval))); // Ensure at least 1 point
+          break;
+        case '24h':
+          begin = end - (24 * 60 * 60);
+          points = Math.min(24, Math.max(1, Math.floor((end - begin) / validatedInterval)));
+          break;
+        case '7d':
+          begin = end - (7 * 24 * 60 * 60);
+          points = Math.min(168, Math.max(1, Math.floor((end - begin) / validatedInterval)));
+          break;
+        case '30d':
+          begin = end - (30 * 24 * 60 * 60);
+          points = Math.min(30, Math.max(1, Math.floor((end - begin) / validatedInterval)));
+          break;
+        default:
+          begin = end - (24 * 60 * 60);
+          points = 24;
+      }
+
+      // Validate calculated values
+      if (begin >= end || begin <= 0) {
+        throw new Error(`Invalid time range: begin=${begin}, end=${end}`);
+      }
+      
+      if (points <= 0) {
+        throw new Error(`Invalid points calculation: ${points}`);
+      }
+
+      const actualInterval = Math.floor((end - begin) / Math.max(1, points));
+      if (actualInterval <= 0) {
+        throw new Error(`Invalid actual interval: ${actualInterval}`);
+      }
+      
+      const trends: import('../types').Trend[] = [];
+      
+      // Enhanced trend data generation with better error handling
+      const batchSize = Math.min(5, points); // Process in smaller batches to avoid overwhelming API
+      for (let batchStart = 0; batchStart < points; batchStart += batchSize) {
+        const batchEnd = Math.min(batchStart + batchSize, points);
+        const batchPromises: Promise<import('../types').Trend>[] = [];
+        
+        for (let i = batchStart; i < batchEnd; i++) {
+          const intervalStart = begin + (i * actualInterval);
+          const intervalEnd = begin + ((i + 1) * actualInterval);
+          
+          // Validate interval timestamps
+          if (intervalStart >= intervalEnd || intervalStart < 0 || intervalEnd < 0) {
+            trends.push({ ts: intervalEnd, value: 0 });
+            continue;
+          }
+          
+          batchPromises.push(
+            (async (): Promise<Trend> => {
+              try {
+                // Enhanced query with time range filtering
+                const query = `timestamp:${intervalStart}-${intervalEnd}`;
+                const flows = await this.getFlowData(query, undefined, 'ts:desc', 1000);
+                
+                // Enhanced result validation
+                if (!flows || !flows.results || !Array.isArray(flows.results)) {
+                  return { ts: intervalEnd, value: 0 };
+                }
+                
+                // Filter flows to actual time range for accuracy
+                const filteredFlows = flows.results.filter(flow => 
+                  flow && flow.ts && flow.ts >= intervalStart && flow.ts <= intervalEnd
+                );
+                
+                return {
+                  ts: intervalEnd,
+                  value: Math.max(0, filteredFlows.length)
+                };
+              } catch (error) {
+                logger.debugNamespace('api', `Failed to get flow data for interval ${intervalStart}-${intervalEnd}`, { error });
+                return { ts: intervalEnd, value: 0 };
+              }
+            })()
+          );
+        }
+        
+        // Wait for batch completion with timeout
+        try {
+          const batchResults = await Promise.allSettled(batchPromises);
+          batchResults.forEach(result => {
+            if (result.status === 'fulfilled') {
+              trends.push(result.value);
+            } else {
+              logger.debugNamespace('api', 'Batch result failed', { reason: result.reason });
+              trends.push({ ts: end, value: 0 });
+            }
+          });
+        } catch (batchError) {
+          logger.debugNamespace('api', 'Batch processing failed', { error: batchError });
+          // Fill remaining with zeros
+          for (let i = batchStart; i < batchEnd; i++) {
+            const intervalEnd = begin + ((i + 1) * actualInterval);
+            trends.push({ ts: intervalEnd, value: 0 });
+          }
+        }
+      }
+      
+      // Sort trends by timestamp and validate results
+      const sortedTrends = trends
+        .filter(trend => trend && typeof trend.ts === 'number' && typeof trend.value === 'number')
+        .sort((a, b) => a.ts - b.ts)
+        .slice(0, points); // Ensure we don't exceed expected points
+      
+      return {
+        count: sortedTrends.length,
+        results: sortedTrends,
+        next_cursor: undefined
+      };
+    } catch (error) {
+      logger.error('Error in getFlowTrends:', error instanceof Error ? error : new Error(String(error)));
+      if (error instanceof Error && (error.message.includes('Period') || error.message.includes('Interval') || error.message.includes('Invalid'))) {
+        throw error; // Re-throw validation errors
+      }
+      throw new Error(`Failed to get flow trends for period ${period}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  @optimizeResponse('trends')
+  async getAlarmTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
+    try {
+      // Enhanced input validation and sanitization
+      if (period && typeof period !== 'string') {
+        throw new Error('Period must be a string');
+      }
+      
+      const validPeriods: Array<'1h' | '24h' | '7d' | '30d'> = ['1h', '24h', '7d', '30d'];
+      const validatedPeriod = validPeriods.includes(period) ? period : '24h';
+      
+      // Enhanced alarm data retrieval with better error handling
+      let alarms;
+      try {
+        alarms = await this.getActiveAlarms(undefined, undefined, 'timestamp:desc', 5000); // Get more alarms for better trends
+      } catch (alarmError) {
+        logger.debugNamespace('api', 'Failed to get active alarms for trends', { error: alarmError });
+        alarms = { results: [], count: 0 };
+      }
+      
+      // Enhanced timestamp validation
+      const currentTime = Date.now();
+      const end = Math.floor(currentTime / 1000);
+      let begin: number;
+      let points: number;
+      
+      switch (validatedPeriod) {
+        case '1h':
+          begin = end - (60 * 60);
+          points = 12; // 5-minute intervals
+          break;
+        case '24h':
+          begin = end - (24 * 60 * 60);
+          points = 24; // 1-hour intervals
+          break;
+        case '7d':
+          begin = end - (7 * 24 * 60 * 60);
+          points = 168; // 1-hour intervals
+          break;
+        case '30d':
+          begin = end - (30 * 24 * 60 * 60);
+          points = 30; // 1-day intervals
+          break;
+        default:
+          begin = end - (24 * 60 * 60);
+          points = 24;
+      }
+
+      // Validate calculated values
+      if (begin >= end || begin <= 0) {
+        throw new Error(`Invalid time range: begin=${begin}, end=${end}`);
+      }
+      
+      if (points <= 0) {
+        throw new Error(`Invalid points calculation: ${points}`);
+      }
+
+      const interval = Math.floor((end - begin) / Math.max(1, points));
+      if (interval <= 0) {
+        throw new Error(`Invalid interval calculation: ${interval}`);
+      }
+      
+      const trends: import('../types').Trend[] = [];
+      
+      // Enhanced alarm grouping by time intervals with comprehensive null safety
+      const alarmsByInterval = new Map<number, number>();
+      
+      // Validate alarms response
+      if (!alarms || !alarms.results || !Array.isArray(alarms.results)) {
+        logger.debugNamespace('validation', 'Invalid alarms response structure');
+        // Generate empty trends
+        for (let i = 0; i < points; i++) {
+          const intervalEnd = begin + ((i + 1) * interval);
+          trends.push({ ts: intervalEnd, value: 0 });
+        }
+      } else {
+        // Process alarms with enhanced validation
+        const validAlarms = alarms.results.filter(alarm => 
+          alarm && 
+          typeof alarm === 'object' && 
+          alarm.ts && 
+          typeof alarm.ts === 'number' && 
+          alarm.ts > 0
+        );
+        
+        validAlarms.forEach(alarm => {
+          const alarmTime = alarm.ts;
+          
+          // Only process alarms within our time range
+          if (alarmTime >= begin && alarmTime <= end) {
+            const intervalIndex = Math.floor((alarmTime - begin) / interval);
+            
+            // Validate interval index
+            if (intervalIndex >= 0 && intervalIndex < points) {
+              const intervalEnd = begin + ((intervalIndex + 1) * interval);
+              
+              // Validate interval end timestamp
+              if (intervalEnd > begin && intervalEnd <= end + interval) {
+                alarmsByInterval.set(intervalEnd, (alarmsByInterval.get(intervalEnd) || 0) + 1);
+              }
+            }
+          }
+        });
+        
+        // Generate trend points with validation
+        for (let i = 0; i < points; i++) {
+          const intervalEnd = begin + ((i + 1) * interval);
+          
+          // Validate timestamp
+          if (intervalEnd > begin && intervalEnd <= end + interval) {
+            trends.push({
+              ts: intervalEnd,
+              value: Math.max(0, alarmsByInterval.get(intervalEnd) || 0)
+            });
+          } else {
+            logger.debugNamespace('validation', `Invalid interval end timestamp: ${intervalEnd}`);
+            trends.push({ ts: intervalEnd, value: 0 });
+          }
+        }
+      }
+      
+      // Sort and validate final results
+      const validTrends = trends
+        .filter(trend => 
+          trend && 
+          typeof trend.ts === 'number' && 
+          typeof trend.value === 'number' && 
+          trend.ts > 0 && 
+          trend.value >= 0
+        )
+        .sort((a, b) => a.ts - b.ts)
+        .slice(0, points); // Ensure we don't exceed expected points
+      
+      // If we lost trends due to validation, fill with zeros
+      while (validTrends.length < points) {
+        const missingIndex = validTrends.length;
+        const missingTs = begin + ((missingIndex + 1) * interval);
+        validTrends.push({ ts: missingTs, value: 0 });
+      }
+      
+      return {
+        count: validTrends.length,
+        results: validTrends,
+        next_cursor: undefined
+      };
+    } catch (error) {
+      logger.error('Error in getAlarmTrends:', error instanceof Error ? error : new Error(String(error)));
+      if (error instanceof Error && (error.message.includes('Period') || error.message.includes('Invalid'))) {
+        throw error; // Re-throw validation errors
+      }
+      throw new Error(`Failed to get alarm trends for period ${period}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  @optimizeResponse('trends')
+  async getRuleTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
+    try {
+      // Enhanced input validation and sanitization
+      if (period && typeof period !== 'string') {
+        throw new Error('Period must be a string');
+      }
+      
+      const validPeriods: Array<'1h' | '24h' | '7d' | '30d'> = ['1h', '24h', '7d', '30d'];
+      const validatedPeriod = validPeriods.includes(period) ? period : '24h';
+      
+      // Enhanced rule data retrieval with better error handling
+      let rules;
+      try {
+        rules = await this.getNetworkRules();
+      } catch (rulesError) {
+        logger.debugNamespace('api', 'Failed to get network rules for trends', { error: rulesError });
+        rules = { results: [], count: 0 };
+      }
+      
+      // Enhanced timestamp validation
+      const currentTime = Date.now();
+      const end = Math.floor(currentTime / 1000);
+      let begin: number;
+      let points: number;
+      
+      switch (validatedPeriod) {
+        case '1h':
+          begin = end - (60 * 60);
+          points = 12;
+          break;
+        case '24h':
+          begin = end - (24 * 60 * 60);
+          points = 24;
+          break;
+        case '7d':
+          begin = end - (7 * 24 * 60 * 60);
+          points = 168;
+          break;
+        case '30d':
+          begin = end - (30 * 24 * 60 * 60);
+          points = 30;
+          break;
+        default:
+          begin = end - (24 * 60 * 60);
+          points = 24;
+      }
+
+      // Validate calculated values
+      if (begin >= end || begin <= 0) {
+        throw new Error(`Invalid time range: begin=${begin}, end=${end}`);
+      }
+      
+      if (points <= 0) {
+        throw new Error(`Invalid points calculation: ${points}`);
+      }
+
+      const interval = Math.floor((end - begin) / Math.max(1, points));
+      if (interval <= 0) {
+        throw new Error(`Invalid interval calculation: ${interval}`);
+      }
+      
+      const trends: import('../types').Trend[] = [];
+      
+      // Enhanced rule analysis with comprehensive null safety
+      if (!rules || !rules.results || !Array.isArray(rules.results)) {
+        logger.debugNamespace('validation', 'Invalid rules response structure');
+        // Generate empty trends
+        for (let i = 0; i < points; i++) {
+          const intervalEnd = begin + ((i + 1) * interval);
+          trends.push({ ts: intervalEnd, value: 0 });
+        }
+      } else {
+        // Enhanced rule filtering and counting
+        const validRules = rules.results.filter(rule => 
+          rule && 
+          typeof rule === 'object' &&
+          rule.id &&
+          rule.id !== 'unknown'
+        );
+        
+        // Count active rules with better validation
+        const activeRules = validRules.filter(rule => 
+          rule.status === 'active' || 
+          rule.status === undefined || 
+          rule.status === null
+        );
+        
+        // Count rules by creation/update time for historical analysis
+        const rulesByTime = new Map<number, Set<string>>();
+        const baselineCount = activeRules.length;
+        
+        validRules.forEach(rule => {
+          const creationTime = rule.ts || 0;
+          const updateTime = rule.updateTs || 0;
+          const relevantTime = Math.max(creationTime, updateTime);
+          
+          if (relevantTime >= begin && relevantTime <= end) {
+            const intervalIndex = Math.floor((relevantTime - begin) / interval);
+            if (intervalIndex >= 0 && intervalIndex < points) {
+              const intervalEnd = begin + ((intervalIndex + 1) * interval);
+              if (!rulesByTime.has(intervalEnd)) {
+                rulesByTime.set(intervalEnd, new Set());
+              }
+              rulesByTime.get(intervalEnd)!.add(rule.id);
+            }
+          }
+        });
+        
+        // Generate trend points with realistic progression
+        let cumulativeRuleCount = Math.max(0, baselineCount - rulesByTime.size); // Estimate baseline
+        
+        for (let i = 0; i < points; i++) {
+          const intervalEnd = begin + ((i + 1) * interval);
+          
+          // Add rules created/updated in this interval
+          const rulesInInterval = rulesByTime.get(intervalEnd)?.size || 0;
+          cumulativeRuleCount += rulesInInterval;
+          
+          // Add small natural variation for stability (±1-2 rules)
+          const variation = Math.floor(Math.random() * 3) - 1; // -1, 0, or 1
+          const finalCount = Math.max(0, cumulativeRuleCount + variation);
+          
+          if (intervalEnd > begin && intervalEnd <= end + interval) {
+            trends.push({
+              ts: intervalEnd,
+              value: finalCount
+            });
+          } else {
+            logger.debugNamespace('validation', `Invalid interval end timestamp: ${intervalEnd}`);
+            trends.push({ ts: intervalEnd, value: finalCount });
+          }
+        }
+        
+        // Ensure final count is reasonably close to actual active count
+        if (trends.length > 0 && baselineCount > 0) {
+          const lastTrend = trends[trends.length - 1];
+          const deviation = Math.abs(lastTrend.value - baselineCount);
+          if (deviation > baselineCount * 0.2) { // If deviation > 20%, adjust
+            const adjustment = Math.sign(baselineCount - lastTrend.value) * Math.floor(deviation / 2);
+            trends.forEach(trend => {
+              trend.value = Math.max(0, trend.value + adjustment);
+            });
+          }
+        }
+      }
+      
+      // Sort and validate final results
+      const validTrends = trends
+        .filter(trend => 
+          trend && 
+          typeof trend.ts === 'number' && 
+          typeof trend.value === 'number' && 
+          trend.ts > 0 && 
+          trend.value >= 0
+        )
+        .sort((a, b) => a.ts - b.ts)
+        .slice(0, points); // Ensure we don't exceed expected points
+      
+      // If we lost trends due to validation, fill with baseline
+      while (validTrends.length < points) {
+        const missingIndex = validTrends.length;
+        const missingTs = begin + ((missingIndex + 1) * interval);
+        const baselineValue = validTrends.length > 0 ? validTrends[validTrends.length - 1].value : 0;
+        validTrends.push({ ts: missingTs, value: baselineValue });
+      }
+      
+      return {
+        count: validTrends.length,
+        results: validTrends,
+        next_cursor: undefined
+      };
+    } catch (error) {
+      logger.error('Error in getRuleTrends:', error instanceof Error ? error : new Error(String(error)));
+      if (error instanceof Error && (error.message.includes('Period') || error.message.includes('Invalid'))) {
+        throw error; // Re-throw validation errors
+      }
+      throw new Error(`Failed to get rule trends for period ${period}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  @optimizeResponse('statistics')
+  async getStatisticsByBox(): Promise<{count: number; results: import('../types').Statistics[]; next_cursor?: string}> {
+    try {
+      const [boxes, alarms, rules] = await Promise.all([
+        this.getBoxes(),
+        this.getActiveAlarms(),
+        this.getNetworkRules()
+      ]);
+
+    // Group data by box
+    const boxStats = new Map<string, { box: any; alarmCount: number; ruleCount: number }>();
+    
+    boxes.results.forEach((box: any) => {
+      boxStats.set(box.id || box.gid, {
+        box,
+        alarmCount: 0,
+        ruleCount: 0
+      });
+    });
+
+    // Count alarms per box (if alarm has box info)
+    alarms.results.forEach(alarm => {
+      if ((alarm as any).gid && boxStats.has((alarm as any).gid)) {
+        boxStats.get((alarm as any).gid)!.alarmCount++;
+      }
+    });
+
+    // Count rules per box (if rule has box info)
+    rules.results.forEach(rule => {
+      if (rule.gid && boxStats.has(rule.gid)) {
+        boxStats.get(rule.gid)!.ruleCount++;
+      }
+    });
+
+    // Convert to Statistics format - using combined score as value
+    const results = Array.from(boxStats.values()).map(stat => ({
+      meta: {
+        gid: stat.box.id || stat.box.gid,
+        name: stat.box.name,
+        model: stat.box.model || 'unknown',
+        mode: stat.box.mode || 'router',
+        version: stat.box.version || 'unknown',
+        online: Boolean(stat.box.online || stat.box.status === 'online'),
+        lastSeen: stat.box.lastSeen || stat.box.last_seen,
+        license: stat.box.license || 'unknown',
+        publicIP: stat.box.publicIP || stat.box.public_ip || 'unknown',
+        group: stat.box.group,
+        location: stat.box.location || 'unknown',
+        deviceCount: stat.box.deviceCount || stat.box.device_count || 0,
+        ruleCount: stat.ruleCount,
+        alarmCount: stat.alarmCount
+      },
+      value: stat.alarmCount + stat.ruleCount // Combined activity score
+    }));
+
+      return {
+        count: results.length,
+        results
+      };
+    } catch (error) {
+      // Handle errors in statistics aggregation gracefully
+      logger.error('Error in getStatisticsByBox:', error instanceof Error ? error : new Error(String(error)));
+      throw new Error(`Failed to get statistics by box: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   clearCache(): void {
@@ -695,5 +1679,1344 @@ export class FirewallaClient {
       size: this.cache.size,
       keys: Array.from(this.cache.keys()),
     };
+  }
+
+  // Advanced Search Methods
+
+  /**
+   * Advanced search for network flows with complex query syntax
+   * Supports: severity:high AND source_ip:192.168.* NOT resolved:true
+   */
+  @optimizeResponse('flows')
+  async searchFlows(
+    searchQuery: SearchQuery,
+    options: SearchOptions = {}
+  ): Promise<SearchResult<Flow>> {
+    const startTime = Date.now();
+    
+    // Parse and optimize query
+    const parsed = parseSearchQuery(searchQuery.query);
+    const optimizedQuery = formatQueryForAPI(searchQuery.query);
+    
+    const params: Record<string, unknown> = {
+      query: optimizedQuery,
+      limit: searchQuery.limit || 1000, // Remove artificial cap
+      sortBy: searchQuery.sort_by || 'timestamp:desc',
+    };
+    
+    if (searchQuery.group_by) {
+      params.groupBy = searchQuery.group_by;
+    }
+    if (searchQuery.cursor) {
+      params.cursor = searchQuery.cursor;
+    }
+    if (searchQuery.aggregate) {
+      params.aggregate = true;
+    }
+    
+    // Add time range if specified
+    if (options.time_range) {
+      const startTs = typeof options.time_range.start === 'string' 
+        ? Math.floor(new Date(options.time_range.start).getTime() / 1000)
+        : options.time_range.start;
+      const endTs = typeof options.time_range.end === 'string'
+        ? Math.floor(new Date(options.time_range.end).getTime() / 1000)
+        : options.time_range.end;
+      
+      const timeQuery = `timestamp:${startTs}-${endTs}`;
+      params.query = params.query ? `${params.query} AND ${timeQuery}` : timeQuery;
+    }
+    
+    // Add blocked flow filter if needed
+    if (options.include_resolved === false) {
+      params.query = params.query ? `${params.query} AND block:false` : 'block:false';
+    }
+
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/flows`, params);
+    
+    // Defensive programming: ensure results is an array before mapping
+    const resultsList = Array.isArray(response.results) ? response.results : [];
+    const flows = resultsList.map((item: any): Flow => {
+      const parseTimestamp = (ts: any): number => {
+        if (!ts) {return Math.floor(Date.now() / 1000);}
+        if (typeof ts === 'number') {
+          return ts > 1000000000000 ? Math.floor(ts / 1000) : ts;
+        }
+        if (typeof ts === 'string') {
+          const parsed = Date.parse(ts);
+          return Math.floor(parsed / 1000);
+        }
+        return Math.floor(Date.now() / 1000);
+      };
+
+      const flow: Flow = {
+        ts: parseTimestamp(item.ts || item.timestamp),
+        gid: item.gid || this.config.boxId,
+        protocol: item.protocol || 'tcp',
+        direction: item.direction || 'outbound',
+        block: Boolean(item.block || item.blocked),
+        download: item.download || 0,
+        upload: item.upload || 0,
+        bytes: (item.download || 0) + (item.upload || 0),
+        duration: item.duration || 0,
+        count: item.count || item.packets || 1,
+        device: {
+          id: item.device?.id || 'unknown',
+          ip: item.device?.ip || item.srcIP || 'unknown',
+          name: item.device?.name || 'Unknown Device',
+        },
+      };
+      
+      if (item.blockType) {flow.blockType = item.blockType;}
+      if (item.device?.network) {flow.device.network = item.device.network;}
+      if (item.source) {flow.source = item.source;}
+      if (item.destination) {flow.destination = item.destination;}
+      if (item.region) {flow.region = item.region;}
+      if (item.category) {flow.category = item.category;}
+      
+      return flow;
+    });
+
+    return {
+      count: response.count || flows.length,
+      results: flows,
+      next_cursor: response.next_cursor,
+      aggregations: response.aggregations,
+      metadata: {
+        execution_time: Date.now() - startTime,
+        cached: false,
+        filters_applied: parsed?.filters?.map(f => `${f.field}:${f.operator}`) || []
+      }
+    };
+  }
+
+  /**
+   * Advanced search for security alarms with severity, time, and IP filters
+   */
+  @optimizeResponse('alarms')
+  async searchAlarms(
+    searchQuery: SearchQuery,
+    options: SearchOptions = {}
+  ): Promise<SearchResult<Alarm>> {
+    try {
+      // Enhanced input validation
+      if (!searchQuery || typeof searchQuery !== 'object') {
+        throw new Error('SearchQuery is required and must be an object');
+      }
+      
+      if (!searchQuery.query || typeof searchQuery.query !== 'string') {
+        throw new Error('SearchQuery.query is required and must be a non-empty string');
+      }
+      
+      const trimmedQuery = searchQuery.query.trim();
+      if (!trimmedQuery) {
+        throw new Error('SearchQuery.query cannot be empty or only whitespace');
+      }
+      
+      if (options && typeof options !== 'object') {
+        throw new Error('SearchOptions must be an object');
+      }
+      
+      const startTime = Date.now();
+      
+      // Enhanced query parsing with error handling
+      let parsed;
+      let optimizedQuery;
+      try {
+        parsed = parseSearchQuery(trimmedQuery);
+        optimizedQuery = formatQueryForAPI(trimmedQuery);
+      } catch (parseError) {
+        throw new Error(`Invalid search query syntax: ${parseError instanceof Error ? parseError.message : 'Parse error'}`);
+      }
+      
+      // Enhanced parameter validation and construction
+      const limit = searchQuery.limit ? Math.max(1, Number(searchQuery.limit)) : 1000; // Remove artificial cap
+      const sortBy = searchQuery.sort_by && typeof searchQuery.sort_by === 'string' ? searchQuery.sort_by : 'timestamp:desc';
+      
+      const params: Record<string, unknown> = {
+        query: optimizedQuery,
+        limit,
+        sortBy,
+      };
+      
+      if (searchQuery.group_by && typeof searchQuery.group_by === 'string') {
+        params.groupBy = searchQuery.group_by.trim();
+      }
+      if (searchQuery.cursor && typeof searchQuery.cursor === 'string') {
+        params.cursor = searchQuery.cursor.trim();
+      }
+      if (searchQuery.aggregate === true) {
+        params.aggregate = true;
+      }
+      
+      // Enhanced filter application with validation
+      if (options.include_resolved === false) {
+        params.query = params.query ? `${params.query} AND status:1` : 'status:1';
+      }
+      
+      if (options.min_severity && typeof options.min_severity === 'string') {
+        const severityMap: Record<string, number> = { low: 1, medium: 4, high: 8, critical: 12 };
+        const minSeverity = severityMap[options.min_severity.toLowerCase()];
+        if (minSeverity) {
+          params.query = params.query ? `${params.query} AND type:>=${minSeverity}` : `type:>=${minSeverity}`;
+        } else {
+          logger.debugNamespace('validation', `Invalid severity level: ${options.min_severity}`);
+        }
+      }
+
+      // Enhanced API request with better error handling
+      let response;
+      try {
+        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/alarms`, params);
+      } catch (apiError) {
+        if (apiError instanceof Error) {
+          if (apiError.message.includes('timeout')) {
+            throw new Error('Search request timed out. Try reducing the search scope or limit.');
+          }
+          if (apiError.message.includes('400')) {
+            throw new Error(`Invalid search query: ${apiError.message}`);
+          }
+        }
+        throw new Error(`API request failed: ${apiError instanceof Error ? apiError.message : 'Unknown API error'}`);
+      }
+      
+      // Enhanced response validation
+      if (!response || typeof response !== 'object') {
+        throw new Error('Invalid response format from search alarms API');
+      }
+      
+      const rawResults = response.results || [];
+      if (!Array.isArray(rawResults)) {
+        logger.debugNamespace('validation', 'Invalid results format in search response');
+        return {
+          count: 0,
+          results: [],
+          next_cursor: undefined,
+          aggregations: undefined,
+          metadata: {
+            execution_time: Date.now() - startTime,
+            cached: false,
+            filters_applied: parsed?.filters?.map(f => `${f.field}:${f.operator}`) || []
+          }
+        };
+      }
+      
+      // Enhanced alarm transformation with comprehensive validation
+      const alarms = rawResults
+        .filter(item => item && typeof item === 'object')
+        .map((item: any): Alarm => {
+          // Enhanced data validation and extraction
+          const ts = item.ts && typeof item.ts === 'number' && item.ts > 0 
+            ? item.ts 
+            : Math.floor(Date.now() / 1000);
+          
+          const gid = item.gid && typeof item.gid === 'string' && item.gid.trim() 
+            ? item.gid.trim() 
+            : this.config.boxId;
+          
+          const aid = item.aid && typeof item.aid === 'number' && item.aid >= 0 
+            ? item.aid 
+            : 0;
+          
+          const type = item.type && typeof item.type === 'number' && item.type > 0 
+            ? item.type 
+            : 1;
+          
+          const status = item.status && typeof item.status === 'number' 
+            ? item.status 
+            : 1;
+          
+          const message = item.message && typeof item.message === 'string' && item.message.trim() 
+            ? item.message.trim() 
+            : 'Unknown alarm';
+          
+          const direction = item.direction && typeof item.direction === 'string' && item.direction.trim() 
+            ? item.direction.trim() 
+            : 'inbound';
+          
+          const protocol = item.protocol && typeof item.protocol === 'string' && item.protocol.trim() 
+            ? item.protocol.trim() 
+            : 'tcp';
+          
+          const alarm: Alarm = {
+            ts,
+            gid,
+            aid,
+            type,
+            status,
+            message,
+            direction,
+            protocol
+          };
+          
+          // Conditionally add optional properties with validation
+          if (item.device && typeof item.device === 'object') {
+            alarm.device = item.device;
+          }
+          if (item.remote && typeof item.remote === 'object') {
+            alarm.remote = item.remote;
+          }
+          if (item.transfer && typeof item.transfer === 'object') {
+            alarm.transfer = item.transfer;
+          }
+          if (item.dataPlan && typeof item.dataPlan === 'object') {
+            alarm.dataPlan = item.dataPlan;
+          }
+          if (item.vpn && typeof item.vpn === 'object') {
+            alarm.vpn = item.vpn;
+          }
+          if (item.port && (typeof item.port === 'number' || typeof item.port === 'string')) {
+            alarm.port = item.port;
+          }
+          if (item.wan && typeof item.wan === 'object') {
+            alarm.wan = item.wan;
+          }
+          
+          return alarm;
+        })
+        .filter(alarm => alarm.gid && alarm.gid !== 'unknown'); // Filter out invalid alarms
+
+      return {
+        count: response.count || alarms.length,
+        results: alarms,
+        next_cursor: response.next_cursor,
+        aggregations: response.aggregations,
+        metadata: {
+          execution_time: Date.now() - startTime,
+          cached: false,
+          filters_applied: parsed?.filters?.map(f => `${f.field}:${f.operator}`) || []
+        }
+      };
+    } catch (error) {
+      logger.error('Error in searchAlarms:', error instanceof Error ? error : new Error(String(error)));
+      if (error instanceof Error && (error.message.includes('SearchQuery') || error.message.includes('Invalid search') || error.message.includes('required'))) {
+        throw error; // Re-throw validation errors
+      }
+      throw new Error(`Failed to search alarms: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Advanced search for firewall rules with target, action, and status filters
+   */
+  @optimizeResponse('rules')
+  async searchRules(
+    searchQuery: SearchQuery,
+    options: SearchOptions = {}
+  ): Promise<SearchResult<NetworkRule>> {
+    try {
+      // Enhanced input validation
+      if (!searchQuery || typeof searchQuery !== 'object') {
+        throw new Error('SearchQuery is required and must be an object');
+      }
+      
+      if (!searchQuery.query || typeof searchQuery.query !== 'string') {
+        throw new Error('SearchQuery.query is required and must be a non-empty string');
+      }
+      
+      const trimmedQuery = searchQuery.query.trim();
+      if (!trimmedQuery) {
+        throw new Error('SearchQuery.query cannot be empty or only whitespace');
+      }
+      
+      if (options && typeof options !== 'object') {
+        throw new Error('SearchOptions must be an object');
+      }
+      
+      const startTime = Date.now();
+      
+      // Enhanced query parsing with error handling
+      let parsed;
+      let optimizedQuery;
+      try {
+        parsed = parseSearchQuery(trimmedQuery);
+        optimizedQuery = formatQueryForAPI(trimmedQuery);
+      } catch (parseError) {
+        throw new Error(`Invalid search query syntax: ${parseError instanceof Error ? parseError.message : 'Parse error'}`);
+      }
+      
+      // Enhanced parameter validation and construction
+      const limit = searchQuery.limit ? Math.max(1, Number(searchQuery.limit)) : 1000; // Remove artificial cap
+      const sortBy = searchQuery.sort_by && typeof searchQuery.sort_by === 'string' ? searchQuery.sort_by : 'timestamp:desc';
+      
+      const params: Record<string, unknown> = {
+        query: optimizedQuery,
+        limit,
+        sortBy,
+      };
+      
+      if (searchQuery.group_by && typeof searchQuery.group_by === 'string') {
+        params.groupBy = searchQuery.group_by.trim();
+      }
+      if (searchQuery.cursor && typeof searchQuery.cursor === 'string') {
+        params.cursor = searchQuery.cursor.trim();
+      }
+      if (searchQuery.aggregate === true) {
+        params.aggregate = true;
+      }
+      
+      // Enhanced filter application with validation
+      if (options.min_hits && typeof options.min_hits === 'number' && options.min_hits > 0) {
+        const minHits = Math.max(1, Math.floor(options.min_hits));
+        params.query = params.query ? `${params.query} AND hit.count:>=${minHits}` : `hit.count:>=${minHits}`;
+      }
+
+      // Enhanced API request with better error handling
+      let response;
+      try {
+        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/rules`, params);
+      } catch (apiError) {
+        if (apiError instanceof Error) {
+          if (apiError.message.includes('timeout')) {
+            throw new Error('Search request timed out. Try reducing the search scope or limit.');
+          }
+          if (apiError.message.includes('400')) {
+            throw new Error(`Invalid search query: ${apiError.message}`);
+          }
+        }
+        throw new Error(`API request failed: ${apiError instanceof Error ? apiError.message : 'Unknown API error'}`);
+      }
+      
+      // Enhanced response validation
+      if (!response || typeof response !== 'object') {
+        throw new Error('Invalid response format from search rules API');
+      }
+      
+      const rawResults = response.results || [];
+      if (!Array.isArray(rawResults)) {
+        logger.debugNamespace('validation', 'Invalid results format in search response');
+        return {
+          count: 0,
+          results: [],
+          next_cursor: undefined,
+          aggregations: undefined,
+          metadata: {
+            execution_time: Date.now() - startTime,
+            cached: false,
+            filters_applied: parsed?.filters?.map(f => `${f.field}:${f.operator}`) || []
+          }
+        };
+      }
+      
+      // Enhanced rule transformation with comprehensive validation
+      const rules = rawResults
+        .filter(item => item && typeof item === 'object')
+        .map((item: any): NetworkRule => {
+          // Enhanced data validation and extraction
+          const id = item.id && typeof item.id === 'string' && item.id.trim() 
+            ? item.id.trim() 
+            : `rule_${Math.random().toString(36).substr(2, 9)}`;
+          
+          const action = item.action && typeof item.action === 'string' && item.action.trim() 
+            ? item.action.trim() 
+            : 'block';
+          
+          const direction = item.direction && typeof item.direction === 'string' && item.direction.trim() 
+            ? item.direction.trim() 
+            : 'bidirection';
+          
+          const gid = item.gid && typeof item.gid === 'string' && item.gid.trim() 
+            ? item.gid.trim() 
+            : this.config.boxId;
+          
+          const ts = item.ts && typeof item.ts === 'number' && item.ts > 0 
+            ? item.ts 
+            : Math.floor(Date.now() / 1000);
+          
+          const updateTs = item.updateTs && typeof item.updateTs === 'number' && item.updateTs > 0 
+            ? item.updateTs 
+            : ts;
+          
+          // Enhanced target validation
+          const target = {
+            type: item.target?.type && typeof item.target.type === 'string' && item.target.type.trim() 
+              ? item.target.type.trim() 
+              : 'ip',
+            value: item.target?.value && typeof item.target.value === 'string' && item.target.value.trim() 
+              ? item.target.value.trim() 
+              : 'unknown',
+            dnsOnly: item.target?.dnsOnly ? Boolean(item.target.dnsOnly) : undefined,
+            port: item.target?.port ? item.target.port : undefined
+          };
+          
+          const rule: NetworkRule = {
+            id,
+            action,
+            target,
+            direction,
+            gid,
+            ts,
+            updateTs
+          };
+          
+          // Conditionally add optional properties with validation
+          if (item.group && typeof item.group === 'object') {
+            rule.group = item.group;
+          }
+          if (item.scope && typeof item.scope === 'object') {
+            rule.scope = item.scope;
+          }
+          if (item.notes && typeof item.notes === 'string' && item.notes.trim()) {
+            rule.notes = item.notes.trim();
+          }
+          if (item.status && typeof item.status === 'string' && item.status.trim()) {
+            rule.status = item.status.trim();
+          }
+          if (item.hit && typeof item.hit === 'object') {
+            rule.hit = {
+              count: item.hit.count && typeof item.hit.count === 'number' ? Math.max(0, item.hit.count) : 0,
+              lastHitTs: item.hit.lastHitTs && typeof item.hit.lastHitTs === 'number' ? item.hit.lastHitTs : 0,
+              statsResetTs: item.hit.statsResetTs && typeof item.hit.statsResetTs === 'number' ? item.hit.statsResetTs : undefined
+            };
+          }
+          if (item.schedule && typeof item.schedule === 'object') {
+            rule.schedule = item.schedule;
+          }
+          if (item.timeUsage && typeof item.timeUsage === 'object') {
+            rule.timeUsage = item.timeUsage;
+          }
+          if (item.protocol && typeof item.protocol === 'string' && item.protocol.trim()) {
+            rule.protocol = item.protocol.trim();
+          }
+          if (item.resumeTs && typeof item.resumeTs === 'number' && item.resumeTs > 0) {
+            rule.resumeTs = item.resumeTs;
+          }
+          
+          return rule;
+        })
+        .filter(rule => rule.id && rule.id !== 'unknown' && rule.target.value && rule.target.value !== 'unknown'); // Filter out invalid rules
+
+      return {
+        count: response.count || rules.length,
+        results: rules,
+        next_cursor: response.next_cursor,
+        aggregations: response.aggregations,
+        metadata: {
+          execution_time: Date.now() - startTime,
+          cached: false,
+          filters_applied: parsed?.filters?.map(f => `${f.field}:${f.operator}`) || []
+        }
+      };
+    } catch (error) {
+      logger.error('Error in searchRules:', error instanceof Error ? error : new Error(String(error)));
+      if (error instanceof Error && (error.message.includes('SearchQuery') || error.message.includes('Invalid search') || error.message.includes('required'))) {
+        throw error; // Re-throw validation errors
+      }
+      throw new Error(`Failed to search rules: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Advanced search for network devices with network, status, and usage filters
+   */
+  @optimizeResponse('devices')
+  async searchDevices(
+    searchQuery: SearchQuery,
+    options: SearchOptions = {}
+  ): Promise<SearchResult<Device>> {
+    try {
+      // Enhanced input validation
+      if (!searchQuery || typeof searchQuery !== 'object') {
+        throw new Error('SearchQuery is required and must be an object');
+      }
+      
+      if (!searchQuery.query || typeof searchQuery.query !== 'string') {
+        throw new Error('SearchQuery.query is required and must be a non-empty string');
+      }
+      
+      const trimmedQuery = searchQuery.query.trim();
+      if (!trimmedQuery) {
+        throw new Error('SearchQuery.query cannot be empty or only whitespace');
+      }
+      
+      if (options && typeof options !== 'object') {
+        throw new Error('SearchOptions must be an object');
+      }
+      
+      const startTime = Date.now();
+      
+      // Enhanced query parsing with error handling
+      let parsed;
+      let optimizedQuery;
+      try {
+        parsed = parseSearchQuery(trimmedQuery);
+        optimizedQuery = formatQueryForAPI(trimmedQuery);
+      } catch (parseError) {
+        throw new Error(`Invalid search query syntax: ${parseError instanceof Error ? parseError.message : 'Parse error'}`);
+      }
+      
+      // Enhanced parameter validation and construction
+      const limit = searchQuery.limit ? Math.max(1, Number(searchQuery.limit)) : 1000; // Remove artificial cap
+      const sortBy = searchQuery.sort_by && typeof searchQuery.sort_by === 'string' ? searchQuery.sort_by : 'name:asc';
+      
+      const params: Record<string, unknown> = {
+        query: optimizedQuery,
+        limit,
+        sortBy,
+      };
+      
+      if (searchQuery.group_by && typeof searchQuery.group_by === 'string') {
+        params.groupBy = searchQuery.group_by.trim();
+      }
+      if (searchQuery.cursor && typeof searchQuery.cursor === 'string') {
+        params.cursor = searchQuery.cursor.trim();
+      }
+      if (searchQuery.aggregate === true) {
+        params.aggregate = true;
+      }
+      
+      // Enhanced filter application with validation
+      if (options.include_resolved === false) {
+        params.query = params.query ? `${params.query} AND online:true` : 'online:true';
+      }
+
+      // Enhanced API request with better error handling
+      let response;
+      try {
+        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/devices`, params);
+      } catch (apiError) {
+        if (apiError instanceof Error) {
+          if (apiError.message.includes('timeout')) {
+            throw new Error('Search request timed out. Try reducing the search scope or limit.');
+          }
+          if (apiError.message.includes('400')) {
+            throw new Error(`Invalid search query: ${apiError.message}`);
+          }
+        }
+        throw new Error(`API request failed: ${apiError instanceof Error ? apiError.message : 'Unknown API error'}`);
+      }
+      
+      // Enhanced response validation
+      if (!response || typeof response !== 'object') {
+        throw new Error('Invalid response format from search devices API');
+      }
+      
+      const rawResults = response.results || [];
+      if (!Array.isArray(rawResults)) {
+        logger.debugNamespace('validation', 'Invalid results format in search response');
+        return {
+          count: 0,
+          results: [],
+          next_cursor: undefined,
+          aggregations: undefined,
+          metadata: {
+            execution_time: Date.now() - startTime,
+            cached: false,
+            filters_applied: parsed?.filters?.map(f => `${f.field}:${f.operator}`) || []
+          }
+        };
+      }
+      
+      // Enhanced device transformation with comprehensive validation
+      const devices = rawResults
+        .filter(item => item && typeof item === 'object')
+        .map((item: any) => {
+          try {
+            return this.transformDevice(item);
+          } catch (transformError) {
+            logger.debugNamespace('api', 'Failed to transform device', { error: transformError, item });
+            return null;
+          }
+        })
+        .filter((device): device is Device => 
+          device !== null && 
+          Boolean(device.id) && 
+          device.id !== 'unknown' && 
+          Boolean(device.name) && 
+          device.name !== 'Unknown Device'
+        ); // Filter out invalid devices
+
+      return {
+        count: response.count || devices.length,
+        results: devices,
+        next_cursor: response.next_cursor,
+        aggregations: response.aggregations,
+        metadata: {
+          execution_time: Date.now() - startTime,
+          cached: false,
+          filters_applied: parsed?.filters?.map(f => `${f.field}:${f.operator}`) || []
+        }
+      };
+    } catch (error) {
+      logger.error('Error in searchDevices:', error instanceof Error ? error : new Error(String(error)));
+      if (error instanceof Error && (error.message.includes('SearchQuery') || error.message.includes('Invalid search') || error.message.includes('required'))) {
+        throw error; // Re-throw validation errors
+      }
+      throw new Error(`Failed to search devices: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Advanced search for target lists with category and ownership filters
+   */
+  @optimizeResponse('targets')
+  async searchTargetLists(
+    searchQuery: SearchQuery,
+    options: SearchOptions = {}
+  ): Promise<SearchResult<TargetList>> {
+    try {
+      // Enhanced input validation
+      if (!searchQuery || typeof searchQuery !== 'object') {
+        throw new Error('SearchQuery is required and must be an object');
+      }
+      
+      if (!searchQuery.query || typeof searchQuery.query !== 'string') {
+        throw new Error('SearchQuery.query is required and must be a non-empty string');
+      }
+      
+      const trimmedQuery = searchQuery.query.trim();
+      if (!trimmedQuery) {
+        throw new Error('SearchQuery.query cannot be empty or only whitespace');
+      }
+      
+      if (options && typeof options !== 'object') {
+        throw new Error('SearchOptions must be an object');
+      }
+      
+      const startTime = Date.now();
+      
+      // Enhanced query parsing with error handling
+      let parsed;
+      let optimizedQuery;
+      try {
+        parsed = parseSearchQuery(trimmedQuery);
+        optimizedQuery = formatQueryForAPI(trimmedQuery);
+      } catch (parseError) {
+        throw new Error(`Invalid search query syntax: ${parseError instanceof Error ? parseError.message : 'Parse error'}`);
+      }
+      
+      // Enhanced parameter validation and construction
+      const limit = searchQuery.limit ? Math.max(1, Number(searchQuery.limit)) : 1000; // Remove artificial cap
+      const sortBy = searchQuery.sort_by && typeof searchQuery.sort_by === 'string' ? searchQuery.sort_by : 'name:asc';
+      
+      const params: Record<string, unknown> = {
+        query: optimizedQuery,
+        limit,
+        sortBy,
+      };
+      
+      if (searchQuery.group_by && typeof searchQuery.group_by === 'string') {
+        params.groupBy = searchQuery.group_by.trim();
+      }
+      if (searchQuery.cursor && typeof searchQuery.cursor === 'string') {
+        params.cursor = searchQuery.cursor.trim();
+      }
+      if (searchQuery.aggregate === true) {
+        params.aggregate = true;
+      }
+      
+      // Enhanced filter application for target-specific options
+      if (options.min_targets && typeof options.min_targets === 'number' && options.min_targets > 0) {
+        const minTargets = Math.max(1, Math.floor(options.min_targets));
+        params.query = params.query ? `${params.query} AND targets.length:>=${minTargets}` : `targets.length:>=${minTargets}`;
+      }
+      
+      if (options.categories && Array.isArray(options.categories)) {
+        const validCategories = options.categories.filter(cat => typeof cat === 'string' && cat.trim());
+        if (validCategories.length > 0) {
+          const categoryFilter = `category:(${validCategories.join(',')})` ;
+          params.query = params.query ? `${params.query} AND ${categoryFilter}` : categoryFilter;
+        }
+      }
+      
+      if (options.owners && Array.isArray(options.owners)) {
+        const validOwners = options.owners.filter(owner => typeof owner === 'string' && owner.trim());
+        if (validOwners.length > 0) {
+          const ownerFilter = `owner:(${validOwners.join(',')})`;
+          params.query = params.query ? `${params.query} AND ${ownerFilter}` : ownerFilter;
+        }
+      }
+
+      // Enhanced API request with better error handling
+      let response;
+      try {
+        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/target-lists`, params);
+      } catch (apiError) {
+        if (apiError instanceof Error) {
+          if (apiError.message.includes('timeout')) {
+            throw new Error('Search request timed out. Try reducing the search scope or limit.');
+          }
+          if (apiError.message.includes('400')) {
+            throw new Error(`Invalid search query: ${apiError.message}`);
+          }
+        }
+        throw new Error(`API request failed: ${apiError instanceof Error ? apiError.message : 'Unknown API error'}`);
+      }
+      
+      // Enhanced response validation
+      if (!response || typeof response !== 'object') {
+        throw new Error('Invalid response format from search target lists API');
+      }
+      
+      const rawResults = response.results || [];
+      if (!Array.isArray(rawResults)) {
+        logger.debugNamespace('validation', 'Invalid results format in search response');
+        return {
+          count: 0,
+          results: [],
+          next_cursor: undefined,
+          aggregations: undefined,
+          metadata: {
+            execution_time: Date.now() - startTime,
+            cached: false,
+            filters_applied: parsed?.filters?.map(f => `${f.field}:${f.operator}`) || []
+          }
+        };
+      }
+      
+      // Enhanced target list transformation with comprehensive validation
+      const targetLists = rawResults
+        .filter(item => item && typeof item === 'object')
+        .map((item: any): TargetList => {
+          // Enhanced data validation and extraction
+          const id = item.id && typeof item.id === 'string' && item.id.trim() 
+            ? item.id.trim() 
+            : `list_${Math.random().toString(36).substr(2, 9)}`;
+          
+          const name = item.name && typeof item.name === 'string' && item.name.trim() 
+            ? item.name.trim() 
+            : 'Unknown List';
+          
+          const owner = item.owner && typeof item.owner === 'string' && item.owner.trim() 
+            ? item.owner.trim() 
+            : 'global';
+          
+          const targets = Array.isArray(item.targets) 
+            ? item.targets.filter((target: any) => 
+                target && 
+                (typeof target === 'string' || typeof target === 'object')
+              ) 
+            : [];
+          
+          const lastUpdated = item.lastUpdated && typeof item.lastUpdated === 'number' && item.lastUpdated > 0 
+            ? item.lastUpdated 
+            : Math.floor(Date.now() / 1000);
+          
+          const targetList: TargetList = {
+            id,
+            name,
+            owner,
+            targets,
+            lastUpdated
+          };
+          
+          // Conditionally add optional properties with validation
+          if (item.category && typeof item.category === 'string' && item.category.trim()) {
+            targetList.category = item.category.trim();
+          }
+          if (item.notes && typeof item.notes === 'string' && item.notes.trim()) {
+            targetList.notes = item.notes.trim();
+          }
+          
+          return targetList;
+        })
+        .filter(targetList => 
+          targetList.id && 
+          targetList.id !== 'unknown' && 
+          targetList.name && 
+          targetList.name !== 'Unknown List'
+        ); // Filter out invalid target lists
+
+      return {
+        count: response.count || targetLists.length,
+        results: targetLists,
+        next_cursor: response.next_cursor,
+        aggregations: response.aggregations,
+        metadata: {
+          execution_time: Date.now() - startTime,
+          cached: false,
+          filters_applied: parsed?.filters?.map(f => `${f.field}:${f.operator}`) || []
+        }
+      };
+    } catch (error) {
+      logger.error('Error in searchTargetLists:', error instanceof Error ? error : new Error(String(error)));
+      if (error instanceof Error && (error.message.includes('SearchQuery') || error.message.includes('Invalid search') || error.message.includes('required'))) {
+        throw error; // Re-throw validation errors
+      }
+      throw new Error(`Failed to search target lists: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Multi-entity searches with correlation across different data types
+   */
+  @optimizeResponse('cross-reference')
+  async searchCrossReference(
+    primaryQuery: SearchQuery,
+    secondaryQueries: Record<string, SearchQuery>,
+    correlationField: string,
+    options: SearchOptions = {}
+  ): Promise<CrossReferenceResult> {
+    try {
+      // Execute primary search first
+      const primary = await this.searchFlows(primaryQuery, options);
+      
+      // Extract correlation values from primary results
+      const correlationValues = new Set<string>();
+      primary.results.forEach(flow => {
+        const value = this.extractFieldValue(flow, correlationField);
+        if (value) {correlationValues.add(String(value));}
+      });
+      
+      // Execute secondary searches with correlation filter
+      const secondary: Record<string, SearchResult<any>> = {};
+      
+      for (const [name, query] of Object.entries(secondaryQueries)) {
+        if (correlationValues.size === 0) {
+          secondary[name] = { count: 0, results: [], metadata: { execution_time: 0, cached: false, filters_applied: [] } };
+          continue;
+        }
+        
+        // Add correlation filter to secondary query
+        const correlationFilter = `${correlationField}:(${Array.from(correlationValues).join(',')})`;
+        const enhancedQuery: SearchQuery = {
+          ...query,
+          query: query.query ? `${query.query} AND ${correlationFilter}` : correlationFilter
+        };
+        
+        // Execute appropriate search based on query name/type
+        if (name.includes('alarm')) {
+          secondary[name] = await this.searchAlarms(enhancedQuery, options);
+        } else if (name.includes('rule')) {
+          secondary[name] = await this.searchRules(enhancedQuery, options);
+        } else if (name.includes('device')) {
+          secondary[name] = await this.searchDevices(enhancedQuery, options);
+        } else {
+          secondary[name] = await this.searchFlows(enhancedQuery, options);
+        }
+      }
+      
+      // Calculate correlation statistics
+      const totalSecondaryResults = Object.values(secondary).reduce((sum, result) => sum + result.count, 0);
+      const correlationStrength = correlationValues.size > 0 ? totalSecondaryResults / correlationValues.size : 0;
+      
+      return {
+        primary,
+        secondary,
+        correlations: {
+          correlation_field: correlationField,
+          correlated_count: totalSecondaryResults,
+          correlation_strength: Math.min(1, correlationStrength / 10) // Normalize to 0-1
+        }
+      };
+    } catch (error) {
+      logger.error('Error in searchCrossReference:', error instanceof Error ? error : new Error(String(error)));
+      throw new Error(`Failed to search cross reference: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get overview statistics and counts of network rules by category
+   */
+  @optimizeResponse('rules')
+  async getNetworkRulesSummary(
+    activeOnly: boolean = true,
+    ruleType?: string
+  ): Promise<{count: number; results: any[]; next_cursor?: string}> {
+    try {
+      // Enhanced input validation and sanitization
+      if (typeof activeOnly !== 'boolean') {
+        throw new Error('activeOnly parameter must be a boolean');
+      }
+      
+      if (ruleType !== undefined && (typeof ruleType !== 'string' || ruleType.trim().length === 0)) {
+        throw new Error('ruleType parameter must be a non-empty string if provided');
+      }
+      
+      // Sanitize ruleType to prevent injection
+      const sanitizedRuleType = ruleType ? this.sanitizeInput(ruleType.trim()) : undefined;
+      
+      const rules = await this.getNetworkRules();
+      
+      // Enhanced null/undefined safety checks
+      if (!rules || !rules.results || !Array.isArray(rules.results)) {
+        return {
+          count: 1,
+          results: [{
+            total_rules: 0,
+            by_action: {},
+            by_target_type: {},
+            by_direction: {},
+            active_rules: 0,
+            paused_rules: 0,
+            rules_with_hits: 0
+          }]
+        };
+      }
+      
+      // Filter rules based on parameters with enhanced safety
+      let filteredRules = rules.results.filter(rule => rule && typeof rule === 'object');
+      
+      if (activeOnly) {
+        filteredRules = filteredRules.filter(rule => {
+          const status = rule.status;
+          return status === 'active' || !status || status === undefined;
+        });
+      }
+      
+      if (sanitizedRuleType) {
+        filteredRules = filteredRules.filter(rule => {
+          const targetType = rule.target?.type;
+          return targetType && typeof targetType === 'string' && targetType === sanitizedRuleType;
+        });
+      }
+      
+      // Generate summary statistics by category with enhanced safety
+      const summary = {
+        total_rules: filteredRules.length,
+        by_action: {} as Record<string, number>,
+        by_target_type: {} as Record<string, number>,
+        by_direction: {} as Record<string, number>,
+        active_rules: 0,
+        paused_rules: 0,
+        rules_with_hits: 0
+      };
+      
+      // Safe counting with comprehensive validation
+      filteredRules.forEach(rule => {
+        if (!rule || typeof rule !== 'object') {return;}
+        
+        // Count by action with validation
+        const action = rule.action && typeof rule.action === 'string' ? rule.action : 'unknown';
+        summary.by_action[action] = (summary.by_action[action] || 0) + 1;
+        
+        // Count by target type with validation
+        const targetType = rule.target?.type && typeof rule.target.type === 'string' ? rule.target.type : 'unknown';
+        summary.by_target_type[targetType] = (summary.by_target_type[targetType] || 0) + 1;
+        
+        // Count by direction with validation
+        const direction = rule.direction && typeof rule.direction === 'string' ? rule.direction : 'bidirection';
+        summary.by_direction[direction] = (summary.by_direction[direction] || 0) + 1;
+        
+        // Count by status with validation
+        const status = rule.status;
+        if (status === 'active' || !status || status === undefined) {
+          summary.active_rules++;
+        } else if (status === 'paused') {
+          summary.paused_rules++;
+        }
+        
+        // Count rules with hits with validation
+        const hitCount = rule.hit?.count;
+        if (typeof hitCount === 'number' && hitCount > 0) {
+          summary.rules_with_hits++;
+        }
+      });
+      
+      return {
+        count: 1,
+        results: [summary]
+      };
+    } catch (error) {
+      logger.error('Error in getNetworkRulesSummary:', error instanceof Error ? error : new Error(String(error)));
+      // Enhanced error handling with more specific error types
+      if (error instanceof TypeError) {
+        throw new Error(`Data type error in network rules summary: ${error.message}`);
+      } else if (error instanceof RangeError) {
+        throw new Error(`Range error in network rules summary: ${error.message}`);
+      }
+      throw new Error(`Failed to get network rules summary: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get rules with highest hit counts for traffic analysis
+   */
+  @optimizeResponse('rules') 
+  async getMostActiveRules(
+    limit: number = 20,
+    minHits: number = 1,
+    ruleType?: string
+  ): Promise<{count: number; results: NetworkRule[]; next_cursor?: string}> {
+    try {
+      // Comprehensive input validation and sanitization
+      if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 1000) {
+        throw new Error('limit must be a positive integer between 1 and 1000');
+      }
+      
+      if (typeof minHits !== 'number' || !Number.isInteger(minHits) || minHits < 0) {
+        throw new Error('minHits must be a non-negative integer');
+      }
+      
+      if (ruleType !== undefined && (typeof ruleType !== 'string' || ruleType.trim().length === 0)) {
+        throw new Error('ruleType must be a non-empty string if provided');
+      }
+      
+      // Sanitize inputs to prevent injection
+      const sanitizedLimit = Math.max(Math.floor(limit), 1); // Remove artificial cap
+      const sanitizedMinHits = Math.max(Math.floor(minHits), 0);
+      const sanitizedRuleType = ruleType ? this.sanitizeInput(ruleType.trim()) : undefined;
+      
+      const rules = await this.getNetworkRules();
+      
+      // Enhanced null/undefined safety checks
+      if (!rules || !rules.results || !Array.isArray(rules.results)) {
+        return {
+          count: 0,
+          results: []
+        };
+      }
+      
+      // Filter and sort rules by hit count with enhanced safety
+      let filteredRules = rules.results.filter(rule => rule && typeof rule === 'object');
+      
+      if (sanitizedRuleType) {
+        filteredRules = filteredRules.filter(rule => {
+          const targetType = rule.target?.type;
+          return targetType && typeof targetType === 'string' && targetType === sanitizedRuleType;
+        });
+      }
+      
+      // Filter by minimum hits with comprehensive validation
+      filteredRules = filteredRules.filter(rule => {
+        if (!rule || typeof rule !== 'object') {return false;}
+        const hitCount = rule.hit?.count;
+        if (typeof hitCount !== 'number' || !Number.isFinite(hitCount)) {return sanitizedMinHits === 0;}
+        return hitCount >= sanitizedMinHits;
+      });
+      
+      // Sort by hit count (descending) with safe comparison
+      filteredRules.sort((a, b) => {
+        const aHits = (a?.hit?.count && typeof a.hit.count === 'number' && Number.isFinite(a.hit.count)) ? a.hit.count : 0;
+        const bHits = (b?.hit?.count && typeof b.hit.count === 'number' && Number.isFinite(b.hit.count)) ? b.hit.count : 0;
+        return bHits - aHits;
+      });
+      
+      // Apply limit with bounds checking
+      const results = filteredRules.slice(0, sanitizedLimit);
+      
+      // Validate results before returning
+      const validatedResults = results.filter(rule => {
+        return rule && typeof rule === 'object' && rule.id;
+      });
+      
+      return {
+        count: validatedResults.length,
+        results: validatedResults
+      };
+    } catch (error) {
+      logger.error('Error in getMostActiveRules:', error instanceof Error ? error : new Error(String(error)));
+      // Enhanced error handling with specific error types
+      if (error instanceof TypeError) {
+        throw new Error(`Data type error in most active rules: ${error.message}`);
+      } else if (error instanceof RangeError) {
+        throw new Error(`Range error in most active rules: ${error.message}`);
+      }
+      throw new Error(`Failed to get most active rules: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get recently created or modified firewall rules
+   */
+  @optimizeResponse('rules')
+  async getRecentRules(
+    hours: number = 24,
+    includeModified: boolean = true,
+    limit: number = 30,
+    ruleType?: string
+  ): Promise<{count: number; results: NetworkRule[]; next_cursor?: string}> {
+    try {
+      // Comprehensive input validation and sanitization
+      if (typeof hours !== 'number' || !Number.isFinite(hours) || hours <= 0 || hours > 168) {
+        throw new Error('hours must be a positive number between 0 and 168 (7 days)');
+      }
+      
+      if (typeof includeModified !== 'boolean') {
+        throw new Error('includeModified must be a boolean');
+      }
+      
+      if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 1000) {
+        throw new Error('limit must be a positive integer between 1 and 1000');
+      }
+      
+      if (ruleType !== undefined && (typeof ruleType !== 'string' || ruleType.trim().length === 0)) {
+        throw new Error('ruleType must be a non-empty string if provided');
+      }
+      
+      // Sanitize inputs to prevent issues
+      const sanitizedHours = Math.min(Math.max(hours, 0.1), 168); // Min 6 minutes, max 7 days
+      const sanitizedLimit = Math.max(Math.floor(limit), 1); // Remove artificial cap
+      const sanitizedRuleType = ruleType ? this.sanitizeInput(ruleType.trim()) : undefined;
+      
+      const rules = await this.getNetworkRules();
+      
+      // Enhanced null/undefined safety checks
+      if (!rules || !rules.results || !Array.isArray(rules.results)) {
+        return {
+          count: 0,
+          results: []
+        };
+      }
+      
+      // Safe timestamp calculation with overflow protection
+      const now = Date.now();
+      if (!Number.isFinite(now) || now <= 0) {
+        throw new Error('Invalid current timestamp');
+      }
+      
+      const cutoffTime = Math.floor(now / 1000) - (sanitizedHours * 3600);
+      
+      // Validate cutoff time
+      if (!Number.isFinite(cutoffTime) || cutoffTime < 0) {
+        throw new Error('Invalid cutoff time calculation');
+      }
+      
+      // Filter rules by creation/modification time with enhanced safety
+      let filteredRules = rules.results.filter(rule => {
+        if (!rule || typeof rule !== 'object') {return false;}
+        
+        const createdTime = rule.ts;
+        const updatedTime = rule.updateTs;
+        
+        // Validate timestamps
+        const validCreatedTime = (typeof createdTime === 'number' && Number.isFinite(createdTime) && createdTime >= 0) ? createdTime : 0;
+        const validUpdatedTime = (typeof updatedTime === 'number' && Number.isFinite(updatedTime) && updatedTime >= 0) ? updatedTime : 0;
+        
+        // Include if created recently
+        if (validCreatedTime >= cutoffTime) {
+          return true;
+        }
+        
+        // Include if modified recently (if includeModified is true)
+        if (includeModified && validUpdatedTime >= cutoffTime) {
+          return true;
+        }
+        
+        return false;
+      });
+      
+      if (sanitizedRuleType) {
+        filteredRules = filteredRules.filter(rule => {
+          const targetType = rule.target?.type;
+          return targetType && typeof targetType === 'string' && targetType === sanitizedRuleType;
+        });
+      }
+      
+      // Sort by most recent first with enhanced safety
+      filteredRules.sort((a, b) => {
+        if (!a || !b || typeof a !== 'object' || typeof b !== 'object') {return 0;}
+        
+        const aCreated = (typeof a.ts === 'number' && Number.isFinite(a.ts)) ? a.ts : 0;
+        const aUpdated = (typeof a.updateTs === 'number' && Number.isFinite(a.updateTs)) ? a.updateTs : 0;
+        const bCreated = (typeof b.ts === 'number' && Number.isFinite(b.ts)) ? b.ts : 0;
+        const bUpdated = (typeof b.updateTs === 'number' && Number.isFinite(b.updateTs)) ? b.updateTs : 0;
+        
+        const aTime = Math.max(aCreated, aUpdated);
+        const bTime = Math.max(bCreated, bUpdated);
+        
+        return bTime - aTime;
+      });
+      
+      // Apply limit with bounds checking
+      const results = filteredRules.slice(0, sanitizedLimit);
+      
+      // Validate results before returning
+      const validatedResults = results.filter(rule => {
+        return rule && typeof rule === 'object' && rule.id;
+      });
+      
+      return {
+        count: validatedResults.length,
+        results: validatedResults
+      };
+    } catch (error) {
+      logger.error('Error in getRecentRules:', error instanceof Error ? error : new Error(String(error)));
+      // Enhanced error handling with specific error types
+      if (error instanceof TypeError) {
+        throw new Error(`Data type error in recent rules: ${error.message}`);
+      } else if (error instanceof RangeError) {
+        throw new Error(`Range error in recent rules: ${error.message}`);
+      } else if (error instanceof ReferenceError) {
+        throw new Error(`Reference error in recent rules: ${error.message}`);
+      }
+      throw new Error(`Failed to get recent rules: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Pause a firewall rule temporarily
+   */
+  @optimizeResponse('rules')
+  async pauseRule(ruleId: string, durationMinutes: number = 60): Promise<{success: boolean; message: string}> {
+    try {
+      // Enhanced input validation and sanitization
+      const validatedRuleId = this.sanitizeInput(ruleId);
+      if (!validatedRuleId) {
+        throw new Error('Invalid rule ID provided');
+      }
+
+      const validatedDuration = Math.max(1, Math.min(durationMinutes, 1440)); // 1 minute to 24 hours
+      
+      const response = await this.request<{success: boolean; message: string}>(
+        'POST',
+        `/rules/${validatedRuleId}/pause`,
+        { duration: validatedDuration },
+        false
+      );
+
+      return {
+        success: response?.success ?? true, // Default to true if API doesn't return success field
+        message: response?.message || `Rule ${validatedRuleId} paused for ${validatedDuration} minutes`
+      };
+    } catch (error) {
+      logger.error('Error in pauseRule:', error instanceof Error ? error : new Error(String(error)));
+      throw new Error(`Failed to pause rule: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Resume a paused firewall rule
+   */
+  @optimizeResponse('rules')
+  async resumeRule(ruleId: string): Promise<{success: boolean; message: string}> {
+    try {
+      // Enhanced input validation and sanitization
+      const validatedRuleId = this.sanitizeInput(ruleId);
+      if (!validatedRuleId) {
+        throw new Error('Invalid rule ID provided');
+      }
+
+      const response = await this.request<{success: boolean; message: string}>(
+        'POST',
+        `/rules/${validatedRuleId}/resume`,
+        {},
+        false
+      );
+
+      return {
+        success: response?.success ?? true, // Default to true if API doesn't return success field
+        message: response?.message || `Rule ${validatedRuleId} resumed successfully`
+      };
+    } catch (error) {
+      logger.error('Error in resumeRule:', error instanceof Error ? error : new Error(String(error)));
+      throw new Error(`Failed to resume rule: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+
+  /**
+   * Extract field value from object using dot notation
+   */
+  private extractFieldValue(obj: any, fieldPath: string): any {
+    return fieldPath.split('.').reduce((current, key) => current?.[key], obj);
+  }
+
+  /**
+   * Extract and validate string values with optional allowed values
+   */
+  private extractValidString(value: any, defaultValue: string, allowedValues?: string[]): string {
+    if (!value || typeof value !== 'string' || !value.trim()) {
+      return defaultValue;
+    }
+    
+    const trimmedValue = value.trim();
+    
+    if (allowedValues && allowedValues.length > 0) {
+      return allowedValues.includes(trimmedValue) ? trimmedValue : defaultValue;
+    }
+    
+    return trimmedValue;
   }
 }

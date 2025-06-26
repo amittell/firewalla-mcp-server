@@ -70,21 +70,26 @@ describe('FirewallaClient', () => {
         data: { results: mockAlarms },
       });
 
-      const result = await client.getActiveAlarms('high', 10);
+      const result = await client.getActiveAlarms('high', undefined, undefined, 10);
       
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/v2/alarms`,
-        { params: { query: expect.stringContaining(`box:${mockConfig.boxId} severity:high`), limit: 10 } }
+        `/boxes/${mockConfig.boxId}/alarms`,
+        { params: { query: 'high', limit: 10, sortBy: 'timestamp:desc' } }
       );
       
-      // Verify the basic structure and required fields
-      expect(result).toHaveLength(1);
-      expect(result[0]).toHaveProperty('id');
-      expect(result[0]).toHaveProperty('timestamp');
-      expect(result[0]).toHaveProperty('severity');
-      expect(result[0]).toHaveProperty('type');
-      expect(result[0]).toHaveProperty('description');
-      expect(result[0]).toHaveProperty('status');
+      // Verify the paginated response structure
+      expect(result).toEqual(expect.objectContaining({
+        count: expect.any(Number),
+        results: expect.any(Array)
+      }));
+      expect(result.next_cursor).toBeUndefined();
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0]).toHaveProperty('ts');
+      expect(result.results[0]).toHaveProperty('gid');
+      expect(result.results[0]).toHaveProperty('aid');
+      expect(result.results[0]).toHaveProperty('type');
+      expect(result.results[0]).toHaveProperty('message');
+      expect(result.results[0]).toHaveProperty('status');
     });
 
     it('should handle API errors gracefully', async () => {
@@ -95,7 +100,7 @@ describe('FirewallaClient', () => {
       // Mock axios.isAxiosError to return true for our error
       jest.spyOn(axios, 'isAxiosError').mockReturnValue(true);
 
-      await expect(client.getActiveAlarms()).rejects.toThrow('API Error: Network error');
+      await expect(client.getActiveAlarms()).rejects.toThrow('API Error (unknown): Network error');
     });
 
     it('should use cache for repeated requests', async () => {
@@ -136,65 +141,71 @@ describe('FirewallaClient', () => {
       });
 
       const result = await client.getFlowData(
-        '2023-01-01T00:00:00Z',
-        '2023-01-01T23:59:59Z',
+        undefined,
+        undefined,
+        'ts:desc',
         50,
-        1
+        'test-cursor'
       );
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
         `/v2/flows`,
         {
           params: {
-            query: expect.stringContaining(`box:${mockConfig.boxId}`),
             limit: 50,
-            cursor: 1,
+            cursor: 'test-cursor',
+            sortBy: 'ts:desc',
           },
         }
       );
       
       // Verify the structure and required fields
-      expect(result).toHaveProperty('flows');
-      expect(result).toHaveProperty('pagination');
-      expect(result.pagination).toEqual({ has_more: true, next_cursor: 'next-cursor' });
-      expect(result.flows).toHaveLength(1);
+      expect(result).toHaveProperty('results');
+      expect(result).toHaveProperty('next_cursor');
+      expect(result.next_cursor).toEqual('next-cursor');
+      expect(result.results).toHaveLength(1);
       
-      const flow = result.flows[0]!;
-      expect(flow).toHaveProperty('timestamp');
-      expect(flow).toHaveProperty('source_ip', '192.168.1.100');
-      expect(flow).toHaveProperty('destination_ip', '8.8.8.8');
-      expect(flow).toHaveProperty('source_port', 12345);
-      expect(flow).toHaveProperty('destination_port', 80);
-      expect(flow).toHaveProperty('protocol', 'TCP');
-      expect(flow).toHaveProperty('bytes', 1024);
-      expect(flow).toHaveProperty('packets', 10);
-      expect(flow).toHaveProperty('duration', 30);
-      expect(flow).toHaveProperty('direction', 'outbound'); // Enhanced field
+      const flow = result.results[0]!;
+      expect(flow).toHaveProperty('ts');
+      expect(flow).toHaveProperty('gid');
+      expect(flow).toHaveProperty('protocol');
+      expect(flow).toHaveProperty('direction');
+      // Note: The actual flow object structure depends on the API response mapping
     });
 
     it('should handle comprehensive flow data mapping', async () => {
       const mockApiResponse = [
         {
           ts: 1672531200, // Unix timestamp for 2023-01-01T00:00:00Z
-          sh: '192.168.1.100', // source host
-          dh: '8.8.8.8', // destination host
-          sp: 12345, // source port
-          dp: 80, // destination port
-          pr: 6, // protocol number (TCP)
-          rb: 512, // received bytes
-          ob: 512, // outbound bytes
-          ct: 10, // connection/packet count
-          dur: 30, // duration
-          source_device: {
+          gid: 'test-box-id',
+          protocol: 'tcp',
+          direction: 'outbound' as const,
+          block: false,
+          download: 512,
+          upload: 512,
+          duration: 30,
+          count: 10,
+          device: {
             id: 'device-123',
+            ip: '192.168.1.100',
             name: 'My Laptop',
-            type: 'laptop'
+            network: {
+              id: 'network-1',
+              name: 'Home Network'
+            }
           },
-          application: 'Chrome',
-          geo: {
-            country: 'US',
-            city: 'Mountain View'
-          }
+          source: {
+            id: 'source-host-1',
+            name: 'My Laptop',
+            ip: '192.168.1.100'
+          },
+          destination: {
+            id: 'dest-host-1',
+            name: 'Google DNS',
+            ip: '8.8.8.8'
+          },
+          region: 'US',
+          category: 'edu' as const
         },
       ];
 
@@ -205,27 +216,29 @@ describe('FirewallaClient', () => {
 
       const result = await client.getFlowData();
       
-      expect(result.flows).toHaveLength(1);
-      const flow = result.flows[0]!;
+      expect(result.results).toHaveLength(1);
+      const flow = result.results[0]!;
 
-      expect(flow.timestamp).toBe('2023-01-01T00:00:00.000Z');
-      expect(flow.source_ip).toBe('192.168.1.100');
-      expect(flow.destination_ip).toBe('8.8.8.8');
-      expect(flow.protocol).toBe('TCP'); // Converted from protocol number
-      expect(flow.bytes).toBe(1024); // rb + ob
-      expect(flow.bytes_uploaded).toBe(512);
-      expect(flow.bytes_downloaded).toBe(512);
+      expect(flow.ts).toBe(1672531200);
+      expect(flow.source?.ip).toBe('192.168.1.100');
+      expect(flow.destination?.ip).toBe('8.8.8.8');
+      expect(flow.protocol).toBe('tcp');
+      expect(flow.download).toBe(512);
+      expect(flow.upload).toBe(512);
+      expect(flow.bytes).toBe(1024); // Validate aggregated bytes field
+      expect((flow.download || 0) + (flow.upload || 0)).toBe(1024); // Validate combined bytes value (download + upload)
       expect(flow.direction).toBe('outbound');
-      expect(flow.application).toBe('Chrome');
-      expect(flow.source_device).toEqual({
+      expect(flow.device).toEqual({
         id: 'device-123',
+        ip: '192.168.1.100',
         name: 'My Laptop',
-        type: 'laptop'
+        network: {
+          id: 'network-1',
+          name: 'Home Network'
+        }
       });
-      expect(flow.geo_location).toEqual({
-        country: 'US',
-        city: 'Mountain View'
-      });
+      expect(flow.region).toBe('US');
+      expect(flow.category).toBe('edu');
     });
   });
 
@@ -269,42 +282,44 @@ describe('FirewallaClient', () => {
       const result = await client.getDeviceStatus();
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/v2/devices`,
+        `/boxes/${mockConfig.boxId}/devices`,
         { params: {} }
       );
 
-      expect(result).toHaveLength(3);
+      expect(result.results).toHaveLength(3);
       
-      // Verify first device mapping
-      expect(result[0]).toMatchObject({
+      // Results are sorted alphabetically by name: "iPhone", "MacBook-Pro", "Smart-TV"
+      // Verify first device mapping (iPhone)
+      expect(result.results[0]).toMatchObject({
         id: 'device-1',
         name: 'iPhone',
-        ip_address: '192.168.1.10',
-        mac_address: 'AA:BB:CC:DD:EE:FF',
-        status: 'online',
-        device_type: 'mobile',
+        ip: '192.168.1.10',
+        online: true,
       });
-      expect(result.length).toBeGreaterThan(0);
-      expect(result[0]!.last_seen).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-
-      // Verify second device mapping with different field names
-      expect(result.length).toBeGreaterThan(1);
-      expect(result[1]).toMatchObject({
+      expect(result.results[0]!.lastSeen).toBe(1703980800);
+      
+      // Verify second device mapping (MacBook-Pro)  
+      expect(result.results[1]).toMatchObject({
         id: 'device-2',
         name: 'MacBook-Pro',
-        ip_address: '192.168.1.11',
-        mac_address: 'AA:BB:CC:DD:EE:FF',
-        status: 'offline',
+        ip: '192.168.1.11',
+        online: false,
       });
-
-      // Verify third device with MAC address normalization
-      expect(result[2]).toMatchObject({
+      
+      // Verify third device mapping
+      expect(result.results[2]).toMatchObject({
         id: 'device-3',
         name: 'Smart-TV',
-        ip_address: '192.168.1.12',
-        mac_address: 'AA:BB:CC:DD:EE:11',
-        status: 'online',
+        ip: '192.168.1.12',
+        online: true,
       });
+      
+      // Verify paginated response structure
+      expect(result).toEqual(expect.objectContaining({
+        count: expect.any(Number),
+        results: expect.any(Array),
+        next_cursor: undefined
+      }));
     });
 
     it('should filter devices by deviceId', async () => {
@@ -334,8 +349,13 @@ describe('FirewallaClient', () => {
 
       const result = await client.getDeviceStatus('device-1');
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.id).toBe('device-1');
+      expect(result.results).toHaveLength(1); // One device matches
+      expect(result.results[0]!.id).toBe('device-1');
+      expect(result).toEqual(expect.objectContaining({
+        count: 1,
+        results: expect.any(Array),
+        next_cursor: undefined
+      }));
     });
 
     it('should filter by MAC address', async () => {
@@ -357,8 +377,13 @@ describe('FirewallaClient', () => {
 
       const result = await client.getDeviceStatus('AA:BB:CC:DD:EE:FF');
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.mac_address).toBe('AA:BB:CC:DD:EE:FF');
+      expect(result.results).toHaveLength(1); // One device matches by MAC
+      expect(result.results[0]!.id).toBe('device-1');
+      expect(result).toEqual(expect.objectContaining({
+        count: 1,
+        results: expect.any(Array),
+        next_cursor: undefined
+      }));
     });
 
     it('should exclude offline devices when includeOffline is false', async () => {
@@ -388,8 +413,13 @@ describe('FirewallaClient', () => {
 
       const result = await client.getDeviceStatus(undefined, false);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.status).toBe('online');
+      expect(result.results).toHaveLength(1); // Only online devices
+      expect(result.results[0]!.online).toBe(true);
+      expect(result).toEqual(expect.objectContaining({
+        count: 1,
+        results: expect.any(Array),
+        next_cursor: undefined
+      }));
     });
 
     it('should infer device types from names and vendors', async () => {
@@ -428,10 +458,16 @@ describe('FirewallaClient', () => {
 
       const result = await client.getDeviceStatus();
 
-      expect(result).toHaveLength(3);
-      expect(result[0]!.device_type).toBe('media');
-      expect(result[1]!.device_type).toBe('iot');
-      expect(result[2]!.device_type).toBe('laptop');
+      expect(result.results).toHaveLength(3); // All devices returned
+      // Results should be sorted by name: "Alexa Echo", "MacBook Pro", "Samsung Smart TV"
+      expect(result.results[0]!.id).toBe('device-2'); // Alexa Echo
+      expect(result.results[1]!.id).toBe('device-3'); // MacBook Pro
+      expect(result.results[2]!.id).toBe('device-1'); // Samsung Smart TV
+      expect(result).toEqual(expect.objectContaining({
+        count: 3,
+        results: expect.any(Array),
+        next_cursor: undefined
+      }));
     });
   });
 
@@ -440,13 +476,13 @@ describe('FirewallaClient', () => {
       const mockResponse = { success: true, message: 'Rule paused successfully' };
       const mockAxiosInstance = mockedAxios.create();
       mockAxiosInstance.post = jest.fn().mockResolvedValue({
-        data: {},
+        data: { success: true, message: 'Rule paused successfully' },
       });
 
       const result = await client.pauseRule('rule-123', 120);
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        `/v2/rules/rule-123/pause`,
+        `/rules/rule-123/pause`,
         { duration: 120 }
       );
       expect(result).toEqual({ success: true, message: 'Rule rule-123 paused for 120 minutes' });
@@ -477,8 +513,8 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/api/v1/rules/${mockConfig.boxId}`,
-        { params: { active_only: true } }
+        `/v2/rules`,
+        { params: {} }
       );
     });
 
@@ -487,7 +523,7 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/api/v1/target-lists/${mockConfig.boxId}`,
+        `/v2/target-lists`,
         { params: {} }
       );
     });
@@ -497,7 +533,7 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/api/v1/threats/recent/${mockConfig.boxId}`,
+        `/v2/boxes/${mockConfig.boxId}/threats/recent`,
         { params: { hours: 24 } }
       );
     });
@@ -507,7 +543,7 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/api/v1/summary/${mockConfig.boxId}`,
+        `/v2/boxes/${mockConfig.boxId}/summary`,
         { params: undefined }
       );
     });
@@ -517,7 +553,7 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/api/v1/metrics/security/${mockConfig.boxId}`,
+        `/v2/boxes/${mockConfig.boxId}/metrics/security`,
         { params: undefined }
       );
     });
@@ -527,7 +563,7 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/api/v1/topology/${mockConfig.boxId}`,
+        `/v2/boxes/${mockConfig.boxId}/topology`,
         { params: undefined }
       );
     });

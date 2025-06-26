@@ -1,4 +1,29 @@
-import { productionConfig } from '../production/config';
+import { productionConfig } from '../production/config.js';
+import { getCurrentTimestamp } from '../utils/timestamp.js';
+
+// DEBUG environment variable support
+const DEBUG_ENABLED = process.env.DEBUG === 'firewalla:*' || process.env.DEBUG === '1' || process.env.DEBUG === 'true';
+const DEBUG_FILTERS = (process.env.DEBUG || '').split(',').map(f => f.trim());
+
+/**
+ * Determines if debug logging is enabled for a given namespace based on environment variable filters.
+ *
+ * Returns true if global debug is enabled or if the namespace matches any filter (with wildcard support) specified in the `DEBUG` environment variable.
+ *
+ * @param namespace - The debug namespace to check
+ * @returns True if debug logging is enabled for the specified namespace
+ */
+function shouldDebug(namespace: string): boolean {
+  if (!DEBUG_ENABLED && DEBUG_FILTERS.length === 0) {
+    return false;
+  }
+  if (DEBUG_ENABLED) {return true;}
+  return DEBUG_FILTERS.some(filter => {
+    if (filter === '*') {return true;}
+    if (filter.endsWith('*')) {return namespace.startsWith(filter.slice(0, -1));}
+    return namespace === filter;
+  });
+}
 
 export interface LogEntry {
   timestamp: string;
@@ -22,7 +47,12 @@ export class StructuredLogger {
   private logLevel: LogEntry['level'];
 
   constructor(logLevel?: LogEntry['level']) {
-    this.logLevel = logLevel || productionConfig.logLevel || 'info';
+    // Override log level if DEBUG is enabled
+    if (DEBUG_ENABLED) {
+      this.logLevel = 'debug';
+    } else {
+      this.logLevel = logLevel || productionConfig.logLevel || 'info';
+    }
   }
 
   private shouldLog(level: LogEntry['level']): boolean {
@@ -41,7 +71,7 @@ export class StructuredLogger {
     requestId?: string
   ): LogEntry {
     const entry: LogEntry = {
-      timestamp: new Date().toISOString(),
+      timestamp: getCurrentTimestamp(),
       level,
       message,
       service: this.service,
@@ -99,38 +129,44 @@ export class StructuredLogger {
   private output(entry: LogEntry): void {
     const logString = JSON.stringify(entry);
     
-    if (entry.level === 'error') {
-      process.stderr.write(logString + '\\n');
-    } else {
-      process.stdout.write(logString + '\\n');
-    }
+    // Always write to stderr in MCP server to avoid polluting stdout JSON-RPC channel
+    process.stderr.write(logString + '\\n');
   }
 
   error(message: string, error?: Error, metadata?: Record<string, unknown>, traceId?: string, requestId?: string): void {
-    if (!this.shouldLog('error')) return;
+    if (!this.shouldLog('error')) {return;}
     
     const entry = this.createLogEntry('error', message, metadata, error, traceId, requestId);
     this.output(entry);
   }
 
   warn(message: string, metadata?: Record<string, unknown>, traceId?: string, requestId?: string): void {
-    if (!this.shouldLog('warn')) return;
+    if (!this.shouldLog('warn')) {return;}
     
     const entry = this.createLogEntry('warn', message, metadata, undefined, traceId, requestId);
     this.output(entry);
   }
 
   info(message: string, metadata?: Record<string, unknown>, traceId?: string, requestId?: string): void {
-    if (!this.shouldLog('info')) return;
+    if (!this.shouldLog('info')) {return;}
     
     const entry = this.createLogEntry('info', message, metadata, undefined, traceId, requestId);
     this.output(entry);
   }
 
   debug(message: string, metadata?: Record<string, unknown>, traceId?: string, requestId?: string): void {
-    if (!this.shouldLog('debug')) return;
+    if (!this.shouldLog('debug')) {return;}
     
     const entry = this.createLogEntry('debug', message, metadata, undefined, traceId, requestId);
+    this.output(entry);
+  }
+
+  // Namespace-specific debug logging
+  debugNamespace(namespace: string, message: string, metadata?: Record<string, unknown>, traceId?: string, requestId?: string): void {
+    if (!shouldDebug(namespace)) {return;}
+    
+    const namespacedMessage = `[${namespace}] ${message}`;
+    const entry = this.createLogEntry('debug', namespacedMessage, metadata, undefined, traceId, requestId);
     this.output(entry);
   }
 
@@ -165,11 +201,45 @@ export class StructuredLogger {
   }
 
   cacheOperation(operation: string, key: string, hit: boolean, metadata?: Record<string, unknown>): void {
-    this.debug('Cache operation', {
+    this.debugNamespace('cache', `Cache ${operation}: ${hit ? 'HIT' : 'MISS'}`, {
       cache: {
         operation,
         key,
         hit,
+        ...metadata,
+      },
+    });
+  }
+
+  // Performance monitoring logs
+  performanceLog(operation: string, duration: number, metadata?: Record<string, unknown>): void {
+    this.debugNamespace('performance', `${operation} completed in ${duration}ms`, {
+      performance: {
+        operation,
+        duration_ms: duration,
+        ...metadata,
+      },
+    });
+  }
+
+  // Data pipeline troubleshooting logs
+  pipelineLog(stage: string, message: string, metadata?: Record<string, unknown>): void {
+    this.debugNamespace('pipeline', `[${stage}] ${message}`, {
+      pipeline: {
+        stage,
+        ...metadata,
+      },
+    });
+  }
+
+  // Query performance logs
+  queryLog(queryType: string, query: string, duration: number, resultCount: number, metadata?: Record<string, unknown>): void {
+    this.debugNamespace('query', `${queryType} query executed`, {
+      query: {
+        type: queryType,
+        query: query.length > 100 ? query.substring(0, 100) + '...' : query,
+        duration_ms: duration,
+        result_count: resultCount,
         ...metadata,
       },
     });

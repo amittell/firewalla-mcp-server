@@ -2,6 +2,7 @@ import { FirewallaClient } from '../firewalla/client';
 import { logger } from '../monitoring/logger';
 import { metricsCollector } from '../monitoring/metrics';
 import { HealthCheckManager } from '../health/endpoints';
+import { getCurrentTimestamp } from '../utils/timestamp.js';
 
 export interface DebugInfo {
   timestamp: string;
@@ -28,20 +29,22 @@ export class DebugTools {
   private startTime: number;
 
   constructor(
-    private firewalla: FirewallaClient,
-    private healthCheck: HealthCheckManager
+    // eslint-disable-next-line no-unused-vars
+    private _firewalla: FirewallaClient,
+    // eslint-disable-next-line no-unused-vars
+    private _healthCheck: HealthCheckManager
   ) {
     this.startTime = Date.now();
   }
 
   async getDebugInfo(): Promise<DebugInfo> {
     const memUsage = process.memoryUsage();
-    const cacheStats = this.firewalla.getCacheStats();
+    const cacheStats = this._firewalla.getCacheStats();
     const allMetrics = metricsCollector.getAllMetrics();
-    const health = await this.healthCheck.performHealthCheck();
+    const health = await this._healthCheck.performHealthCheck();
 
     return {
-      timestamp: new Date().toISOString(),
+      timestamp: getCurrentTimestamp(),
       version: '1.0.0',
       environment: process.env.NODE_ENV || 'development',
       uptime: Math.floor((Date.now() - this.startTime) / 1000),
@@ -74,7 +77,7 @@ export class DebugTools {
     const startTime = Date.now();
     
     try {
-      const summary = await this.firewalla.getFirewallSummary();
+      const summary = await this._firewalla.getFirewallSummary();
       const responseTime = Date.now() - startTime;
       
       return {
@@ -118,7 +121,7 @@ export class DebugTools {
       const startTime = Date.now();
       
       try {
-        await this.firewalla.getFirewallSummary();
+        await this._firewalla.getFirewallSummary();
         const responseTime = Date.now() - startTime;
         results.push({ success: true, responseTime });
       } catch (error) {
@@ -149,10 +152,10 @@ export class DebugTools {
   }
 
   clearCache(): { cleared_entries: number } {
-    const stats = this.firewalla.getCacheStats();
+    const stats = this._firewalla.getCacheStats();
     const clearedEntries = stats.size;
     
-    this.firewalla.clearCache();
+    this._firewalla.clearCache();
     
     logger.info('Cache cleared', { cleared_entries: clearedEntries });
     
@@ -208,7 +211,7 @@ export class DebugTools {
     }
     
     // Check cache size
-    const cacheStats = this.firewalla.getCacheStats();
+    const cacheStats = this._firewalla.getCacheStats();
     if (cacheStats.size > 1000) {
       issues.push({
         level: 'warning',
@@ -224,12 +227,12 @@ export class DebugTools {
 
   generateSystemReport(): string {
     const memUsage = process.memoryUsage();
-    const cacheStats = this.firewalla.getCacheStats();
+    const cacheStats = this._firewalla.getCacheStats();
     const uptime = Math.floor((Date.now() - this.startTime) / 1000);
     
     return `
 Firewalla MCP Server System Report
-Generated: ${new Date().toISOString()}
+Generated: ${getCurrentTimestamp()}
 
 Environment Information:
 - Node.js Version: ${process.version}

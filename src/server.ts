@@ -47,6 +47,18 @@ export class FirewallaMCPServer {
             inputSchema: {
               type: 'object',
               properties: {
+                query: {
+                  type: 'string',
+                  description: 'Search query for filtering alarms',
+                },
+                groupBy: {
+                  type: 'string',
+                  description: 'Group alarms by field (e.g., type, box)',
+                },
+                sortBy: {
+                  type: 'string',
+                  description: 'Sort alarms (default: ts:desc)',
+                },
                 severity: {
                   type: 'string',
                   enum: ['low', 'medium', 'high', 'critical'],
@@ -54,11 +66,16 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum number of results (default: 20)',
+                  description: 'Results per page (use cursor for more)',
                   minimum: 1,
-                  maximum: 100,
+                  maximum: 10000,
+                },
+                cursor: {
+                  type: 'string',
+                  description: 'Pagination cursor from previous response',
                 },
               },
+              required: ['limit'],
             },
           },
           {
@@ -77,15 +94,16 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (default: 50)',
+                  description: 'Results per page (use cursor for more)',
                   minimum: 1,
-                  maximum: 100,
+                  maximum: 10000,
                 },
                 cursor: {
                   type: 'string',
                   description: 'Pagination cursor from previous response',
                 },
               },
+              required: ['limit'],
             },
           },
           {
@@ -94,13 +112,37 @@ export class FirewallaMCPServer {
             inputSchema: {
               type: 'object',
               properties: {
-                device_id: {
+                box_id: {
                   type: 'string',
-                  description: 'Specific device ID to query',
+                  description: 'Filter devices under a specific Firewalla box',
                 },
-                include_offline: {
+                group_id: {
+                  type: 'string',
+                  description: 'Filter devices under a specific device group',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of devices to return',
+                  minimum: 1,
+                  maximum: 10000,
+                },
+                cursor: {
+                  type: 'string',
+                  description: 'Pagination cursor from previous response',
+                },
+              },
+              required: ['limit'],
+            },
+          },
+          {
+            name: 'get_offline_devices',
+            description: 'Get all offline devices with last seen timestamps',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                sort_by_last_seen: {
                   type: 'boolean',
-                  description: 'Include offline devices (default: true)',
+                  description: 'Sort devices by last seen time (default: true)',
                 },
               },
             },
@@ -116,14 +158,14 @@ export class FirewallaMCPServer {
                   enum: ['1h', '24h', '7d', '30d'],
                   description: 'Time period for analysis',
                 },
-                top: {
+                limit: {
                   type: 'number',
-                  description: 'Number of top devices (default: 10)',
+                  description: 'Number of top devices to return',
                   minimum: 1,
-                  maximum: 50,
+                  maximum: 500,
                 },
               },
-              required: ['period'],
+              required: ['period', 'limit'],
             },
           },
           {
@@ -140,7 +182,18 @@ export class FirewallaMCPServer {
                   type: 'boolean',
                   description: 'Only return active rules (default: true)',
                 },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of rules to return',
+                  minimum: 1,
+                  maximum: 10000,
+                },
+                summary_only: {
+                  type: 'boolean',
+                  description: 'Return minimal rule information to reduce token usage (default: false)',
+                },
               },
+              required: ['limit'],
             },
           },
           {
@@ -192,14 +245,6 @@ export class FirewallaMCPServer {
             },
           },
           {
-            name: 'get_boxes',
-            description: 'List all managed Firewalla boxes',
-            inputSchema: {
-              type: 'object',
-              properties: {},
-            },
-          },
-          {
             name: 'get_specific_alarm',
             description: 'Get detailed information for a specific alarm',
             inputSchema: {
@@ -225,6 +270,422 @@ export class FirewallaMCPServer {
                 },
               },
               required: ['alarm_id'],
+            },
+          },
+          {
+            name: 'get_boxes',
+            description: 'List all managed Firewalla boxes',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                group_id: {
+                  type: 'string',
+                  description: 'Filter boxes by group ID (optional)',
+                },
+              },
+            },
+          },
+          {
+            name: 'get_simple_statistics',
+            description: 'Get basic statistics about boxes, alarms, and rules',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+            },
+          },
+          {
+            name: 'get_statistics_by_region',
+            description: 'Get flow statistics grouped by country/region',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+            },
+          },
+          {
+            name: 'get_statistics_by_box',
+            description: 'Get statistics for each Firewalla box with activity scores',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+            },
+          },
+          {
+            name: 'get_flow_trends',
+            description: 'Get historical flow data trends over time',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                period: {
+                  type: 'string',
+                  enum: ['1h', '24h', '7d', '30d'],
+                  description: 'Time period for trend analysis (default: 24h)',
+                },
+                interval: {
+                  type: 'number',
+                  description: 'Interval between data points in seconds (default: 3600)',
+                  minimum: 60,
+                  maximum: 86400,
+                },
+              },
+            },
+          },
+          {
+            name: 'get_alarm_trends',
+            description: 'Get historical alarm data trends over time',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                period: {
+                  type: 'string',
+                  enum: ['1h', '24h', '7d', '30d'],
+                  description: 'Time period for trend analysis (default: 24h)',
+                },
+              },
+            },
+          },
+          {
+            name: 'get_rule_trends',
+            description: 'Get historical rule activity trends over time',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                period: {
+                  type: 'string',
+                  enum: ['1h', '24h', '7d', '30d'],
+                  description: 'Time period for trend analysis (default: 24h)',
+                },
+              },
+            },
+          },
+          {
+            name: 'search_flows',
+            description: 'Advanced flow searching with complex query syntax',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Search query using advanced syntax (e.g., "severity:high AND source_ip:192.168.*")',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum results',
+                  minimum: 1,
+                  maximum: 10000,
+                },
+                offset: {
+                  type: 'number',
+                  description: 'Results offset for pagination (default: 0)',
+                  minimum: 0,
+                },
+                time_range: {
+                  type: 'object',
+                  properties: {
+                    start: { type: 'string', description: 'Start time (ISO 8601)' },
+                    end: { type: 'string', description: 'End time (ISO 8601)' }
+                  },
+                  description: 'Optional time range filter'
+                },
+                include_blocked: {
+                  type: 'boolean',
+                  description: 'Include blocked flows (default: true)'
+                },
+                min_bytes: {
+                  type: 'number',
+                  description: 'Minimum flow size in bytes'
+                },
+                group_by: {
+                  type: 'string',
+                  enum: ['source', 'destination', 'protocol', 'device'],
+                  description: 'Group results by field'
+                },
+                aggregate: {
+                  type: 'boolean',
+                  description: 'Include aggregation statistics (default: false)'
+                }
+              },
+              required: ['query', 'limit'],
+            },
+          },
+          {
+            name: 'search_alarms',
+            description: 'Advanced alarm searching with severity, time, and IP filters',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Search query (e.g., "severity:>=high AND source_ip:192.168.*")',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum results',
+                  minimum: 1,
+                  maximum: 10000,
+                },
+                offset: {
+                  type: 'number',
+                  description: 'Results offset for pagination (default: 0)',
+                  minimum: 0,
+                },
+                include_resolved: {
+                  type: 'boolean',
+                  description: 'Include resolved alarms (default: false)'
+                },
+                min_severity: {
+                  type: 'string',
+                  enum: ['low', 'medium', 'high', 'critical'],
+                  description: 'Minimum severity level'
+                },
+                time_window: {
+                  type: 'string',
+                  description: 'Time window for search (e.g., "24h", "7d")'
+                },
+                aggregate: {
+                  type: 'boolean',
+                  description: 'Include aggregation statistics (default: false)'
+                }
+              },
+              required: ['query', 'limit'],
+            },
+          },
+          {
+            name: 'search_rules',
+            description: 'Advanced rule searching with target, action, and status filters',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Search query (e.g., "action:block AND target_value:*.facebook.com")',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum results',
+                  minimum: 1,
+                  maximum: 10000,
+                },
+                offset: {
+                  type: 'number',
+                  description: 'Results offset for pagination (default: 0)',
+                  minimum: 0,
+                },
+                include_paused: {
+                  type: 'boolean',
+                  description: 'Include paused rules (default: true)'
+                },
+                actions: {
+                  type: 'array',
+                  items: {
+                    type: 'string',
+                    enum: ['allow', 'block', 'timelimit']
+                  },
+                  description: 'Filter by rule actions'
+                },
+                directions: {
+                  type: 'array',
+                  items: {
+                    type: 'string',
+                    enum: ['bidirection', 'inbound', 'outbound']
+                  },
+                  description: 'Filter by traffic directions'
+                },
+                aggregate: {
+                  type: 'boolean',
+                  description: 'Include aggregation statistics (default: false)'
+                }
+              },
+              required: ['query', 'limit'],
+            },
+          },
+          {
+            name: 'search_devices',
+            description: 'Advanced device searching with network, status, and usage filters',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Search query (e.g., "online:true AND mac_vendor:Apple")',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum results',
+                  minimum: 1,
+                  maximum: 10000,
+                },
+                offset: {
+                  type: 'number',
+                  description: 'Results offset for pagination (default: 0) - DEPRECATED: use cursor',
+                  minimum: 0,
+                },
+                cursor: {
+                  type: 'string',
+                  description: 'Pagination cursor from previous response (preferred over offset)',
+                },
+                include_offline: {
+                  type: 'boolean',
+                  description: 'Include offline devices (default: true)'
+                },
+                network_ids: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Filter by network IDs'
+                },
+                last_seen_threshold: {
+                  type: 'number',
+                  description: 'Minimum last seen threshold (seconds ago)'
+                },
+                aggregate: {
+                  type: 'boolean',
+                  description: 'Include aggregation statistics (default: false)'
+                }
+              },
+              required: ['query', 'limit'],
+            },
+          },
+          {
+            name: 'search_target_lists',
+            description: 'Advanced target list searching with category and ownership filters',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Search query (e.g., "category:ad AND owner:global")',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum results',
+                  minimum: 1,
+                  maximum: 10000,
+                },
+                offset: {
+                  type: 'number',
+                  description: 'Results offset for pagination (default: 0)',
+                  minimum: 0,
+                },
+                owners: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Filter by list owners'
+                },
+                categories: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Filter by categories'
+                },
+                min_targets: {
+                  type: 'number',
+                  description: 'Minimum number of targets in list'
+                },
+                aggregate: {
+                  type: 'boolean',
+                  description: 'Include aggregation statistics (default: false)'
+                }
+              },
+              required: ['query', 'limit'],
+            },
+          },
+          {
+            name: 'search_cross_reference',
+            description: 'Multi-entity searches with correlation across different data types',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                primary_query: {
+                  type: 'string',
+                  description: 'Primary search query (typically for flows)',
+                },
+                secondary_queries: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Secondary queries to correlate with primary results',
+                },
+                correlation_field: {
+                  type: 'string',
+                  description: 'Field to use for correlation (e.g., "source_ip", "destination_ip")',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum results per query',
+                  minimum: 1,
+                  maximum: 10000,
+                }
+              },
+              required: ['primary_query', 'secondary_queries', 'correlation_field', 'limit'],
+            },
+          },
+          {
+            name: 'get_network_rules_summary',
+            description: 'Get overview statistics and counts of network rules by category',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                rule_type: {
+                  type: 'string',
+                  description: 'Filter by rule type',
+                },
+                active_only: {
+                  type: 'boolean',
+                  description: 'Only include active rules in summary (default: true)',
+                },
+              },
+            },
+          },
+          {
+            name: 'get_most_active_rules',
+            description: 'Get rules with highest hit counts for traffic analysis',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                limit: {
+                  type: 'number',
+                  description: 'Number of top rules to return',
+                  minimum: 1,
+                  maximum: 1000,
+                },
+                min_hits: {
+                  type: 'number',
+                  description: 'Minimum hit count threshold (default: 1)',
+                  minimum: 0,
+                },
+                rule_type: {
+                  type: 'string',
+                  description: 'Filter by rule type',
+                },
+              },
+              required: ['limit'],
+            },
+          },
+          {
+            name: 'get_recent_rules',
+            description: 'Get recently created or modified firewall rules',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                hours: {
+                  type: 'number',
+                  description: 'Look back period in hours (default: 24, max: 168)',
+                  minimum: 1,
+                  maximum: 168,
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of rules to return',
+                  minimum: 1,
+                  maximum: 1000,
+                },
+                rule_type: {
+                  type: 'string',
+                  description: 'Filter by rule type',
+                },
+                include_modified: {
+                  type: 'boolean',
+                  description: 'Include recently modified rules, not just created (default: true)',
+                },
+              },
+              required: ['limit'],
             },
           },
         ],

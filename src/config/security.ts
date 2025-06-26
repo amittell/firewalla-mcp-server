@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { getCurrentTimestamp } from '../utils/timestamp.js';
 
 export class SecurityManager {
   private static readonly ALLOWED_ORIGINS = [
@@ -39,7 +40,7 @@ export class SecurityManager {
 
   sanitizeString(input: string): string {
     return input
-      .replace(/[<>\"'&]/g, (match) => {
+      .replace(/[<>"'&]/g, (match) => {
         const map: Record<string, string> = {
           '<': '&lt;',
           '>': '&gt;',
@@ -87,7 +88,7 @@ export class SecurityManager {
   }
 
   validateOrigin(origin?: string): boolean {
-    if (!origin) return true; // Allow requests without origin (local tools)
+    if (!origin) {return true;} // Allow requests without origin (local tools)
     
     return SecurityManager.ALLOWED_ORIGINS.some(allowed => 
       origin.includes(allowed)
@@ -142,7 +143,7 @@ export class SecurityManager {
   }
 
   logSecurityEvent(event: string, details: Record<string, unknown>): void {
-    const timestamp = new Date().toISOString();
+    const timestamp = getCurrentTimestamp();
     const logEntry = {
       timestamp,
       event,

@@ -1,6 +1,7 @@
 import { FirewallaClient } from '../firewalla/client';
 import { SecurityManager } from '../config/security';
 import { config } from '../config/config';
+import { getCurrentTimestamp } from '../utils/timestamp.js';
 
 export interface HealthStatus {
   status: 'healthy' | 'degraded' | 'unhealthy';
@@ -22,6 +23,7 @@ export class HealthCheckManager {
   private security: SecurityManager;
 
   constructor(
+    /* eslint-disable-next-line no-unused-vars */
     private firewalla: FirewallaClient,
     security?: SecurityManager
   ) {
@@ -35,7 +37,7 @@ export class HealthCheckManager {
 
     return {
       status: overallStatus,
-      timestamp: new Date().toISOString(),
+      timestamp: getCurrentTimestamp(),
       version: '1.0.0',
       uptime: Math.floor((Date.now() - this.startTime) / 1000),
       checks,
@@ -165,7 +167,7 @@ export class HealthCheckManager {
           heapUsagePercent,
         },
       };
-    } catch (error) {
+    } catch {
       return {
         status: 'fail',
         message: 'Memory check failed',
@@ -202,7 +204,7 @@ export class HealthCheckManager {
           cacheKeys: cacheStats.keys.length,
         },
       };
-    } catch (error) {
+    } catch {
       return {
         status: 'fail',
         message: 'Cache check failed',
@@ -241,7 +243,7 @@ export class HealthCheckManager {
         message: 'Security systems are operational',
         responseTime,
       };
-    } catch (error) {
+    } catch {
       return {
         status: 'fail',
         message: 'Security check failed',

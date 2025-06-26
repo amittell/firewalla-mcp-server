@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 
+// Load test-specific environment variables
 dotenv.config({ path: '.env.test' });
 
 beforeAll(() => {

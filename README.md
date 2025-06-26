@@ -4,11 +4,12 @@ A Model Context Protocol (MCP) server that enables Claude to access and analyze 
 
 ## Features
 
-🔥 **Real-time Firewall Data**: Query security alerts, network flows, and device status  
-🛡️ **Security Analysis**: Get insights on threats, blocked attacks, and network anomalies  
-📊 **Bandwidth Monitoring**: Track top bandwidth consumers and usage patterns  
-⚙️ **Rule Management**: View and temporarily pause firewall rules  
-🎯 **Target Lists**: Access CloudFlare and CrowdSec security intelligence  
+- **Real-time Firewall Data**: Query security alerts, network flows, and device status  
+- **Security Analysis**: Get insights on threats, blocked attacks, and network anomalies  
+- **Bandwidth Monitoring**: Track top bandwidth consumers and usage patterns  
+- **Rule Management**: View and temporarily pause firewall rules  
+- **Target Lists**: Access CloudFlare and CrowdSec security intelligence
+- **Advanced Search**: Complex query syntax with filters, logical operators, and correlations  
 
 ## Architecture
 
@@ -54,13 +55,13 @@ Create a `.env` file with your Firewalla credentials:
 
 ```env
 FIREWALLA_MSP_TOKEN=your_msp_access_token_here
-FIREWALLA_MSP_ID=your_msp_id_here
+FIREWALLA_MSP_ID=yourdomain.firewalla.net
 FIREWALLA_BOX_ID=your_box_gid_here
 ```
 
 **Getting Your Credentials:**
-1. Log into your Firewalla MSP portal
-2. Your MSP ID is the part before `.firewalla.net` in your portal URL
+1. Log into your Firewalla MSP portal at `https://yourdomain.firewalla.net`
+2. Your MSP ID is the full domain (e.g., `company123.firewalla.net`)
 3. Generate an access token in API settings
 4. Find your Box GID (Group ID) in device settings - this is your unique device identifier
 
@@ -84,7 +85,7 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
       "args": ["firewalla-mcp-server"],
       "env": {
         "FIREWALLA_MSP_TOKEN": "your_msp_access_token_here",
-        "FIREWALLA_MSP_ID": "your_msp_id_here",
+        "FIREWALLA_MSP_ID": "yourdomain.firewalla.net",
         "FIREWALLA_BOX_ID": "your_box_gid_here"
       }
     }
@@ -98,10 +99,10 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
   "mcpServers": {
     "firewalla": {
       "command": "node",
-      "args": ["--loader", "ts-node/esm", "/path/to/firewalla-mcp-server/src/server.ts"],
+      "args": ["/full/path/to/firewalla-mcp-server/dist/server.js"],
       "env": {
         "FIREWALLA_MSP_TOKEN": "your_msp_access_token_here",
-        "FIREWALLA_MSP_ID": "your_msp_id_here",
+        "FIREWALLA_MSP_ID": "yourdomain.firewalla.net",
         "FIREWALLA_BOX_ID": "your_box_gid_here"
       }
     }
@@ -109,53 +110,223 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
 }
 ```
 
+**If using Docker:**
+```json
+{
+  "mcpServers": {
+    "firewalla": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "FIREWALLA_MSP_TOKEN=your_msp_access_token_here",
+        "-e", "FIREWALLA_MSP_ID=yourdomain.firewalla.net", 
+        "-e", "FIREWALLA_BOX_ID=your_box_gid_here",
+        "firewalla-mcp-server"
+      ]
+    }
+  }
+}
+```
+
+> **Note**: The args array above is passed verbatim to Docker. When copying to shell scripts, quoting may differ.
+
 **Config file locations:**
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
+## Docker Usage
+
+### Building the Docker Image
+
+To use the Docker configuration option above, first build the image:
+
+```bash
+# Build the Docker image
+docker build -t firewalla-mcp-server .
+
+# Optional: Tag with semantic version
+docker build -t firewalla-mcp-server:1.0.0 .
+
+# Push to registry (if deploying to remote)
+docker tag firewalla-mcp-server your-registry/firewalla-mcp-server:latest
+docker push your-registry/firewalla-mcp-server:latest
+```
+
+### Advanced Docker Deployment
+
+For production server deployments, you can use the included deployment script:
+
+```bash
+# Deploy with automated testing and security scanning
+./scripts/deploy.sh
+```
+
+The deployment script provides:
+- Automated testing and linting
+- Security scanning with Trivy
+- Docker Compose configuration
+- Health checks and monitoring
+
 ## Usage Examples
 
-Once connected, you can ask Claude questions like:
+### Step-by-Step First Use
 
-- "What security alerts do I have right now?"
-- "Show me the top 5 devices using the most bandwidth today"
-- "What firewall rules are currently active?"
-- "Analyze my network traffic patterns from the last 24 hours"
-- "Are there any suspicious connections I should know about?"
+**1. Verify Connection**
+After completing the setup, verify the MCP server is working:
+
+```bash
+# Start the server
+npm run mcp:start
+
+# You should see output like:
+# MCP Server starting...
+# Firewalla client initialized
+# Server ready on stdio transport
+```
+
+**2. Test with Claude**
+Open Claude Code and try these starter queries:
+
+**Basic Health Check:**
+```text
+"Can you check my Firewalla status and show me a summary?"
+```
+*This uses: `firewall_summary` resource + `get_simple_statistics` tool*
+
+**Security Overview:**
+```text
+"What security alerts do I have? Show me the 5 most recent ones."
+```
+*This uses: `get_active_alarms` tool with limit parameter*
+
+### Practical Workflows
+
+**Daily Security Review:**
+```text
+"Give me today's security report. Include:
+1. Any new security alerts
+2. Top 3 devices using bandwidth
+3. Any devices that went offline
+4. Status of critical firewall rules"
+```
+
+**Investigating Suspicious Activity:**
+```text
+"I noticed unusual traffic. Can you:
+1. Show me all high-severity alarms from the last 4 hours
+2. Find any blocked connections to external IPs
+3. Check which devices had the most network activity"
+```
+
+**Network Troubleshooting:**
+```text
+"A device seems to have connectivity issues. Can you:
+1. Check if device 192.168.1.100 is online
+2. Show its recent network flows
+3. See if any rules are blocking its traffic"
+```
+
+**Bandwidth Investigation:**
+```text
+"Our internet is slow. Help me find the cause:
+1. Show top 10 bandwidth users in the last hour
+2. Look for any devices with unusual upload/download patterns
+3. Check for any streaming or video traffic"
+```
+
+### Advanced Search Examples
+
+**Find Specific Threats:**
+```text
+search for: high severity alarms from IP range 10.0.0.* in the last 24 hours
+```
+*Uses: `search_alarms` with query: "severity:high AND source_ip:10.0.0.* AND timestamp:>24h"*
+
+**Analyze Rule Effectiveness:**
+```text
+"Show me firewall rules that blocked the most connections this week"
+```
+*Uses: `get_most_active_rules` + `search_flows` for blocked traffic*
+
+**Device Behavior Analysis:**
+```text
+"Find all devices that were online yesterday but are offline now"
+```
+*Uses: `search_devices` with temporal queries + `get_offline_devices`*
+
+### Troubleshooting Common Issues
+
+**Connection Problems:**
+If you get authentication errors:
+1. Verify your `.env` file has correct credentials
+2. Check your MSP token hasn't expired
+3. Confirm your Box ID is the full GID format
+
+**Empty Results:**
+If queries return no data:
+1. Check your Firewalla is online and reporting
+2. Verify the time range isn't too narrow
+3. Try broader search terms first
+
+**Performance Issues:**
+If responses are slow:
+1. Reduce the limit parameter in queries
+2. Use more specific time ranges
+3. Check your network connection to the MSP API
 
 ## Available MCP Components
 
-### 🔧 Tools (Actions Claude can perform)
+### Tools (Actions Claude can perform)
 
-**Security Monitoring** 🛡️
+#### Security Monitoring
 - `get_active_alarms` - Retrieve current security alerts with complete alarm data, IDs, and descriptions
 - `get_specific_alarm` - Get detailed information for a specific alarm ID
 - `delete_alarm` - Remove specific security alarms
 
-**Network Analysis** 📊
+#### Network Analysis
 - `get_flow_data` - Query network traffic flows with detailed connection data and device context
 - `get_bandwidth_usage` - Get top bandwidth consuming devices with detailed usage statistics
+- `get_offline_devices` - List offline devices with last seen timestamps
 
-**Device Management** 🖥️
+#### Device Management
 - `get_device_status` - Check device status with comprehensive information including names, types, and vendors
 - `get_boxes` - List all Firewalla devices with status and version information
 
-**Rule Management** ⚙️
+#### Rule Management
 - `get_network_rules` - Retrieve firewall rules with complete rule names, conditions, and metadata
+- `get_network_rules_summary` - Overview statistics and counts by category
+- `get_most_active_rules` - Rules with the highest hit counts for traffic analysis
+- `get_recent_rules` - Recently created or modified firewall rules
 - `pause_rule` - Temporarily disable specific firewall rules
 - `resume_rule` - Re-enable previously paused firewall rules
 
-**Threat Intelligence** 🎯
+#### Threat Intelligence
 - `get_target_lists` - Access CloudFlare and CrowdSec security target lists
 
-### 📋 Resources (Data Claude can access)
+#### Statistics and Trends
+- `get_simple_statistics` - Basic statistics about boxes, alarms, and rules with health scores
+- `get_statistics_by_region` - Flow statistics grouped by country/region
+- `get_statistics_by_box` - Per-device statistics with activity scores
+- `get_flow_trends` - Historical flow data trends over time
+- `get_alarm_trends` - Historical alarm frequency and patterns
+- `get_rule_trends` - Rule activity trends and stability metrics
+
+#### Advanced Search
+- `search_flows` - Advanced flow searching with complex query syntax
+- `search_alarms` - Alarm searching with severity, time, and IP filters
+- `search_rules` - Rule searching with target, action, and status filters
+- `search_devices` - Device searching with network, status, and usage filters
+- `search_target_lists` - Target list searching with category and ownership filters
+- `search_cross_reference` - Multi-entity searches with correlation across data types
+
+### Resources (Data Claude can access)
 - `firewall_summary` - Overview of firewall status and health
 - `device_inventory` - List of all managed devices
 - `security_metrics` - Real-time security statistics
 - `network_topology` - Network structure and connections
 - `recent_threats` - Latest security events and blocked attempts
 
-### 💬 Prompts (Pre-defined interactions)
+### Prompts (Pre-defined interactions)
 - `security_report` - Generate comprehensive security status report
 - `threat_analysis` - Analyze recent alarms and suspicious activity
 - `bandwidth_analysis` - Investigate high bandwidth usage patterns
@@ -178,11 +349,11 @@ npm run lint:fix     # Fix ESLint issues
 ### MCP Execution Methods
 
 **Why `npx` for MCP servers?**
-- ✅ **Version Management**: Always uses the correct/latest version
-- ✅ **Dependency Resolution**: Handles package dependencies automatically  
-- ✅ **No Global Install Required**: Works without global installation
-- ✅ **MCP Standard**: Follows Model Context Protocol conventions
-- ✅ **Cross-Platform**: Works consistently across different environments
+- **Version Management**: Always uses the correct/latest version
+- **Dependency Resolution**: Handles package dependencies automatically  
+- **No global installation required**: Works without global installation
+- **MCP Standard**: Follows Model Context Protocol conventions
+- **Cross-Platform**: Works consistently across different environments
 
 **Alternative execution methods:**
 ```bash
@@ -192,14 +363,14 @@ npm run mcp:start
 # Production (npm installed)
 npx firewalla-mcp-server
 
-# Direct execution (if globally installed)
+# Direct execution (from source after build)
 node dist/server.js
 ```
 
 ### Project Structure
 
-```
-firewalla_mcp/
+```text
+firewalla-mcp-server/
 ├── src/
 │   ├── server.ts           # Main MCP server
 │   ├── firewalla/          # Firewalla API client
@@ -207,7 +378,6 @@ firewalla_mcp/
 │   ├── resources/          # MCP resource implementations
 │   └── prompts/            # MCP prompt implementations
 ├── tests/                  # Test files
-├── docs/                   # Additional documentation
 ├── CLAUDE.md              # Claude development guide
 ├── SPEC.md                # Technical specifications
 └── README.md              # This file
@@ -258,27 +428,134 @@ DEBUG=mcp:* npm run mcp:start
 
 ## Recent Improvements
 
-### 🎯 Enhanced Data Mapping (Latest Update)
-All 11 MCP tools now return complete, well-structured data:
+### Enhanced Data Mapping (v1.0.0)
+All MCP tools now return complete, well-structured data:
 
-**Previously Problematic - Now Fixed:**
-- ✅ `get_active_alarms`: Complete alarm information with IDs, descriptions, and source/destination IPs
-- ✅ `get_device_status`: Detailed device profiles with names, types, vendors, and operating systems  
-- ✅ `get_network_rules`: Full rule specifications with names, conditions, and comprehensive metadata
-- ✅ `get_flow_data`: Rich connection details with applications, device names, and traffic statistics
+**Core Tool Improvements:**
+- `get_active_alarms`: Complete alarm information with IDs, descriptions, and source/destination IPs
+- `get_device_status`: Detailed device profiles with names, types, vendors, and operating systems  
+- `get_network_rules`: Full rule specifications with names, conditions, and comprehensive metadata
+- `get_flow_data`: Rich connection details with applications, device names, and traffic statistics
 
-**Key Technical Achievements:**
-- 🔧 Comprehensive API response field mapping with intelligent fallbacks
-- 🕐 Proper timestamp handling and conversion (Unix/ISO formats)
-- 📝 Meaningful name generation when missing from API responses
-- 🛡️ Enhanced error handling and graceful degradation
-- 📊 100% improvement in data completeness and usability
+### Advanced Analytics (v1.0.0)
+**New Statistics and Trends Tools:**
+- Health scoring system for network assessment
+- Regional flow analysis with country-level breakdowns
+- Per-device activity scores and monitoring
+- Historical trend analysis for flows, alarms, and rules
+- Comprehensive offline device tracking
 
-### 🏗️ Architecture Improvements
+### Advanced Search Engine (v1.0.0)
+**Powerful Query Capabilities:**
+- Complex search syntax with logical operators (AND, OR, NOT)
+- Field-specific filters with wildcards and ranges
+- Cross-reference searches for data correlation
+- Time-based filtering with flexible date ranges
+- Post-processing filters for comprehensive results
+- Aggregation and statistical analysis
+
+**Search Examples:**
+```text
+severity:high AND source_ip:192.168.*
+timestamp:>2024-01-01 AND bytes:>=1000000
+target_value:*.facebook.com OR mac_vendor:Apple*
+```
+
+### Architecture Improvements
 - Environment-based configuration (no hardcoded values)
 - Full TypeScript compliance maintained
 - Comprehensive test coverage with simulation testing
 - Robust caching and rate limiting
+- Modular filter system with extensible architecture
+
+## v1.0.0 Implementation Features
+
+### Mandatory Limit Parameters
+
+**REQUIRED**: All paginated tools now require explicit `limit` parameter. This prevents artificial defaults that mask missing parameters.
+
+**Affected Tools:**
+- `get_active_alarms`
+- `get_flow_data`  
+- `get_device_status`
+- `get_bandwidth_usage` (parameter renamed from `top` to `limit`)
+- `get_network_rules`
+- `get_most_active_rules`
+- `get_recent_rules`
+- All search tools (`search_flows`, `search_alarms`, etc.)
+
+**Migration:**
+```typescript
+// Before (would default to 50-200 results)
+await get_device_status({});
+
+// After (explicit limit required)  
+await get_device_status({ limit: 100 });
+```
+
+**Error Response:**
+Tools will now return clear error: `"limit parameter is required"` when limit is missing.
+
+## New Features (v1.0.0)
+
+### Enterprise-Grade Validation Framework
+
+**Standardized Error Handling:**
+- Consistent error format: `{error: true, message: string, tool: string}`
+- Enhanced parameter validation with type checking
+- Comprehensive null safety throughout codebase
+- Input sanitization preventing injection attacks
+
+### Performance Monitoring & Optimization
+
+**DEBUG Environment Variable:**
+```bash
+# Enable comprehensive debugging
+DEBUG=firewalla:* npm run mcp:start
+
+# Enable specific debugging
+DEBUG=cache,performance,api npm run mcp:start
+```
+
+**Multi-Tier Caching System:**
+- Real-time data (alarms/flows): 30s TTL
+- Medium-frequency data (devices): 2m TTL  
+- Stable data (rules): 10m TTL
+- Static data (statistics): 1h TTL
+
+**Performance Metrics:**
+- Response time tracking with P95/P99 percentiles
+- Error rate monitoring by operation type
+- Memory usage optimization with LRU eviction
+- Query performance analysis and optimization
+
+### Enhanced Security & Reliability
+
+**Critical Bug Fixes:**
+- Fixed null pointer exceptions in rule management
+- Corrected success status reporting for pause/resume operations  
+- Enhanced alarm detection with better field mapping
+- Improved bandwidth usage error handling
+
+**Security Enhancements:**
+- Query sanitization preventing injection attacks
+- Enhanced input validation for all parameters
+- Defensive programming patterns throughout
+- Cross-reference field mapping improvements
+
+### Developer Experience Improvements
+
+**Comprehensive Logging:**
+- Pipeline stage debugging for data flow analysis
+- Performance bottleneck identification
+- API request/response logging with timing
+- Error tracking with detailed context
+
+**Validation Utilities:**
+- `ParameterValidator` for consistent validation patterns
+- `SafeAccess` utilities preventing null pointer exceptions
+- `FieldMapper` for cross-reference compatibility
+- `ErrorHandler` for standardized error responses
 
 ## Publishing to npm
 
@@ -327,12 +604,13 @@ npm install -g firewalla-mcp-server
 
 ### Package Features
 
-✅ **MCP Convention Compliant** - Uses `npx` for execution as per MCP standards  
-✅ **Optimized Bundle** - Only includes dist/, README, LICENSE via .npmignore  
-✅ **Automated Build** - Pre-publish hooks ensure clean builds  
-✅ **Semantic Versioning** - Built-in version management scripts  
-✅ **TypeScript Support** - Full type safety with compiled output  
-✅ **Environment Variables** - Secure credential management  
+- **MCP Convention Compliant** - Uses `npx` for execution as per MCP standards  
+- **Optimized Bundle** - Only includes dist/, README, LICENSE via .npmignore  
+- **Automated Build** - Pre-publish hooks ensure clean builds  
+- **Security Scanning** - Trivy scan integrated into CI pipeline  
+- **Semantic Versioning** - Built-in version management scripts  
+- **TypeScript Support** - Full type safety with compiled output  
+- **Environment Variables** - Secure credential management  
 
 ## License
 
@@ -349,16 +627,15 @@ For issues and questions:
 
 ---
 
-Made with ❤️ for the Firewalla community
 ## GitHub Repository
 
-🔗 **Repository**: [https://github.com/amittell/firewalla-mcp-server](https://github.com/amittell/firewalla-mcp-server)
+**Repository**: [https://github.com/amittell/firewalla-mcp-server](https://github.com/amittell/firewalla-mcp-server)
 
 ### Quick Links
-- 📋 [Issues](https://github.com/amittell/firewalla-mcp-server/issues)
-- 🔀 [Pull Requests](https://github.com/amittell/firewalla-mcp-server/pulls)
-- 📈 [Actions](https://github.com/amittell/firewalla-mcp-server/actions)
-- 🛡️ [Security](https://github.com/amittell/firewalla-mcp-server/security)
+- [Issues](https://github.com/amittell/firewalla-mcp-server/issues)
+- [Pull Requests](https://github.com/amittell/firewalla-mcp-server/pulls)
+- [Actions](https://github.com/amittell/firewalla-mcp-server/actions)
+- [Security](https://github.com/amittell/firewalla-mcp-server/security)
 
 ### Repository Stats
 [![GitHub issues](https://img.shields.io/github/issues/amittell/firewalla-mcp-server)](https://github.com/amittell/firewalla-mcp-server/issues)

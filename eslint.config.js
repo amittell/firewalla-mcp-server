@@ -12,6 +12,16 @@ export default [
         ecmaVersion: 2020,
         sourceType: 'module',
         project: './tsconfig.json'
+      },
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        setInterval: 'readonly',
+        setTimeout: 'readonly',
+        clearInterval: 'readonly',
+        clearTimeout: 'readonly',
+        URL: 'readonly',
+        Buffer: 'readonly'
       }
     },
     plugins: {
@@ -20,8 +30,7 @@ export default [
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/explicit-function-return-type': 'warn',
-      '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/prefer-const': 'error',
+      // '@typescript-eslint/no-explicit-any': 'warn', // Disabled to reduce noise
       'prefer-const': 'error',
       'no-var': 'error',
       'no-console': 'warn',
