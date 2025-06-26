@@ -617,11 +617,15 @@ export class FirewallaClient {
           offlineDevices.sort((a, b) => {
             const aLastSeen = new Date(a.lastSeen || 0).getTime();
             const bLastSeen = new Date(b.lastSeen || 0).getTime();
-            // Handle invalid dates
-            if (isNaN(aLastSeen) && isNaN(bLastSeen)) {return 0;}
-            if (isNaN(aLastSeen)) {return 1;}
-            if (isNaN(bLastSeen)) {return -1;}
-            return bLastSeen - aLastSeen; // Most recent first
+            // Handle invalid dates - push invalid dates to end, then sort by most recent first
+            const aValid = !isNaN(aLastSeen);
+            const bValid = !isNaN(bLastSeen);
+            
+            if (aValid !== bValid) {
+              return bValid ? 1 : -1; // Valid dates come first
+            }
+            
+            return aValid ? bLastSeen - aLastSeen : 0; // Most recent first if both valid
           });
         } catch (sortError) {
           logger.debugNamespace('api', 'Error sorting offline devices by lastSeen', { error: sortError });

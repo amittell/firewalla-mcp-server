@@ -27,7 +27,7 @@ function isWildcardQuery(node: QueryNode): node is WildcardQuery {
   return node.type === 'wildcard' && 'field' in node && 'pattern' in node;
 }
 
-// Simplified IP and other filters for now
+// IP address filtering with proper validation and subnet matching
 class IpAddressFilter implements Filter {
   readonly name = 'ip_address';
   
@@ -39,13 +39,20 @@ class IpAddressFilter implements Filter {
   }
   
   apply(node: QueryNode, _context: FilterContext): FilterResult {
-    // Simplified - just pass through for post-processing
+    // Enhanced IP filtering with proper validation
     if (isWildcardQuery(node)) {
       return {
         apiParams: {},
         postProcessing: (items: any[]) => items.filter(item => {
           const value = this.getNestedValue(item, node.field);
-          return this.matchWildcard(String(value || ''), node.pattern);
+          const ipString = String(value || '');
+          
+          // Validate IP address format first
+          if (!this.isValidIpAddress(ipString)) {
+            return false;
+          }
+          
+          return this.matchWildcardIp(ipString, node.pattern);
         }),
         cacheKeyComponent: `${this.name}:${JSON.stringify(node)}`
       };
@@ -56,7 +63,20 @@ class IpAddressFilter implements Filter {
         apiParams: {},
         postProcessing: (items: any[]) => items.filter(item => {
           const value = this.getNestedValue(item, node.field);
-          return String(value || '') === String(node.value);
+          const ipString = String(value || '');
+          const queryString = String(node.value);
+          
+          // Handle CIDR notation for exact matching
+          if (queryString.includes('/')) {
+            return this.matchCidr(ipString, queryString);
+          }
+          
+          // Validate both IPs for exact match
+          if (!this.isValidIpAddress(ipString) || !this.isValidIpAddress(queryString)) {
+            return false;
+          }
+          
+          return ipString === queryString;
         }),
         cacheKeyComponent: `${this.name}:${JSON.stringify(node)}`
       };
@@ -69,19 +89,85 @@ class IpAddressFilter implements Filter {
     return path.split('.').reduce((current, key) => current?.[key], obj);
   }
   
-  private matchWildcard(value: string, pattern: string): boolean {
-    const regexPattern = pattern
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-      .replace(/\*/g, '.*')
-      .replace(/\?/g, '.');
-    const regex = new RegExp(`^${regexPattern}$`, 'i');
-    return regex.test(value);
+  /**
+   * Validates if a string is a valid IPv4 or IPv6 address
+   */
+  private isValidIpAddress(ip: string): boolean {
+    if (!ip || typeof ip !== 'string') {
+      return false;
+    }
+    
+    // IPv4 validation
+    const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (ipv4Regex.test(ip)) {
+      const parts = ip.split('.');
+      return parts.every(part => {
+        const num = parseInt(part, 10);
+        return num >= 0 && num <= 255;
+      });
+    }
+    
+    // IPv6 validation (basic)
+    const ipv6Regex = /^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}$/;
+    return ipv6Regex.test(ip);
+  }
+  
+  /**
+   * Enhanced wildcard matching for IP addresses with subnet support
+   */
+  private matchWildcardIp(ip: string, pattern: string): boolean {
+    // Handle CIDR notation in pattern
+    if (pattern.includes('/')) {
+      return this.matchCidr(ip, pattern);
+    }
+    
+    // Handle common IP wildcard patterns
+    if (pattern.includes('*')) {
+      // Convert IP wildcard to regex (e.g., 192.168.*.* or 10.0.0.*)
+      const regexPattern = pattern
+        .replace(/\./g, '\\.')
+        .replace(/\*/g, '\\d{1,3}');
+      const regex = new RegExp(`^${regexPattern}$`);
+      return regex.test(ip);
+    }
+    
+    return ip === pattern;
+  }
+  
+  /**
+   * CIDR subnet matching
+   */
+  private matchCidr(ip: string, cidr: string): boolean {
+    if (!this.isValidIpAddress(ip)) {
+      return false;
+    }
+    
+    const [network, prefixStr] = cidr.split('/');
+    const prefix = parseInt(prefixStr, 10);
+    
+    if (!this.isValidIpAddress(network) || isNaN(prefix) || prefix < 0 || prefix > 32) {
+      return false;
+    }
+    
+    // Convert IPs to 32-bit integers for comparison
+    const ipInt = this.ipToInt(ip);
+    const networkInt = this.ipToInt(network);
+    const mask = (0xFFFFFFFF << (32 - prefix)) >>> 0;
+    
+    return (ipInt & mask) === (networkInt & mask);
+  }
+  
+  /**
+   * Convert IPv4 address to 32-bit integer
+   */
+  private ipToInt(ip: string): number {
+    const parts = ip.split('.').map(part => parseInt(part, 10));
+    return ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
   }
 }
 
 class SeverityFilter implements Filter {
   readonly name = 'severity';
-  private readonly severityOrder = ['low', 'medium', 'high', 'critical'];
   
   canHandle(node: QueryNode): boolean {
     return isFieldQuery(node) && node.field === 'severity';

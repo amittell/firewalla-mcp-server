@@ -52,6 +52,39 @@ function getOptionalEnvVar(name: string, defaultValue: string): string {
 }
 
 /**
+ * Safely parses an environment variable to an integer with validation
+ * 
+ * @param name - The environment variable name to parse
+ * @param defaultValue - The default value to use if parsing fails
+ * @param min - Optional minimum value for validation
+ * @param max - Optional maximum value for validation
+ * @returns The parsed integer value or the default value
+ * @throws {Error} If the parsed value is outside the valid range
+ */
+function getOptionalEnvInt(name: string, defaultValue: number, min?: number, max?: number): number {
+  const envValue = process.env[name];
+  if (!envValue) {
+    return defaultValue;
+  }
+  
+  const parsed = parseInt(envValue, 10);
+  if (isNaN(parsed)) {
+    console.warn(`Invalid numeric value for ${name}: ${envValue}, using default: ${defaultValue}`);
+    return defaultValue;
+  }
+  
+  if (min !== undefined && parsed < min) {
+    throw new Error(`Environment variable ${name} must be at least ${min}, got: ${parsed}`);
+  }
+  
+  if (max !== undefined && parsed > max) {
+    throw new Error(`Environment variable ${name} must be at most ${max}, got: ${parsed}`);
+  }
+  
+  return parsed;
+}
+
+/**
  * Creates and validates the complete Firewalla configuration
  * 
  * Loads all required and optional configuration values from environment variables,
@@ -74,9 +107,9 @@ export function getConfig(): FirewallaConfig {
     mspToken: getRequiredEnvVar('FIREWALLA_MSP_TOKEN'),
     mspId: getRequiredEnvVar('FIREWALLA_MSP_ID'),
     boxId: getRequiredEnvVar('FIREWALLA_BOX_ID'),
-    apiTimeout: parseInt(getOptionalEnvVar('API_TIMEOUT', '30000'), 10),
-    rateLimit: parseInt(getOptionalEnvVar('API_RATE_LIMIT', '100'), 10),
-    cacheTtl: parseInt(getOptionalEnvVar('CACHE_TTL', '300'), 10),
+    apiTimeout: getOptionalEnvInt('API_TIMEOUT', 30000, 1000, 300000), // 1s to 5min
+    rateLimit: getOptionalEnvInt('API_RATE_LIMIT', 100, 1, 1000), // 1 to 1000 requests per minute
+    cacheTtl: getOptionalEnvInt('CACHE_TTL', 300, 0, 3600), // 0s to 1 hour
   };
 }
 

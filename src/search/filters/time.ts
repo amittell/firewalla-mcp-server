@@ -167,7 +167,7 @@ export class TimeRangeFilter extends BaseFilter {
     switch (node.type) {
       case 'field': {
         const targetTime = this.parseTimestamp((node as FieldQuery).value);
-        return targetTime ? Math.abs(timestamp - targetTime) <= this.DEFAULT_POST_PROCESSING_MARGIN : false;
+        return Boolean(targetTime && Math.abs(timestamp - targetTime) <= this.DEFAULT_POST_PROCESSING_MARGIN);
       }
 
       case 'range': {

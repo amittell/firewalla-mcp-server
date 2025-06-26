@@ -90,9 +90,31 @@ export class SecurityManager {
   validateOrigin(origin?: string): boolean {
     if (!origin) {return true;} // Allow requests without origin (local tools)
     
-    return SecurityManager.ALLOWED_ORIGINS.some(allowed => 
-      origin.includes(allowed)
-    );
+    return SecurityManager.ALLOWED_ORIGINS.some(allowed => {
+      // For localhost, allow exact match, with port, or with protocol
+      if (allowed === 'localhost') {
+        return origin === 'localhost' || 
+               origin.startsWith('localhost:') ||
+               origin.startsWith('http://localhost') || 
+               origin.startsWith('https://localhost');
+      }
+      
+      // For other domains, require exact match or subdomain match
+      if (allowed === 'claude.ai') {
+        return origin === 'claude.ai' || 
+               origin === 'https://claude.ai' || 
+               origin.endsWith('.claude.ai') ||
+               origin.endsWith('.claude.ai/');
+      }
+      
+      // For claude-code (local application identifier)
+      if (allowed === 'claude-code') {
+        return origin === 'claude-code';
+      }
+      
+      // Fallback to exact match for any other allowed origins
+      return origin === allowed;
+    });
   }
 
   hashSensitiveData(data: string): string {

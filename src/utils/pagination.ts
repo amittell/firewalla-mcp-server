@@ -3,6 +3,58 @@
  * Provides consistent pagination interface across all MCP tools
  */
 
+/**
+ * Pagination configuration interface
+ */
+export interface PaginationConfig {
+  defaultPageSize: number;
+  maxPageSize: number;
+}
+
+/**
+ * Default pagination configuration that can be overridden via environment variables
+ */
+const DEFAULT_PAGINATION_CONFIG: PaginationConfig = {
+  defaultPageSize: parseInt(process.env.DEFAULT_PAGE_SIZE || '100', 10),
+  maxPageSize: parseInt(process.env.MAX_PAGE_SIZE || '10000', 10)
+};
+
+/**
+ * Current pagination configuration (can be updated at runtime)
+ */
+let currentPaginationConfig: PaginationConfig = DEFAULT_PAGINATION_CONFIG;
+
+/**
+ * Update pagination configuration at runtime
+ */
+export function updatePaginationConfig(newConfig: Partial<PaginationConfig>): void {
+  currentPaginationConfig = {
+    ...currentPaginationConfig,
+    ...newConfig
+  };
+}
+
+/**
+ * Get current pagination configuration
+ */
+export function getPaginationConfig(): PaginationConfig {
+  return currentPaginationConfig;
+}
+
+/**
+ * Get default page size with validation
+ */
+export function getDefaultPageSize(requestedSize?: number): number {
+  const config = getPaginationConfig();
+  
+  if (requestedSize) {
+    // Validate requested size against max
+    return Math.min(requestedSize, config.maxPageSize);
+  }
+  
+  return config.defaultPageSize;
+}
+
 export interface CursorData {
   offset: number;
   page_size: number;
@@ -82,7 +134,7 @@ export function decodeCursor(cursor: string): CursorData {
 export function paginateArray<T>(
   items: T[],
   cursor?: string,
-  page_size: number = 100,
+  page_size: number = getDefaultPageSize(),
   sort_by?: string,
   sort_order: 'asc' | 'desc' = 'asc'
 ): PaginatedResult<T> {
@@ -164,7 +216,7 @@ export function paginateArray<T>(
 export async function createPaginatedResponse<T>(
   dataFetcher: () => Promise<T[]>,
   cursor?: string,
-  page_size: number = 100,
+  page_size: number = getDefaultPageSize(),
   sort_by?: string,
   sort_order: 'asc' | 'desc' = 'asc'
 ): Promise<PaginatedResult<T>> {

@@ -364,10 +364,20 @@ export function optimizeDeviceResponse(
   if (!Array.isArray(response.results)) {
     return { ...response, results: [] };
   }
+  // Calculate online/offline counts in a single pass for better performance
+  const { onlineCount, offlineCount } = response.results.reduce((acc, device) => {
+    if (device.online) {
+      acc.onlineCount++;
+    } else {
+      acc.offlineCount++;
+    }
+    return acc;
+  }, { onlineCount: 0, offlineCount: 0 });
+
   const optimized = {
     count: typeof response.count === 'number' ? response.count : response.results?.length || 0,
-    online_count: response.results.filter(d => d.online).length,
-    offline_count: response.results.filter(d => !d.online).length,
+    online_count: onlineCount,
+    offline_count: offlineCount,
     results: response.results.slice(0, config.summaryMode.maxItems).map(device => ({
       id: device.id,
       gid: device.gid,
