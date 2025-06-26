@@ -131,12 +131,26 @@ export abstract class BaseFilter implements Filter {
   }
   
   /**
-   * Parse timestamp value to Unix timestamp
+   * Parse timestamp value to Unix timestamp with robust detection
    */
   protected parseTimestamp(value: any): number | null {
     if (typeof value === 'number') {
-      // Assume Unix timestamp (seconds or milliseconds)
-      return value > 1000000000000 ? Math.floor(value / 1000) : value;
+      // More robust detection: timestamps after year 3000 in seconds would be > 32503680000
+      // Timestamps in milliseconds for current era would be > 1000000000000
+      // This handles both current millisecond timestamps and future second timestamps correctly
+      if (value > 32503680000 && value < 1000000000000) {
+        // Likely seconds for far future dates
+        return value;
+      } else if (value > 1000000000000) {
+        // Likely milliseconds
+        return Math.floor(value / 1000);
+      } else if (value > 946684800) {
+        // Likely seconds for dates after 2000-01-01
+        return value;
+      } else {
+        // Too small to be a valid timestamp
+        return null;
+      }
     }
     
     if (typeof value === 'string') {

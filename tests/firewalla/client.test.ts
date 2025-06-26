@@ -18,6 +18,8 @@ describe('FirewallaClient', () => {
       apiTimeout: 30000,
       rateLimit: 100,
       cacheTtl: 300,
+      defaultPageSize: 100,
+      maxPageSize: 10000,
     };
 
     mockedAxios.create.mockReturnValue({

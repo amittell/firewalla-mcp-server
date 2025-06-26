@@ -359,7 +359,8 @@ describe('Enhanced Correlation Algorithms', () => {
       const totalTime = Date.now() - startTime;
       
       expect(stats.totalProcessingTime).toBeGreaterThanOrEqual(0);
-      expect(totalTime).toBeLessThan(1000); // Should complete within 1 second
+      const performanceThreshold = parseInt(process.env.CORRELATION_PERF_THRESHOLD_MS || (process.env.CI ? '2000' : '1000'));
+      expect(totalTime).toBeLessThan(performanceThreshold); // Should complete within threshold
     });
   });
 });

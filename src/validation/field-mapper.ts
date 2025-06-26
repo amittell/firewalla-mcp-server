@@ -369,9 +369,32 @@ export function normalizeFieldValue(value: any, field: string): any {
     return value;
   }
 
-  // Normalize IP addresses
+  // Normalize IP addresses with validation
   if (field.includes('ip')) {
-    return value.trim().toLowerCase();
+    const normalized = value.trim().toLowerCase();
+    
+    // Basic IP validation
+    const isValidIPv4 = (ip: string): boolean => {
+      const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+      if (!ipv4Regex.test(ip)) {return false;}
+      return ip.split('.').every(octet => {
+        const num = parseInt(octet, 10);
+        return num >= 0 && num <= 255;
+      });
+    };
+    
+    const isValidIPv6 = (ip: string): boolean => {
+      const ipv6Regex = /^([0-9a-f]{1,4}:){7}[0-9a-f]{1,4}$/i;
+      const ipv6CompressedRegex = /^([0-9a-f]{0,4}:){0,7}:([0-9a-f]{0,4}:){0,7}[0-9a-f]{0,4}$/i;
+      return ipv6Regex.test(ip) || ipv6CompressedRegex.test(ip);
+    };
+    
+    if (!isValidIPv4(normalized) && !isValidIPv6(normalized)) {
+      // eslint-disable-next-line no-console
+      console.warn(`Invalid IP address format: ${normalized}`);
+    }
+    
+    return normalized;
   }
 
   // Normalize MAC addresses

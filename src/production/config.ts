@@ -19,6 +19,8 @@ export function getProductionConfig(): ProductionConfig {
     apiTimeout: getOptionalEnvInt('API_TIMEOUT', 30000, 1000, 300000), // 1s to 5min
     rateLimit: getOptionalEnvInt('API_RATE_LIMIT', 100, 1, 1000), // 1 to 1000 requests per minute
     cacheTtl: getOptionalEnvInt('CACHE_TTL', 300, 0, 3600), // 0s to 1 hour
+    defaultPageSize: getOptionalEnvInt('DEFAULT_PAGE_SIZE', 100, 1, 10000), // 1 to 10000 items per page
+    maxPageSize: getOptionalEnvInt('MAX_PAGE_SIZE', 10000, 100, 100000), // 100 to 100000 items per page
   };
 
   return {
@@ -64,6 +66,7 @@ function getOptionalEnvInt(name: string, defaultValue: number, min?: number, max
   
   const parsed = parseInt(envValue, 10);
   if (isNaN(parsed)) {
+    // eslint-disable-next-line no-console
     console.warn(`Invalid numeric value for ${name}: ${envValue}, using default: ${defaultValue}`);
     return defaultValue;
   }

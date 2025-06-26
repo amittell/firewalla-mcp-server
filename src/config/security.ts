@@ -90,31 +90,39 @@ export class SecurityManager {
   validateOrigin(origin?: string): boolean {
     if (!origin) {return true;} // Allow requests without origin (local tools)
     
-    return SecurityManager.ALLOWED_ORIGINS.some(allowed => {
-      // For localhost, allow exact match, with port, or with protocol
-      if (allowed === 'localhost') {
-        return origin === 'localhost' || 
-               origin.startsWith('localhost:') ||
-               origin.startsWith('http://localhost') || 
-               origin.startsWith('https://localhost');
-      }
+    // Parse the origin URL to get hostname for secure validation
+    try {
+      const url = new URL(origin.startsWith('http') ? origin : `https://${origin}`);
+      const hostname = url.hostname;
       
-      // For other domains, require exact match or subdomain match
-      if (allowed === 'claude.ai') {
-        return origin === 'claude.ai' || 
-               origin === 'https://claude.ai' || 
-               origin.endsWith('.claude.ai') ||
-               origin.endsWith('.claude.ai/');
-      }
-      
-      // For claude-code (local application identifier)
-      if (allowed === 'claude-code') {
-        return origin === 'claude-code';
-      }
-      
-      // Fallback to exact match for any other allowed origins
-      return origin === allowed;
-    });
+      return SecurityManager.ALLOWED_ORIGINS.some(allowed => {
+        // For localhost, allow exact match and any port
+        if (allowed === 'localhost') {
+          return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+        }
+        
+        // For other domains, require exact match or proper subdomain match
+        if (allowed === 'claude.ai') {
+          return hostname === 'claude.ai' || hostname.endsWith('.claude.ai');
+        }
+        
+        // For claude-code (local application identifier), allow as-is
+        if (allowed === 'claude-code') {
+          return origin === 'claude-code';
+        }
+        
+        // For any other allowed origins, require exact hostname match
+        return hostname === allowed || hostname.endsWith(`.${allowed}`);
+      });
+    } catch {
+      // If URL parsing fails, fall back to basic string validation for special cases
+      return SecurityManager.ALLOWED_ORIGINS.some(allowed => {
+        if (allowed === 'claude-code' && origin === 'claude-code') {
+          return true;
+        }
+        return false; // Reject malformed origins
+      });
+    }
   }
 
   hashSensitiveData(data: string): string {

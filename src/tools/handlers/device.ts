@@ -30,10 +30,24 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
       
       const devicesResponse = await firewalla.getDeviceStatus(deviceId, includeOffline, limit, cursor);
       
+      // Optimize device counting to avoid dual array iteration
+      const deviceCounts = SafeAccess.safeArrayAccess(
+        devicesResponse.results,
+        (devices: any[]) => devices.reduce(
+          (acc: { online: number; offline: number }, d: any) => {
+            if (d.online) acc.online++;
+            else acc.offline++;
+            return acc;
+          },
+          { online: 0, offline: 0 }
+        ),
+        { online: 0, offline: 0 }
+      );
+      
       return this.createSuccessResponse({
         total_devices: SafeAccess.getNestedValue(devicesResponse, 'total_count', 0),
-        online_devices: SafeAccess.safeArrayFilter(devicesResponse.results, (d: any) => d.online).length,
-        offline_devices: SafeAccess.safeArrayFilter(devicesResponse.results, (d: any) => !d.online).length,
+        online_devices: deviceCounts.online,
+        offline_devices: deviceCounts.offline,
         page_size: SafeAccess.safeArrayAccess(devicesResponse.results, (arr) => arr.length, 0),
         has_more: SafeAccess.getNestedValue(devicesResponse, 'has_more', false),
         devices: SafeAccess.safeArrayMap(

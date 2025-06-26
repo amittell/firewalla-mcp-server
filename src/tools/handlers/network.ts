@@ -188,8 +188,7 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
             ip: SafeAccess.getNestedValue(device, 'ip', 'unknown'),
             macVendor: SafeAccess.getNestedValue(device, 'macVendor', 'unknown'),
             lastSeen: SafeAccess.getNestedValue(device, 'lastSeen', 0),
-            lastSeenFormatted: SafeAccess.getNestedValue(device, 'lastSeen', 0) ? 
-              safeUnixToISOString(SafeAccess.getNestedValue(device, 'lastSeen', 0), 'Never') : 'Never',
+            lastSeenFormatted: safeUnixToISOString(SafeAccess.getNestedValue(device, 'lastSeen', 0), 'Never'),
             network: SafeAccess.getNestedValue(device, 'network', null),
             group: SafeAccess.getNestedValue(device, 'group', null),
           })

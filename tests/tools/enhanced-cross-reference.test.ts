@@ -428,7 +428,8 @@ describe('Enhanced Cross-Reference Search Tools', () => {
       const executionTime = Date.now() - startTime;
 
       expect(result.correlation_summary.total_correlated_count).toBeGreaterThanOrEqual(0);
-      expect(executionTime).toBeLessThan(1000); // Should complete within 1 second
+      const performanceThreshold = parseInt(process.env.CROSS_REF_PERF_THRESHOLD_MS || (process.env.CI ? '2000' : '1000'));
+      expect(executionTime).toBeLessThan(performanceThreshold); // Should complete within threshold
     });
 
     test('should handle API errors gracefully', async () => {

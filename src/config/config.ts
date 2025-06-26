@@ -14,6 +14,8 @@
  * - API_TIMEOUT: Request timeout in milliseconds (default: 30000)
  * - API_RATE_LIMIT: Requests per minute limit (default: 100)  
  * - CACHE_TTL: Cache time-to-live in seconds (default: 300)
+ * - DEFAULT_PAGE_SIZE: Default pagination page size (default: 100)
+ * - MAX_PAGE_SIZE: Maximum allowed pagination page size (default: 10000)
  * 
  * @version 1.0.0
  * @author Firewalla MCP Server Team
@@ -40,16 +42,6 @@ function getRequiredEnvVar(name: string): string {
   return value;
 }
 
-/**
- * Retrieves an optional environment variable with a default fallback
- * 
- * @param name - The environment variable name to retrieve
- * @param defaultValue - The default value to use if the variable is not set
- * @returns The environment variable value or the default value
- */
-function getOptionalEnvVar(name: string, defaultValue: string): string {
-  return process.env[name] || defaultValue;
-}
 
 /**
  * Safely parses an environment variable to an integer with validation
@@ -69,6 +61,7 @@ function getOptionalEnvInt(name: string, defaultValue: number, min?: number, max
   
   const parsed = parseInt(envValue, 10);
   if (isNaN(parsed)) {
+    // eslint-disable-next-line no-console
     console.warn(`Invalid numeric value for ${name}: ${envValue}, using default: ${defaultValue}`);
     return defaultValue;
   }
@@ -110,6 +103,8 @@ export function getConfig(): FirewallaConfig {
     apiTimeout: getOptionalEnvInt('API_TIMEOUT', 30000, 1000, 300000), // 1s to 5min
     rateLimit: getOptionalEnvInt('API_RATE_LIMIT', 100, 1, 1000), // 1 to 1000 requests per minute
     cacheTtl: getOptionalEnvInt('CACHE_TTL', 300, 0, 3600), // 0s to 1 hour
+    defaultPageSize: getOptionalEnvInt('DEFAULT_PAGE_SIZE', 100, 1, 10000), // 1 to 10000 items per page
+    maxPageSize: getOptionalEnvInt('MAX_PAGE_SIZE', 10000, 100, 100000), // 100 to 100000 items per page
   };
 }
 

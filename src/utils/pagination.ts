@@ -3,6 +3,8 @@
  * Provides consistent pagination interface across all MCP tools
  */
 
+import { config } from '../config/config.js';
+
 /**
  * Pagination configuration interface
  */
@@ -12,11 +14,12 @@ export interface PaginationConfig {
 }
 
 /**
- * Default pagination configuration that can be overridden via environment variables
+ * Default pagination configuration loaded from main configuration
+ * Falls back to environment variables for backward compatibility
  */
 const DEFAULT_PAGINATION_CONFIG: PaginationConfig = {
-  defaultPageSize: parseInt(process.env.DEFAULT_PAGE_SIZE || '100', 10),
-  maxPageSize: parseInt(process.env.MAX_PAGE_SIZE || '10000', 10)
+  defaultPageSize: config.defaultPageSize || parseInt(process.env.DEFAULT_PAGE_SIZE || '100', 10),
+  maxPageSize: config.maxPageSize || parseInt(process.env.MAX_PAGE_SIZE || '10000', 10)
 };
 
 /**
@@ -126,7 +129,7 @@ export function decodeCursor(cursor: string): CursorData {
  *
  * @param items - The array of items to paginate
  * @param cursor - Optional base64-encoded cursor string indicating the current pagination state
- * @param page_size - Number of items per page (default is 100)
+ * @param page_size - Number of items per page (default: configured DEFAULT_PAGE_SIZE or 100)
  * @param sort_by - Optional field name to sort by
  * @param sort_order - Sort order, either 'asc' or 'desc' (default is 'asc')
  * @returns A paginated result containing the current page of items, pagination metadata, and a next cursor if more items are available
@@ -207,7 +210,7 @@ export function paginateArray<T>(
  *
  * @param dataFetcher - A function that asynchronously retrieves all items to be paginated
  * @param cursor - An optional base64-encoded cursor string representing the current pagination state
- * @param page_size - The number of items per page (default is 100)
+ * @param page_size - The number of items per page (default: configured DEFAULT_PAGE_SIZE or 100)
  * @param sort_by - Optional field name to sort the items by
  * @param sort_order - Sort order, either 'asc' or 'desc' (default is 'asc')
  * @returns A paginated result containing the current page of items, pagination metadata, and next cursor if more items remain
