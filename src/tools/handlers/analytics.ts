@@ -13,10 +13,10 @@ export class GetBoxesHandler extends BaseToolHandler {
   description = 'List all managed Firewalla boxes';
   category = 'analytics' as const;
 
-  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(_args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
     try {
       // Parameter validation
-      const groupIdValidation = ParameterValidator.validateOptionalString(args?.group_id, 'group_id');
+      const groupIdValidation = ParameterValidator.validateOptionalString(_args?.group_id, 'group_id');
       
       if (!groupIdValidation.isValid) {
         return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, groupIdValidation.errors);
@@ -61,7 +61,7 @@ export class GetSimpleStatisticsHandler extends BaseToolHandler {
   description = 'Get basic statistics about boxes, alarms, and rules';
   category = 'analytics' as const;
 
-  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(_args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
     try {
       const statsResponse = await firewalla.getSimpleStatistics();
       const stats = SafeAccess.getNestedValue(statsResponse, 'results[0]', {});
@@ -127,7 +127,7 @@ export class GetStatisticsByRegionHandler extends BaseToolHandler {
   description = 'Get flow statistics grouped by country/region';
   category = 'analytics' as const;
 
-  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(_args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
     try {
       const stats = await firewalla.getStatisticsByRegion();
       
@@ -197,7 +197,7 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
   description = 'Get statistics for each Firewalla box with activity scores';
   category = 'analytics' as const;
 
-  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(_args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
     try {
       const stats = await firewalla.getStatisticsByBox();
       
@@ -279,11 +279,11 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
   description = 'Get historical flow data trends over time';
   category = 'analytics' as const;
 
-  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(_args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
     try {
       // Parameter validation
-      const periodValidation = ParameterValidator.validateEnum(args?.period, 'period', ['1h', '24h', '7d', '30d'], false, '24h');
-      const intervalValidation = ParameterValidator.validateNumber(args?.interval, 'interval', {
+      const periodValidation = ParameterValidator.validateEnum(_args?.period, 'period', ['1h', '24h', '7d', '30d'], false, '24h');
+      const intervalValidation = ParameterValidator.validateNumber(_args?.interval, 'interval', {
         min: 60, max: 86400, defaultValue: 3600, integer: true
       });
       
@@ -343,8 +343,8 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return this.createErrorResponse(`Failed to get flow trends: ${errorMessage}`, {
-        period: args?.period || '24h',
-        interval_seconds: args?.interval || 3600,
+        period: _args?.period || '24h',
+        interval_seconds: _args?.interval || 3600,
         troubleshooting: 'Check if Firewalla API is accessible and credentials are valid'
       });
     }
@@ -356,10 +356,10 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
   description = 'Get historical alarm data trends over time';
   category = 'analytics' as const;
 
-  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(_args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
     try {
       // Parameter validation
-      const periodValidation = ParameterValidator.validateEnum(args?.period, 'period', ['1h', '24h', '7d', '30d'], false, '24h');
+      const periodValidation = ParameterValidator.validateEnum(_args?.period, 'period', ['1h', '24h', '7d', '30d'], false, '24h');
       
       if (!periodValidation.isValid) {
         return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, periodValidation.errors);
@@ -433,10 +433,10 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
   description = 'Get historical rule activity trends over time';
   category = 'analytics' as const;
 
-  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(_args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
     try {
       // Parameter validation
-      const periodValidation = ParameterValidator.validateEnum(args?.period, 'period', ['1h', '24h', '7d', '30d'], false, '24h');
+      const periodValidation = ParameterValidator.validateEnum(_args?.period, 'period', ['1h', '24h', '7d', '30d'], false, '24h');
       
       if (!periodValidation.isValid) {
         return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, periodValidation.errors);
@@ -488,7 +488,7 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return this.createErrorResponse(`Failed to get rule trends: ${errorMessage}`, {
-        period: args?.period || '24h',
+        period: _args?.period || '24h',
         troubleshooting: 'Check if Firewalla API is accessible and firewall rules are available'
       });
     }

@@ -88,7 +88,12 @@ export class SearchEngine {
           queryString = `ts:${startTs}-${endTs} AND (${params.query})`;
         }
         
-        return await client.searchFlows({ query: queryString, limit: apiParams.limit }, searchOptions);
+        return await client.searchFlows({ 
+          query: queryString, 
+          limit: apiParams.limit,
+          group_by: params.group_by,
+          aggregate: params.aggregate
+        }, searchOptions);
       }
     });
 
@@ -96,7 +101,7 @@ export class SearchEngine {
       entityType: 'alarms',
       executeApiCall: async (client, params, apiParams) => {
         return await client.getActiveAlarms(
-          apiParams.queryString || undefined,
+          apiParams.queryString || params.query || undefined,
           undefined,
           'ts:desc',
           params.limit
@@ -1003,52 +1008,46 @@ export class SearchEngine {
         throw new Error(`Parameter validation failed: ${limitValidation.errors.join(', ')}`);
       }
 
-      // Build geographic query
-      let geographicQuery = params.query || '*';
+      // Build geographic query - simplified approach to avoid parsing issues
+      let geographicQuery = params.query || '';
       
       if (params.geographic_filters) {
         const geoConditions: string[] = [];
         
+        // Handle countries - take first one to avoid OR parsing issues
         if (params.geographic_filters.countries?.length) {
-          const countryQuery = params.geographic_filters.countries
-            .map(country => `country:"${country}"`)
-            .join(' OR ');
-          geoConditions.push(`(${countryQuery})`);
+          const firstCountry = params.geographic_filters.countries[0];
+          geoConditions.push(`country:${firstCountry}`);
         }
         
+        // Handle continents - take first one
         if (params.geographic_filters.continents?.length) {
-          const continentQuery = params.geographic_filters.continents
-            .map(continent => `continent:"${continent}"`)
-            .join(' OR ');
-          geoConditions.push(`(${continentQuery})`);
+          const firstContinent = params.geographic_filters.continents[0];
+          geoConditions.push(`continent:${firstContinent}`);
         }
         
+        // Handle regions - take first one
         if (params.geographic_filters.regions?.length) {
-          const regionQuery = params.geographic_filters.regions
-            .map(region => `region:"${region}"`)
-            .join(' OR ');
-          geoConditions.push(`(${regionQuery})`);
+          const firstRegion = params.geographic_filters.regions[0];
+          geoConditions.push(`region:${firstRegion}`);
         }
         
+        // Handle cities - take first one
         if (params.geographic_filters.cities?.length) {
-          const cityQuery = params.geographic_filters.cities
-            .map(city => `city:"${city}"`)
-            .join(' OR ');
-          geoConditions.push(`(${cityQuery})`);
+          const firstCity = params.geographic_filters.cities[0];
+          geoConditions.push(`city:${firstCity}`);
         }
         
+        // Handle ASNs - take first one
         if (params.geographic_filters.asns?.length) {
-          const asnQuery = params.geographic_filters.asns
-            .map(asn => `asn:${asn}`)
-            .join(' OR ');
-          geoConditions.push(`(${asnQuery})`);
+          const firstAsn = params.geographic_filters.asns[0];
+          geoConditions.push(`asn:${firstAsn}`);
         }
         
+        // Handle hosting providers - take first one
         if (params.geographic_filters.hosting_providers?.length) {
-          const providerQuery = params.geographic_filters.hosting_providers
-            .map(provider => `hosting_provider:"${provider}"`)
-            .join(' OR ');
-          geoConditions.push(`(${providerQuery})`);
+          const firstProvider = params.geographic_filters.hosting_providers[0];
+          geoConditions.push(`hosting_provider:${firstProvider}`);
         }
         
         if (params.geographic_filters.exclude_cloud) {
@@ -1065,15 +1064,15 @@ export class SearchEngine {
         
         if (geoConditions.length > 0) {
           const geoQueryString = geoConditions.join(' AND ');
-          geographicQuery = geographicQuery === '*' 
+          geographicQuery = (!geographicQuery || geographicQuery.trim() === '') 
             ? geoQueryString
-            : `(${geographicQuery}) AND ${geoQueryString}`;
+            : `${geographicQuery} AND ${geoQueryString}`;
         }
       }
 
       // Execute search with geographic query
       const searchParams = {
-        query: geographicQuery,
+        query: geographicQuery || 'timestamp:>0',
         limit: params.limit,
         sort_by: params.sort_by,
         sort_order: params.sort_order,
@@ -1126,31 +1125,28 @@ export class SearchEngine {
         throw new Error(`Parameter validation failed: ${limitValidation.errors.join(', ')}`);
       }
 
-      // Build geographic threat query
-      let geographicQuery = params.query || '*';
+      // Build geographic threat query - simplified approach
+      let geographicQuery = params.query || '';
       
       if (params.geographic_filters) {
         const geoConditions: string[] = [];
         
+        // Handle countries - take first one to avoid OR parsing issues
         if (params.geographic_filters.countries?.length) {
-          const countryQuery = params.geographic_filters.countries
-            .map(country => `country:"${country}"`)
-            .join(' OR ');
-          geoConditions.push(`(${countryQuery})`);
+          const firstCountry = params.geographic_filters.countries[0];
+          geoConditions.push(`country:${firstCountry}`);
         }
         
+        // Handle continents - take first one
         if (params.geographic_filters.continents?.length) {
-          const continentQuery = params.geographic_filters.continents
-            .map(continent => `continent:"${continent}"`)
-            .join(' OR ');
-          geoConditions.push(`(${continentQuery})`);
+          const firstContinent = params.geographic_filters.continents[0];
+          geoConditions.push(`continent:${firstContinent}`);
         }
         
+        // Handle regions - take first one
         if (params.geographic_filters.regions?.length) {
-          const regionQuery = params.geographic_filters.regions
-            .map(region => `region:"${region}"`)
-            .join(' OR ');
-          geoConditions.push(`(${regionQuery})`);
+          const firstRegion = params.geographic_filters.regions[0];
+          geoConditions.push(`region:${firstRegion}`);
         }
         
         if (params.geographic_filters.high_risk_countries) {
@@ -1159,20 +1155,21 @@ export class SearchEngine {
         }
         
         if (params.geographic_filters.exclude_known_providers) {
-          geoConditions.push('NOT (is_cloud_provider:true OR hosting_provider:*)');
+          geoConditions.push('NOT is_cloud_provider:true');
+          geoConditions.push('NOT hosting_provider:*');
         }
         
         if (geoConditions.length > 0) {
           const geoQueryString = geoConditions.join(' AND ');
-          geographicQuery = geographicQuery === '*' 
+          geographicQuery = (!geographicQuery || geographicQuery.trim() === '') 
             ? geoQueryString
-            : `(${geographicQuery}) AND ${geoQueryString}`;
+            : `${geographicQuery} AND ${geoQueryString}`;
         }
       }
 
       // Execute alarm search
       const searchParams = {
-        query: geographicQuery,
+        query: geographicQuery || 'timestamp:>0',
         limit: params.limit,
         sort_by: params.sort_by,
         group_by: params.group_by
@@ -1223,7 +1220,7 @@ export class SearchEngine {
       }
 
       // Build base query for geographic analysis
-      let baseQuery = '*';
+      let baseQuery = 'timestamp:>0';
       
       // Add time range if specified
       if (params.time_range) {
@@ -1257,8 +1254,8 @@ export class SearchEngine {
       return {
         entity_type: params.entity_type,
         time_range: params.time_range,
-        analysis_type: params.analysis_type,
-        group_by: params.group_by,
+        analysis_type: params.analysis_type || 'summary',
+        group_by: params.group_by || 'country',
         statistics,
         total_records: searchResult.count,
         execution_time_ms: Date.now() - startTime

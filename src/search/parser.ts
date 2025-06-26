@@ -324,6 +324,16 @@ export class QueryParser {
       return this.parseFieldQuery();
     }
 
+    // Wildcard query (standalone *) - treat as match-all
+    if (this.match(TokenType.WILDCARD) && this.previous().value === '*') {
+      // Return a special match-all query that bypasses field validation
+      return {
+        type: 'field',
+        field: '*',
+        value: '*'
+      } as FieldQuery;
+    }
+
     this.errors.push(`Unexpected token: ${this.peek().value}`);
     return undefined;
   }
@@ -455,7 +465,8 @@ export class QueryParser {
         case 'range':
         case 'comparison': {
           const fieldNode = n as FieldQuery | WildcardQuery | RangeQuery | ComparisonQuery;
-          if (!validFields.includes(fieldNode.field)) {
+          // Skip validation for special match-all field '*'
+          if (fieldNode.field !== '*' && !validFields.includes(fieldNode.field)) {
             this.errors.push(`Invalid field '${fieldNode.field}' for ${entityType}. Valid fields: ${validFields.join(', ')}`);
           }
           break;
