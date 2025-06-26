@@ -3,7 +3,7 @@
  * Implements response truncation, summary modes, and token management
  */
 
-import { safeUnixToISOString, unixToISOString } from '../utils/timestamp.js';
+import { safeUnixToISOString } from '../utils/timestamp.js';
 
 /**
  * Truncation limits for different text types
@@ -383,7 +383,7 @@ export function autoOptimizeResponse(response: any, responseType: string, config
       : JSON.stringify(response).length;
   } catch (error) {
     // Fallback for circular references or other JSON.stringify errors
-    console.warn('JSON.stringify failed for size estimation, using fallback:', error instanceof Error ? error.message : 'Unknown error');
+    process.stderr.write(`JSON.stringify failed for size estimation, using fallback: ${error instanceof Error ? error.message : 'Unknown error'}\n`);
     estimatedSize = response?.results?.length ? response.results.length * 1000 : 10000;
   }
   
@@ -398,7 +398,7 @@ export function autoOptimizeResponse(response: any, responseType: string, config
     responseText = JSON.stringify(response);
   } catch (error) {
     // Handle circular references or other JSON.stringify errors
-    console.warn('JSON.stringify failed for response size check, applying optimization:', error instanceof Error ? error.message : 'Unknown error');
+    process.stderr.write(`JSON.stringify failed for response size check, applying optimization: ${error instanceof Error ? error.message : 'Unknown error'}\n`);
     // Force optimization since we can't measure the response size
     responseText = '';
   }
@@ -470,14 +470,14 @@ export function getOptimizationStats(original: any, optimized: any): {
   try {
     originalText = JSON.stringify(original);
   } catch (error) {
-    console.warn('JSON.stringify failed for original data, using fallback size:', error instanceof Error ? error.message : 'Unknown error');
+    process.stderr.write(`JSON.stringify failed for original data, using fallback size: ${error instanceof Error ? error.message : 'Unknown error'}\n`);
     originalText = '[circular or invalid data]';
   }
   
   try {
     optimizedText = JSON.stringify(optimized);
   } catch (error) {
-    console.warn('JSON.stringify failed for optimized data, using fallback size:', error instanceof Error ? error.message : 'Unknown error');
+    process.stderr.write(`JSON.stringify failed for optimized data, using fallback size: ${error instanceof Error ? error.message : 'Unknown error'}\n`);
     optimizedText = '[circular or invalid data]';
   }
   
@@ -544,7 +544,7 @@ export function optimizeResponse(responseType: string, config?: Partial<Optimiza
         return optimized;
       } catch (error) {
         // Log error and re-throw with context
-        console.error(`[${propertyKey}] Optimization failed:`, error);
+        process.stderr.write(`[${propertyKey}] Optimization failed: ${error}\n`);
         throw error;
       }
     };

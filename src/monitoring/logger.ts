@@ -129,11 +129,8 @@ export class StructuredLogger {
   private output(entry: LogEntry): void {
     const logString = JSON.stringify(entry);
     
-    if (entry.level === 'error') {
-      process.stderr.write(logString + '\\n');
-    } else {
-      process.stdout.write(logString + '\\n');
-    }
+    // Always write to stderr in MCP server to avoid polluting stdout JSON-RPC channel
+    process.stderr.write(logString + '\\n');
   }
 
   error(message: string, error?: Error, metadata?: Record<string, unknown>, traceId?: string, requestId?: string): void {

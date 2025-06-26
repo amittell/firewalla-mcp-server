@@ -97,7 +97,7 @@ export class SearchEngine {
           
           const startTs = Math.floor(startDate.getTime() / 1000);
           const endTs = Math.floor(endDate.getTime() / 1000);
-          queryString = `ts:${startTs}-${endTs} AND (${params.query})`;
+          queryString = `timestamp:${startTs}-${endTs} AND (${params.query})`;
         }
         
         return await client.searchFlows({ 
@@ -115,7 +115,7 @@ export class SearchEngine {
         return await client.getActiveAlarms(
           apiParams.queryString || params.query || undefined,
           undefined,
-          'ts:desc',
+          'timestamp:desc',
           params.limit
         );
       }

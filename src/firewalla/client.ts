@@ -228,7 +228,7 @@ export class FirewallaClient {
   async getActiveAlarms(
     query?: string, 
     groupBy?: string, 
-    sortBy = 'ts:desc', 
+    sortBy = 'timestamp:desc', 
     limit = 200, 
     cursor?: string
   ): Promise<{count: number; results: Alarm[]; next_cursor?: string}> {
@@ -284,7 +284,7 @@ export class FirewallaClient {
   async getFlowData(
     query?: string,
     groupBy?: string,
-    sortBy = 'ts:desc',
+    sortBy = 'timestamp:desc',
     limit = 200,
     cursor?: string
   ): Promise<{count: number; results: Flow[]; next_cursor?: string}> {
@@ -303,7 +303,7 @@ export class FirewallaClient {
       params.cursor = cursor;
     }
 
-    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/flows`, params);
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/flows`, params);
     
     // API returns {count, results[], next_cursor} format
     const flows = (Array.isArray(response.results) ? response.results : []).map((item: any): Flow => {
@@ -557,9 +557,28 @@ export class FirewallaClient {
       
       const validPeriods = ['1h', '24h', '7d', '30d'];
       const validatedPeriod = validPeriods.includes(period.toLowerCase()) ? period.toLowerCase() : '24h';
-      const validatedTop = Math.max(1, Number(top) || 50); // Remove artificial cap
+      const validatedTop = Math.max(1, Number(top) || 50);
       
-      // Calculate timestamp range based on period with validation
+      // Calculate flow fetch limit based on period (more flows for longer periods)
+      let flowLimit: number;
+      switch (validatedPeriod) {
+        case '1h':
+          flowLimit = 1000;
+          break;
+        case '24h':
+          flowLimit = 3000;
+          break;
+        case '7d':
+          flowLimit = 5000;
+          break;
+        case '30d':
+          flowLimit = 10000;
+          break;
+        default:
+          flowLimit = 3000;
+      }
+
+      // Calculate timestamp range for the period
       const end = Math.floor(Date.now() / 1000);
       let begin: number;
       
@@ -577,68 +596,65 @@ export class FirewallaClient {
           begin = end - (30 * 24 * 60 * 60);
           break;
         default:
-          begin = end - (24 * 60 * 60); // Default to 24h
+          begin = end - (24 * 60 * 60);
       }
 
-      // Validate timestamp range
-      if (begin >= end || begin <= 0) {
-        throw new Error('Invalid timestamp range calculated');
-      }
-
+      // Use proper Firewalla MSP API v2 flow endpoint with timestamp filtering
+      const timeQuery = `timestamp:${begin}-${end}`;
+      const endpoint = `/v2/boxes/${this.config.boxId}/flows`;
+      
       const params = {
-        query: `ts:${begin}-${end}`,
-        limit: validatedTop,
-        sortBy: 'total:desc',
-        groupBy: 'device'
+        query: timeQuery,
+        groupBy: 'device',
+        limit: Math.min(flowLimit, 500), // API max is 500
+        sortBy: 'bytes:desc'
       };
 
-      const response = await this.request<{results: any[]} | any[]>('GET', `/boxes/${this.config.boxId}/flows`, params);
+      const flowResponse = await this.request<{count: number; results: any[]; next_cursor?: string}>(
+        'GET', 
+        endpoint, 
+        params
+      );
       
-      // Enhanced null safety and data validation
-      if (!response) {
+      if (!flowResponse || !flowResponse.results || flowResponse.results.length === 0) {
         return { count: 0, results: [], next_cursor: undefined };
       }
+
+      // Process flows and aggregate bandwidth by device
+      const deviceBandwidth = new Map<string, BandwidthUsage>();
       
-      const rawData = Array.isArray(response) ? response : (response.results || []);
-      
-      if (!Array.isArray(rawData)) {
-        logger.debugNamespace('validation', 'Invalid response format for bandwidth usage');
-        return { count: 0, results: [], next_cursor: undefined };
-      }
-      
-      // Transform the response to BandwidthUsage format with comprehensive null safety
-      const results = rawData
-        .filter(item => item && typeof item === 'object')
-        .map((item: any) => {
-          // Enhanced data extraction with fallbacks and proper validation
-          const deviceId = item.device?.id || item.deviceId || item.gid || 'unknown_device';
-          const deviceName = item.device?.name || item.deviceName || item.name || 'Unknown Device';
-          const ipAddress = item.device?.ip || item.ip || item.localIP || 'unknown';
-          
-          // Safe number conversion with validation and consistency enforcement
-          const bytesUploaded = Math.max(0, Number(item.upload || item.uploadBytes || 0) || 0);
-          const bytesDownloaded = Math.max(0, Number(item.download || item.downloadBytes || 0) || 0);
-          // Always calculate total from components to ensure validation consistency
-          const totalBytes = bytesUploaded + bytesDownloaded;
-          
-          return {
+      flowResponse.results.forEach((flow: any) => {
+        const deviceId = flow.device?.id || flow.deviceId || 'unknown';
+        const deviceName = flow.device?.name || flow.deviceName || 'Unknown Device';
+        const deviceIp = flow.device?.ip || flow.localIP || 'unknown';
+        const upload = Number(flow.upload || 0);
+        const download = Number(flow.download || 0);
+        
+        if (deviceId === 'unknown' || (upload === 0 && download === 0)) {
+          return; // Skip flows without device info or bandwidth
+        }
+        
+        if (deviceBandwidth.has(deviceId)) {
+          const existing = deviceBandwidth.get(deviceId)!;
+          existing.bytes_uploaded += upload;
+          existing.bytes_downloaded += download;
+          existing.total_bytes = existing.bytes_uploaded + existing.bytes_downloaded;
+        } else {
+          deviceBandwidth.set(deviceId, {
             device_id: deviceId,
             device_name: deviceName,
-            ip: ipAddress,
-            bytes_uploaded: bytesUploaded,
-            bytes_downloaded: bytesDownloaded,
-            total_bytes: totalBytes,
+            ip: deviceIp,
+            bytes_uploaded: upload,
+            bytes_downloaded: download,
+            total_bytes: upload + download,
             period: validatedPeriod
-          };
-        })
-        .filter(item => 
-          item.device_id && 
-          item.device_id !== 'unknown' && 
-          item.device_id !== 'unknown_device' &&
-          item.ip && 
-          item.ip !== 'unknown' &&
-          item.total_bytes > 0
-        )
+          });
+        }
+      });
+
+      // Convert to array, sort by total bandwidth, and get top N
+      const results = Array.from(deviceBandwidth.values())
+        .filter(device => device.total_bytes > 0)
         .sort((a, b) => b.total_bytes - a.total_bytes)
         .slice(0, validatedTop);
 
@@ -668,7 +684,7 @@ export class FirewallaClient {
       params.limit = limit;
     }
 
-    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/rules`, params);
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/rules`, params);
     
     // API returns {count, results[]} format
     const rules = (Array.isArray(response.results) ? response.results : []).map((item: any): NetworkRule => ({
@@ -725,7 +741,7 @@ export class FirewallaClient {
       params.list_type = listType;
     }
 
-    const response = await this.request<TargetList[] | {results: TargetList[]}>('GET', `/target-lists`, params);
+    const response = await this.request<TargetList[] | {results: TargetList[]}>('GET', `/v2/target-lists`, params);
     
     // Handle response format
     const results = Array.isArray(response) ? response : (response?.results || []);
@@ -745,7 +761,7 @@ export class FirewallaClient {
     blocked_attempts: number;
     last_updated: string;
   }> {
-    return this.request('GET', `/boxes/${this.config.boxId}/summary`, undefined, true);
+    return this.request('GET', `/v2/boxes/${this.config.boxId}/summary`, undefined, true);
   }
 
   async getSecurityMetrics(): Promise<{
@@ -756,7 +772,7 @@ export class FirewallaClient {
     threat_level: 'low' | 'medium' | 'high' | 'critical';
     last_threat_detected: string;
   }> {
-    return this.request('GET', `/boxes/${this.config.boxId}/metrics/security`, undefined, true);
+    return this.request('GET', `/v2/boxes/${this.config.boxId}/metrics/security`, undefined, true);
   }
 
   async getNetworkTopology(): Promise<{
@@ -773,7 +789,7 @@ export class FirewallaClient {
       bandwidth: number;
     }>;
   }> {
-    return this.request('GET', `/boxes/${this.config.boxId}/topology`, undefined, true);
+    return this.request('GET', `/v2/boxes/${this.config.boxId}/topology`, undefined, true);
   }
 
   async getRecentThreats(hours = 24): Promise<Array<{
@@ -785,7 +801,7 @@ export class FirewallaClient {
     severity: string;
   }>> {
     const params = { hours };
-    return this.request('GET', `/boxes/${this.config.boxId}/threats/recent`, params, true);
+    return this.request('GET', `/v2/boxes/${this.config.boxId}/threats/recent`, params, true);
   }
 
   @optimizeResponse('rules')
@@ -801,7 +817,7 @@ export class FirewallaClient {
       }
 
       // API returns direct array of boxes
-      const response = await this.request<any[]>('GET', `/boxes`, params, true);
+      const response = await this.request<any[]>('GET', `/v2/boxes`, params, true);
       
       // Enhanced null safety and data validation
       const rawResults = Array.isArray(response) ? response : [];
@@ -854,7 +870,7 @@ export class FirewallaClient {
         throw new Error('Alarm ID contains invalid characters');
       }
 
-      const response = await this.request<any>('GET', `/alarms/${this.config.boxId}/${validatedAlarmId}`);
+      const response = await this.request<any>('GET', `/v2/boxes/${this.config.boxId}/alarms/${validatedAlarmId}`);
       
       // Enhanced null/undefined checks for response
       if (!response || typeof response !== 'object') {
@@ -1187,7 +1203,7 @@ export class FirewallaClient {
             (async (): Promise<Trend> => {
               try {
                 // Enhanced query with time range filtering
-                const query = `ts:${intervalStart}-${intervalEnd}`;
+                const query = `timestamp:${intervalStart}-${intervalEnd}`;
                 const flows = await this.getFlowData(query, undefined, 'ts:desc', 1000);
                 
                 // Enhanced result validation
@@ -1267,7 +1283,7 @@ export class FirewallaClient {
       // Enhanced alarm data retrieval with better error handling
       let alarms;
       try {
-        alarms = await this.getActiveAlarms(undefined, undefined, 'ts:desc', 5000); // Get more alarms for better trends
+        alarms = await this.getActiveAlarms(undefined, undefined, 'timestamp:desc', 5000); // Get more alarms for better trends
       } catch (alarmError) {
         logger.debugNamespace('api', 'Failed to get active alarms for trends', { error: alarmError });
         alarms = { results: [], count: 0 };
@@ -1686,7 +1702,7 @@ export class FirewallaClient {
     const params: Record<string, unknown> = {
       query: optimizedQuery,
       limit: searchQuery.limit || 1000, // Remove artificial cap
-      sortBy: searchQuery.sort_by || 'ts:desc',
+      sortBy: searchQuery.sort_by || 'timestamp:desc',
     };
     
     if (searchQuery.group_by) {
@@ -1708,7 +1724,7 @@ export class FirewallaClient {
         ? Math.floor(new Date(options.time_range.end).getTime() / 1000)
         : options.time_range.end;
       
-      const timeQuery = `ts:${startTs}-${endTs}`;
+      const timeQuery = `timestamp:${startTs}-${endTs}`;
       params.query = params.query ? `${params.query} AND ${timeQuery}` : timeQuery;
     }
     
@@ -1717,7 +1733,7 @@ export class FirewallaClient {
       params.query = params.query ? `${params.query} AND block:false` : 'block:false';
     }
 
-    const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/search/flows`, params);
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/flows`, params);
     
     // Defensive programming: ensure results is an array before mapping
     const resultsList = Array.isArray(response.results) ? response.results : [];
@@ -1816,7 +1832,7 @@ export class FirewallaClient {
       
       // Enhanced parameter validation and construction
       const limit = searchQuery.limit ? Math.max(1, Number(searchQuery.limit)) : 1000; // Remove artificial cap
-      const sortBy = searchQuery.sort_by && typeof searchQuery.sort_by === 'string' ? searchQuery.sort_by : 'ts:desc';
+      const sortBy = searchQuery.sort_by && typeof searchQuery.sort_by === 'string' ? searchQuery.sort_by : 'timestamp:desc';
       
       const params: Record<string, unknown> = {
         query: optimizedQuery,
@@ -1852,7 +1868,7 @@ export class FirewallaClient {
       // Enhanced API request with better error handling
       let response;
       try {
-        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/search/alarms`, params);
+        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/alarms`, params);
       } catch (apiError) {
         if (apiError instanceof Error) {
           if (apiError.message.includes('timeout')) {
@@ -2022,7 +2038,7 @@ export class FirewallaClient {
       
       // Enhanced parameter validation and construction
       const limit = searchQuery.limit ? Math.max(1, Number(searchQuery.limit)) : 1000; // Remove artificial cap
-      const sortBy = searchQuery.sort_by && typeof searchQuery.sort_by === 'string' ? searchQuery.sort_by : 'ts:desc';
+      const sortBy = searchQuery.sort_by && typeof searchQuery.sort_by === 'string' ? searchQuery.sort_by : 'timestamp:desc';
       
       const params: Record<string, unknown> = {
         query: optimizedQuery,
@@ -2049,7 +2065,7 @@ export class FirewallaClient {
       // Enhanced API request with better error handling
       let response;
       try {
-        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/search/rules`, params);
+        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/rules`, params);
       } catch (apiError) {
         if (apiError instanceof Error) {
           if (apiError.message.includes('timeout')) {
@@ -2258,7 +2274,7 @@ export class FirewallaClient {
       // Enhanced API request with better error handling
       let response;
       try {
-        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/search/devices`, params);
+        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/devices`, params);
       } catch (apiError) {
         if (apiError instanceof Error) {
           if (apiError.message.includes('timeout')) {
@@ -2415,7 +2431,7 @@ export class FirewallaClient {
       // Enhanced API request with better error handling
       let response;
       try {
-        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/search/target-lists`, params);
+        response = await this.request<{count: number; results: any[]; next_cursor?: string; aggregations?: any}>('GET', `/v2/search/target-lists`, params);
       } catch (apiError) {
         if (apiError instanceof Error) {
           if (apiError.message.includes('timeout')) {

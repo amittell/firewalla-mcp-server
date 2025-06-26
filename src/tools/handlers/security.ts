@@ -44,7 +44,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
       const response = await firewalla.getActiveAlarms(
         sanitizedQuery,
         groupByValidation.sanitizedValue,
-        sortByValidation.sanitizedValue || 'ts:desc',
+        sortByValidation.sanitizedValue || 'timestamp:desc',
         limitValidation.sanitizedValue!,
         cursorValidation.sanitizedValue
       );

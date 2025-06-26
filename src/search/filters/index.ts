@@ -151,12 +151,12 @@ export class FilterFactory {
         if (existingPostProcessing) {
           result.postProcessing = (items: any[]) => {
             if (context.debug) {
-              console.log(`Applying ${filter.name} after existing filters`);
+              process.stderr.write(`Applying ${filter.name} after existing filters\n`);
             }
             const intermediate = existingPostProcessing(items);
             const final = filterResult.postProcessing!(intermediate);
             if (context.debug) {
-              console.log(`${filter.name}: ${items.length} → ${intermediate.length} → ${final.length} items`);
+              process.stderr.write(`${filter.name}: ${items.length} → ${intermediate.length} → ${final.length} items\n`);
             }
             return final;
           };
