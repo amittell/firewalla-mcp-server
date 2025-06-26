@@ -3,7 +3,11 @@
 # Comprehensive Test Plan Script
 # Validates project build, tests, and interface generation
 
-set -e  # Exit on any error
+set -euo pipefail  # Exit on error, undefined var, or failed pipe
+
+# Guard against missing runtimes
+command -v node >/dev/null || { echo "❌ Node.js not found"; exit 1; }
+command -v npm  >/dev/null || { echo "❌ npm not found";  exit 1; }
 
 echo "🚀 Starting comprehensive test plan..."
 echo "Platform: $(uname -s) $(uname -m)"
@@ -20,7 +24,7 @@ check_directory() {
         return 1
     fi
     
-    if [ -z "$(ls -A "$dir" 2>/dev/null)" ]; then
+    if ! find "$dir" -mindepth 1 -print -quit 2>/dev/null | grep -q .; then
         echo "❌ $description directory '$dir' is empty"
         return 1
     fi
@@ -65,7 +69,7 @@ check_typescript_compilation() {
         if [ -f "$file" ]; then
             echo "✅ Interface file found: $file"
         else
-            echo "⚠️  Interface file missing: $file"
+            echo "❌ Interface file missing: $file"
             missing_files+=("$file")
         fi
     done
@@ -73,11 +77,9 @@ check_typescript_compilation() {
     if [ ${#missing_files[@]} -eq 0 ]; then
         echo "✅ All expected interface files are present"
     else
-        echo "⚠️  Some interface files are missing, but compilation succeeded"
-        echo "Missing files: ${missing_files[*]}"
+        echo "❌ Missing interface files: ${missing_files[*]}"
+        return 1
     fi
-    
-    return 0
 }
 
 # Function to run tests
@@ -142,14 +144,15 @@ check_mcp_server() {
     echo "🔌 Testing MCP server startup..."
     
     # Start server in background and test basic functionality
-    timeout 10s npm run mcp:start &
+    command -v timeout >/dev/null || { echo "❌ GNU timeout required"; return 1; }
+    timeout 10s bash -c 'npm run mcp:start' &
     local server_pid=$!
     
     sleep 3
     
     if kill -0 $server_pid 2>/dev/null; then
         echo "✅ MCP server started successfully"
-        kill $server_pid 2>/dev/null || true
+        kill -- -"$server_pid" 2>/dev/null || true   # kill entire process group
         wait $server_pid 2>/dev/null || true
     else
         echo "❌ MCP server failed to start"
@@ -188,7 +191,7 @@ main() {
 }
 
 # Error handling
-trap 'echo "❌ Test plan failed at line $LINENO. Check the output above for details."' ERR
+trap 'echo "❌ Test plan failed at line ${BASH_LINENO[0]}. Check the output above for details."' ERR
 
 # Run main function
 main "$@"

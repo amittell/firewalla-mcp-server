@@ -6,9 +6,9 @@
 import { safeUnixToISOString } from '../utils/timestamp.js';
 
 /**
- * Truncation limits for different text types
+ * Default truncation limits for different text types
  */
-const TRUNCATION_LIMITS = {
+const DEFAULT_TRUNCATION_LIMITS = {
   MESSAGE: 80,
   DEVICE_NAME: 30,
   REMOTE_NAME: 30,
@@ -18,6 +18,25 @@ const TRUNCATION_LIMITS = {
   GENERIC_TEXT: 100,
   FLOW_DEVICE_NAME: 25
 } as const;
+
+/**
+ * Current truncation limits (configurable)
+ */
+export let TRUNCATION_LIMITS = { ...DEFAULT_TRUNCATION_LIMITS };
+
+/**
+ * Configure truncation limits for different deployment scenarios
+ */
+export function setTruncationLimits(limits: Partial<typeof DEFAULT_TRUNCATION_LIMITS>): void {
+  TRUNCATION_LIMITS = { ...DEFAULT_TRUNCATION_LIMITS, ...limits };
+}
+
+/**
+ * Reset truncation limits to defaults
+ */
+export function resetTruncationLimits(): void {
+  TRUNCATION_LIMITS = { ...DEFAULT_TRUNCATION_LIMITS };
+}
 
 /**
  * Base response interface with optional pagination metadata

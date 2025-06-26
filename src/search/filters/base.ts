@@ -110,9 +110,9 @@ export abstract class BaseFilter implements Filter {
     
     // Convert wildcard pattern to regex
     const regexPattern = pattern
-      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape regex chars
-      .replace(/\\\*/g, '.*') // Convert * to .*
-      .replace(/\\\?/g, '.'); // Convert ? to .
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape regex chars except * and ?
+      .replace(/\*/g, '.*') // Convert * to .*
+      .replace(/\?/g, '.'); // Convert ? to .
     
     const regex = new RegExp(`^${regexPattern}$`, 'i');
     return regex.test(String(value));

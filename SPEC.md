@@ -139,7 +139,7 @@ interface Flow {
 **Purpose**: Get top bandwidth consuming devices
 **Parameters**:
 - `period`: Time period ('1h', '24h', '7d', '30d')
-- `top` (optional): Number of top devices (default: 10)
+- `limit` (required): Maximum number of devices to return
 
 ### get_network_rules
 **Purpose**: Retrieve firewall rules

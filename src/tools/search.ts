@@ -392,7 +392,7 @@ export class SearchEngine {
       const result: SearchResult = {
         results,
         count: response.count || results.length,
-        limit: params.limit,
+        limit: params.limit || 100,
         offset: params.offset || 0,
         query: queryCheck?.sanitizedValue || params.query,
         execution_time_ms: Date.now() - startTime,

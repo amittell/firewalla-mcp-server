@@ -102,7 +102,7 @@ Generate a comprehensive security report based on the following data:
 - Recent Threats: ${threats.length}
 
 **Active Alarms (${alarms.count}):**
-${alarms.results.slice(0, 10).map((alarm: any) => 
+${alarms.results.slice(0, 10).map((alarm) => 
   `- ${alarm.type}: ${alarm.message} (${unixToISOString(alarm.ts)})`
 ).join('\\n')}
 
@@ -149,7 +149,7 @@ Please analyze this data and provide:
 Analyze the following security data to identify patterns, trends, and recommend defensive actions:
 
 **Active Alarms (${severityThreshold}+ severity):**
-${(Array.isArray(alarms.results) ? alarms.results : []).map((alarm: any) => 
+${(Array.isArray(alarms.results) ? alarms.results : []).map((alarm) => 
   `- [${alarm.type}] ${alarm.message}
     Source: ${alarm.device?.ip || 'N/A'} → Destination: ${alarm.remote?.ip || 'N/A'}
     Time: ${unixToISOString(alarm.ts)}`
@@ -200,8 +200,8 @@ Please provide:
             firewalla.getFlowData(undefined, undefined, undefined, 100),
           ]);
 
-          const highUsageDevices = usage.results.filter((u: any) => u.total_bytes > thresholdMb * 1024 * 1024);
-          const flowAnalysis = analyzeFlowPatterns((Array.isArray(flows.results) ? flows.results : []).map((f: any) => ({ 
+          const highUsageDevices = usage.results.filter((u) => u.total_bytes > thresholdMb * 1024 * 1024);
+          const flowAnalysis = analyzeFlowPatterns((Array.isArray(flows.results) ? flows.results : []).map((f) => ({ 
             protocol: f.protocol, 
             duration: f.duration || 0, 
             timestamp: unixToISOString(f.ts) 
@@ -213,8 +213,8 @@ Please provide:
 Analyze bandwidth consumption patterns and identify optimization opportunities:
 
 **Top Bandwidth Consumers (>${thresholdMb}MB):**
-${highUsageDevices.map((device: any) => 
-  `- ${device.device_name} (${device.ip_address})
+${highUsageDevices.map((device) => 
+  `- ${device.device_name} (${device.ip})
     Total: ${Math.round(device.total_bytes / (1024 * 1024))}MB
     Upload: ${Math.round(device.bytes_uploaded / (1024 * 1024))}MB
     Download: ${Math.round(device.bytes_downloaded / (1024 * 1024))}MB
@@ -230,7 +230,7 @@ ${highUsageDevices.map((device: any) =>
 
 **Device Status Context:**
 - Total devices: ${devices.count}
-- Online devices: ${devices.results.filter((d: any) => d.online).length}
+- Online devices: ${devices.results.filter((d) => d.online).length}
 - Devices with high usage: ${highUsageDevices.length}
 
 Please analyze and provide:
@@ -268,16 +268,16 @@ Please analyze and provide:
             firewalla.getActiveAlarms(),
           ]);
 
-          const targetDevice = devices.results.find((d: any) => d.id === deviceId);
+          const targetDevice = devices.results.find((d) => d.id === deviceId);
           if (!targetDevice) {
             throw new Error(`Device with ID ${deviceId} not found`);
           }
 
-          const deviceFlows = flows.results.filter((f: any) => 
+          const deviceFlows = flows.results.filter((f) => 
             f.source?.ip === targetDevice.ip || f.destination?.ip === targetDevice.ip ||
             f.device.ip === targetDevice.ip
           );
-          const deviceAlarms = alarms.results.filter((a: any) => 
+          const deviceAlarms = alarms.results.filter((a) => 
             a.device?.ip === targetDevice.ip || a.remote?.ip === targetDevice.ip
           );
 
@@ -297,23 +297,23 @@ Investigate potential security issues and unusual behavior for this device:
 
 **Network Activity (${lookbackHours}h lookback):**
 - Total flows involving this device: ${deviceFlows.length}
-- Outbound connections: ${deviceFlows.filter((f: any) => f.source?.ip === targetDevice.ip || f.device.ip === targetDevice.ip).length}
-- Inbound connections: ${deviceFlows.filter((f: any) => f.destination?.ip === targetDevice.ip).length}
-- Data transferred: ${deviceFlows.reduce((sum: any, f: any) => sum + ((f.download || 0) + (f.upload || 0)), 0)} bytes
-- Unique remote IPs: ${new Set(deviceFlows.map((f: any) => 
+- Outbound connections: ${deviceFlows.filter((f) => f.source?.ip === targetDevice.ip || f.device.ip === targetDevice.ip).length}
+- Inbound connections: ${deviceFlows.filter((f) => f.destination?.ip === targetDevice.ip).length}
+- Data transferred: ${deviceFlows.reduce((sum, f) => sum + ((f.download || 0) + (f.upload || 0)), 0)} bytes
+- Unique remote IPs: ${new Set(deviceFlows.map((f) => 
   f.source?.ip === targetDevice.ip ? f.destination?.ip : f.source?.ip
 ).filter(Boolean)).size}
 
 **Security Alerts:**
 ${deviceAlarms.length > 0 ? 
-  deviceAlarms.map((alarm: any) => 
+  deviceAlarms.map((alarm) => 
     `- [${alarm.type}] ${alarm.message} (${unixToISOString(alarm.ts)})`
   ).join('\\n') : 
   'No security alerts found for this device'
 }
 
 **Connection Patterns:**
-${deviceFlows.slice(0, 10).map((flow: any) => 
+${deviceFlows.slice(0, 10).map((flow) => 
   `- ${flow.source?.ip || 'N/A'} → ${flow.destination?.ip || 'N/A'} (${flow.protocol})
     ${((flow.download || 0) + (flow.upload || 0))} bytes, ${flow.count} packets, ${flow.duration || 0}s duration`
 ).join('\\n')}
@@ -370,8 +370,8 @@ Evaluate overall network health and performance:
 
 **Network Connectivity:**
 - Total Devices: ${devices.count}
-- Online: ${devices.results.filter((d: any) => d.online).length} (${Math.round(devices.results.filter((d: any) => d.online).length / devices.count * 100)}%)
-- Offline: ${devices.results.filter((d: any) => !d.online).length}
+- Online: ${devices.results.filter((d) => d.online).length} (${Math.round(devices.results.filter((d) => d.online).length / devices.count * 100)}%)
+- Offline: ${devices.results.filter((d) => !d.online).length}
 - Subnets: ${topology.subnets.length}
 - Active Connections: ${summary.active_connections}
 
@@ -379,7 +379,7 @@ Evaluate overall network health and performance:
 - Threat Level: ${metrics.threat_level}
 - Active Alarms: ${metrics.active_alarms}
 - Blocked Attempts: ${summary.blocked_attempts}
-- Active Rules: ${rules.results.filter((r: any) => r.status === 'active' || !r.status).length}
+- Active Rules: ${rules.results.filter((r) => r.status === 'active' || !r.status).length}
 - Security Score: ${calculateSecurityScore(metrics)}/100
 
 **Overall Health Score: ${healthScore}/100**

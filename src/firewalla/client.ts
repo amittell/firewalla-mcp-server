@@ -1508,8 +1508,7 @@ export class FirewallaClient {
         const activeRules = validRules.filter(rule => 
           rule.status === 'active' || 
           rule.status === undefined || 
-          rule.status === null || 
-          rule.status === 'enabled'
+          rule.status === null
         );
         
         // Count rules by creation/update time for historical analysis
@@ -2321,9 +2320,9 @@ export class FirewallaClient {
         })
         .filter((device): device is Device => 
           device !== null && 
-          device.id && 
+          Boolean(device.id) && 
           device.id !== 'unknown' && 
-          device.name && 
+          Boolean(device.name) && 
           device.name !== 'Unknown Device'
         ); // Filter out invalid devices
 
@@ -2483,7 +2482,7 @@ export class FirewallaClient {
             : 'global';
           
           const targets = Array.isArray(item.targets) 
-            ? item.targets.filter(target => 
+            ? item.targets.filter((target: any) => 
                 target && 
                 (typeof target === 'string' || typeof target === 'object')
               ) 

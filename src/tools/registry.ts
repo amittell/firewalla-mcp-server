@@ -65,7 +65,7 @@ export class ToolRegistry {
     // Device tools (1 handler)
     this.register(new GetDeviceStatusHandler());
     
-    // Rule tools (6 handlers)
+    // Rule tools (7 handlers)
     this.register(new GetNetworkRulesHandler());
     this.register(new PauseRuleHandler());
     this.register(new ResumeRuleHandler());
@@ -74,7 +74,7 @@ export class ToolRegistry {
     this.register(new GetMostActiveRulesHandler());
     this.register(new GetRecentRulesHandler());
     
-    // Analytics tools (6 handlers)
+    // Analytics tools (7 handlers)
     this.register(new GetBoxesHandler());
     this.register(new GetSimpleStatisticsHandler());
     this.register(new GetStatisticsByRegionHandler());

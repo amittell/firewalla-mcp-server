@@ -28,7 +28,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
       ]);
       
       if (!validationResult.isValid) {
-        return createErrorResponse('get_active_alarms', 'Parameter validation failed', null, validationResult.errors);
+        return createErrorResponse('get_active_alarms', 'Parameter validation failed', undefined, validationResult.errors);
       }
       
       // Sanitize query if provided
@@ -36,7 +36,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
       if (sanitizedQuery) {
         const queryCheck = QuerySanitizer.sanitizeSearchQuery(sanitizedQuery);
         if (!queryCheck.isValid) {
-          return createErrorResponse('get_active_alarms', 'Query validation failed', null, queryCheck.errors);
+          return createErrorResponse('get_active_alarms', 'Query validation failed', undefined, queryCheck.errors);
         }
         sanitizedQuery = queryCheck.sanitizedValue;
       }
@@ -94,7 +94,7 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
       const alarmIdValidation = ParameterValidator.validateRequiredString(args?.alarm_id, 'alarm_id');
       
       if (!alarmIdValidation.isValid) {
-        return createErrorResponse('get_specific_alarm', 'Parameter validation failed', null, alarmIdValidation.errors);
+        return createErrorResponse('get_specific_alarm', 'Parameter validation failed', undefined, alarmIdValidation.errors);
       }
       
       const response = await firewalla.getSpecificAlarm(alarmIdValidation.sanitizedValue!);
@@ -121,7 +121,7 @@ export class DeleteAlarmHandler extends BaseToolHandler {
       const alarmIdValidation = ParameterValidator.validateRequiredString(args?.alarm_id, 'alarm_id');
       
       if (!alarmIdValidation.isValid) {
-        return createErrorResponse('delete_alarm', 'Parameter validation failed', null, alarmIdValidation.errors);
+        return createErrorResponse('delete_alarm', 'Parameter validation failed', undefined, alarmIdValidation.errors);
       }
       
       const response = await firewalla.deleteAlarm(alarmIdValidation.sanitizedValue!);

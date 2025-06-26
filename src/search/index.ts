@@ -480,6 +480,15 @@ export function buildSearchOptions(
  * @returns The optimized query string suitable for API consumption
  */
 export function formatQueryForAPI(query: string): string {
+  if (!query || typeof query !== 'string' || !query.trim()) {
+    return '';
+  }
+  
+  const validation = validateSearchQuery(query);
+  if (!validation.valid) {
+    throw new Error(`Invalid query: ${validation.errors.join(', ')}`);
+  }
+  
   const parsed = parseSearchQuery(query);
   return parsed.optimized || query;
 }

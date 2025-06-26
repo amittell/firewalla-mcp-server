@@ -157,8 +157,7 @@ export type TokenTypeValue = typeof TokenType[keyof typeof TokenType];
  */
 export interface FilterResult {
   apiParams: Record<string, any>;
-  // eslint-disable-next-line no-unused-vars
-  postProcessing: ((items: any[]) => any[])[];
+  postProcessing: ((_items: any[]) => any[])[];
   metadata: {
     filtersApplied: string[];
     optimizations: string[];

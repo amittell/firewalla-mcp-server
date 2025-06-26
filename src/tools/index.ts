@@ -32,7 +32,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
 
       // Execute the tool handler with proper error handling
       logger.debug(`Executing tool: ${name} with handler: ${handler.constructor.name}`);
-      return await handler.execute(args, firewalla);
+      return await handler.execute(args || {}, firewalla);
       
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';

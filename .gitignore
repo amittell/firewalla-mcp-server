@@ -126,6 +126,7 @@ temp/
 .claude-code/
 mcp_servers.json
 test_credentials.js
+.mcp.json
 
 # Database files
 *.db

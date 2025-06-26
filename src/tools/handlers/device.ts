@@ -5,6 +5,7 @@
 import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
 import { FirewallaClient } from '../../firewalla/client.js';
 import { ParameterValidator, SafeAccess, createErrorResponse } from '../../validation/error-handler.js';
+import { unixToISOStringOrNow } from '../../utils/timestamp.js';
 
 export class GetDeviceStatusHandler extends BaseToolHandler {
   name = 'get_device_status';
@@ -44,7 +45,7 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
             ip: SafeAccess.getNestedValue(device, 'ip', 'unknown'),
             macVendor: SafeAccess.getNestedValue(device, 'macVendor', 'unknown'),
             online: SafeAccess.getNestedValue(device, 'online', false),
-            lastSeen: SafeAccess.getNestedValue(device, 'lastSeen', 0),
+            lastSeen: unixToISOStringOrNow(SafeAccess.getNestedValue(device, 'lastSeen', 0)),
             ipReserved: SafeAccess.getNestedValue(device, 'ipReserved', false),
             network: SafeAccess.getNestedValue(device, 'network', null),
             group: SafeAccess.getNestedValue(device, 'group', null),

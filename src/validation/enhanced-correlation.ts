@@ -292,7 +292,8 @@ function calculateFieldScore(
   if (primaryValues.values.has(entityValue)) {
     const metadata = primaryValues.metadata.get(entityValue);
     const qualityBonus = metadata ? metadata.quality * 0.1 : 0;
-    return { score: Math.min(1.0 + qualityBonus, 1.0), matchType: 'exact' };
+    // Allow the score to exceed 1.0 if qualityBonus is applied
+    return { score: 1.0 + qualityBonus, matchType: 'exact' };
   }
   
   // Try fuzzy matching if enabled

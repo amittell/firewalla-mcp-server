@@ -100,7 +100,7 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
       ]);
       
       if (!validationResult.isValid) {
-        return createErrorResponse(this.name, 'Parameter validation failed', null, validationResult.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', undefined, validationResult.errors);
       }
       
       const usageResponse = await firewalla.getBandwidthUsage(

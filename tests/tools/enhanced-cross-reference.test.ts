@@ -24,48 +24,6 @@ describe('Enhanced Cross-Reference Search Tools', () => {
   });
 
   describe('search_enhanced_cross_reference', () => {
-    const mockFlowsData = {
-      results: [
-        {
-          source: { ip: '192.168.1.1' },
-          destination: { ip: '203.0.113.1' },
-          protocol: 'tcp',
-          ts: 1640995200,
-          geo: { country: 'United States', asn: '12345' },
-          app: { name: 'Chrome', category: 'browser' }
-        },
-        {
-          source: { ip: '192.168.1.2' },
-          destination: { ip: '198.51.100.1' },
-          protocol: 'https',
-          ts: 1640995260,
-          geo: { country: 'Germany', asn: '67890' },
-          app: { name: 'Firefox', category: 'browser' }
-        }
-      ],
-      count: 2
-    };
-
-    const mockAlarmsData = {
-      results: [
-        {
-          device: { ip: '192.168.1.1' },
-          remote: { ip: '203.0.113.1', country: 'United States' },
-          severity: 'high',
-          type: 'network_intrusion',
-          ts: 1640995250
-        },
-        {
-          device: { ip: '192.168.1.3' },
-          remote: { ip: '198.51.100.2', country: 'France' },
-          severity: 'medium',
-          type: 'policy_violation',
-          ts: 1640995300
-        }
-      ],
-      count: 2
-    };
-
     beforeEach(() => {
       // Create more specific mock data structures that accurately reflect real API responses
       const enhancedMockFlowsData = {

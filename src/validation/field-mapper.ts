@@ -627,7 +627,9 @@ function filterItemsByFieldValue(
 ): any[] {
   return items.filter(item => {
     const itemValue = getFieldValue(item, field, entityType);
-    if (itemValue === undefined || itemValue === null) {return false;}
+    if (itemValue === undefined || itemValue === null) {
+      return false;
+    }
     const normalizedValue = normalizeFieldValue(itemValue, field);
     return correlationValues.has(normalizedValue);
   });

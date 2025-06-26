@@ -60,20 +60,20 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
             } : { type: 'unknown', value: 'unknown' },
             direction: SafeAccess.getNestedValue(rule, 'direction', 'unknown'),
             gid: SafeAccess.getNestedValue(rule, 'gid', 'unknown'),
-            group: SafeAccess.getNestedValue(rule, 'group', null),
-            scope: SafeAccess.getNestedValue(rule, 'scope', null),
+            group: SafeAccess.getNestedValue(rule, 'group', undefined),
+            scope: SafeAccess.getNestedValue(rule, 'scope', undefined),
             notes: SafeAccess.getNestedValue(rule, 'notes', ''),
             status: SafeAccess.getNestedValue(rule, 'status', 'unknown'),
-            hit: SafeAccess.getNestedValue(rule, 'hit', null),
-            schedule: SafeAccess.getNestedValue(rule, 'schedule', null),
-            timeUsage: SafeAccess.getNestedValue(rule, 'timeUsage', null),
-            protocol: SafeAccess.getNestedValue(rule, 'protocol', null),
-            created_at: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'ts', null), null),
-            updated_at: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'updateTs', null), null),
-            resume_at: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'resumeTs', null), null),
+            hit: SafeAccess.getNestedValue(rule, 'hit', undefined),
+            schedule: SafeAccess.getNestedValue(rule, 'schedule', undefined),
+            timeUsage: SafeAccess.getNestedValue(rule, 'timeUsage', undefined),
+            protocol: SafeAccess.getNestedValue(rule, 'protocol', undefined),
+            created_at: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'ts', undefined), undefined),
+            updated_at: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'updateTs', undefined), undefined),
+            resume_at: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'resumeTs', undefined), undefined),
           })
         ),
-        next_cursor: SafeAccess.getNestedValue(summaryOnly ? optimizedResponse : response, 'next_cursor', null),
+        next_cursor: SafeAccess.getNestedValue(summaryOnly ? optimizedResponse : response, 'next_cursor', undefined),
         ...(summaryOnly && (optimizedResponse as any).pagination_note && { pagination_note: (optimizedResponse as any).pagination_note }),
       });
       
@@ -102,7 +102,7 @@ export class PauseRuleHandler extends BaseToolHandler {
       ]);
       
       if (!validationResult.isValid) {
-        return createErrorResponse(this.name, 'Parameter validation failed', null, validationResult.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', undefined, validationResult.errors);
       }
       
       const result = await firewalla.pauseRule(
@@ -136,7 +136,7 @@ export class ResumeRuleHandler extends BaseToolHandler {
       const ruleIdValidation = ParameterValidator.validateRequiredString(args?.rule_id, 'rule_id');
       
       if (!ruleIdValidation.isValid) {
-        return createErrorResponse(this.name, 'Parameter validation failed', null, ruleIdValidation.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', undefined, ruleIdValidation.errors);
       }
       
       const result = await firewalla.resumeRule(ruleIdValidation.sanitizedValue!);
@@ -168,7 +168,7 @@ export class GetTargetListsHandler extends BaseToolHandler {
       if (listType !== undefined) {
         const validTypes = ['cloudflare', 'crowdsec', 'all'];
         if (!validTypes.includes(listType)) {
-          return createErrorResponse(this.name, 'Invalid list_type parameter', null, [`list_type must be one of: ${validTypes.join(', ')}`]);
+          return createErrorResponse(this.name, 'Invalid list_type parameter', undefined, [`list_type must be one of: ${validTypes.join(', ')}`]);
         }
       }
       
@@ -178,7 +178,7 @@ export class GetTargetListsHandler extends BaseToolHandler {
         total_lists: SafeAccess.safeArrayAccess(listsResponse.results, (arr) => arr.length, 0),
         categories: Array.from(new Set(SafeAccess.safeArrayMap(
           listsResponse.results,
-          (l: any) => SafeAccess.getNestedValue(l, 'category', null)
+          (l: any) => SafeAccess.getNestedValue(l, 'category', undefined)
         ).filter(Boolean))),
         target_lists: SafeAccess.safeArrayMap(
           listsResponse.results,
@@ -189,7 +189,7 @@ export class GetTargetListsHandler extends BaseToolHandler {
             category: SafeAccess.getNestedValue(list, 'category', 'unknown'),
             entry_count: SafeAccess.safeArrayAccess(list.targets, (arr) => arr.length, 0),
             targets: SafeAccess.safeArrayAccess(list.targets, (arr) => arr.slice(0, 500), []), // Increased from 100 to 500 targets per list
-            last_updated: safeUnixToISOString(SafeAccess.getNestedValue(list, 'lastUpdated', null), null),
+            last_updated: safeUnixToISOString(SafeAccess.getNestedValue(list, 'lastUpdated', undefined), undefined),
             notes: SafeAccess.getNestedValue(list, 'notes', ''),
           })
         ),
@@ -264,8 +264,8 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
       const avgHitsPerRule = allRules.length > 0 ? Math.round(totalHits / allRules.length * 100) / 100 : 0;
       
       // Find most recent rule activity
-      let mostRecentRuleTs: number | null = null;
-      let oldestRuleTs: number | null = null;
+      let mostRecentRuleTs: number | undefined = undefined;
+      let oldestRuleTs: number | undefined = undefined;
       
       if (allRules.length > 0) {
         const validTimestamps = allRules
@@ -306,9 +306,9 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
           hit_rate_percentage: allRules.length > 0 ? Math.round((rulesWithHits.length / allRules.length) * 100) : 0,
         },
         age_statistics: {
-          most_recent_activity: safeUnixToISOString(mostRecentRuleTs, null),
-          oldest_rule_created: safeUnixToISOString(oldestRuleTs, null),
-          has_timestamp_data: mostRecentRuleTs !== null || oldestRuleTs !== null,
+          most_recent_activity: safeUnixToISOString(mostRecentRuleTs, undefined),
+          oldest_rule_created: safeUnixToISOString(oldestRuleTs, undefined),
+          has_timestamp_data: mostRecentRuleTs !== undefined || oldestRuleTs !== undefined,
         },
         filters_applied: {
           rule_type: ruleType || 'all',
@@ -387,8 +387,8 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
               target_value: targetValue.length > 60 ? targetValue.substring(0, 60) + '...' : targetValue,
               direction: SafeAccess.getNestedValue(rule, 'direction', 'unknown'),
               hit_count: SafeAccess.getNestedValue(rule, 'hit.count', 0),
-              last_hit: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'hit.lastHitTs', null), 'Never'),
-              created_at: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'ts', null), null),
+              last_hit: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'hit.lastHitTs', undefined), 'Never'),
+              created_at: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'ts', undefined), undefined),
               notes: notes.length > 80 ? notes.substring(0, 80) + '...' : notes,
             };
           }
@@ -465,7 +465,7 @@ export class GetRecentRulesHandler extends BaseToolHandler {
         recent_rules_found: recentRules.length,
         lookback_hours: hours,
         include_modified: includeModified,
-        cutoff_time: safeUnixToISOString(hoursAgoTs, null),
+        cutoff_time: safeUnixToISOString(hoursAgoTs, undefined),
         rules: SafeAccess.safeArrayMap(
           recentRules,
           (rule: any) => {
@@ -483,8 +483,8 @@ export class GetRecentRulesHandler extends BaseToolHandler {
               direction: SafeAccess.getNestedValue(rule, 'direction', 'unknown'),
               status: SafeAccess.getNestedValue(rule, 'status', 'active'),
               activity_type: wasModified ? 'modified' : 'created',
-              created_at: safeUnixToISOString(ts, null),
-              updated_at: safeUnixToISOString(updateTs, null),
+              created_at: safeUnixToISOString(ts, undefined),
+              updated_at: safeUnixToISOString(updateTs, undefined),
               hit_count: SafeAccess.getNestedValue(rule, 'hit.count', 0),
               notes: notes.length > 80 ? notes.substring(0, 80) + '...' : notes,
             };
