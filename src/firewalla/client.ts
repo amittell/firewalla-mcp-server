@@ -1,3 +1,23 @@
+/**
+ * @fileoverview Firewalla API Client for MSP Integration
+ * 
+ * Provides comprehensive access to Firewalla MSP APIs with enterprise-grade features:
+ * - **Authentication**: Token-based MSP API authentication with error handling
+ * - **Caching**: Intelligent response caching with configurable TTL
+ * - **Rate Limiting**: Built-in protection against API rate limits
+ * - **Error Handling**: Comprehensive error mapping and recovery strategies
+ * - **Optimization**: Automatic response optimization for token efficiency
+ * - **Monitoring**: Request/response logging and performance tracking
+ * 
+ * The client supports all major Firewalla data types including alarms, flows,
+ * devices, rules, bandwidth analytics, and advanced search capabilities with
+ * cross-reference correlation and trend analysis.
+ * 
+ * @version 1.0.0
+ * @author Firewalla MCP Server Team
+ * @since 2024-01-01
+ */
+
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
 import {
@@ -20,17 +40,68 @@ import { optimizeResponse } from '../optimization/index.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
 import { logger } from '../monitoring/logger.js';
 
+/**
+ * Standard API response wrapper for Firewalla MSP endpoints
+ * 
+ * @template T - The type of data contained in the response
+ */
 interface APIResponse<T> {
+  /** @description Indicates if the API request was successful */
   success: boolean;
+  /** @description The response data payload */
   data: T;
+  /** @description Optional success message from the API */
   message?: string;
+  /** @description Optional error message if the request failed */
   error?: string;
 }
 
+/**
+ * Firewalla API Client for MSP Integration
+ * 
+ * Main client class providing authenticated access to Firewalla MSP APIs.
+ * Handles authentication, caching, rate limiting, error handling, and response
+ * optimization for efficient integration with Claude through the MCP protocol.
+ * 
+ * Features:
+ * - Automatic token-based authentication with the MSP API
+ * - Intelligent caching with configurable TTL policies
+ * - Built-in rate limiting and retry mechanisms
+ * - Comprehensive error handling with meaningful error messages
+ * - Response optimization for MCP protocol constraints
+ * - Request/response logging for debugging and monitoring
+ * 
+ * @example
+ * ```typescript
+ * const config = getConfig();
+ * const client = new FirewallaClient(config);
+ * 
+ * // Get recent alarms
+ * const alarms = await client.getActiveAlarms({ limit: 50 });
+ * 
+ * // Search for high-severity flows
+ * const flows = await client.searchFlows({
+ *   query: 'severity:high AND bytes:>1000000',
+ *   limit: 100
+ * });
+ * ```
+ * 
+ * @class
+ * @public
+ */
 export class FirewallaClient {
+  /** @private Axios instance configured for Firewalla MSP API access */
   private api: AxiosInstance;
+  
+  /** @private In-memory cache for API responses with TTL management */
   private cache: Map<string, { data: unknown; expires: number }>;
 
+  /**
+   * Creates a new Firewalla API client instance
+   * 
+   * @param config - Configuration object containing MSP credentials and settings
+   * @throws {Error} If configuration is invalid or authentication fails
+   */
   constructor(private config: FirewallaConfig) {
     this.cache = new Map();
     
@@ -50,6 +121,18 @@ export class FirewallaClient {
     this.setupInterceptors();
   }
 
+  /**
+   * Sets up Axios request and response interceptors for logging and error handling
+   * 
+   * Configures interceptors to:
+   * - Log all API requests and responses for debugging
+   * - Transform HTTP error codes into meaningful error messages
+   * - Handle authentication and authorization failures
+   * - Provide specific guidance for common error scenarios
+   * 
+   * @private
+   * @returns {void}
+   */
   private setupInterceptors(): void {
     this.api.interceptors.request.use(
       (config) => {
@@ -88,11 +171,27 @@ export class FirewallaClient {
     );
   }
 
+  /**
+   * Generates a unique cache key for API requests
+   * 
+   * @param endpoint - API endpoint path
+   * @param params - Optional request parameters
+   * @returns Unique cache key string
+   * @private
+   */
   private getCacheKey(endpoint: string, params?: Record<string, unknown>): string {
     const paramStr = params ? JSON.stringify(params) : '';
     return `${endpoint}:${paramStr}`;
   }
 
+  /**
+   * Retrieves data from cache if available and not expired
+   * 
+   * @template T - The expected return type
+   * @param key - Cache key to look up
+   * @returns Cached data if available and valid, otherwise null
+   * @private
+   */
   private getFromCache<T>(key: string): T | null {
     const cached = this.cache.get(key);
     if (cached && cached.expires > Date.now()) {
@@ -224,6 +323,42 @@ export class FirewallaClient {
     }
   }
 
+  /**
+   * Retrieves active security alarms from the Firewalla system
+   * 
+   * Fetches current security alerts, alarms, and notifications with support for
+   * advanced filtering, grouping, and pagination. Results are automatically
+   * optimized for token efficiency while preserving essential security context.
+   * 
+   * @param query - Optional search query for filtering alarms
+   * @param groupBy - Optional field to group results by (e.g., 'type', 'box')
+   * @param sortBy - Sort order specification (default: 'timestamp:desc')
+   * @param limit - Maximum number of results to return (required for pagination)
+   * @param cursor - Pagination cursor from previous response
+   * @returns Promise resolving to paginated alarm results with metadata
+   * 
+   * @example
+   * ```typescript
+   * // Get recent high-severity alarms
+   * const highSeverityAlarms = await client.getActiveAlarms(
+   *   'severity:high',
+   *   undefined,
+   *   'timestamp:desc',
+   *   50
+   * );
+   * 
+   * // Get alarms grouped by type
+   * const groupedAlarms = await client.getActiveAlarms(
+   *   undefined,
+   *   'type',
+   *   'timestamp:desc',
+   *   100
+   * );
+   * ```
+   * 
+   * @public
+   * @optimizeResponse('alarms') - Automatically optimizes response for token efficiency
+   */
   @optimizeResponse('alarms')
   async getActiveAlarms(
     query?: string, 

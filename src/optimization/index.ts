@@ -1,6 +1,19 @@
 /**
- * Token usage optimization utilities for Firewalla MCP Server
- * Implements response truncation, summary modes, and token management
+ * @fileoverview Token usage optimization utilities for Firewalla MCP Server
+ * 
+ * Provides comprehensive response optimization for MCP protocol communication including:
+ * - **Intelligent Truncation**: Smart text shortening with word boundary preservation
+ * - **Response Summarization**: Field-level optimization for different data types
+ * - **Token Management**: Sophisticated token counting and size estimation
+ * - **Auto-optimization**: Automatic response size management with configurable limits
+ * - **Performance Monitoring**: Optimization statistics and compression metrics
+ * 
+ * The optimization system reduces token usage while preserving essential information,
+ * ensuring Claude can process large datasets within MCP protocol constraints.
+ * 
+ * @version 1.0.0
+ * @author Firewalla MCP Server Team
+ * @since 2024-01-01
  */
 
 import { safeUnixToISOString } from '../utils/timestamp.js';
