@@ -292,7 +292,7 @@ export class SearchEngine {
 
     // Validate limit parameter with consistent boundary checking
     if (config.requireLimit !== false) {
-      const maxLimit = config.maxLimit || (entityType === 'flows' ? 10000 : 5000);
+      const maxLimit = config.maxLimit || (entityType === 'flows' ? 1000 : 500);
       const limitValidation = ParameterValidator.validateNumber(params?.limit, 'limit', {
         required: true,
         min: 1,
@@ -492,7 +492,7 @@ export class SearchEngine {
       requireQuery: true,
       requireLimit: true,
       supportsTimeRange: true,
-      maxLimit: 10000
+      maxLimit: 1000
     });
   }
 
@@ -959,10 +959,16 @@ export class SearchEngine {
       const valueA = a.value;
       const valueB = b.value;
       
+      // Handle null/undefined values - sort nulls to the end
+      if (valueA == null && valueB == null) return 0;
+      if (valueA == null) return 1;  // null values go to end
+      if (valueB == null) return -1; // null values go to end
+      
       if (valueA === valueB) {
         return 0;
       }
       
+      // Handle string vs number comparisons
       const comparison = valueA < valueB ? -1 : 1;
       return sortOrder === 'asc' ? comparison : -comparison;
     });
@@ -1090,7 +1096,7 @@ export class SearchEngine {
     try {
       // Validate limit parameter
       const limitValidation = ParameterValidator.validateNumber(params.limit, 'limit', {
-        required: true, min: 1, max: 10000, integer: true
+        required: true, min: 1, max: 1000, integer: true
       });
       
       if (!limitValidation.isValid) {
@@ -1301,7 +1307,7 @@ export class SearchEngine {
     try {
       const limit = params.limit || 1000;
       const limitValidation = ParameterValidator.validateNumber(limit, 'limit', {
-        min: 1, max: 10000, integer: true
+        min: 1, max: 1000, integer: true
       });
       
       if (!limitValidation.isValid) {

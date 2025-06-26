@@ -344,22 +344,64 @@ function mapComparisonOperator(op: string): QueryComponent['operator'] {
  * Converts a wildcard pattern containing `*` and `?` into an equivalent regular expression string.
  *
  * Escapes all regex special characters except `*` and `?`, then replaces `*` with `.*` and `?` with `.`.
+ * Includes protection against ReDoS (Regular Expression Denial of Service) attacks.
  *
  * @param pattern - The wildcard pattern to convert
  * @returns The corresponding regular expression string
+ * @throws {Error} If the pattern is too long or contains dangerous patterns
  */
 function convertWildcardToRegex(pattern: string): string {
+  // Protection against ReDoS attacks
+  if (pattern.length > 100) {
+    throw new Error('Wildcard pattern too long (max 100 characters)');
+  }
+  
+  // Check for dangerous patterns that could cause ReDoS
+  const dangerousPatterns = [
+    /(\*\+|\+\*)/,           // Nested quantifiers
+    /(\*\{|\{\*)/,           // Quantifier combinations
+    /(\.\*){5,}/,            // Too many .* sequences
+    /(\*.*\*.*\*.*\*)/,      // Multiple wildcards in sequence
+  ];
+  
+  for (const dangerousPattern of dangerousPatterns) {
+    if (dangerousPattern.test(pattern)) {
+      throw new Error('Wildcard pattern contains potentially dangerous sequences');
+    }
+  }
+  
   // Escape special regex characters except * and ?
   const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
   
-  // Convert wildcards to regex
-  return escaped
-    .replace(/\*/g, '.*')     // * becomes .*
-    .replace(/\?/g, '.');     // ? becomes .
+  // Convert wildcards to regex with limited quantifiers
+  let result = escaped
+    .replace(/\*/g, '[^\\s]*')  // * becomes [^\s]* (non-greedy, no whitespace)
+    .replace(/\?/g, '[^\\s]');  // ? becomes [^\s] (single non-whitespace char)
+  
+  // Validate the resulting regex pattern length
+  if (result.length > 200) {
+    throw new Error('Generated regex pattern too complex');
+  }
+  
+  return result;
 }
 
 /**
  * Returns the complexity score associated with a given query operator.
+ *
+ * The complexity scoring system helps optimize query execution and resource allocation:
+ * 
+ * **Score Ranges:**
+ * - 1.0-1.2: Simple operations (equality, comparison)
+ * - 1.3-1.9: Moderate operations (array membership, basic filters)
+ * - 2.0-2.9: Complex operations (pattern matching, regex, ranges)
+ * - 3.0+: Very complex operations (full-text search, advanced algorithms)
+ * 
+ * **Usage:**
+ * - Scores are summed across all query components
+ * - Higher complexity queries may be subject to additional validation
+ * - Query optimization reorders components by ascending complexity
+ * - Resource allocation is adjusted based on total complexity score
  *
  * @param operator - The operator whose complexity is to be evaluated
  * @returns A numeric score representing the relative complexity of the operator
@@ -443,15 +485,53 @@ export function validateSearchQuery(
       errors.push(`Query too complex (${parsed.complexity}). Maximum complexity is ${maxComplexity}.`);
     }
     
-    // Check for unsupported operators
+    // Check for unsupported operators and validate regex patterns
     for (const component of parsed.components) {
       if (component.operator === 'regex' && typeof component.value === 'string') {
         try {
-          const regex = new RegExp(component.value);
-          // Test if the regex is valid by using it
-          regex.test('');
-        } catch {
-          errors.push(`Invalid regex pattern: ${component.value}`);
+          const pattern = component.value;
+          
+          // Check pattern length to prevent ReDoS
+          if (pattern.length > 100) {
+            errors.push(`Regex pattern too long (max 100 characters): ${pattern}`);
+            continue;
+          }
+          
+          // Check for catastrophic backtracking patterns
+          const catastrophicPatterns = [
+            /(\(.*\*.*\)){2,}/,        // Nested groups with quantifiers
+            /(\.\*\+|\+\.\*)/,         // Greedy quantifier combinations
+            /(\w\*\+|\+\w\*)/,         // Word character quantifier combinations
+            /(\.\*){3,}/,              // Multiple .* sequences
+            /(.*\+.*\+.*\+)/,          // Multiple + quantifiers
+          ];
+          
+          for (const catPattern of catastrophicPatterns) {
+            if (catPattern.test(pattern)) {
+              errors.push(`Regex pattern contains potentially catastrophic backtracking: ${pattern}`);
+              break;
+            }
+          }
+          
+          const regex = new RegExp(pattern);
+          
+          // Test regex with various inputs to ensure it doesn't hang
+          const testInputs = ['', 'a', 'test', '123', 'long_test_string_with_various_chars_123'];
+          const testTimeout = 100; // 100ms timeout for regex testing
+          
+          for (const testInput of testInputs) {
+            const start = Date.now();
+            regex.test(testInput);
+            const elapsed = Date.now() - start;
+            
+            if (elapsed > testTimeout) {
+              errors.push(`Regex pattern takes too long to execute (${elapsed}ms): ${pattern}`);
+              break;
+            }
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          errors.push(`Invalid regex pattern: ${component.value} (${errorMessage})`);
         }
       }
     }

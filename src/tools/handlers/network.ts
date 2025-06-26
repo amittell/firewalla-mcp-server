@@ -16,7 +16,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
     try {
       // Parameter validation
       const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
-        required: true, min: 1, max: 10000, integer: true
+        required: true, min: 1, max: 1000, integer: true
       });
       
       if (!limitValidation.isValid) {
@@ -142,7 +142,7 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
     try {
       // Parameter validation
       const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
-        required: true, min: 1, max: 10000, integer: true
+        required: true, min: 1, max: 1000, integer: true
       });
       const sortValidation = ParameterValidator.validateBoolean(args?.sort_by_last_seen, 'sort_by_last_seen', true);
       
@@ -158,7 +158,7 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
       const sortByLastSeen = sortValidation.sanitizedValue!;
       
       // Get all devices including offline ones with adequate buffer for filtering
-      const fetchLimit = Math.min(limit * 3, 10000); // Fetch 3x limit to account for offline filtering
+      const fetchLimit = Math.min(limit * 3, 1000); // Fetch 3x limit to account for offline filtering
       const allDevicesResponse = await firewalla.getDeviceStatus(undefined, undefined, fetchLimit);
       
       // Filter to only offline devices

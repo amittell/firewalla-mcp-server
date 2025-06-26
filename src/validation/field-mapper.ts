@@ -725,8 +725,37 @@ export function performMultiFieldCorrelation(
   primaryType: EntityType,
   secondaryType: EntityType,
   correlationParams: EnhancedCorrelationParams
-): { correlatedResults: any[]; correlationStats: any } {
+): { correlatedResults: any[]; correlationStats: any; warnings?: string[] } {
   const { correlationFields, correlationType } = correlationParams;
+  const warnings: string[] = [];
+  
+  // Add dataset size warnings for large correlation operations
+  const totalDatasetSize = primaryResults.length + secondaryResults.length;
+  const primarySize = primaryResults.length;
+  const secondarySize = secondaryResults.length;
+  
+  if (totalDatasetSize > 5000) {
+    warnings.push(`Large dataset detected (${totalDatasetSize} items). Correlation may take longer than usual.`);
+  }
+  
+  if (primarySize > 2000) {
+    warnings.push(`Large primary dataset (${primarySize} items). Consider using more specific queries to improve performance.`);
+  }
+  
+  if (secondarySize > 2000) {
+    warnings.push(`Large secondary dataset (${secondarySize} items). Consider using more specific queries to improve performance.`);
+  }
+  
+  // Warn about complex correlations
+  const complexityScore = correlationFields.length * Math.max(primarySize, secondarySize);
+  if (complexityScore > 10000) {
+    warnings.push(`High complexity correlation (score: ${complexityScore}). Consider reducing correlation fields or dataset size.`);
+  }
+  
+  // Warn about fuzzy matching on large datasets (if fuzzy matching is enabled)
+  if ('enableFuzzyMatching' in correlationParams && correlationParams.enableFuzzyMatching && totalDatasetSize > 1000) {
+    warnings.push(`Fuzzy matching on large dataset (${totalDatasetSize} items) may be slow. Consider using exact matching for better performance.`);
+  }
   
   // Extract correlation values for each field from primary results
   const correlationValueSets = correlationFields.map(field => 
@@ -769,7 +798,8 @@ export function performMultiFieldCorrelation(
   
   return {
     correlatedResults: temporallyFilteredResults,
-    correlationStats
+    correlationStats,
+    warnings: warnings.length > 0 ? warnings : undefined
   };
 }
 

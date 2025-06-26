@@ -17,7 +17,7 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
     try {
       // Parameter validation
       const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
-        required: true, min: 1, max: 10000, integer: true
+        required: true, min: 1, max: 1000, integer: true
       });
       
       if (!limitValidation.isValid) {
