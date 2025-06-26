@@ -15,7 +15,14 @@ export class GetBoxesHandler extends BaseToolHandler {
 
   async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
     try {
-      const groupId = args?.group_id as string | undefined;
+      // Parameter validation
+      const groupIdValidation = ParameterValidator.validateOptionalString(args?.group_id, 'group_id');
+      
+      if (!groupIdValidation.isValid) {
+        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, groupIdValidation.errors);
+      }
+      
+      const groupId = groupIdValidation.sanitizedValue;
       
       const boxesResponse = await firewalla.getBoxes(groupId);
       
@@ -274,8 +281,22 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
 
   async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
     try {
-      const period = (args?.period as '1h' | '24h' | '7d' | '30d') || '24h';
-      const interval = (args?.interval as number) || 3600;
+      // Parameter validation
+      const periodValidation = ParameterValidator.validateEnum(args?.period, 'period', ['1h', '24h', '7d', '30d'], false, '24h');
+      const intervalValidation = ParameterValidator.validateNumber(args?.interval, 'interval', {
+        min: 60, max: 86400, defaultValue: 3600, integer: true
+      });
+      
+      const validationResult = ParameterValidator.combineValidationResults([
+        periodValidation, intervalValidation
+      ]);
+      
+      if (!validationResult.isValid) {
+        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, validationResult.errors);
+      }
+      
+      const period = periodValidation.sanitizedValue!;
+      const interval = intervalValidation.sanitizedValue!;
       
       const trends = await firewalla.getFlowTrends(period, interval);
       
@@ -337,7 +358,14 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
 
   async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
     try {
-      const period = (args?.period as '1h' | '24h' | '7d' | '30d') || '24h';
+      // Parameter validation
+      const periodValidation = ParameterValidator.validateEnum(args?.period, 'period', ['1h', '24h', '7d', '30d'], false, '24h');
+      
+      if (!periodValidation.isValid) {
+        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, periodValidation.errors);
+      }
+      
+      const period = periodValidation.sanitizedValue!;
       
       const trends = await firewalla.getAlarmTrends(period);
       
@@ -407,7 +435,14 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
 
   async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
     try {
-      const period = (args?.period as '1h' | '24h' | '7d' | '30d') || '24h';
+      // Parameter validation
+      const periodValidation = ParameterValidator.validateEnum(args?.period, 'period', ['1h', '24h', '7d', '30d'], false, '24h');
+      
+      if (!periodValidation.isValid) {
+        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, periodValidation.errors);
+      }
+      
+      const period = periodValidation.sanitizedValue!;
       
       const trends = await firewalla.getRuleTrends(period);
       

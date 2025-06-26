@@ -4,6 +4,15 @@
  */
 
 import { SafeAccess } from './error-handler.js';
+import { 
+  performEnhancedCorrelation, 
+  ScoredCorrelationResult, 
+  EnhancedCorrelationStats,
+  CorrelationWeights,
+  FuzzyMatchConfig,
+  DEFAULT_CORRELATION_WEIGHTS,
+  DEFAULT_FUZZY_CONFIG
+} from './enhanced-correlation.js';
 
 export type EntityType = 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists';
 
@@ -21,7 +30,55 @@ export const FIELD_MAPPINGS: Record<EntityType, Record<string, string[]>> = {
     'device_id': ['device.id', 'device.gid'],
     'direction': ['direction'],
     'blocked': ['block', 'blocked'],
-    'gid': ['gid', 'device.gid']
+    'gid': ['gid', 'device.gid'],
+    // Enhanced network fields
+    'subnet': ['source.subnet', 'destination.subnet', 'device.subnet'],
+    'network_segment': ['device.network.segment', 'network.segment'],
+    'port': ['source.port', 'destination.port', 'srcPort', 'dstPort'],
+    'port_range': ['port_range', 'target.port'],
+    // Enhanced device fields
+    'device_type': ['device.type', 'device.category'],
+    'device_vendor': ['device.macVendor', 'device.vendor'],
+    'device_group': ['device.group.id', 'device.group'],
+    'mac_vendor': ['device.macVendor', 'macVendor'],
+    'device_category': ['device.category', 'category'],
+    // Enhanced temporal fields
+    'time_window': ['time_window', 'ts'],
+    'hour_of_day': ['hour', 'ts'],
+    'day_of_week': ['day', 'ts'],
+    'time_pattern': ['time_pattern', 'ts'],
+    // Enhanced security fields
+    'threat_level': ['threat.level', 'risk_level'],
+    'attack_vector': ['attack.vector', 'method'],
+    'geo_location': ['geo.country', 'location.country', 'country'],
+    'asn': ['geo.asn', 'location.asn', 'asn', 'as_number'],
+    // Application-level fields
+    'user_agent': ['headers.userAgent', 'userAgent', 'ua'],
+    'application': ['app', 'application', 'service'],
+    'application_category': ['app.category', 'service.category'],
+    'domain_category': ['domain.category', 'category'],
+    'ssl_subject': ['ssl.subject', 'tls.subject'],
+    'ssl_issuer': ['ssl.issuer', 'tls.issuer'],
+    // Behavioral pattern fields
+    'session_duration': ['duration', 'session.duration'],
+    'frequency_score': ['frequency', 'rate'],
+    'bytes_per_session': ['bytesPerSession', 'avgBytes'],
+    'connection_pattern': ['pattern', 'connectionPattern'],
+    'activity_level': ['activity', 'level'],
+    // Enhanced geographic fields
+    'country': ['geo.country', 'location.country', 'country', 'region'],
+    'country_code': ['geo.countryCode', 'location.countryCode', 'countryCode'],
+    'continent': ['geo.continent', 'location.continent'],
+    'region': ['geo.region', 'location.region', 'region'],
+    'city': ['geo.city', 'location.city'],
+    'timezone': ['geo.timezone', 'location.timezone'],
+    'isp': ['geo.isp', 'location.isp', 'isp'],
+    'organization': ['geo.organization', 'location.organization', 'org'],
+    'hosting_provider': ['geo.hosting', 'location.hosting', 'hosting'],
+    'is_cloud_provider': ['geo.isCloud', 'location.isCloud', 'cloud'],
+    'is_proxy': ['geo.isProxy', 'location.isProxy', 'proxy'],
+    'is_vpn': ['geo.isVPN', 'location.isVPN', 'vpn'],
+    'geographic_risk_score': ['geo.riskScore', 'location.riskScore', 'geoRisk']
   },
   alarms: {
     'source_ip': ['device.ip', 'remote.ip'],
@@ -34,7 +91,47 @@ export const FIELD_MAPPINGS: Record<EntityType, Record<string, string[]>> = {
     'severity': ['severity'],
     'status': ['status'],
     'message': ['message'],
-    'gid': ['gid']
+    'gid': ['gid'],
+    // Enhanced network fields
+    'subnet': ['device.subnet', 'remote.subnet'],
+    'port': ['port', 'remote.port'],
+    // Enhanced temporal fields
+    'time_window': ['time_window', 'ts'],
+    'hour_of_day': ['hour', 'ts'],
+    'day_of_week': ['day', 'ts'],
+    'time_pattern': ['time_pattern', 'ts'],
+    // Enhanced security fields
+    'threat_level': ['threat.level', 'risk_level', 'severity'],
+    'attack_vector': ['attack.vector', 'method', 'type'],
+    'geo_location': ['geo.country', 'location.country', 'country'],
+    'asn': ['geo.asn', 'location.asn', 'asn', 'as_number', 'remote.asn'],
+    // Application-level fields
+    'user_agent': ['headers.userAgent', 'userAgent', 'ua', 'remote.userAgent'],
+    'application': ['app', 'application', 'service', 'remote.app'],
+    'application_category': ['app.category', 'service.category', 'remote.category'],
+    'domain_category': ['domain.category', 'category', 'remote.domainCategory'],
+    'ssl_subject': ['ssl.subject', 'tls.subject', 'remote.sslSubject'],
+    'ssl_issuer': ['ssl.issuer', 'tls.issuer', 'remote.sslIssuer'],
+    // Behavioral pattern fields
+    'session_duration': ['duration', 'session.duration', 'remote.duration'],
+    'frequency_score': ['frequency', 'rate', 'remote.frequency'],
+    'bytes_per_session': ['bytesPerSession', 'avgBytes', 'remote.avgBytes'],
+    'connection_pattern': ['pattern', 'connectionPattern', 'remote.pattern'],
+    'activity_level': ['activity', 'level', 'remote.activity'],
+    // Enhanced geographic fields
+    'country': ['geo.country', 'location.country', 'country', 'remote.country'],
+    'country_code': ['geo.countryCode', 'location.countryCode', 'remote.countryCode'],
+    'continent': ['geo.continent', 'location.continent', 'remote.continent'],
+    'region': ['geo.region', 'location.region', 'remote.region'],
+    'city': ['geo.city', 'location.city', 'remote.city'],
+    'timezone': ['geo.timezone', 'location.timezone', 'remote.timezone'],
+    'isp': ['geo.isp', 'location.isp', 'remote.isp'],
+    'organization': ['geo.organization', 'location.organization', 'remote.org'],
+    'hosting_provider': ['geo.hosting', 'location.hosting', 'remote.hosting'],
+    'is_cloud_provider': ['geo.isCloud', 'location.isCloud', 'remote.cloud'],
+    'is_proxy': ['geo.isProxy', 'location.isProxy', 'remote.proxy'],
+    'is_vpn': ['geo.isVPN', 'location.isVPN', 'remote.vpn'],
+    'geographic_risk_score': ['geo.riskScore', 'location.riskScore', 'remote.geoRisk']
   },
   rules: {
     'target_value': ['target.value'],
@@ -46,7 +143,15 @@ export const FIELD_MAPPINGS: Record<EntityType, Record<string, string[]>> = {
     'hit_count': ['hit.count'],
     'timestamp': ['ts', 'updateTs'],
     'gid': ['gid'],
-    'id': ['id']
+    'id': ['id'],
+    // Enhanced network fields
+    'port': ['port', 'target.port'],
+    'port_range': ['port_range', 'target.port_range'],
+    // Enhanced rule and policy fields
+    'policy_group': ['policy.group', 'group'],
+    'rule_category': ['category', 'type'],
+    'target_domain': ['target.domain', 'target.value'],
+    'target_category': ['target.category', 'category']
   },
   devices: {
     'device_ip': ['ip', 'ipAddress'],
@@ -58,7 +163,16 @@ export const FIELD_MAPPINGS: Record<EntityType, Record<string, string[]>> = {
     'last_seen': ['lastSeen', 'onlineTs'],
     'network_id': ['network.id'],
     'group_id': ['group.id'],
-    'gid': ['gid']
+    'gid': ['gid'],
+    // Enhanced device fields
+    'device_type': ['type', 'category'],
+    'device_vendor': ['macVendor', 'vendor'],
+    'device_group': ['group.id', 'group'],
+    'mac_vendor': ['macVendor'],
+    'device_category': ['category', 'type'],
+    // Enhanced network fields
+    'subnet': ['subnet', 'network.subnet'],
+    'network_segment': ['network.segment', 'segment']
   },
   target_lists: {
     'name': ['name'],
@@ -66,7 +180,10 @@ export const FIELD_MAPPINGS: Record<EntityType, Record<string, string[]>> = {
     'owner': ['owner'],
     'target_count': ['targets.length'],
     'last_updated': ['lastUpdated'],
-    'id': ['id']
+    'id': ['id'],
+    // Enhanced target list fields
+    'target_category': ['category', 'target.category'],
+    'target_domain': ['domain', 'targets.domain']
   }
 };
 
@@ -82,7 +199,60 @@ export const CORRELATION_FIELDS: Record<string, EntityType[]> = {
   'timestamp': ['flows', 'alarms', 'rules'],
   'gid': ['flows', 'alarms', 'rules', 'devices'],
   'direction': ['flows', 'rules'],
-  'status': ['alarms', 'rules']
+  'status': ['alarms', 'rules'],
+  // Enhanced network correlations
+  'subnet': ['flows', 'alarms', 'devices'],
+  'network_segment': ['flows', 'devices'],
+  'port': ['flows', 'alarms', 'rules'],
+  'port_range': ['flows', 'rules'],
+  // Enhanced device correlations
+  'device_type': ['devices', 'flows'],
+  'device_vendor': ['devices', 'flows'],
+  'device_group': ['devices', 'flows'],
+  'mac_vendor': ['devices', 'flows'],
+  'device_category': ['devices', 'flows'],
+  // Enhanced temporal correlations
+  'time_window': ['flows', 'alarms', 'rules'],
+  'hour_of_day': ['flows', 'alarms'],
+  'day_of_week': ['flows', 'alarms'],
+  'time_pattern': ['flows', 'alarms'],
+  // Enhanced rule and policy correlations
+  'policy_group': ['rules', 'flows'],
+  'rule_category': ['rules', 'flows'],
+  'target_domain': ['rules', 'flows'],
+  'target_category': ['rules', 'target_lists'],
+  // Enhanced security correlations
+  'threat_level': ['alarms', 'flows'],
+  'attack_vector': ['alarms', 'flows'],
+  'geo_location': ['flows', 'alarms'],
+  'asn': ['flows', 'alarms'],
+  // Enhanced geographic correlations
+  'country': ['flows', 'alarms'],
+  'country_code': ['flows', 'alarms'],
+  'continent': ['flows', 'alarms'],
+  'region': ['flows', 'alarms'],
+  'city': ['flows', 'alarms'],
+  'timezone': ['flows', 'alarms'],
+  'isp': ['flows', 'alarms'],
+  'organization': ['flows', 'alarms'],
+  'hosting_provider': ['flows', 'alarms'],
+  'is_cloud_provider': ['flows', 'alarms'],
+  'is_proxy': ['flows', 'alarms'],
+  'is_vpn': ['flows', 'alarms'],
+  'geographic_risk_score': ['flows', 'alarms'],
+  // Application-level correlations
+  'user_agent': ['flows', 'alarms'],
+  'application': ['flows', 'alarms'],
+  'application_category': ['flows', 'alarms'],
+  'domain_category': ['flows', 'alarms'],
+  'ssl_subject': ['flows', 'alarms'],
+  'ssl_issuer': ['flows', 'alarms'],
+  // Behavioral pattern correlations
+  'session_duration': ['flows', 'alarms'],
+  'frequency_score': ['flows', 'alarms'],
+  'bytes_per_session': ['flows', 'alarms'],
+  'connection_pattern': ['flows', 'alarms'],
+  'activity_level': ['flows', 'alarms']
 };
 
 /**
@@ -214,6 +384,16 @@ export function normalizeFieldValue(value: any, field: string): any {
     return value.toLowerCase();
   }
 
+  // Normalize geographic fields
+  if (field.includes('country') || field === 'continent' || field === 'region' || field === 'city') {
+    return value.trim().toLowerCase();
+  }
+
+  // Normalize ASN values
+  if (field === 'asn') {
+    return value.trim();
+  }
+
   return value;
 }
 
@@ -305,11 +485,11 @@ export function validateCrossReference(
     errors.push('Primary query cannot be empty');
   }
   
-  if (!secondaryQueries || secondaryQueries.length === 0) {
+  if (!secondaryQueries || !Array.isArray(secondaryQueries) || secondaryQueries.length === 0) {
     errors.push('At least one secondary query is required');
   }
   
-  if (secondaryQueries?.some(q => !q || q.trim().length === 0)) {
+  if (Array.isArray(secondaryQueries) && secondaryQueries.some(q => !q || q.trim().length === 0)) {
     errors.push('Secondary queries cannot be empty');
   }
   
@@ -341,4 +521,360 @@ export function validateCrossReference(
     errors,
     entityTypes: allTypes
   };
+}
+
+/**
+ * Enhanced correlation parameters for multi-field correlation
+ */
+export interface EnhancedCorrelationParams {
+  correlationFields: string[];
+  correlationType: 'AND' | 'OR';
+  temporalWindow?: {
+    windowSize: number;
+    windowUnit: 'seconds' | 'minutes' | 'hours' | 'days';
+  };
+  networkScope?: {
+    includeSubnets: boolean;
+    includePorts: boolean;
+  };
+  deviceScope?: {
+    includeVendor: boolean;
+    includeGroup: boolean;
+  };
+}
+
+/**
+ * Validates parameters for enhanced multi-field cross-reference search
+ */
+export function validateEnhancedCrossReference(
+  primaryQuery: string,
+  secondaryQueries: string[],
+  correlationParams: EnhancedCorrelationParams
+): { isValid: boolean; errors: string[]; entityTypes?: EntityType[] } {
+  const errors: string[] = [];
+  let entityTypes: EntityType[] | undefined;
+  
+  // Basic validation if we have correlation fields
+  if (correlationParams.correlationFields && correlationParams.correlationFields.length > 0) {
+    const basicValidation = validateCrossReference(primaryQuery, secondaryQueries, correlationParams.correlationFields[0]);
+    if (!basicValidation.isValid) {
+      errors.push(...basicValidation.errors);
+    }
+    entityTypes = basicValidation.entityTypes;
+  }
+  
+  // Validate correlation fields array
+  if (!correlationParams.correlationFields || correlationParams.correlationFields.length === 0) {
+    errors.push('At least one correlation field is required');
+  }
+  
+  if (correlationParams.correlationFields.length > 5) {
+    errors.push('Maximum of 5 correlation fields allowed for performance reasons');
+  }
+  
+  // Validate correlation type
+  if (!['AND', 'OR'].includes(correlationParams.correlationType)) {
+    errors.push('Correlation type must be either "AND" or "OR"');
+  }
+  
+  // Validate temporal window
+  if (correlationParams.temporalWindow) {
+    const { windowSize, windowUnit } = correlationParams.temporalWindow;
+    if (!windowSize || windowSize <= 0) {
+      errors.push('Temporal window size must be positive');
+    }
+    if (!['seconds', 'minutes', 'hours', 'days'].includes(windowUnit)) {
+      errors.push('Temporal window unit must be one of: seconds, minutes, hours, days');
+    }
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors,
+    entityTypes
+  };
+}
+
+/**
+ * Perform multi-field correlation between entity results
+ */
+export function performMultiFieldCorrelation(
+  primaryResults: any[],
+  secondaryResults: any[],
+  primaryType: EntityType,
+  secondaryType: EntityType,
+  correlationParams: EnhancedCorrelationParams
+): { correlatedResults: any[]; correlationStats: any } {
+  const { correlationFields, correlationType } = correlationParams;
+  
+  // Extract correlation values for each field from primary results
+  const correlationValueSets = correlationFields.map(field => 
+    extractCorrelationValues(primaryResults, field, primaryType)
+  );
+  
+  // Filter secondary results based on correlation logic
+  const correlatedResults = secondaryResults.filter(item => {
+    const fieldMatches = correlationFields.map((field, index) => {
+      const itemValue = getFieldValue(item, field, secondaryType);
+      if (itemValue === undefined || itemValue === null) {
+        return false;
+      }
+      const normalizedValue = normalizeFieldValue(itemValue, field);
+      return correlationValueSets[index].has(normalizedValue);
+    });
+    
+    // Apply correlation logic
+    if (correlationType === 'AND') {
+      return fieldMatches.every(match => match);
+    } else {
+      return fieldMatches.some(match => match);
+    }
+  });
+  
+  // Apply temporal window filtering if specified
+  let temporallyFilteredResults = correlatedResults;
+  if (correlationParams.temporalWindow && correlationFields.includes('timestamp')) {
+    temporallyFilteredResults = applyTemporalWindowFilter(
+      correlatedResults,
+      primaryResults,
+      correlationParams.temporalWindow,
+      secondaryType,
+      primaryType
+    );
+  }
+  
+  // Generate correlation statistics
+  const correlationStats = {
+    totalSecondaryResults: secondaryResults.length,
+    correlatedResults: correlatedResults.length,
+    temporallyFiltered: temporallyFilteredResults.length,
+    correlationRate: secondaryResults.length > 0 
+      ? Math.round((temporallyFilteredResults.length / secondaryResults.length) * 100) 
+      : 0,
+    fieldCorrelationRates: correlationFields.map((field, index) => ({
+      field,
+      matchingItems: secondaryResults.filter(item => {
+        const itemValue = getFieldValue(item, field, secondaryType);
+        if (itemValue === undefined || itemValue === null) {return false;}
+        const normalizedValue = normalizeFieldValue(itemValue, field);
+        return correlationValueSets[index].has(normalizedValue);
+      }).length,
+      correlationRate: secondaryResults.length > 0 
+        ? Math.round((secondaryResults.filter(item => {
+            const itemValue = getFieldValue(item, field, secondaryType);
+            if (itemValue === undefined || itemValue === null) {return false;}
+            const normalizedValue = normalizeFieldValue(itemValue, field);
+            return correlationValueSets[index].has(normalizedValue);
+          }).length / secondaryResults.length) * 100)
+        : 0
+    }))
+  };
+  
+  return {
+    correlatedResults: temporallyFilteredResults,
+    correlationStats
+  };
+}
+
+/**
+ * Apply temporal window filtering to correlation results
+ */
+function applyTemporalWindowFilter(
+  correlatedResults: any[],
+  primaryResults: any[],
+  temporalWindow: { windowSize: number; windowUnit: string },
+  secondaryType: EntityType,
+  primaryType: EntityType
+): any[] {
+  // Extract timestamp ranges from primary results
+  const primaryTimestamps = primaryResults
+    .map(item => getFieldValue(item, 'timestamp', primaryType))
+    .filter(ts => ts !== undefined && ts !== null)
+    .map(ts => typeof ts === 'number' ? ts : new Date(ts).getTime() / 1000)
+    .sort((a, b) => a - b);
+  
+  if (primaryTimestamps.length === 0) {
+    return correlatedResults;
+  }
+  
+  const windowSizeSeconds = convertToSeconds(temporalWindow.windowSize, temporalWindow.windowUnit);
+  const minTimestamp = Math.min(...primaryTimestamps) - windowSizeSeconds;
+  const maxTimestamp = Math.max(...primaryTimestamps) + windowSizeSeconds;
+  
+  return correlatedResults.filter(item => {
+    const itemTimestamp = getFieldValue(item, 'timestamp', secondaryType);
+    if (itemTimestamp === undefined || itemTimestamp === null) {
+      return false;
+    }
+    
+    const normalizedTimestamp = typeof itemTimestamp === 'number' 
+      ? itemTimestamp 
+      : new Date(itemTimestamp).getTime() / 1000;
+    
+    return normalizedTimestamp >= minTimestamp && normalizedTimestamp <= maxTimestamp;
+  });
+}
+
+/**
+ * Convert time window to seconds
+ */
+function convertToSeconds(value: number, unit: string): number {
+  switch (unit) {
+    case 'seconds': return value;
+    case 'minutes': return value * 60;
+    case 'hours': return value * 3600;
+    case 'days': return value * 86400;
+    default: return value;
+  }
+}
+
+/**
+ * Get all supported correlation field combinations for a set of entity types
+ */
+export function getSupportedCorrelationCombinations(entityTypes: EntityType[]): string[][] {
+  // Return empty array if no entity types provided
+  if (!entityTypes || entityTypes.length === 0) {
+    return [];
+  }
+  
+  const allFields = Object.keys(CORRELATION_FIELDS);
+  const supportedFields = allFields.filter(field => 
+    isFieldCompatible(field, entityTypes)
+  );
+  
+  // Return empty if no supported fields
+  if (supportedFields.length === 0) {
+    return [];
+  }
+  
+  // Generate meaningful combinations (2-3 fields max for performance)
+  const combinations: string[][] = [];
+  
+  // Single field combinations
+  combinations.push(...supportedFields.map(field => [field]));
+  
+  // Two field combinations
+  for (let i = 0; i < supportedFields.length; i++) {
+    for (let j = i + 1; j < supportedFields.length; j++) {
+      combinations.push([supportedFields[i], supportedFields[j]]);
+    }
+  }
+  
+  // Three field combinations for common patterns
+  const commonTriples = [
+    ['source_ip', 'destination_ip', 'protocol'],
+    ['device_ip', 'timestamp', 'protocol'],
+    ['source_ip', 'device_id', 'timestamp']
+  ].filter(triple => triple.every(field => supportedFields.includes(field)));
+  
+  combinations.push(...commonTriples);
+  
+  return combinations;
+}
+
+/**
+ * Enhanced correlation parameters with scoring and fuzzy matching options
+ */
+export interface ScoringCorrelationParams extends EnhancedCorrelationParams {
+  enableScoring?: boolean;
+  enableFuzzyMatching?: boolean;
+  minimumScore?: number;
+  customWeights?: CorrelationWeights;
+  fuzzyConfig?: FuzzyMatchConfig;
+}
+
+/**
+ * Enhanced correlation result with scoring information
+ */
+export interface EnhancedCorrelationResult {
+  correlatedResults: any[];
+  scoredResults?: ScoredCorrelationResult[];
+  correlationStats: any;
+  enhancedStats?: EnhancedCorrelationStats;
+}
+
+/**
+ * Perform enhanced multi-field correlation with optional scoring and fuzzy matching
+ * This extends the existing performMultiFieldCorrelation with advanced capabilities
+ */
+export function performEnhancedMultiFieldCorrelation(
+  primaryResults: any[],
+  secondaryResults: any[],
+  primaryType: EntityType,
+  secondaryType: EntityType,
+  correlationParams: ScoringCorrelationParams
+): EnhancedCorrelationResult {
+  
+  // Check if enhanced features are enabled
+  const useEnhancedFeatures = correlationParams.enableScoring || correlationParams.enableFuzzyMatching;
+  
+  if (useEnhancedFeatures) {
+    // Use new enhanced correlation algorithm
+    const weights = correlationParams.customWeights || DEFAULT_CORRELATION_WEIGHTS;
+    const fuzzyConfig = correlationParams.enableFuzzyMatching 
+      ? (correlationParams.fuzzyConfig || DEFAULT_FUZZY_CONFIG)
+      : { ...DEFAULT_FUZZY_CONFIG, enabled: false };
+    
+    const minimumScore = correlationParams.minimumScore || 0.3;
+    
+    const { correlatedResults: scoredResults, stats: enhancedStats } = performEnhancedCorrelation(
+      primaryResults,
+      secondaryResults,
+      primaryType,
+      secondaryType,
+      correlationParams.correlationFields,
+      correlationParams.correlationType,
+      weights,
+      fuzzyConfig,
+      minimumScore
+    );
+    
+    // Convert scored results back to standard format for backward compatibility
+    const correlatedResults = scoredResults.map(scored => scored.entity);
+    
+    // Generate legacy stats for backward compatibility
+    const legacyStats = {
+      totalSecondaryResults: enhancedStats.totalSecondaryResults,
+      correlatedResults: enhancedStats.correlatedResults,
+      temporallyFiltered: enhancedStats.correlatedResults, // Same as correlated for enhanced
+      correlationRate: enhancedStats.totalSecondaryResults > 0
+        ? Math.round((enhancedStats.correlatedResults / enhancedStats.totalSecondaryResults) * 100)
+        : 0,
+      fieldCorrelationRates: correlationParams.correlationFields.map(field => {
+        const fieldStats = enhancedStats.fieldStatistics[field];
+        const totalMatches = fieldStats ? 
+          fieldStats.exactMatches + fieldStats.fuzzyMatches + fieldStats.partialMatches : 0;
+        
+        return {
+          field,
+          matchingItems: totalMatches,
+          correlationRate: enhancedStats.totalSecondaryResults > 0
+            ? Math.round((totalMatches / enhancedStats.totalSecondaryResults) * 100)
+            : 0
+        };
+      })
+    };
+    
+    return {
+      correlatedResults,
+      scoredResults,
+      correlationStats: legacyStats,
+      enhancedStats
+    };
+    
+  } else {
+    // Use legacy correlation algorithm
+    const legacyResult = performMultiFieldCorrelation(
+      primaryResults,
+      secondaryResults,
+      primaryType,
+      secondaryType,
+      correlationParams
+    );
+    
+    return {
+      correlatedResults: legacyResult.correlatedResults,
+      correlationStats: legacyResult.correlationStats
+    };
+  }
 }

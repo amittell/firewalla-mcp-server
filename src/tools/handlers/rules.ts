@@ -68,9 +68,9 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
             schedule: SafeAccess.getNestedValue(rule, 'schedule', null),
             timeUsage: SafeAccess.getNestedValue(rule, 'timeUsage', null),
             protocol: SafeAccess.getNestedValue(rule, 'protocol', null),
-            created_at: SafeAccess.getNestedValue(rule, 'ts', 0) ? unixToISOString(rule.ts) : null,
-            updated_at: SafeAccess.getNestedValue(rule, 'updateTs', 0) ? unixToISOString(rule.updateTs) : null,
-            resume_at: SafeAccess.getNestedValue(rule, 'resumeTs', 0) ? unixToISOString(rule.resumeTs) : undefined,
+            created_at: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'ts', null), null),
+            updated_at: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'updateTs', null), null),
+            resume_at: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'resumeTs', null), null),
           })
         ),
         next_cursor: SafeAccess.getNestedValue(summaryOnly ? optimizedResponse : response, 'next_cursor', null),
@@ -189,8 +189,7 @@ export class GetTargetListsHandler extends BaseToolHandler {
             category: SafeAccess.getNestedValue(list, 'category', 'unknown'),
             entry_count: SafeAccess.safeArrayAccess(list.targets, (arr) => arr.length, 0),
             targets: SafeAccess.safeArrayAccess(list.targets, (arr) => arr.slice(0, 500), []), // Increased from 100 to 500 targets per list
-            last_updated: SafeAccess.getNestedValue(list, 'lastUpdated', 0) ? 
-              unixToISOString(list.lastUpdated) : null,
+            last_updated: safeUnixToISOString(SafeAccess.getNestedValue(list, 'lastUpdated', null), null),
             notes: SafeAccess.getNestedValue(list, 'notes', ''),
           })
         ),
@@ -210,8 +209,20 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
 
   async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
     try {
-      const ruleType = args?.rule_type as string | undefined;
-      const activeOnly = (args?.active_only as boolean) ?? true;
+      // Parameter validation
+      const ruleTypeValidation = ParameterValidator.validateEnum(args?.rule_type, 'rule_type', ['block', 'allow', 'timelimit', 'all'], false, 'all');
+      const activeOnlyValidation = ParameterValidator.validateBoolean(args?.active_only, 'active_only', true);
+      
+      const validationResult = ParameterValidator.combineValidationResults([
+        ruleTypeValidation, activeOnlyValidation
+      ]);
+      
+      if (!validationResult.isValid) {
+        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, validationResult.errors);
+      }
+      
+      const ruleType = ruleTypeValidation.sanitizedValue!;
+      const activeOnly = activeOnlyValidation.sanitizedValue!;
       
       // Add reasonable limit to prevent memory issues with large rule sets
       // Summary analysis doesn't need all rules, 5000 should be sufficient for statistics
@@ -295,8 +306,8 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
           hit_rate_percentage: allRules.length > 0 ? Math.round((rulesWithHits.length / allRules.length) * 100) : 0,
         },
         age_statistics: {
-          most_recent_activity: mostRecentRuleTs ? unixToISOString(mostRecentRuleTs) : null,
-          oldest_rule_created: oldestRuleTs ? unixToISOString(oldestRuleTs) : null,
+          most_recent_activity: safeUnixToISOString(mostRecentRuleTs, null),
+          oldest_rule_created: safeUnixToISOString(oldestRuleTs, null),
           has_timestamp_data: mostRecentRuleTs !== null || oldestRuleTs !== null,
         },
         filters_applied: {
@@ -329,7 +340,15 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
       }
       
       const limit = limitValidation.sanitizedValue!;
-      const minHits = (args?.min_hits as number) || 1;
+      const minHitsValidation = ParameterValidator.validateNumber(args?.min_hits, 'min_hits', {
+        min: 0, max: 1000000, defaultValue: 1, integer: true
+      });
+      
+      if (!minHitsValidation.isValid) {
+        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, minHitsValidation.errors);
+      }
+      
+      const minHits = minHitsValidation.sanitizedValue!;
       
       // Fetch rules with a reasonable buffer to account for filtering by minHits
       // Use 3x the limit to ensure we have enough rules after filtering
@@ -368,10 +387,8 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
               target_value: targetValue.length > 60 ? targetValue.substring(0, 60) + '...' : targetValue,
               direction: SafeAccess.getNestedValue(rule, 'direction', 'unknown'),
               hit_count: SafeAccess.getNestedValue(rule, 'hit.count', 0),
-              last_hit: SafeAccess.getNestedValue(rule, 'hit.lastHitTs', 0) ? 
-                unixToISOString(rule.hit.lastHitTs) : 'Never',
-              created_at: SafeAccess.getNestedValue(rule, 'ts', 0) ? 
-                unixToISOString(rule.ts) : null,
+              last_hit: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'hit.lastHitTs', null), 'Never'),
+              created_at: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'ts', null), null),
               notes: notes.length > 80 ? notes.substring(0, 80) + '...' : notes,
             };
           }
@@ -448,7 +465,7 @@ export class GetRecentRulesHandler extends BaseToolHandler {
         recent_rules_found: recentRules.length,
         lookback_hours: hours,
         include_modified: includeModified,
-        cutoff_time: unixToISOString(hoursAgoTs),
+        cutoff_time: safeUnixToISOString(hoursAgoTs, null),
         rules: SafeAccess.safeArrayMap(
           recentRules,
           (rule: any) => {
@@ -466,8 +483,8 @@ export class GetRecentRulesHandler extends BaseToolHandler {
               direction: SafeAccess.getNestedValue(rule, 'direction', 'unknown'),
               status: SafeAccess.getNestedValue(rule, 'status', 'active'),
               activity_type: wasModified ? 'modified' : 'created',
-              created_at: ts ? unixToISOString(ts) : null,
-              updated_at: updateTs ? unixToISOString(updateTs) : null,
+              created_at: safeUnixToISOString(ts, null),
+              updated_at: safeUnixToISOString(updateTs, null),
               hit_count: SafeAccess.getNestedValue(rule, 'hit.count', 0),
               notes: notes.length > 80 ? notes.substring(0, 80) + '...' : notes,
             };

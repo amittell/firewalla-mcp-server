@@ -1,4 +1,4 @@
-import { productionConfig } from '../production/config';
+import { productionConfig } from '../production/config.js';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
 
 // DEBUG environment variable support

@@ -33,7 +33,12 @@ import {
   SearchRulesHandler,
   SearchDevicesHandler,
   SearchTargetListsHandler,
-  SearchCrossReferenceHandler
+  SearchCrossReferenceHandler,
+  SearchEnhancedCrossReferenceHandler,
+  GetCorrelationSuggestionsHandler,
+  SearchFlowsByGeographyHandler,
+  SearchAlarmsByGeographyHandler,
+  GetGeographicStatisticsHandler
 } from './handlers/search.js';
 
 export class ToolRegistry {
@@ -78,13 +83,20 @@ export class ToolRegistry {
     this.register(new GetAlarmTrendsHandler());
     this.register(new GetRuleTrendsHandler());
     
-    // Search tools (6 handlers)
+    // Search tools (11 handlers)
     this.register(new SearchFlowsHandler());
     this.register(new SearchAlarmsHandler());
     this.register(new SearchRulesHandler());
     this.register(new SearchDevicesHandler());
     this.register(new SearchTargetListsHandler());
     this.register(new SearchCrossReferenceHandler());
+    
+    // Enhanced cross-reference and geographic search tools (5 handlers)
+    this.register(new SearchEnhancedCrossReferenceHandler());
+    this.register(new GetCorrelationSuggestionsHandler());
+    this.register(new SearchFlowsByGeographyHandler());
+    this.register(new SearchAlarmsByGeographyHandler());
+    this.register(new GetGeographicStatisticsHandler());
   }
 
   /**

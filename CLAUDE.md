@@ -193,11 +193,233 @@ search_cross_reference primary_query:"source_ip:suspicious_ip" secondary_queries
 - Time-based bucketing: hour, day, week, month
 - Trend analysis and correlation detection
 
+### Enhanced Cross-Reference Search (v1.0.0)
+
+The v1.0.0 implementation introduces advanced cross-reference capabilities with intelligent correlation scoring and fuzzy matching.
+
+#### Enhanced Correlation Features
+
+**Multi-Field Correlation**
+- Correlate entities across multiple fields simultaneously
+- Support for AND/OR correlation logic
+- Temporal window filtering for time-based correlation
+- Network and device scope expansion
+
+**Intelligent Scoring System**
+- Confidence scoring for correlation matches (0.0-1.0)
+- Field importance weighting system
+- Match type classification (exact, fuzzy, partial)
+- Confidence levels (high ≥0.8, medium ≥0.5, low <0.5)
+
+**Fuzzy Matching Algorithms**
+- IP subnet matching (/8, /16, /24 networks)
+- String similarity using Levenshtein distance
+- Numeric tolerance matching with configurable thresholds
+- Geographic proximity matching
+
+#### Enhanced Search Tools
+
+**search_enhanced_cross_reference**
+```javascript
+{
+  primary_query: "protocol:tcp AND bytes:>1000",
+  secondary_queries: ["severity:high", "type:network_intrusion"],
+  correlation_params: {
+    correlationFields: ["source_ip", "country"],
+    correlationType: "AND",
+    temporalWindow: {
+      windowSize: 30,
+      windowUnit: "minutes"
+    },
+    networkScope: {
+      includeSubnets: true,
+      includePorts: true
+    }
+  },
+  limit: 500
+}
+```
+
+**search_enhanced_scored_cross_reference** (with fuzzy matching)
+```javascript
+{
+  primary_query: "application:Chrome",
+  secondary_queries: ["severity:medium"],
+  correlation_params: {
+    correlationFields: ["source_ip", "user_agent"],
+    correlationType: "OR",
+    enableScoring: true,
+    enableFuzzyMatching: true,
+    minimumScore: 0.5,
+    customWeights: {
+      "source_ip": 1.0,
+      "user_agent": 0.8
+    },
+    fuzzyConfig: {
+      enabled: true,
+      stringThreshold: 0.8,
+      ipSubnetMatching: true,
+      numericTolerance: 0.1,
+      geographicRadius: 50
+    }
+  },
+  limit: 100
+}
+```
+
+**get_correlation_suggestions**
+```javascript
+{
+  primary_query: "blocked:true",
+  secondary_queries: ["severity:high", "online:false"]
+}
+// Returns intelligent field combination suggestions
+```
+
+#### Advanced Correlation Fields
+
+**Application-Level Fields**
+- `user_agent`: Browser/application user agent strings
+- `application`: Application name (Chrome, Firefox, etc.)
+- `application_category`: Application category (browser, social media)
+- `domain_category`: Domain classification
+- `ssl_subject`: SSL certificate subject
+- `ssl_issuer`: SSL certificate issuer
+
+**Behavioral Pattern Fields**
+- `session_duration`: Connection duration
+- `frequency_score`: Activity frequency rating
+- `bytes_per_session`: Average data transfer per session
+- `connection_pattern`: Connection behavior pattern
+- `activity_level`: User/device activity level
+
+**Enhanced Geographic Fields**
+- `country`, `country_code`, `continent`, `city`
+- `timezone`, `isp`, `organization`
+- `hosting_provider`, `asn`
+- `is_cloud_provider`, `is_proxy`, `is_vpn`
+- `geographic_risk_score`
+
+#### Correlation Scoring Weights
+
+Default field importance weights for correlation scoring:
+```javascript
+{
+  // Network identifiers (highest confidence)
+  "source_ip": 1.0,
+  "destination_ip": 1.0,
+  "device_ip": 1.0,
+  "device_id": 1.0,
+  
+  // Protocol and network details
+  "protocol": 0.9,
+  "port": 0.8,
+  "asn": 0.8,
+  
+  // Geographic fields
+  "country": 0.7,
+  "region": 0.6,
+  "city": 0.5,
+  
+  // Application fields
+  "application": 0.7,
+  "user_agent": 0.6,
+  "ssl_subject": 0.8,
+  
+  // Behavioral patterns
+  "session_duration": 0.5,
+  "frequency_score": 0.6,
+  
+  // Temporal fields (lower confidence)
+  "timestamp": 0.4,
+  "hour_of_day": 0.3
+}
+```
+
+#### Geographic Cross-Reference Tools
+
+**search_flows_by_geography**
+```javascript
+{
+  query: "protocol:tcp",
+  geographic_filters: {
+    countries: ["United States", "Germany"],
+    risk_threshold: 0.7,
+    exclude_cloud_providers: true
+  },
+  limit: 200
+}
+```
+
+**search_alarms_by_geography**
+```javascript
+{
+  query: "severity:>=medium",
+  geographic_filters: {
+    continents: ["Europe", "Asia"],
+    include_proxies: false,
+    asn_filters: ["12345", "67890"]
+  },
+  limit: 100
+}
+```
+
+**get_geographic_statistics**
+```javascript
+{
+  entity_type: "flows",
+  time_range: {
+    start: "2024-01-01T00:00:00Z",
+    end: "2024-01-31T23:59:59Z"
+  },
+  group_by: "country"
+}
+// Returns geographic distribution analysis
+```
+
+### Testing Enhanced Search
+
+```bash
+# Test enhanced correlation algorithms
+npm run test -- tests/validation/enhanced-correlation.test.ts
+
+# Test enhanced cross-reference functionality
+npm run test -- tests/tools/enhanced-cross-reference.test.ts
+
+# Manual testing with Claude Code
+npm run mcp:start
+
+# Example queries for Claude Code:
+# "Find flows from suspicious IPs correlated with high-severity alarms using fuzzy matching"
+# "Search for Chrome browser traffic correlated with network intrusion alarms"
+# "Get correlation suggestions for blocked traffic and offline devices"
+# "Analyze geographic distribution of high-risk flows"
+```
+
+#### Example Advanced Queries
+
+```bash
+# Multi-field correlation with scoring
+search_enhanced_scored_cross_reference primary_query:"bytes:>10000000" secondary_queries:["severity:high"] correlation_params:"{correlationFields:['source_ip','country'],correlationType:'AND',enableScoring:true,enableFuzzyMatching:true,minimumScore:0.7}"
+
+# Geographic flow analysis
+search_flows_by_geography query:"blocked:true" geographic_filters:"{countries:['China','Russia'],risk_threshold:0.8}"
+
+# Intelligent correlation suggestions
+get_correlation_suggestions primary_query:"application:torrent" secondary_queries:["action:block","severity:medium"]
+
+# Behavioral pattern correlation
+search_enhanced_cross_reference primary_query:"session_duration:>300" secondary_queries:["frequency_score:>5"] correlation_params:"{correlationFields:['device_ip','activity_level'],correlationType:'OR'}"
+```
+
 ### Testing Advanced Search
 
 ```bash
 # Test search API validation
 npm run test:search
+
+# Test enhanced correlation features
+npm run test:enhanced-correlation
 
 # Manual search testing
 npm run mcp:start
@@ -205,6 +427,7 @@ npm run mcp:start
 # "search for high severity alarms from the last hour"
 # "find blocked flows larger than 10MB grouped by source IP"
 # "show me all rules that block social media sites"
+# "correlate Chrome browser flows with security alarms using fuzzy matching"
 ```
 
 ## Common Issues and Solutions

@@ -140,10 +140,26 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
 
   async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
     try {
-      const sortByLastSeen = (args?.sort_by_last_seen as boolean) ?? true;
+      // Parameter validation
+      const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
+        required: true, min: 1, max: 10000, integer: true
+      });
+      const sortValidation = ParameterValidator.validateBoolean(args?.sort_by_last_seen, 'sort_by_last_seen', true);
       
-      // Get all devices including offline ones with high limit to ensure no truncation
-      const allDevicesResponse = await firewalla.getDeviceStatus(undefined, undefined, 1000);
+      const validationResult = ParameterValidator.combineValidationResults([
+        limitValidation, sortValidation
+      ]);
+      
+      if (!validationResult.isValid) {
+        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, validationResult.errors);
+      }
+      
+      const limit = limitValidation.sanitizedValue!;
+      const sortByLastSeen = sortValidation.sanitizedValue!;
+      
+      // Get all devices including offline ones with adequate buffer for filtering
+      const fetchLimit = Math.min(limit * 3, 10000); // Fetch 3x limit to account for offline filtering
+      const allDevicesResponse = await firewalla.getDeviceStatus(undefined, undefined, fetchLimit);
       
       // Filter to only offline devices
       let offlineDevices = SafeAccess.safeArrayFilter(allDevicesResponse.results, (device: any) => !SafeAccess.getNestedValue(device, 'online', false));
@@ -157,10 +173,15 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
         });
       }
       
+      // Apply the requested limit
+      const limitedOfflineDevices = offlineDevices.slice(0, limit);
+      
       return this.createSuccessResponse({
         total_offline_devices: offlineDevices.length,
+        limit_applied: limit,
+        returned_count: limitedOfflineDevices.length,
         devices: SafeAccess.safeArrayMap(
-          offlineDevices,
+          limitedOfflineDevices,
           (device: any) => ({
             id: SafeAccess.getNestedValue(device, 'id', 'unknown'),
             name: SafeAccess.getNestedValue(device, 'name', 'Unknown Device'),

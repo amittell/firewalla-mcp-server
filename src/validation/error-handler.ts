@@ -151,6 +151,29 @@ export class ParameterValidator {
           errors: [`${paramName} is required`]
         };
       }
+      
+      // Validate default value against constraints if provided
+      if (defaultValue !== undefined) {
+        if (min !== undefined && defaultValue < min) {
+          return {
+            isValid: false,
+            errors: [`${paramName} default value ${defaultValue} must be at least ${min}`]
+          };
+        }
+        if (max !== undefined && defaultValue > max) {
+          return {
+            isValid: false,
+            errors: [`${paramName} default value ${defaultValue} must be at most ${max}`]
+          };
+        }
+        if (integer && !Number.isInteger(defaultValue)) {
+          return {
+            isValid: false,
+            errors: [`${paramName} default value ${defaultValue} must be an integer`]
+          };
+        }
+      }
+      
       return {
         isValid: true,
         errors: [],
@@ -174,16 +197,18 @@ export class ParameterValidator {
     }
 
     if (min !== undefined && numValue < min) {
+      const contextualMessage = this.getContextualBoundaryMessage(paramName, numValue, min, max, 'minimum');
       return {
         isValid: false,
-        errors: [`${paramName} must be at least ${min}`]
+        errors: [contextualMessage]
       };
     }
 
     if (max !== undefined && numValue > max) {
+      const contextualMessage = this.getContextualBoundaryMessage(paramName, numValue, min, max, 'maximum');
       return {
         isValid: false,
-        errors: [`${paramName} must be at most ${max}`]
+        errors: [contextualMessage]
       };
     }
 
@@ -299,6 +324,48 @@ export class ParameterValidator {
       isValid,
       errors: allErrors
     };
+  }
+
+  /**
+   * Generate contextual error messages for boundary validation failures
+   */
+  private static getContextualBoundaryMessage(
+    paramName: string, 
+    value: number, 
+    min?: number, 
+    max?: number, 
+    violationType: 'minimum' | 'maximum' = 'minimum'
+  ): string {
+    const paramContext = this.getParameterContext(paramName);
+    
+    if (violationType === 'minimum') {
+      if (value <= 0) {
+        return `${paramName} must be a positive number${paramContext ? ` ${paramContext}` : ''} (got ${value}, minimum: ${min})`;
+      }
+      return `${paramName} is too small${paramContext ? ` ${paramContext}` : ''} (got ${value}, minimum: ${min})`;
+    } else {
+      if (max && max > 1000) {
+        return `${paramName} exceeds system limits${paramContext ? ` ${paramContext}` : ''} (got ${value}, maximum: ${max} for performance reasons)`;
+      }
+      return `${paramName} is too large${paramContext ? ` ${paramContext}` : ''} (got ${value}, maximum: ${max})`;
+    }
+  }
+
+  /**
+   * Get contextual information about parameter usage
+   */
+  private static getParameterContext(paramName: string): string {
+    const contexts: Record<string, string> = {
+      limit: 'to control result set size and prevent memory issues',
+      min_hits: 'to filter rules by activity level',
+      duration: 'in minutes for temporary rule changes',
+      hours: 'for time-based filtering',
+      interval: 'in seconds for data aggregation',
+      fetch_limit: 'to prevent excessive API calls',
+      analysis_limit: 'to balance performance and accuracy'
+    };
+    
+    return contexts[paramName] || '';
   }
 }
 

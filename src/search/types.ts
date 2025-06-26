@@ -172,11 +172,33 @@ export interface FilterResult {
 export const SEARCH_FIELDS = {
   flows: [
     'source_ip', 'destination_ip', 'protocol', 'direction', 'blocked', 
-    'bytes', 'timestamp', 'device_ip', 'region', 'category'
+    'bytes', 'timestamp', 'device_ip', 'region', 'category',
+    // Enhanced geographic fields
+    'country', 'country_code', 'continent', 'city', 'timezone',
+    'isp', 'organization', 'hosting_provider', 'asn',
+    'is_cloud_provider', 'is_proxy', 'is_vpn', 'geographic_risk_score',
+    'geo_location',
+    // Application-level fields
+    'user_agent', 'application', 'application_category', 'domain_category',
+    'ssl_subject', 'ssl_issuer',
+    // Behavioral pattern fields
+    'session_duration', 'frequency_score', 'bytes_per_session',
+    'connection_pattern', 'activity_level'
   ],
   alarms: [
     'severity', 'type', 'source_ip', 'destination_ip', 'timestamp', 
-    'status', 'description'
+    'status', 'description',
+    // Enhanced geographic fields
+    'country', 'country_code', 'continent', 'city', 'timezone',
+    'isp', 'organization', 'hosting_provider', 'asn',
+    'is_cloud_provider', 'is_proxy', 'is_vpn', 'geographic_risk_score',
+    'geo_location',
+    // Application-level fields
+    'user_agent', 'application', 'application_category', 'domain_category',
+    'ssl_subject', 'ssl_issuer',
+    // Behavioral pattern fields
+    'session_duration', 'frequency_score', 'bytes_per_session',
+    'connection_pattern', 'activity_level'
   ],
   rules: [
     'action', 'target_type', 'target_value', 'direction', 'status', 
