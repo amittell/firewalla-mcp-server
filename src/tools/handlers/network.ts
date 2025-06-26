@@ -120,7 +120,7 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
             bytes_uploaded: SafeAccess.getNestedValue(item, 'bytes_uploaded', 0),
             bytes_downloaded: SafeAccess.getNestedValue(item, 'bytes_downloaded', 0),
             total_bytes: SafeAccess.getNestedValue(item, 'total_bytes', 0),
-            total_mb: Math.round(SafeAccess.getNestedValue(item, 'total_bytes', 0) / (1024 * 1024)),
+            total_mb: Math.round(SafeAccess.getNestedValue(item, 'total_bytes', 0) / (1024 * 1024) * 100) / 100,
             total_gb: Math.round(SafeAccess.getNestedValue(item, 'total_bytes', 0) / (1024 * 1024 * 1024) * 100) / 100,
           })
         ),

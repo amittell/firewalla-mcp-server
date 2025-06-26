@@ -150,6 +150,18 @@ function smartSplitLogicalOperators(query: string): string[] {
 export function parseSearchQuery(query: string): ParsedQuery {
   const components: QueryComponent[] = [];
   const filters: SearchFilter[] = [];
+  
+  // Complexity scoring system:
+  // - Base complexity: 1
+  // - Logical operators (AND, OR, NOT): +0.5 each
+  // - Field operators: +1 to +3 based on computational cost
+  //   * Simple equality/inequality: +1
+  //   * Comparisons: +1.2
+  //   * Array membership: +1.5
+  //   * Pattern matching/regex: +2
+  //   * Range queries: +2.5
+  //   * Full-text search: +3
+  // - Final score used to optimize query execution order and resource allocation
   let complexity = 1;
 
   // Remove extra whitespace and normalize

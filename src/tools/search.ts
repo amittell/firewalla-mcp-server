@@ -95,7 +95,7 @@ export function getSearchConfig(): SearchConfig {
 /**
  * Get risk thresholds (backward compatibility)
  */
-function getRiskThresholds(): { high: number; medium: number; low: number } {
+function getRiskThresholds(): SearchConfig['riskThresholds'] {
   return currentSearchConfig.riskThresholds;
 }
 
