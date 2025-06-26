@@ -499,12 +499,15 @@ export class QuerySanitizer {
 
     // Check for potentially dangerous patterns
     const dangerousPatterns = [
-      /;\s*(drop|delete|truncate|update|insert)\s+/i,
+      /;\s*(drop|delete|truncate|update|insert|alter|create|exec|execute)\s+/i,
+      /\b(union\s+select|select\s+.*\s+from|insert\s+into)\b/i,  // SQL injection patterns
+      /--\s*$|\/\*.*\*\//,  // SQL comments
       /\$\{.*\}/,  // Template literals
       /<script.*?>.*?<\/script>/i,  // Script tags
       /javascript:/i,  // JavaScript protocol
       /eval\s*\(/i,  // eval function
       /expression\s*\(/i,  // CSS expression
+      /\b(onload|onerror|onclick|onmouseover)\s*=/i,  // Event handlers
     ];
 
     for (const pattern of dangerousPatterns) {

@@ -321,7 +321,9 @@ function optimizeQuery(components: QueryComponent[]): string {
     const logical = component.logical ? `${component.logical} ` : '';
     const field = component.field ? `${component.field}:` : '';
     const value = Array.isArray(component.value) 
-      ? (component.value.length === 2 ? `[${component.value.join(' TO ')}]` : `[${component.value.filter(v => v !== null).join(' TO ')}]`)
+      ? component.operator === 'range' 
+        ? `[${component.value.join(' TO ')}]`
+        : component.value.join(',')
       : component.value;
     
     return `${logical}${field}${value}`;

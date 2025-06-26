@@ -74,7 +74,7 @@ describe('FirewallaClient', () => {
       
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
         `/boxes/${mockConfig.boxId}/alarms`,
-        { params: { query: 'high', limit: 10, sortBy: 'ts:desc' } }
+        { params: { query: 'high', limit: 10, sortBy: 'timestamp:desc' } }
       );
       
       // Verify the paginated response structure
@@ -149,7 +149,7 @@ describe('FirewallaClient', () => {
       );
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/flows`,
+        `/v2/flows`,
         {
           params: {
             limit: 50,
@@ -513,7 +513,7 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/rules`,
+        `/v2/rules`,
         { params: {} }
       );
     });
@@ -523,7 +523,7 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/target-lists`,
+        `/v2/target-lists`,
         { params: {} }
       );
     });
@@ -533,7 +533,7 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/boxes/${mockConfig.boxId}/threats/recent`,
+        `/v2/boxes/${mockConfig.boxId}/threats/recent`,
         { params: { hours: 24 } }
       );
     });
@@ -543,7 +543,7 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/boxes/${mockConfig.boxId}/summary`,
+        `/v2/boxes/${mockConfig.boxId}/summary`,
         { params: undefined }
       );
     });
@@ -553,7 +553,7 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/boxes/${mockConfig.boxId}/metrics/security`,
+        `/v2/boxes/${mockConfig.boxId}/metrics/security`,
         { params: undefined }
       );
     });
@@ -563,7 +563,7 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/boxes/${mockConfig.boxId}/topology`,
+        `/v2/boxes/${mockConfig.boxId}/topology`,
         { params: undefined }
       );
     });

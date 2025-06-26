@@ -7,6 +7,7 @@ import { queryParser } from '../search/parser.js';
 import { filterFactory } from '../search/filters/index.js';
 import { FilterContext } from '../search/filters/base.js';
 import { SearchParams, SearchResult } from '../search/types.js';
+import { SearchOptions } from '../types.js';
 import { FirewallaClient } from '../firewalla/client.js';
 import { ParameterValidator, SafeAccess, QuerySanitizer } from '../validation/error-handler.js';
 import { 
@@ -36,12 +37,24 @@ const RISK_THRESHOLDS = {
 } as const;
 
 /**
+ * API parameters interface for search requests
+ */
+interface ApiParameters {
+  limit?: number;
+  offset?: number;
+  cursor?: string;
+  sortBy?: string;
+  query?: string;
+  [key: string]: any;
+}
+
+/**
  * Strategy interface for different entity search implementations
  */
 interface SearchStrategy {
   entityType: string;
   // eslint-disable-next-line no-unused-vars
-  executeApiCall(client: FirewallaClient, params: SearchParams, apiParams: any, searchOptions: any): Promise<any>;
+  executeApiCall(client: FirewallaClient, params: SearchParams, apiParams: ApiParameters, searchOptions: SearchOptions): Promise<{ results: any[], count: number, next_cursor?: string }>;
   // eslint-disable-next-line no-unused-vars
   validateParams?(params: SearchParams): { isValid: boolean; errors: string[] };
   // eslint-disable-next-line no-unused-vars
@@ -111,7 +124,8 @@ export class SearchEngine {
 
     this.strategies.set('alarms', {
       entityType: 'alarms',
-      executeApiCall: async (client, params, apiParams) => {
+      // eslint-disable-next-line no-unused-vars
+      executeApiCall: async (client, params, apiParams, _searchOptions) => {
         return await client.getActiveAlarms(
           apiParams.queryString || params.query || undefined,
           undefined,
@@ -123,7 +137,8 @@ export class SearchEngine {
 
     this.strategies.set('rules', {
       entityType: 'rules',
-      executeApiCall: async (client, params) => {
+      // eslint-disable-next-line no-unused-vars
+      executeApiCall: async (client, params, _apiParams, _searchOptions) => {
         // Use reasonable limit for search operations to prevent memory issues
         const searchLimit = params.limit ? Math.min(params.limit * 2, 2000) : 2000;
         return await client.getNetworkRules(undefined, searchLimit);
@@ -138,7 +153,7 @@ export class SearchEngine {
 
     this.strategies.set('devices', {
       entityType: 'devices',
-      executeApiCall: async (client, params, searchOptions) => {
+      executeApiCall: async (client, params, _apiParams, searchOptions) => {
         const searchQuery = {
           query: params.query,
           limit: params.limit,
@@ -173,7 +188,8 @@ export class SearchEngine {
 
     this.strategies.set('target_lists', {
       entityType: 'target_lists',
-      executeApiCall: async (client) => {
+      // eslint-disable-next-line no-unused-vars
+      executeApiCall: async (client, _params, _apiParams, _searchOptions) => {
         return await client.getTargetLists();
       },
       processResults: (results, params) => {
@@ -302,15 +318,12 @@ export class SearchEngine {
       this.validateSearchParams(params, entityType, validationConfig);
 
       // Parse and validate query
-      let queryCheck;
-      if (entityType === 'flows') {
-        queryCheck = QuerySanitizer.sanitizeSearchQuery(params.query);
-        if (!queryCheck.isValid) {
-          throw new Error(`Query validation failed: ${queryCheck.errors.join(', ')}`);
-        }
+      const queryCheck = QuerySanitizer.sanitizeSearchQuery(params.query);
+      if (!queryCheck.isValid) {
+        throw new Error(`Query validation failed: ${queryCheck.errors.join(', ')}`);
       }
       
-      const validation = queryParser.parse(queryCheck?.sanitizedValue || params.query, entityType as 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists');
+      const validation = queryParser.parse(queryCheck.sanitizedValue, entityType as 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists');
       if (!validation.isValid || !validation.ast) {
         throw new Error(`Invalid query syntax: ${validation.errors.join(', ')}`);
       }
@@ -329,7 +342,7 @@ export class SearchEngine {
       const filterResult = this.applyFiltersRecursively(validation.ast, context);
       
       // Prepare API parameters
-      const apiParams = {
+      const apiParams: ApiParameters = {
         ...filterResult.apiParams,
         limit: params.limit,
         start_time: params.time_range?.start,
@@ -338,7 +351,7 @@ export class SearchEngine {
       };
 
       // Prepare search options
-      const searchOptions: any = {};
+      const searchOptions: SearchOptions = {};
       if (entityType === 'devices') {
         searchOptions.include_resolved = true;
       }
@@ -817,7 +830,7 @@ export class SearchEngine {
       case 'logical': {
         // For logical nodes, apply filters to operands and combine
         // eslint-disable-next-line no-unused-vars
-        const combinedResult: { apiParams: any, postProcessing?: ((items: any[]) => any[]) } = { apiParams: {} };
+        const combinedResult: { apiParams: ApiParameters, postProcessing?: ((items: any[]) => any[]) } = { apiParams: {} };
         
         if (node.left) {
           const leftResult = this.applyFiltersRecursively(node.left, context);
