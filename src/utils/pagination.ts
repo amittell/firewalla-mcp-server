@@ -110,7 +110,9 @@ export function paginateArray<T>(
       const aVal = a[sort_by];
       const bVal = b[sort_by];
       
-      if (aVal === bVal) {return 0;}
+      if (aVal === bVal) {
+        return 0;
+      }
       
       // Case-insensitive string comparison for consistent sorting
       const aStr = String(aVal).toLowerCase();

@@ -1,0 +1,166 @@
+{
+  "timestamp": "2025-06-25T21:32:04.012Z",
+  "totalTests": 6,
+  "successful": 0,
+  "failed": 0,
+  "pending": 6,
+  "tests": [
+    {
+      "testType": "LIST_TOOLS",
+      "status": "PENDING",
+      "analysis": "No analysis",
+      "hasError": false,
+      "responseTime": "No response"
+    },
+    {
+      "testType": "BASIC_SEARCH",
+      "status": "PENDING",
+      "analysis": "No analysis",
+      "hasError": false,
+      "responseTime": "No response"
+    },
+    {
+      "testType": "MISSING_QUERY",
+      "status": "PENDING",
+      "analysis": "No analysis",
+      "hasError": false,
+      "responseTime": "No response"
+    },
+    {
+      "testType": "MISSING_LIMIT",
+      "status": "PENDING",
+      "analysis": "No analysis",
+      "hasError": false,
+      "responseTime": "No response"
+    },
+    {
+      "testType": "COMPLEX_QUERY",
+      "status": "PENDING",
+      "analysis": "No analysis",
+      "hasError": false,
+      "responseTime": "No response"
+    },
+    {
+      "testType": "WITH_OPTIONAL_PARAMS",
+      "status": "PENDING",
+      "analysis": "No analysis",
+      "hasError": false,
+      "responseTime": "No response"
+    }
+  ],
+  "detailed_results": [
+    {
+      "id": 1,
+      "testType": "LIST_TOOLS",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/list",
+        "params": {}
+      },
+      "timestamp": "2025-06-25T21:31:59.488Z",
+      "response": null,
+      "status": "PENDING"
+    },
+    {
+      "id": 2,
+      "testType": "BASIC_SEARCH",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+          "name": "search_flows",
+          "arguments": {
+            "query": "protocol:tcp",
+            "limit": 10
+          }
+        }
+      },
+      "timestamp": "2025-06-25T21:31:59.990Z",
+      "response": null,
+      "status": "PENDING"
+    },
+    {
+      "id": 3,
+      "testType": "MISSING_QUERY",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+          "name": "search_flows",
+          "arguments": {
+            "limit": 10
+          }
+        }
+      },
+      "timestamp": "2025-06-25T21:32:00.491Z",
+      "response": null,
+      "status": "PENDING"
+    },
+    {
+      "id": 4,
+      "testType": "MISSING_LIMIT",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+          "name": "search_flows",
+          "arguments": {
+            "query": "protocol:tcp"
+          }
+        }
+      },
+      "timestamp": "2025-06-25T21:32:00.995Z",
+      "response": null,
+      "status": "PENDING"
+    },
+    {
+      "id": 5,
+      "testType": "COMPLEX_QUERY",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "tools/call",
+        "params": {
+          "name": "search_flows",
+          "arguments": {
+            "query": "protocol:tcp AND bytes:>=1000 AND source_ip:192.168.*",
+            "limit": 5
+          }
+        }
+      },
+      "timestamp": "2025-06-25T21:32:01.498Z",
+      "response": null,
+      "status": "PENDING"
+    },
+    {
+      "id": 6,
+      "testType": "WITH_OPTIONAL_PARAMS",
+      "request": {
+        "jsonrpc": "2.0",
+        "id": 6,
+        "method": "tools/call",
+        "params": {
+          "name": "search_flows",
+          "arguments": {
+            "query": "protocol:tcp",
+            "limit": 5,
+            "aggregate": true,
+            "group_by": "protocol",
+            "include_blocked": true,
+            "time_range": {
+              "start": "2024-01-01T00:00:00Z",
+              "end": "2024-12-31T23:59:59Z"
+            }
+          }
+        }
+      },
+      "timestamp": "2025-06-25T21:32:01.999Z",
+      "response": null,
+      "status": "PENDING"
+    }
+  ]
+}

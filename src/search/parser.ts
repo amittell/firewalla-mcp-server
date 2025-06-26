@@ -472,9 +472,15 @@ export class QueryParser {
           break;
         }
         case 'logical':
-          if (n.left) {validateNode(n.left);}
-          if (n.right) {validateNode(n.right);}
-          if (n.operand) {validateNode(n.operand);}
+          if (n.left) {
+            validateNode(n.left);
+          }
+          if (n.right) {
+            validateNode(n.right);
+          }
+          if (n.operand) {
+            validateNode(n.operand);
+          }
           break;
         case 'group':
           validateNode(n.query);

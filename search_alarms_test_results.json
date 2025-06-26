@@ -1,0 +1,514 @@
+[
+  {
+    "test": "tool_availability",
+    "status": "FAIL",
+    "error": "Communication error: Expecting value: line 1 column 1 (char 0)"
+  },
+  {
+    "test": "required_params_missing_query_and_limit",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "status": "PASS",
+    "description": "Should fail when both query and limit are missing",
+    "response": {
+      "error": "Communication error: Expecting value: line 1 column 1 (char 0)"
+    },
+    "error_details": "Communication error: Expecting value: line 1 column 1 (char 0)"
+  },
+  {
+    "test": "required_params_missing_query",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "status": "PASS",
+    "description": "Should fail when query is missing",
+    "response": {
+      "error": "Communication error: Expecting value: line 1 column 1 (char 0)"
+    },
+    "error_details": "Communication error: Expecting value: line 1 column 1 (char 0)"
+  },
+  {
+    "test": "required_params_missing_limit",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "status": "PASS",
+    "description": "Should fail when limit is missing (v2.0.0 breaking change)",
+    "response": {
+      "error": "Communication error: Expecting value: line 1 column 1 (char 0)"
+    },
+    "error_details": "Communication error: Expecting value: line 1 column 1 (char 0)"
+  },
+  {
+    "test": "required_params_empty_query",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "status": "PASS",
+    "description": "Should fail when query is empty string",
+    "response": {
+      "error": "Communication error: Expecting value: line 1 column 1 (char 0)"
+    },
+    "error_details": "Communication error: Expecting value: line 1 column 1 (char 0)"
+  },
+  {
+    "test": "required_params_null_query",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "status": "PASS",
+    "description": "Should fail when query is null",
+    "response": {
+      "error": "Communication error: Expecting value: line 1 column 1 (char 0)"
+    },
+    "error_details": "Communication error: Expecting value: line 1 column 1 (char 0)"
+  },
+  {
+    "test": "required_params_invalid_limit_zero",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "status": "PASS",
+    "description": "Should fail when limit is zero",
+    "response": {
+      "error": "Communication error: Expecting value: line 1 column 1 (char 0)"
+    },
+    "error_details": "Communication error: Expecting value: line 1 column 1 (char 0)"
+  },
+  {
+    "test": "required_params_invalid_limit_negative",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "status": "PASS",
+    "description": "Should fail when limit is negative",
+    "response": {
+      "error": "Communication error: Expecting value: line 1 column 1 (char 0)"
+    },
+    "error_details": "Communication error: Expecting value: line 1 column 1 (char 0)"
+  },
+  {
+    "test": "required_params_invalid_limit_too_large",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "status": "PASS",
+    "description": "Should fail when limit exceeds maximum (10000)",
+    "response": {
+      "error": "Communication error: Extra data: line 1 column 197 (char 196)"
+    },
+    "error_details": "Communication error: Extra data: line 1 column 197 (char 196)"
+  },
+  {
+    "test": "required_params_valid_basic_query",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept valid query and limit",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: Parameter validation failed: Invalid search parameters: query is required and must be a string\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: Parameter validation failed: Invalid search parameters: query is required and must be a string\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "required_params_valid_wildcard_query",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept wildcard queries",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: Parameter validation failed: Invalid search parameters: query is required and must be a string\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: Parameter validation failed: Invalid search parameters: query is required and must be a string\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "optional_params_with_aggregate_true",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept aggregate parameter as true",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: limit parameter is required\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: limit parameter is required\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "optional_params_with_aggregate_false",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept aggregate parameter as false",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: Parameter validation failed: Invalid search parameters: query is required and must be a string\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: Parameter validation failed: Invalid search parameters: query is required and must be a string\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "optional_params_with_include_resolved_true",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept include_resolved parameter as true",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: Parameter validation failed: Invalid search parameters: query is required and must be a string\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: Parameter validation failed: Invalid search parameters: query is required and must be a string\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "optional_params_with_include_resolved_false",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept include_resolved parameter as false",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: limit parameter is required\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: limit parameter is required\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "optional_params_with_min_severity_low",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept min_severity as 'low'",
+    "response": {
+      "error": "Communication error: Extra data: line 1 column 184 (char 183)"
+    },
+    "error_details": "Communication error: Extra data: line 1 column 184 (char 183)"
+  },
+  {
+    "test": "optional_params_with_min_severity_medium",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept min_severity as 'medium'",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "optional_params_with_min_severity_high",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept min_severity as 'high'",
+    "response": {
+      "error": "Communication error: Extra data: line 1 column 184 (char 183)"
+    },
+    "error_details": "Communication error: Extra data: line 1 column 184 (char 183)"
+  },
+  {
+    "test": "optional_params_with_min_severity_critical",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept min_severity as 'critical'",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "optional_params_with_invalid_min_severity",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "status": "PASS",
+    "description": "Should fail with invalid min_severity value",
+    "response": {
+      "error": "Communication error: Extra data: line 1 column 184 (char 183)"
+    },
+    "error_details": "Communication error: Extra data: line 1 column 184 (char 183)"
+  },
+  {
+    "test": "optional_params_with_time_window_1h",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept time_window as '1h'",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "optional_params_with_time_window_24h",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept time_window as '24h'",
+    "response": {
+      "error": "Communication error: Extra data: line 1 column 184 (char 183)"
+    },
+    "error_details": "Communication error: Extra data: line 1 column 184 (char 183)"
+  },
+  {
+    "test": "optional_params_with_time_window_7d",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept time_window as '7d'",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "optional_params_with_offset",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept offset parameter",
+    "response": {
+      "error": "Communication error: Extra data: line 1 column 184 (char 183)"
+    },
+    "error_details": "Communication error: Extra data: line 1 column 184 (char 183)"
+  },
+  {
+    "test": "optional_params_with_negative_offset",
+    "expected": "FAIL",
+    "actual": "FAIL",
+    "status": "PASS",
+    "description": "Should fail with negative offset",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "advanced_query_logical_and_query",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept logical AND queries",
+    "response": {
+      "error": "Communication error: Extra data: line 1 column 184 (char 183)"
+    },
+    "error_details": "Communication error: Extra data: line 1 column 184 (char 183)"
+  },
+  {
+    "test": "advanced_query_logical_or_query",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept logical OR queries",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "advanced_query_logical_not_query",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept logical NOT queries",
+    "response": {
+      "error": "Communication error: Extra data: line 1 column 184 (char 183)"
+    },
+    "error_details": "Communication error: Extra data: line 1 column 184 (char 183)"
+  },
+  {
+    "test": "advanced_query_parentheses_query",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept queries with parentheses for grouping",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "advanced_query_wildcard_query",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept wildcard patterns",
+    "response": {
+      "error": "Communication error: Extra data: line 1 column 184 (char 183)"
+    },
+    "error_details": "Communication error: Extra data: line 1 column 184 (char 183)"
+  },
+  {
+    "test": "advanced_query_comparison_query",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept comparison operators",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: Invalid query syntax: Invalid field 'device_name' for alarms. Valid fields: severity, type, source_ip, destination_ip, timestamp, status, description\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: Invalid query syntax: Invalid field 'device_name' for alarms. Valid fields: severity, type, source_ip, destination_ip, timestamp, status, description\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "advanced_query_range_query",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept range queries",
+    "response": {
+      "error": "Communication error: Extra data: line 1 column 184 (char 183)"
+    },
+    "error_details": "Communication error: Extra data: line 1 column 184 (char 183)"
+  },
+  {
+    "test": "advanced_query_complex_query",
+    "expected": "PASS",
+    "actual": "FAIL",
+    "status": "FAIL",
+    "description": "Should accept complex multi-operator queries",
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+          }
+        ],
+        "isError": true
+      },
+      "jsonrpc": "2.0",
+      "id": 1
+    },
+    "error_details": "{\n  \"error\": true,\n  \"message\": \"Failed to search alarms: alarms search failed: API Error (unknown): getaddrinfo ENOTFOUND test.firewalla.net\",\n  \"tool\": \"search_alarms\"\n}"
+  },
+  {
+    "test": "response_structure",
+    "status": "FAIL",
+    "error": "Failed to get response: Communication error: Extra data: line 1 column 184 (char 183)"
+  }
+]

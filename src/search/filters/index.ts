@@ -39,7 +39,6 @@ class IpAddressFilter implements Filter {
   }
   
   apply(node: QueryNode, _context: FilterContext): FilterResult {
-    // Simplified - just pass through for post-processing
     if (isWildcardQuery(node)) {
       return {
         apiParams: {},

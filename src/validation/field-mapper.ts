@@ -371,7 +371,7 @@ export function normalizeFieldValue(value: any, field: string): any {
 
   // Normalize IP addresses
   if (field.includes('ip')) {
-    return value.trim().toLowerCase();
+    return value.trim();
   }
 
   // Normalize MAC addresses

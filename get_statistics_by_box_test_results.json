@@ -1,0 +1,26 @@
+{
+  "summary": "get_statistics_by_box tool testing completed",
+  "results": {
+    "toolAvailability": null,
+    "parameterValidation": {
+      "noParameters": {
+        "success": false,
+        "error": "No JSON-RPC response found for request ID 2. Raw output: {\"timestamp\":\"2025-06-25T21:25:00.433Z\",\"level\":\"info\",\"message\":\"MCP tools setup complete. Registry contains 27 handlers across 27 categories.\",\"service\":\"firewalla-mcp-server\",\"version\":\"1.0.0\"}\\n{\"timestamp\":\"2025-06-25T21:25:00.434Z\",\"level\":\"info\",\"message\":\"Registered tools: get_active_alarms, get_specific_alarm, delete_alarm, get_flow_data, get_bandwidth_usage, get_offline_devices, get_device_status, get_network_rules, pause_rule, resume_rule, get_target_lists, get_network_rules_summary, get_most_active_rules, get_recent_rules, get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_trends, get_alarm_trends, get_rule_trends, search_flows, search_alarms, search_rules, search_devices, search_target_lists, search_cross_reference\",\"service\":\"firewalla-mcp-server\",\"version\":\"1.0.0\"}\\n"
+      },
+      "unexpectedParameters": {
+        "success": false,
+        "error": "No JSON-RPC response found for request ID 3. Raw output: {\"timestamp\":\"2025-06-25T21:25:01.037Z\",\"level\":\"info\",\"message\":\"MCP tools setup complete. Registry contains 27 handlers across 27 categories.\",\"service\":\"firewalla-mcp-server\",\"version\":\"1.0.0\"}\\n{\"timestamp\":\"2025-06-25T21:25:01.039Z\",\"level\":\"info\",\"message\":\"Registered tools: get_active_alarms, get_specific_alarm, delete_alarm, get_flow_data, get_bandwidth_usage, get_offline_devices, get_device_status, get_network_rules, pause_rule, resume_rule, get_target_lists, get_network_rules_summary, get_most_active_rules, get_recent_rules, get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_trends, get_alarm_trends, get_rule_trends, search_flows, search_alarms, search_rules, search_devices, search_target_lists, search_cross_reference\",\"service\":\"firewalla-mcp-server\",\"version\":\"1.0.0\"}\\n"
+      }
+    },
+    "responseStructure": {
+      "valid": false,
+      "error": "No JSON-RPC response found for request ID 4. Raw output: {\"timestamp\":\"2025-06-25T21:25:01.645Z\",\"level\":\"info\",\"message\":\"MCP tools setup complete. Registry contains 27 handlers across 27 categories.\",\"service\":\"firewalla-mcp-server\",\"version\":\"1.0.0\"}\\n{\"timestamp\":\"2025-06-25T21:25:01.646Z\",\"level\":\"info\",\"message\":\"Registered tools: get_active_alarms, get_specific_alarm, delete_alarm, get_flow_data, get_bandwidth_usage, get_offline_devices, get_device_status, get_network_rules, pause_rule, resume_rule, get_target_lists, get_network_rules_summary, get_most_active_rules, get_recent_rules, get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_trends, get_alarm_trends, get_rule_trends, search_flows, search_alarms, search_rules, search_devices, search_target_lists, search_cross_reference\",\"service\":\"firewalla-mcp-server\",\"version\":\"1.0.0\"}\\n"
+    },
+    "dataAggregation": null,
+    "errors": [
+      "Tool availability test failed: No JSON-RPC response found for request ID 1. Raw output: {\"timestamp\":\"2025-06-25T21:24:59.741Z\",\"level\":\"info\",\"message\":\"MCP tools setup complete. Registry contains 27 handlers across 27 categories.\",\"service\":\"firewalla-mcp-server\",\"version\":\"1.0.0\"}\\n{\"timestamp\":\"2025-06-25T21:24:59.743Z\",\"level\":\"info\",\"message\":\"Registered tools: get_active_alarms, get_specific_alarm, delete_alarm, get_flow_data, get_bandwidth_usage, get_offline_devices, get_device_status, get_network_rules, pause_rule, resume_rule, get_target_lists, get_network_rules_summary, get_most_active_rules, get_recent_rules, get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_trends, get_alarm_trends, get_rule_trends, search_flows, search_alarms, search_rules, search_devices, search_target_lists, search_cross_reference\",\"service\":\"firewalla-mcp-server\",\"version\":\"1.0.0\"}\\n"
+    ],
+    "actualResponses": []
+  },
+  "actualResponses": []
+}
