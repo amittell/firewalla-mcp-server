@@ -29,7 +29,7 @@
     "noImplicitThis": true,
     "useUnknownInCatchVariables": true,
     "noUnusedLocals": false,
-    "noUnusedParameters": false,
+    "noUnusedParameters": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true
   },

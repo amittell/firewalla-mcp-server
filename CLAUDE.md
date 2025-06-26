@@ -120,7 +120,7 @@ The fixed implementation now uses the correct Firewalla MSP API v2 endpoints:
 ### Search Query Syntax
 The server supports advanced search queries with complex syntax:
 
-```
+```text
 # Basic field queries
 severity:high
 source_ip:192.168.1.1

@@ -43,7 +43,7 @@ A Model Context Protocol server providing Claude with real-time access to Firewa
 ### API Endpoints
 
 #### Flow Data
-```
+```http
 GET /v2/boxes/{box_gid}/flows
 Query Parameters:
 - page: number (pagination)
@@ -68,11 +68,11 @@ Response includes online/offline status, IP addresses, MAC addresses
 ```
 
 #### Bandwidth Usage
-```
+```http
 GET /v2/boxes/{box_gid}/bandwidth
 Query Parameters:
 - period: 1h|24h|7d|30d
-- top: number (top N devices)
+- limit: number (required, max 100)
 ```
 
 ## MCP Tools (Actions)

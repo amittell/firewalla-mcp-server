@@ -188,13 +188,13 @@ npm run mcp:start
 Open Claude Code and try these starter queries:
 
 **Basic Health Check:**
-```
+```text
 "Can you check my Firewalla status and show me a summary?"
 ```
 *This uses: `firewall_summary` resource + `get_simple_statistics` tool*
 
 **Security Overview:**
-```
+```text
 "What security alerts do I have? Show me the 5 most recent ones."
 ```
 *This uses: `get_active_alarms` tool with limit parameter*
@@ -202,7 +202,7 @@ Open Claude Code and try these starter queries:
 ### Practical Workflows
 
 **Daily Security Review:**
-```
+```text
 "Give me today's security report. Include:
 1. Any new security alerts
 2. Top 3 devices using bandwidth
@@ -211,7 +211,7 @@ Open Claude Code and try these starter queries:
 ```
 
 **Investigating Suspicious Activity:**
-```
+```text
 "I noticed unusual traffic. Can you:
 1. Show me all high-severity alarms from the last 4 hours
 2. Find any blocked connections to external IPs
@@ -219,7 +219,7 @@ Open Claude Code and try these starter queries:
 ```
 
 **Network Troubleshooting:**
-```
+```text
 "A device seems to have connectivity issues. Can you:
 1. Check if device 192.168.1.100 is online
 2. Show its recent network flows
@@ -227,7 +227,7 @@ Open Claude Code and try these starter queries:
 ```
 
 **Bandwidth Investigation:**
-```
+```text
 "Our internet is slow. Help me find the cause:
 1. Show top 10 bandwidth users in the last hour
 2. Look for any devices with unusual upload/download patterns
@@ -237,19 +237,19 @@ Open Claude Code and try these starter queries:
 ### Advanced Search Examples
 
 **Find Specific Threats:**
-```
+```text
 search for: high severity alarms from IP range 10.0.0.* in the last 24 hours
 ```
 *Uses: `search_alarms` with query: "severity:high AND source_ip:10.0.0.* AND timestamp:>24h"*
 
 **Analyze Rule Effectiveness:**
-```
+```text
 "Show me firewall rules that blocked the most connections this week"
 ```
 *Uses: `get_most_active_rules` + `search_flows` for blocked traffic*
 
 **Device Behavior Analysis:**
-```
+```text
 "Find all devices that were online yesterday but are offline now"
 ```
 *Uses: `search_devices` with temporal queries + `get_offline_devices`*
@@ -295,7 +295,7 @@ If responses are slow:
 #### Rule Management
 - `get_network_rules` - Retrieve firewall rules with complete rule names, conditions, and metadata
 - `get_network_rules_summary` - Overview statistics and counts by category
-- `get_most_active_rules` - Rules with highest hit counts for traffic analysis
+- `get_most_active_rules` - Rules with the highest hit counts for traffic analysis
 - `get_recent_rules` - Recently created or modified firewall rules
 - `pause_rule` - Temporarily disable specific firewall rules
 - `resume_rule` - Re-enable previously paused firewall rules
@@ -369,7 +369,7 @@ node dist/server.js
 
 ### Project Structure
 
-```
+```text
 firewalla-mcp-server/
 ├── src/
 │   ├── server.ts           # Main MCP server
