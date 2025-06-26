@@ -4,7 +4,7 @@
 
 import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
 import { FirewallaClient } from '../../firewalla/client.js';
-import { ParameterValidator, SafeAccess, ErrorHandler } from '../../validation/error-handler.js';
+import { ParameterValidator, SafeAccess, createErrorResponse } from '../../validation/error-handler.js';
 import { optimizeRuleResponse, DEFAULT_OPTIMIZATION_CONFIG } from '../../optimization/index.js';
 import { unixToISOString, safeUnixToISOString, getCurrentTimestamp } from '../../utils/timestamp.js';
 
@@ -21,7 +21,7 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
       });
       
       if (!limitValidation.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, limitValidation.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', {}, limitValidation.errors);
       }
       
       const query = args?.query as string | undefined;
@@ -102,7 +102,7 @@ export class PauseRuleHandler extends BaseToolHandler {
       ]);
       
       if (!validationResult.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', null, validationResult.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', null, validationResult.errors);
       }
       
       const result = await firewalla.pauseRule(
@@ -136,7 +136,7 @@ export class ResumeRuleHandler extends BaseToolHandler {
       const ruleIdValidation = ParameterValidator.validateRequiredString(args?.rule_id, 'rule_id');
       
       if (!ruleIdValidation.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', null, ruleIdValidation.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', null, ruleIdValidation.errors);
       }
       
       const result = await firewalla.resumeRule(ruleIdValidation.sanitizedValue!);
@@ -168,7 +168,7 @@ export class GetTargetListsHandler extends BaseToolHandler {
       if (listType !== undefined) {
         const validTypes = ['cloudflare', 'crowdsec', 'all'];
         if (!validTypes.includes(listType)) {
-          return ErrorHandler.createErrorResponse(this.name, 'Invalid list_type parameter', null, [`list_type must be one of: ${validTypes.join(', ')}`]);
+          return createErrorResponse(this.name, 'Invalid list_type parameter', null, [`list_type must be one of: ${validTypes.join(', ')}`]);
         }
       }
       
@@ -218,7 +218,7 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
       ]);
       
       if (!validationResult.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, validationResult.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', {}, validationResult.errors);
       }
       
       const ruleType = ruleTypeValidation.sanitizedValue!;
@@ -336,7 +336,7 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
       });
       
       if (!limitValidation.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, limitValidation.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', {}, limitValidation.errors);
       }
       
       const limit = limitValidation.sanitizedValue!;
@@ -345,7 +345,7 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
       });
       
       if (!minHitsValidation.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, minHitsValidation.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', {}, minHitsValidation.errors);
       }
       
       const minHits = minHitsValidation.sanitizedValue!;
@@ -427,7 +427,7 @@ export class GetRecentRulesHandler extends BaseToolHandler {
       ]);
       
       if (!validationResult.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, validationResult.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', {}, validationResult.errors);
       }
       
       const hours = hoursValidation.sanitizedValue!;

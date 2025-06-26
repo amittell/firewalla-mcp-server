@@ -4,7 +4,7 @@
 
 import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
 import { FirewallaClient } from '../../firewalla/client.js';
-import { ParameterValidator, SafeAccess, ErrorHandler } from '../../validation/error-handler.js';
+import { ParameterValidator, SafeAccess, createErrorResponse } from '../../validation/error-handler.js';
 import { unixToISOStringOrNow, safeUnixToISOString } from '../../utils/timestamp.js';
 
 export class GetFlowDataHandler extends BaseToolHandler {
@@ -20,7 +20,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
       });
       
       if (!limitValidation.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, limitValidation.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', {}, limitValidation.errors);
       }
       
       const query = args?.query as string | undefined;
@@ -100,7 +100,7 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
       ]);
       
       if (!validationResult.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', null, validationResult.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', null, validationResult.errors);
       }
       
       const usageResponse = await firewalla.getBandwidthUsage(
@@ -151,7 +151,7 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
       ]);
       
       if (!validationResult.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, validationResult.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', {}, validationResult.errors);
       }
       
       const limit = limitValidation.sanitizedValue!;

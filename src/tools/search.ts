@@ -140,6 +140,7 @@ export class SearchEngine {
       // eslint-disable-next-line no-unused-vars
       executeApiCall: async (client, params, _apiParams, _searchOptions) => {
         // Use reasonable limit for search operations to prevent memory issues
+        // Fetch 2x the requested limit (capped at 2000) to account for post-processing filters
         const searchLimit = params.limit ? Math.min(params.limit * 2, 2000) : 2000;
         return await client.getNetworkRules(undefined, searchLimit);
       },

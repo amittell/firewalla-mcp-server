@@ -18,52 +18,47 @@ export interface ValidationResult {
 }
 
 /**
- * Standardized error response creator
+ * Create a standard error response
  */
-export class ErrorHandler {
-  /**
-   * Create a standard error response
-   */
-  static createErrorResponse(tool: string, message: string, details?: Record<string, any>, validationErrors?: string[]): {
-    content: Array<{ type: string; text: string }>;
-    isError: true;
-  } {
-    const errorResponse: StandardError = {
-      error: true,
-      message: message,
-      tool: tool,
-      ...(details && { details }),
-      ...(validationErrors?.length && { validation_errors: validationErrors })
-    };
+export function createErrorResponse(tool: string, message: string, details?: Record<string, any>, validationErrors?: string[]): {
+  content: Array<{ type: string; text: string }>;
+  isError: true;
+} {
+  const errorResponse: StandardError = {
+    error: true,
+    message: message,
+    tool: tool,
+    ...(details && { details }),
+    ...(validationErrors?.length && { validation_errors: validationErrors })
+  };
 
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(errorResponse, null, 2),
-        },
-      ],
-      isError: true,
-    };
-  }
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(errorResponse, null, 2),
+      },
+    ],
+    isError: true,
+  };
+}
 
-  /**
-   * Wrap a function to ensure consistent error handling
-   */
-  static wrapTool<T extends any[], R>(
-    toolName: string,
-    // eslint-disable-next-line no-unused-vars
-    fn: (..._args: T) => Promise<R>
-  ) {
-    return async (...args: T): Promise<R> => {
-      try {
-        return await fn(...args);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        throw ErrorHandler.createErrorResponse(toolName, errorMessage);
-      }
-    };
-  }
+/**
+ * Wrap a function to ensure consistent error handling
+ */
+export function wrapTool<T extends any[], R>(
+  toolName: string,
+  // eslint-disable-next-line no-unused-vars
+  fn: (..._args: T) => Promise<R>
+) {
+  return async (...args: T): Promise<R> => {
+    try {
+      return await fn(...args);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      throw createErrorResponse(toolName, errorMessage);
+    }
+  };
 }
 
 /**

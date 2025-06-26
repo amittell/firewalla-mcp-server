@@ -4,7 +4,7 @@
 
 import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
 import { FirewallaClient } from '../../firewalla/client.js';
-import { ParameterValidator, SafeAccess, QuerySanitizer, ErrorHandler } from '../../validation/error-handler.js';
+import { ParameterValidator, SafeAccess, QuerySanitizer, createErrorResponse } from '../../validation/error-handler.js';
 import { unixToISOStringOrNow, getCurrentTimestamp } from '../../utils/timestamp.js';
 
 export class GetActiveAlarmsHandler extends BaseToolHandler {
@@ -28,7 +28,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
       ]);
       
       if (!validationResult.isValid) {
-        return ErrorHandler.createErrorResponse('get_active_alarms', 'Parameter validation failed', null, validationResult.errors);
+        return createErrorResponse('get_active_alarms', 'Parameter validation failed', null, validationResult.errors);
       }
       
       // Sanitize query if provided
@@ -36,7 +36,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
       if (sanitizedQuery) {
         const queryCheck = QuerySanitizer.sanitizeSearchQuery(sanitizedQuery);
         if (!queryCheck.isValid) {
-          return ErrorHandler.createErrorResponse('get_active_alarms', 'Query validation failed', null, queryCheck.errors);
+          return createErrorResponse('get_active_alarms', 'Query validation failed', null, queryCheck.errors);
         }
         sanitizedQuery = queryCheck.sanitizedValue;
       }
@@ -94,7 +94,7 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
       const alarmIdValidation = ParameterValidator.validateRequiredString(args?.alarm_id, 'alarm_id');
       
       if (!alarmIdValidation.isValid) {
-        return ErrorHandler.createErrorResponse('get_specific_alarm', 'Parameter validation failed', null, alarmIdValidation.errors);
+        return createErrorResponse('get_specific_alarm', 'Parameter validation failed', null, alarmIdValidation.errors);
       }
       
       const response = await firewalla.getSpecificAlarm(alarmIdValidation.sanitizedValue!);
@@ -121,7 +121,7 @@ export class DeleteAlarmHandler extends BaseToolHandler {
       const alarmIdValidation = ParameterValidator.validateRequiredString(args?.alarm_id, 'alarm_id');
       
       if (!alarmIdValidation.isValid) {
-        return ErrorHandler.createErrorResponse('delete_alarm', 'Parameter validation failed', null, alarmIdValidation.errors);
+        return createErrorResponse('delete_alarm', 'Parameter validation failed', null, alarmIdValidation.errors);
       }
       
       const response = await firewalla.deleteAlarm(alarmIdValidation.sanitizedValue!);

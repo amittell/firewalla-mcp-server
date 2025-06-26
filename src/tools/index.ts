@@ -1,7 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
-import { ErrorHandler } from '../validation/error-handler.js';
+import { createErrorResponse } from '../validation/error-handler.js';
 import { logger } from '../monitoring/logger.js';
 import { ToolRegistry } from './registry.js';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
@@ -39,7 +39,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
       logger.error(`Tool execution failed for ${name}:`, error as Error);
       
       // Use centralized error handling
-      return ErrorHandler.createErrorResponse(name, errorMessage, {
+      return createErrorResponse(name, errorMessage, {
         timestamp: getCurrentTimestamp(),
         error_type: error instanceof Error ? error.constructor.name : 'UnknownError',
         available_tools: toolRegistry.getToolNames() || []

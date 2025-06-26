@@ -4,7 +4,7 @@
 
 import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
 import { FirewallaClient } from '../../firewalla/client.js';
-import { ParameterValidator, SafeAccess, ErrorHandler } from '../../validation/error-handler.js';
+import { ParameterValidator, SafeAccess, createErrorResponse } from '../../validation/error-handler.js';
 
 export class GetDeviceStatusHandler extends BaseToolHandler {
   name = 'get_device_status';
@@ -19,7 +19,7 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
       });
       
       if (!limitValidation.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, limitValidation.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', {}, limitValidation.errors);
       }
       
       const deviceId = args?.device_id as string | undefined;

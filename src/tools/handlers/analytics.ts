@@ -4,7 +4,7 @@
 
 import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
 import { FirewallaClient } from '../../firewalla/client.js';
-import { ParameterValidator, SafeAccess, ErrorHandler } from '../../validation/error-handler.js';
+import { ParameterValidator, SafeAccess, createErrorResponse } from '../../validation/error-handler.js';
 import { unixToISOString } from '../../utils/timestamp.js';
 import { logger } from '../../monitoring/logger.js';
 
@@ -19,7 +19,7 @@ export class GetBoxesHandler extends BaseToolHandler {
       const groupIdValidation = ParameterValidator.validateOptionalString(_args?.group_id, 'group_id');
       
       if (!groupIdValidation.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, groupIdValidation.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', {}, groupIdValidation.errors);
       }
       
       const groupId = groupIdValidation.sanitizedValue;
@@ -292,7 +292,7 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
       ]);
       
       if (!validationResult.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, validationResult.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', {}, validationResult.errors);
       }
       
       const period = periodValidation.sanitizedValue!;
@@ -362,7 +362,7 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
       const periodValidation = ParameterValidator.validateEnum(_args?.period, 'period', ['1h', '24h', '7d', '30d'], false, '24h');
       
       if (!periodValidation.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, periodValidation.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', {}, periodValidation.errors);
       }
       
       const period = periodValidation.sanitizedValue!;
@@ -439,7 +439,7 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
       const periodValidation = ParameterValidator.validateEnum(_args?.period, 'period', ['1h', '24h', '7d', '30d'], false, '24h');
       
       if (!periodValidation.isValid) {
-        return ErrorHandler.createErrorResponse(this.name, 'Parameter validation failed', {}, periodValidation.errors);
+        return createErrorResponse(this.name, 'Parameter validation failed', {}, periodValidation.errors);
       }
       
       const period = periodValidation.sanitizedValue!;

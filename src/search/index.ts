@@ -69,6 +69,77 @@ interface ParsedQuery {
 }
 
 /**
+ * Splits a string by logical operators while respecting quoted substrings.
+ * 
+ * Logical operators (AND, OR, NOT) inside single or double quotes are ignored as split points.
+ * Returns an array of tokens with logical operators preserved as separate elements.
+ *
+ * @param query - The input string to split
+ * @returns An array of tokens split by logical operators, with quoted sections kept intact
+ */
+function smartSplitLogicalOperators(query: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  let quoteChar = '';
+  let i = 0;
+  
+  while (i < query.length) {
+    const char = query[i];
+    const prevChar = i > 0 ? query[i - 1] : '';
+    
+    // Handle quote state
+    if ((char === '"' || char === "'") && prevChar !== '\\') {
+      if (!inQuotes) {
+        inQuotes = true;
+        quoteChar = char;
+      } else if (char === quoteChar) {
+        inQuotes = false;
+        quoteChar = '';
+      }
+      current += char;
+      i++;
+      continue;
+    }
+    
+    // If we're inside quotes, just add the character
+    if (inQuotes) {
+      current += char;
+      i++;
+      continue;
+    }
+    
+    // Check for logical operators outside quotes
+    const remaining = query.slice(i);
+    const logicalMatch = remaining.match(/^\s+(AND|OR|NOT)\s+/i);
+    
+    if (logicalMatch) {
+      // Add current token if not empty
+      if (current.trim()) {
+        result.push(current.trim());
+        current = '';
+      }
+      
+      // Add the logical operator
+      result.push(logicalMatch[1].toUpperCase());
+      
+      // Skip past the matched logical operator and whitespace
+      i += logicalMatch[0].length;
+    } else {
+      current += char;
+      i++;
+    }
+  }
+  
+  // Add remaining token if not empty
+  if (current.trim()) {
+    result.push(current.trim());
+  }
+  
+  return result;
+}
+
+/**
  * Parses a raw search query string into structured query components and filters.
  *
  * Supports advanced syntax including logical operators (AND, OR, NOT), field comparisons, ranges, wildcards, arrays, and free-text search. Returns an object containing parsed components, filters for backend search, an optimized query string, and a complexity score.
@@ -84,8 +155,8 @@ export function parseSearchQuery(query: string): ParsedQuery {
   // Remove extra whitespace and normalize
   const normalized = query.trim().replace(/\s+/g, ' ');
   
-  // Split by logical operators while preserving them
-  const tokens = normalized.split(/\s+(AND|OR|NOT)\s+/i);
+  // Split by logical operators while preserving them and respecting quotes
+  const tokens = smartSplitLogicalOperators(normalized);
   
   let currentLogical: 'AND' | 'OR' | 'NOT' | undefined;
   
