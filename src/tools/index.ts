@@ -48,14 +48,8 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
   });
 
   const allToolNames = toolRegistry.getToolNames() || [];
-  const securityTools = toolRegistry.getToolsByCategory('security') || [];
-  const networkTools = toolRegistry.getToolsByCategory('network') || [];
-  const deviceTools = toolRegistry.getToolsByCategory('device') || [];
-  const ruleTools = toolRegistry.getToolsByCategory('rule') || [];
-  const analyticsTools = toolRegistry.getToolsByCategory('analytics') || [];
-  const searchTools = toolRegistry.getToolsByCategory('search') || [];
-  
-  const totalCategories = securityTools.length + networkTools.length + deviceTools.length + ruleTools.length + analyticsTools.length + searchTools.length;
+  const categories = ['security', 'network', 'device', 'rule', 'analytics', 'search'];
+  const totalCategories = categories.length;
   
   logger.info(`MCP tools setup complete. Registry contains ${allToolNames.length} handlers across ${totalCategories} categories.`);
   logger.info(`Registered tools: ${allToolNames.join(', ')}`);
