@@ -160,6 +160,7 @@ export function performEnhancedCorrelation(
   // Performance safeguard for large datasets
   const maxProcessingSize = 10000;
   if (secondaryResults.length > maxProcessingSize) {
+    // eslint-disable-next-line no-console
     console.warn(
       `Large dataset detected (${secondaryResults.length} items). Consider pagination for better performance.`
     );
