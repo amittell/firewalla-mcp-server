@@ -484,7 +484,7 @@ export function optimizeResponse(responseType: string, config?: Partial<Optimiza
     throw new Error('ResponseType parameter must be a non-empty string');
   }
 
-  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor): PropertyDescriptor {
+  return function (_target: any, propertyKey: string, descriptor: PropertyDescriptor): PropertyDescriptor {
     // Type checking for originalMethod
     if (!descriptor || typeof descriptor.value !== 'function') {
       throw new Error('Decorator can only be applied to methods');

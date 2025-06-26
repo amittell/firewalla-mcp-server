@@ -38,7 +38,7 @@ class IpAddressFilter implements Filter {
     return false;
   }
   
-  apply(node: QueryNode, context: FilterContext): FilterResult {
+  apply(node: QueryNode, _context: FilterContext): FilterResult {
     // Simplified - just pass through for post-processing
     if (isWildcardQuery(node)) {
       return {
@@ -87,7 +87,7 @@ class SeverityFilter implements Filter {
     return isFieldQuery(node) && node.field === 'severity';
   }
   
-  apply(node: QueryNode, context: FilterContext): FilterResult {
+  apply(node: QueryNode, _context: FilterContext): FilterResult {
     if (isFieldQuery(node)) {
       return {
         apiParams: { severity: node.value },
@@ -105,7 +105,7 @@ class ProtocolFilter implements Filter {
     return isFieldQuery(node) && node.field === 'protocol';
   }
   
-  apply(node: QueryNode, context: FilterContext): FilterResult {
+  apply(node: QueryNode, _context: FilterContext): FilterResult {
     if (isFieldQuery(node)) {
       return {
         apiParams: { protocol: node.value },
