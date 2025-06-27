@@ -408,10 +408,9 @@ export class FirewallaClient {
       params.cursor = cursor;
     }
 
-    const endpoint =
-      this.config.boxId && this.config.boxId.trim()
-        ? `/boxes/${this.config.boxId.trim()}/alarms`
-        : `/alarms`;
+    const endpoint = this.config.boxId 
+      ? `/v2/boxes/${this.config.boxId}/alarms`
+      : `/alarms`;
 
     const response = await this.request<{
       count: number;
@@ -477,7 +476,7 @@ export class FirewallaClient {
       count: number;
       results: any[];
       next_cursor?: string;
-    }>('GET', `/v2/boxes/${this.config.boxId}/flows`, params);
+    }>('GET', this.config.boxId ? `/v2/boxes/${this.config.boxId}/flows` : `/flows`, params);
 
     // API returns {count, results[], next_cursor} format
     const flows = (Array.isArray(response.results) ? response.results : []).map(
@@ -583,8 +582,8 @@ export class FirewallaClient {
       const dataFetcher = async (): Promise<Device[]> => {
         const params: Record<string, unknown> = {};
 
-        const endpoint = this.config.boxId?.trim()
-          ? `/boxes/${this.config.boxId.trim()}/devices`
+        const endpoint = this.config.boxId
+          ? `/v2/boxes/${this.config.boxId}/devices`
           : `/devices`;
 
         // API returns direct array of devices
@@ -778,29 +777,10 @@ export class FirewallaClient {
         : '24h';
       const validatedTop = Math.max(1, Number(top) || 50);
 
-      // Calculate flow fetch limit based on period (more flows for longer periods)
-      let flowLimit: number;
-      switch (validatedPeriod) {
-        case '1h':
-          flowLimit = 1000;
-          break;
-        case '24h':
-          flowLimit = 3000;
-          break;
-        case '7d':
-          flowLimit = 5000;
-          break;
-        case '30d':
-          flowLimit = 10000;
-          break;
-        default:
-          flowLimit = 3000;
-      }
-
-      // Calculate timestamp range for the period
+      // Calculate time range for the period
       const end = Math.floor(Date.now() / 1000);
       let begin: number;
-
+      
       switch (validatedPeriod) {
         case '1h':
           begin = end - 60 * 60;
@@ -818,48 +798,40 @@ export class FirewallaClient {
           begin = end - 24 * 60 * 60;
       }
 
-      // Use proper Firewalla MSP API v2 flow endpoint with timestamp filtering
-      const timeQuery = `timestamp:${begin}-${end}`;
-      const endpoint = `/v2/boxes/${this.config.boxId}/flows`;
-
-      const params = {
-        query: timeQuery,
+      // Use correct Firewalla API pattern: /flows with groupBy and sortBy
+      const endpoint = this.config.boxId ? `/v2/boxes/${this.config.boxId}/flows` : '/flows';
+      const params: Record<string, unknown> = {
+        query: `ts:${begin}-${end}`,
         groupBy: 'device',
-        limit: Math.min(flowLimit, 500), // API max is 500
-        sortBy: 'bytes:desc',
+        sortBy: 'download+upload:desc',
+        limit: validatedTop,
       };
 
-      const flowResponse = await this.request<{
+      const response = await this.request<{
         count: number;
         results: any[];
         next_cursor?: string;
       }>('GET', endpoint, params);
 
-      if (!flowResponse?.results || flowResponse.results.length === 0) {
-        return { count: 0, results: [], next_cursor: undefined };
-      }
-
-      // Process flows and aggregate bandwidth by device
+      // Process and aggregate bandwidth by device
       const deviceBandwidth = new Map<string, BandwidthUsage>();
-
-      flowResponse.results.forEach((flow: any) => {
+      
+      (response.results || []).forEach((flow: any) => {
         const deviceId = flow.device?.id || flow.deviceId || 'unknown';
-        const deviceName =
-          flow.device?.name || flow.deviceName || 'Unknown Device';
+        const deviceName = flow.device?.name || flow.deviceName || 'Unknown Device';
         const deviceIp = flow.device?.ip || flow.localIP || 'unknown';
         const upload = Number(flow.upload || 0);
         const download = Number(flow.download || 0);
 
         if (deviceId === 'unknown' || (upload === 0 && download === 0)) {
-          return; // Skip flows without device info or bandwidth
+          return;
         }
 
         if (deviceBandwidth.has(deviceId)) {
           const existing = deviceBandwidth.get(deviceId)!;
           existing.bytes_uploaded += upload;
           existing.bytes_downloaded += download;
-          existing.total_bytes =
-            existing.bytes_uploaded + existing.bytes_downloaded;
+          existing.total_bytes = existing.bytes_uploaded + existing.bytes_downloaded;
         } else {
           deviceBandwidth.set(deviceId, {
             device_id: deviceId,
@@ -873,7 +845,7 @@ export class FirewallaClient {
         }
       });
 
-      // Convert to array, sort by total bandwidth, and get top N
+      // Convert to array and sort by total bandwidth
       const results = Array.from(deviceBandwidth.values())
         .filter(device => device.total_bytes > 0)
         .sort((a, b) => b.total_bytes - a.total_bytes)
@@ -882,19 +854,13 @@ export class FirewallaClient {
       return {
         count: results.length,
         results,
-        next_cursor: undefined,
+        next_cursor: response.next_cursor,
       };
     } catch (error) {
       logger.error(
         'Error in getBandwidthUsage:',
         error instanceof Error ? error : new Error(String(error))
       );
-      if (
-        error instanceof Error &&
-        error.message.includes('Failed to get bandwidth usage')
-      ) {
-        throw error; // Re-throw already formatted errors
-      }
       throw new Error(
         `Failed to get bandwidth usage for period ${period}: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
@@ -920,7 +886,7 @@ export class FirewallaClient {
       count: number;
       results: any[];
       next_cursor?: string;
-    }>('GET', `/v2/boxes/${this.config.boxId}/rules`, params);
+    }>('GET', this.config.boxId ? `/v2/boxes/${this.config.boxId}/rules` : `/rules`, params);
 
     // API returns {count, results[]} format
     const rules = (Array.isArray(response.results) ? response.results : []).map(
@@ -990,7 +956,7 @@ export class FirewallaClient {
 
     const response = await this.request<
       TargetList[] | { results: TargetList[] }
-    >('GET', `/v2/boxes/${this.config.boxId}/target-lists`, params);
+    >('GET', this.config.boxId ? `/v2/boxes/${this.config.boxId}/target-lists` : `/target-lists`, params);
 
     // Handle response format
     const results = Array.isArray(response)
@@ -1014,7 +980,7 @@ export class FirewallaClient {
   }> {
     return this.request(
       'GET',
-      `/v2/boxes/${this.config.boxId}/summary`,
+      `/summary`,
       undefined,
       true
     );
@@ -1030,7 +996,7 @@ export class FirewallaClient {
   }> {
     return this.request(
       'GET',
-      `/v2/boxes/${this.config.boxId}/metrics/security`,
+      `/metrics/security`,
       undefined,
       true
     );
@@ -1052,7 +1018,7 @@ export class FirewallaClient {
   }> {
     return this.request(
       'GET',
-      `/v2/boxes/${this.config.boxId}/topology`,
+      `/topology`,
       undefined,
       true
     );
@@ -1071,7 +1037,7 @@ export class FirewallaClient {
     const params = { hours };
     return this.request(
       'GET',
-      `/v2/boxes/${this.config.boxId}/threats/recent`,
+      `/threats/recent`,
       params,
       true
     );
@@ -1167,7 +1133,7 @@ export class FirewallaClient {
 
       const response = await this.request<any>(
         'GET',
-        `/v2/boxes/${this.config.boxId}/alarms/${validatedAlarmId}`
+        `/alarms/${validatedAlarmId}`
       );
 
       // Enhanced null/undefined checks for response
@@ -1544,163 +1510,81 @@ export class FirewallaClient {
         Math.min(Number(interval) || 3600, 86400)
       ); // 60-86400 seconds as per schema
 
-      // Enhanced timestamp validation
-      const currentTime = Date.now();
-      const end = Math.floor(currentTime / 1000);
+      // Calculate time range for the period
+      const end = Math.floor(Date.now() / 1000);
       let begin: number;
-      let points: number;
+      let dataPoints: number;
 
       switch (validatedPeriod) {
         case '1h':
           begin = end - 60 * 60;
-          points = Math.min(
-            60,
-            Math.max(1, Math.floor((end - begin) / validatedInterval))
-          ); // Ensure at least 1 point
+          dataPoints = Math.floor(3600 / validatedInterval);
           break;
         case '24h':
           begin = end - 24 * 60 * 60;
-          points = Math.min(
-            24,
-            Math.max(1, Math.floor((end - begin) / validatedInterval))
-          );
+          dataPoints = Math.floor((24 * 3600) / validatedInterval);
           break;
         case '7d':
           begin = end - 7 * 24 * 60 * 60;
-          points = Math.min(
-            168,
-            Math.max(1, Math.floor((end - begin) / validatedInterval))
-          );
+          dataPoints = Math.floor((7 * 24 * 3600) / validatedInterval);
           break;
         case '30d':
           begin = end - 30 * 24 * 60 * 60;
-          points = Math.min(
-            30,
-            Math.max(1, Math.floor((end - begin) / validatedInterval))
-          );
+          dataPoints = Math.floor((30 * 24 * 3600) / validatedInterval);
           break;
         default:
           begin = end - 24 * 60 * 60;
-          points = 24;
+          dataPoints = Math.floor((24 * 3600) / validatedInterval);
       }
 
-      // Validate calculated values
-      if (begin >= end || begin <= 0) {
-        throw new Error(`Invalid time range: begin=${begin}, end=${end}`);
-      }
+      // Get flow data for the period
+      const endpoint = this.config.boxId ? `/v2/boxes/${this.config.boxId}/flows` : '/flows';
+      const flowResponse = await this.request<{
+        count: number;
+        results: any[];
+        next_cursor?: string;
+      }>('GET', endpoint, {
+        query: `ts:${begin}-${end}`,
+        limit: 10000, // Get large sample for trend analysis
+        sortBy: 'ts:asc',
+      });
 
-      if (points <= 0) {
-        throw new Error(`Invalid points calculation: ${points}`);
-      }
-
-      const actualInterval = Math.floor((end - begin) / Math.max(1, points));
-      if (actualInterval <= 0) {
-        throw new Error(`Invalid actual interval: ${actualInterval}`);
-      }
-
+      // Group flows by time intervals
       const trends: Trend[] = [];
+      const intervalGroups = new Map<number, number>();
 
-      // Enhanced trend data generation with better error handling
-      const batchSize = Math.min(5, points); // Process in smaller batches to avoid overwhelming API
-      for (let batchStart = 0; batchStart < points; batchStart += batchSize) {
-        const batchEnd = Math.min(batchStart + batchSize, points);
-        const batchPromises: Array<Promise<Trend>> = [];
-
-        for (let i = batchStart; i < batchEnd; i++) {
-          const intervalStart = begin + i * actualInterval;
-          const intervalEnd = begin + (i + 1) * actualInterval;
-
-          // Validate interval timestamps
-          if (
-            intervalStart >= intervalEnd ||
-            intervalStart < 0 ||
-            intervalEnd < 0
-          ) {
-            trends.push({ ts: intervalEnd, value: 0 });
-            continue;
-          }
-
-          batchPromises.push(
-            (async (): Promise<Trend> => {
-              try {
-                // Enhanced query with time range filtering
-                const query = `timestamp:${intervalStart}-${intervalEnd}`;
-                const flows = await this.getFlowData(
-                  query,
-                  undefined,
-                  'ts:desc',
-                  1000
-                );
-
-                // Enhanced result validation
-                if (!flows?.results || !Array.isArray(flows.results)) {
-                  return { ts: intervalEnd, value: 0 };
-                }
-
-                // Filter flows to actual time range for accuracy
-                const filteredFlows = flows.results.filter(
-                  flow =>
-                    flow &&
-                    flow.ts &&
-                    flow.ts >= intervalStart &&
-                    flow.ts <= intervalEnd
-                );
-
-                return {
-                  ts: intervalEnd,
-                  value: Math.max(0, filteredFlows.length),
-                };
-              } catch (error) {
-                logger.debugNamespace(
-                  'api',
-                  `Failed to get flow data for interval ${intervalStart}-${intervalEnd}`,
-                  { error }
-                );
-                return { ts: intervalEnd, value: 0 };
-              }
-            })()
-          );
-        }
-
-        // Wait for batch completion with timeout
-        try {
-          const batchResults = await Promise.allSettled(batchPromises);
-          batchResults.forEach(result => {
-            if (result.status === 'fulfilled') {
-              trends.push(result.value);
-            } else {
-              logger.debugNamespace('api', 'Batch result failed', {
-                reason: result.reason,
-              });
-              trends.push({ ts: end, value: 0 });
-            }
-          });
-        } catch (batchError) {
-          logger.debugNamespace('api', 'Batch processing failed', {
-            error: batchError,
-          });
-          // Fill remaining with zeros
-          for (let i = batchStart; i < batchEnd; i++) {
-            const intervalEnd = begin + (i + 1) * actualInterval;
-            trends.push({ ts: intervalEnd, value: 0 });
-          }
-        }
+      // Initialize all intervals with 0
+      for (let i = 0; i < dataPoints; i++) {
+        const intervalStart = begin + (i * validatedInterval);
+        intervalGroups.set(intervalStart, 0);
       }
 
-      // Sort trends by timestamp and validate results
-      const sortedTrends = trends
-        .filter(
-          trend =>
-            trend &&
-            typeof trend.ts === 'number' &&
-            typeof trend.value === 'number'
-        )
-        .sort((a, b) => a.ts - b.ts)
-        .slice(0, points); // Ensure we don't exceed expected points
+      // Count flows in each interval
+      (flowResponse.results || []).forEach((flow: any) => {
+        const flowTime = flow.ts || 0;
+        if (flowTime >= begin && flowTime <= end) {
+          const intervalIndex = Math.floor((flowTime - begin) / validatedInterval);
+          const intervalStart = begin + (intervalIndex * validatedInterval);
+          if (intervalGroups.has(intervalStart)) {
+            intervalGroups.set(intervalStart, intervalGroups.get(intervalStart)! + 1);
+          }
+        }
+      });
+
+      // Convert to trend format
+      for (const [intervalStart, count] of intervalGroups.entries()) {
+        trends.push({
+          ts: intervalStart + validatedInterval, // End of interval
+          value: count,
+        });
+      }
+
+      // Sort by timestamp
+      trends.sort((a, b) => a.ts - b.ts);
 
       return {
-        count: sortedTrends.length,
-        results: sortedTrends,
+        count: trends.length,
+        results: trends,
         next_cursor: undefined,
       };
     } catch (error) {
@@ -1740,156 +1624,82 @@ export class FirewallaClient {
       ];
       const validatedPeriod = validPeriods.includes(period) ? period : '24h';
 
-      // Enhanced alarm data retrieval with better error handling
-      let alarms;
-      try {
-        alarms = await this.getActiveAlarms(
-          undefined,
-          undefined,
-          'timestamp:desc',
-          5000
-        ); // Get more alarms for better trends
-      } catch (alarmError) {
-        logger.debugNamespace('api', 'Failed to get active alarms for trends', {
-          error: alarmError,
-        });
-        alarms = { results: [], count: 0 };
-      }
-
-      // Enhanced timestamp validation
-      const currentTime = Date.now();
-      const end = Math.floor(currentTime / 1000);
+      // Calculate time range for the period
+      const end = Math.floor(Date.now() / 1000);
       let begin: number;
-      let points: number;
+      let dataPoints: number;
+      const intervalSeconds = 3600; // 1 hour intervals
 
       switch (validatedPeriod) {
         case '1h':
           begin = end - 60 * 60;
-          points = 12; // 5-minute intervals
+          dataPoints = 1;
           break;
         case '24h':
           begin = end - 24 * 60 * 60;
-          points = 24; // 1-hour intervals
+          dataPoints = 24;
           break;
         case '7d':
           begin = end - 7 * 24 * 60 * 60;
-          points = 168; // 1-hour intervals
+          dataPoints = 168;
           break;
         case '30d':
           begin = end - 30 * 24 * 60 * 60;
-          points = 30; // 1-day intervals
+          dataPoints = 30;
           break;
         default:
           begin = end - 24 * 60 * 60;
-          points = 24;
+          dataPoints = 24;
       }
 
-      // Validate calculated values
-      if (begin >= end || begin <= 0) {
-        throw new Error(`Invalid time range: begin=${begin}, end=${end}`);
-      }
+      // Get alarm data for the period
+      const endpoint = this.config.boxId ? `/v2/boxes/${this.config.boxId}/alarms` : '/alarms';
+      const alarmResponse = await this.request<{
+        count: number;
+        results: any[];
+        next_cursor?: string;
+      }>('GET', endpoint, {
+        query: `ts:${begin}-${end}`,
+        limit: 10000,
+        sortBy: 'ts:asc',
+      });
 
-      if (points <= 0) {
-        throw new Error(`Invalid points calculation: ${points}`);
-      }
-
-      const interval = Math.floor((end - begin) / Math.max(1, points));
-      if (interval <= 0) {
-        throw new Error(`Invalid interval calculation: ${interval}`);
-      }
-
+      // Group alarms by time intervals
       const trends: Trend[] = [];
+      const intervalGroups = new Map<number, number>();
 
-      // Enhanced alarm grouping by time intervals with comprehensive null safety
-      const alarmsByInterval = new Map<number, number>();
+      // Initialize all intervals with 0
+      for (let i = 0; i < dataPoints; i++) {
+        const intervalStart = begin + (i * intervalSeconds);
+        intervalGroups.set(intervalStart, 0);
+      }
 
-      // Validate alarms response
-      if (!alarms?.results || !Array.isArray(alarms.results)) {
-        logger.debugNamespace(
-          'validation',
-          'Invalid alarms response structure'
-        );
-        // Generate empty trends
-        for (let i = 0; i < points; i++) {
-          const intervalEnd = begin + (i + 1) * interval;
-          trends.push({ ts: intervalEnd, value: 0 });
-        }
-      } else {
-        // Process alarms with enhanced validation
-        const validAlarms = alarms.results.filter(
-          alarm =>
-            alarm &&
-            typeof alarm === 'object' &&
-            alarm.ts &&
-            typeof alarm.ts === 'number' &&
-            alarm.ts > 0
-        );
-
-        validAlarms.forEach(alarm => {
-          const alarmTime = alarm.ts;
-
-          // Only process alarms within our time range
-          if (alarmTime >= begin && alarmTime <= end) {
-            const intervalIndex = Math.floor((alarmTime - begin) / interval);
-
-            // Validate interval index
-            if (intervalIndex >= 0 && intervalIndex < points) {
-              const intervalEnd = begin + (intervalIndex + 1) * interval;
-
-              // Validate interval end timestamp
-              if (intervalEnd > begin && intervalEnd <= end + interval) {
-                alarmsByInterval.set(
-                  intervalEnd,
-                  (alarmsByInterval.get(intervalEnd) || 0) + 1
-                );
-              }
-            }
+      // Count alarms in each interval
+      (alarmResponse.results || []).forEach((alarm: any) => {
+        const alarmTime = alarm.ts || 0;
+        if (alarmTime >= begin && alarmTime <= end) {
+          const intervalIndex = Math.floor((alarmTime - begin) / intervalSeconds);
+          const intervalStart = begin + (intervalIndex * intervalSeconds);
+          if (intervalGroups.has(intervalStart)) {
+            intervalGroups.set(intervalStart, intervalGroups.get(intervalStart)! + 1);
           }
+        }
+      });
+
+      // Convert to trend format
+      for (const [intervalStart, count] of intervalGroups.entries()) {
+        trends.push({
+          ts: intervalStart + intervalSeconds, // End of interval
+          value: count,
         });
-
-        // Generate trend points with validation
-        for (let i = 0; i < points; i++) {
-          const intervalEnd = begin + (i + 1) * interval;
-
-          // Validate timestamp
-          if (intervalEnd > begin && intervalEnd <= end + interval) {
-            trends.push({
-              ts: intervalEnd,
-              value: Math.max(0, alarmsByInterval.get(intervalEnd) || 0),
-            });
-          } else {
-            logger.debugNamespace(
-              'validation',
-              `Invalid interval end timestamp: ${intervalEnd}`
-            );
-            trends.push({ ts: intervalEnd, value: 0 });
-          }
-        }
       }
 
-      // Sort and validate final results
-      const validTrends = trends
-        .filter(
-          trend =>
-            trend &&
-            typeof trend.ts === 'number' &&
-            typeof trend.value === 'number' &&
-            trend.ts > 0 &&
-            trend.value >= 0
-        )
-        .sort((a, b) => a.ts - b.ts)
-        .slice(0, points); // Ensure we don't exceed expected points
-
-      // If we lost trends due to validation, fill with zeros
-      while (validTrends.length < points) {
-        const missingIndex = validTrends.length;
-        const missingTs = begin + (missingIndex + 1) * interval;
-        validTrends.push({ ts: missingTs, value: 0 });
-      }
+      // Sort by timestamp
+      trends.sort((a, b) => a.ts - b.ts);
 
       return {
-        count: validTrends.length,
-        results: validTrends,
+        count: trends.length,
+        results: trends,
         next_cursor: undefined,
       };
     } catch (error) {
@@ -2123,17 +1933,15 @@ export class FirewallaClient {
     next_cursor?: string;
   }> {
     try {
+      // Aggregate statistics from available endpoints
       const [boxes, alarms, rules] = await Promise.all([
-        this.getBoxes(),
-        this.getActiveAlarms(),
-        this.getNetworkRules(),
+        this.getBoxes().catch(() => ({ results: [], count: 0 })),
+        this.getActiveAlarms().catch(() => ({ results: [], count: 0 })),
+        this.getNetworkRules().catch(() => ({ results: [], count: 0 })),
       ]);
 
       // Group data by box
-      const boxStats = new Map<
-        string,
-        { box: any; alarmCount: number; ruleCount: number }
-      >();
+      const boxStats = new Map<string, { box: any; alarmCount: number; ruleCount: number }>();
 
       boxes.results.forEach((box: any) => {
         boxStats.set(box.id || box.gid, {
@@ -2143,22 +1951,22 @@ export class FirewallaClient {
         });
       });
 
-      // Count alarms per box (if alarm has box info)
-      alarms.results.forEach(alarm => {
-        if ((alarm as any).gid && boxStats.has((alarm as any).gid)) {
-          boxStats.get((alarm as any).gid)!.alarmCount++;
+      // Count alarms per box
+      alarms.results.forEach((alarm: any) => {
+        if (alarm.gid && boxStats.has(alarm.gid)) {
+          boxStats.get(alarm.gid)!.alarmCount++;
         }
       });
 
-      // Count rules per box (if rule has box info)
-      rules.results.forEach(rule => {
+      // Count rules per box
+      rules.results.forEach((rule: any) => {
         if (rule.gid && boxStats.has(rule.gid)) {
           boxStats.get(rule.gid)!.ruleCount++;
         }
       });
 
-      // Convert to Statistics format - using combined score as value
-      const results = Array.from(boxStats.values()).map(stat => ({
+      // Convert to Statistics format
+      const results = Array.from(boxStats.values()).map((stat): Statistics => ({
         meta: {
           gid: stat.box.id || stat.box.gid,
           name: stat.box.name,
@@ -2181,9 +1989,9 @@ export class FirewallaClient {
       return {
         count: results.length,
         results,
+        next_cursor: undefined,
       };
     } catch (error) {
-      // Handle errors in statistics aggregation gracefully
       logger.error(
         'Error in getStatisticsByBox:',
         error instanceof Error ? error : new Error(String(error))
