@@ -440,7 +440,7 @@ export class FirewallaClient {
       params.cursor = cursor;
     }
 
-    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/flows`, params);
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/boxes/${this.config.boxId}/flows`, params);
     
     // API returns {count, results[], next_cursor} format
     const flows = (Array.isArray(response.results) ? response.results : []).map((item: any): Flow => {
@@ -825,7 +825,7 @@ export class FirewallaClient {
       params.limit = limit;
     }
 
-    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/rules`, params);
+    const response = await this.request<{count: number; results: any[]; next_cursor?: string}>('GET', `/v2/boxes/${this.config.boxId}/rules`, params);
     
     // API returns {count, results[]} format
     const rules = (Array.isArray(response.results) ? response.results : []).map((item: any): NetworkRule => ({

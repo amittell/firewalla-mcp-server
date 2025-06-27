@@ -151,7 +151,7 @@ describe('FirewallaClient', () => {
       );
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/v2/flows`,
+        `/v2/boxes/test-box-id/flows`,
         {
           params: {
             limit: 50,
@@ -515,7 +515,7 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/v2/rules`,
+        `/v2/boxes/test-box-id/rules`,
         { params: {} }
       );
     });
