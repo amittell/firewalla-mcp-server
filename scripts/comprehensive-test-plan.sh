@@ -56,6 +56,12 @@ check_typescript_compilation() {
     # Check for specific interface files
     echo "🔍 Checking for generated interface files..."
     
+    # First ensure dist directory exists and has expected structure
+    if [ ! -d "dist" ]; then
+        echo "❌ dist directory missing - TypeScript compilation may have failed"
+        return 1
+    fi
+    
     local interface_files=(
         "dist/types.d.ts"
         "dist/tools/handlers/base.d.ts"
