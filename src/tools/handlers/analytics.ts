@@ -749,7 +749,7 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
         (sum: number, t: any) => sum + SafeAccess.getNestedValue(t, 'value', 0),
         0
       ) / trends.length;
-    if (avgValue === 0 || !isFinite(avgValue)) {
+    if (avgValue === 0 || !Number.isFinite(avgValue)) {
       return 100;
     }
 
@@ -761,7 +761,7 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
     const variationPercentage = totalVariation / (trends.length - 1) / avgValue;
 
     // Ensure the result is a finite number
-    if (!isFinite(variationPercentage)) {
+    if (!Number.isFinite(variationPercentage)) {
       return 0;
     }
 

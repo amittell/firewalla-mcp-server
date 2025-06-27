@@ -144,7 +144,7 @@ export abstract class BaseFilter implements Filter {
   protected parseTimestamp(value: any): number | null {
     if (typeof value === 'number') {
       // Handle invalid numbers (NaN, Infinity)
-      if (!isFinite(value)) {
+      if (!Number.isFinite(value)) {
         return null;
       }
 
@@ -191,7 +191,7 @@ export abstract class BaseFilter implements Filter {
 
       // Try parsing as number string first
       const numericValue = parseFloat(trimmed);
-      if (!isNaN(numericValue) && isFinite(numericValue)) {
+      if (!isNaN(numericValue) && Number.isFinite(numericValue)) {
         return this.parseTimestamp(numericValue);
       }
 

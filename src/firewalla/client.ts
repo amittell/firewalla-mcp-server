@@ -408,7 +408,7 @@ export class FirewallaClient {
       params.cursor = cursor;
     }
 
-    const endpoint = this.config.boxId 
+    const endpoint = this.config.boxId
       ? `/v2/boxes/${this.config.boxId}/alarms`
       : `/alarms`;
 
@@ -476,7 +476,11 @@ export class FirewallaClient {
       count: number;
       results: any[];
       next_cursor?: string;
-    }>('GET', this.config.boxId ? `/v2/boxes/${this.config.boxId}/flows` : `/flows`, params);
+    }>(
+      'GET',
+      this.config.boxId ? `/v2/boxes/${this.config.boxId}/flows` : `/flows`,
+      params
+    );
 
     // API returns {count, results[], next_cursor} format
     const flows = (Array.isArray(response.results) ? response.results : []).map(
@@ -780,7 +784,7 @@ export class FirewallaClient {
       // Calculate time range for the period
       const end = Math.floor(Date.now() / 1000);
       let begin: number;
-      
+
       switch (validatedPeriod) {
         case '1h':
           begin = end - 60 * 60;
@@ -799,7 +803,9 @@ export class FirewallaClient {
       }
 
       // Use correct Firewalla API pattern: /flows with groupBy and sortBy
-      const endpoint = this.config.boxId ? `/v2/boxes/${this.config.boxId}/flows` : '/flows';
+      const endpoint = this.config.boxId
+        ? `/v2/boxes/${this.config.boxId}/flows`
+        : '/flows';
       const params: Record<string, unknown> = {
         query: `ts:${begin}-${end}`,
         groupBy: 'device',
@@ -815,10 +821,11 @@ export class FirewallaClient {
 
       // Process and aggregate bandwidth by device
       const deviceBandwidth = new Map<string, BandwidthUsage>();
-      
+
       (response.results || []).forEach((flow: any) => {
         const deviceId = flow.device?.id || flow.deviceId || 'unknown';
-        const deviceName = flow.device?.name || flow.deviceName || 'Unknown Device';
+        const deviceName =
+          flow.device?.name || flow.deviceName || 'Unknown Device';
         const deviceIp = flow.device?.ip || flow.localIP || 'unknown';
         const upload = Number(flow.upload || 0);
         const download = Number(flow.download || 0);
@@ -831,7 +838,8 @@ export class FirewallaClient {
           const existing = deviceBandwidth.get(deviceId)!;
           existing.bytes_uploaded += upload;
           existing.bytes_downloaded += download;
-          existing.total_bytes = existing.bytes_uploaded + existing.bytes_downloaded;
+          existing.total_bytes =
+            existing.bytes_uploaded + existing.bytes_downloaded;
         } else {
           deviceBandwidth.set(deviceId, {
             device_id: deviceId,
@@ -886,7 +894,11 @@ export class FirewallaClient {
       count: number;
       results: any[];
       next_cursor?: string;
-    }>('GET', this.config.boxId ? `/v2/boxes/${this.config.boxId}/rules` : `/rules`, params);
+    }>(
+      'GET',
+      this.config.boxId ? `/v2/boxes/${this.config.boxId}/rules` : `/rules`,
+      params
+    );
 
     // API returns {count, results[]} format
     const rules = (Array.isArray(response.results) ? response.results : []).map(
@@ -956,7 +968,13 @@ export class FirewallaClient {
 
     const response = await this.request<
       TargetList[] | { results: TargetList[] }
-    >('GET', this.config.boxId ? `/v2/boxes/${this.config.boxId}/target-lists` : `/target-lists`, params);
+    >(
+      'GET',
+      this.config.boxId
+        ? `/v2/boxes/${this.config.boxId}/target-lists`
+        : `/target-lists`,
+      params
+    );
 
     // Handle response format
     const results = Array.isArray(response)
@@ -978,12 +996,7 @@ export class FirewallaClient {
     blocked_attempts: number;
     last_updated: string;
   }> {
-    return this.request(
-      'GET',
-      `/summary`,
-      undefined,
-      true
-    );
+    return this.request('GET', `/summary`, undefined, true);
   }
 
   async getSecurityMetrics(): Promise<{
@@ -994,12 +1007,7 @@ export class FirewallaClient {
     threat_level: 'low' | 'medium' | 'high' | 'critical';
     last_threat_detected: string;
   }> {
-    return this.request(
-      'GET',
-      `/metrics/security`,
-      undefined,
-      true
-    );
+    return this.request('GET', `/metrics/security`, undefined, true);
   }
 
   async getNetworkTopology(): Promise<{
@@ -1016,12 +1024,7 @@ export class FirewallaClient {
       bandwidth: number;
     }>;
   }> {
-    return this.request(
-      'GET',
-      `/topology`,
-      undefined,
-      true
-    );
+    return this.request('GET', `/topology`, undefined, true);
   }
 
   async getRecentThreats(hours = 24): Promise<
@@ -1035,12 +1038,7 @@ export class FirewallaClient {
     }>
   > {
     const params = { hours };
-    return this.request(
-      'GET',
-      `/threats/recent`,
-      params,
-      true
-    );
+    return this.request('GET', `/threats/recent`, params, true);
   }
 
   @optimizeResponse('rules')
@@ -1538,7 +1536,9 @@ export class FirewallaClient {
       }
 
       // Get flow data for the period
-      const endpoint = this.config.boxId ? `/v2/boxes/${this.config.boxId}/flows` : '/flows';
+      const endpoint = this.config.boxId
+        ? `/v2/boxes/${this.config.boxId}/flows`
+        : '/flows';
       const flowResponse = await this.request<{
         count: number;
         results: any[];
@@ -1555,7 +1555,7 @@ export class FirewallaClient {
 
       // Initialize all intervals with 0
       for (let i = 0; i < dataPoints; i++) {
-        const intervalStart = begin + (i * validatedInterval);
+        const intervalStart = begin + i * validatedInterval;
         intervalGroups.set(intervalStart, 0);
       }
 
@@ -1563,10 +1563,15 @@ export class FirewallaClient {
       (flowResponse.results || []).forEach((flow: any) => {
         const flowTime = flow.ts || 0;
         if (flowTime >= begin && flowTime <= end) {
-          const intervalIndex = Math.floor((flowTime - begin) / validatedInterval);
-          const intervalStart = begin + (intervalIndex * validatedInterval);
+          const intervalIndex = Math.floor(
+            (flowTime - begin) / validatedInterval
+          );
+          const intervalStart = begin + intervalIndex * validatedInterval;
           if (intervalGroups.has(intervalStart)) {
-            intervalGroups.set(intervalStart, intervalGroups.get(intervalStart)! + 1);
+            intervalGroups.set(
+              intervalStart,
+              intervalGroups.get(intervalStart)! + 1
+            );
           }
         }
       });
@@ -1653,7 +1658,9 @@ export class FirewallaClient {
       }
 
       // Get alarm data for the period
-      const endpoint = this.config.boxId ? `/v2/boxes/${this.config.boxId}/alarms` : '/alarms';
+      const endpoint = this.config.boxId
+        ? `/v2/boxes/${this.config.boxId}/alarms`
+        : '/alarms';
       const alarmResponse = await this.request<{
         count: number;
         results: any[];
@@ -1670,7 +1677,7 @@ export class FirewallaClient {
 
       // Initialize all intervals with 0
       for (let i = 0; i < dataPoints; i++) {
-        const intervalStart = begin + (i * intervalSeconds);
+        const intervalStart = begin + i * intervalSeconds;
         intervalGroups.set(intervalStart, 0);
       }
 
@@ -1678,10 +1685,15 @@ export class FirewallaClient {
       (alarmResponse.results || []).forEach((alarm: any) => {
         const alarmTime = alarm.ts || 0;
         if (alarmTime >= begin && alarmTime <= end) {
-          const intervalIndex = Math.floor((alarmTime - begin) / intervalSeconds);
-          const intervalStart = begin + (intervalIndex * intervalSeconds);
+          const intervalIndex = Math.floor(
+            (alarmTime - begin) / intervalSeconds
+          );
+          const intervalStart = begin + intervalIndex * intervalSeconds;
           if (intervalGroups.has(intervalStart)) {
-            intervalGroups.set(intervalStart, intervalGroups.get(intervalStart)! + 1);
+            intervalGroups.set(
+              intervalStart,
+              intervalGroups.get(intervalStart)! + 1
+            );
           }
         }
       });
@@ -1941,7 +1953,10 @@ export class FirewallaClient {
       ]);
 
       // Group data by box
-      const boxStats = new Map<string, { box: any; alarmCount: number; ruleCount: number }>();
+      const boxStats = new Map<
+        string,
+        { box: any; alarmCount: number; ruleCount: number }
+      >();
 
       boxes.results.forEach((box: any) => {
         boxStats.set(box.id || box.gid, {
@@ -1966,25 +1981,27 @@ export class FirewallaClient {
       });
 
       // Convert to Statistics format
-      const results = Array.from(boxStats.values()).map((stat): Statistics => ({
-        meta: {
-          gid: stat.box.id || stat.box.gid,
-          name: stat.box.name,
-          model: stat.box.model || 'unknown',
-          mode: stat.box.mode || 'router',
-          version: stat.box.version || 'unknown',
-          online: Boolean(stat.box.online || stat.box.status === 'online'),
-          lastSeen: stat.box.lastSeen || stat.box.last_seen,
-          license: stat.box.license || 'unknown',
-          publicIP: stat.box.publicIP || stat.box.public_ip || 'unknown',
-          group: stat.box.group,
-          location: stat.box.location || 'unknown',
-          deviceCount: stat.box.deviceCount || stat.box.device_count || 0,
-          ruleCount: stat.ruleCount,
-          alarmCount: stat.alarmCount,
-        },
-        value: stat.alarmCount + stat.ruleCount, // Combined activity score
-      }));
+      const results = Array.from(boxStats.values()).map(
+        (stat): Statistics => ({
+          meta: {
+            gid: stat.box.id || stat.box.gid,
+            name: stat.box.name,
+            model: stat.box.model || 'unknown',
+            mode: stat.box.mode || 'router',
+            version: stat.box.version || 'unknown',
+            online: Boolean(stat.box.online || stat.box.status === 'online'),
+            lastSeen: stat.box.lastSeen || stat.box.last_seen,
+            license: stat.box.license || 'unknown',
+            publicIP: stat.box.publicIP || stat.box.public_ip || 'unknown',
+            group: stat.box.group,
+            location: stat.box.location || 'unknown',
+            deviceCount: stat.box.deviceCount || stat.box.device_count || 0,
+            ruleCount: stat.ruleCount,
+            alarmCount: stat.alarmCount,
+          },
+          value: stat.alarmCount + stat.ruleCount, // Combined activity score
+        })
+      );
 
       return {
         count: results.length,
