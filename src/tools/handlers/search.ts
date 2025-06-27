@@ -148,19 +148,20 @@ export class SearchFlowsHandler extends BaseToolHandler {
   description = 'Advanced flow searching with complex query syntax';
   category = 'search' as const;
 
-  async execute(args: SearchFlowsArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+    const searchArgs = args as SearchFlowsArgs;
     try {
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
-        query: args.query,
-        limit: args.limit,
-        offset: args.offset,
-        cursor: args.cursor,
-        sort_by: args.sort_by,
-        sort_order: args.sort_order,
-        group_by: args.group_by,
-        aggregate: args.aggregate,
-        time_range: args.time_range
+        query: searchArgs.query,
+        limit: searchArgs.limit,
+        offset: searchArgs.offset,
+        cursor: searchArgs.cursor,
+        sort_by: searchArgs.sort_by,
+        sort_order: searchArgs.sort_order,
+        group_by: searchArgs.group_by,
+        aggregate: searchArgs.aggregate,
+        time_range: searchArgs.time_range
       };
       const result = await searchTools.search_flows(searchParams);
       
@@ -197,19 +198,20 @@ export class SearchAlarmsHandler extends BaseToolHandler {
   description = 'Advanced alarm searching with severity, time, and IP filters';
   category = 'search' as const;
 
-  async execute(args: SearchAlarmsArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+    const searchArgs = args as SearchAlarmsArgs;
     try {
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
-        query: args.query,
-        limit: args.limit,
-        offset: args.offset,
-        cursor: args.cursor,
-        sort_by: args.sort_by,
-        sort_order: args.sort_order,
-        group_by: args.group_by,
-        aggregate: args.aggregate,
-        time_range: args.time_range
+        query: searchArgs.query,
+        limit: searchArgs.limit,
+        offset: searchArgs.offset,
+        cursor: searchArgs.cursor,
+        sort_by: searchArgs.sort_by,
+        sort_order: searchArgs.sort_order,
+        group_by: searchArgs.group_by,
+        aggregate: searchArgs.aggregate,
+        time_range: searchArgs.time_range
       };
       const result = await searchTools.search_alarms(searchParams);
       
@@ -244,17 +246,18 @@ export class SearchRulesHandler extends BaseToolHandler {
   description = 'Advanced rule searching with target, action, and status filters';
   category = 'search' as const;
 
-  async execute(args: SearchRulesArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+    const searchArgs = args as SearchRulesArgs;
     try {
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
-        query: args.query,
-        limit: args.limit,
-        offset: args.offset,
-        cursor: args.cursor,
-        sort_by: args.sort_by,
-        sort_order: args.sort_order,
-        group_by: args.group_by,
+        query: searchArgs.query,
+        limit: searchArgs.limit,
+        offset: searchArgs.offset,
+        cursor: searchArgs.cursor,
+        sort_by: searchArgs.sort_by,
+        sort_order: searchArgs.sort_order,
+        group_by: searchArgs.group_by,
         aggregate: args.aggregate
       };
       const result = await searchTools.search_rules(searchParams);
@@ -290,19 +293,20 @@ export class SearchDevicesHandler extends BaseToolHandler {
   description = 'Advanced device searching with network, status, and usage filters';
   category = 'search' as const;
 
-  async execute(args: SearchDevicesArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+    const searchArgs = args as SearchDevicesArgs;
     try {
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
-        query: args.query,
-        limit: args.limit,
-        offset: args.offset,
-        cursor: args.cursor,
-        sort_by: args.sort_by,
-        sort_order: args.sort_order,
-        group_by: args.group_by,
-        aggregate: args.aggregate,
-        time_range: args.time_range
+        query: searchArgs.query,
+        limit: searchArgs.limit,
+        offset: searchArgs.offset,
+        cursor: searchArgs.cursor,
+        sort_by: searchArgs.sort_by,
+        sort_order: searchArgs.sort_order,
+        group_by: searchArgs.group_by,
+        aggregate: searchArgs.aggregate,
+        time_range: searchArgs.time_range
       };
       const result = await searchTools.search_devices(searchParams);
       
@@ -336,17 +340,18 @@ export class SearchTargetListsHandler extends BaseToolHandler {
   description = 'Advanced target list searching with category and ownership filters';
   category = 'search' as const;
 
-  async execute(args: SearchTargetListsArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+    const searchArgs = args as SearchTargetListsArgs;
     try {
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
-        query: args.query,
-        limit: args.limit,
-        offset: args.offset,
-        cursor: args.cursor,
-        sort_by: args.sort_by,
-        sort_order: args.sort_order,
-        group_by: args.group_by,
+        query: searchArgs.query,
+        limit: searchArgs.limit,
+        offset: searchArgs.offset,
+        cursor: searchArgs.cursor,
+        sort_by: searchArgs.sort_by,
+        sort_order: searchArgs.sort_order,
+        group_by: searchArgs.group_by,
         aggregate: args.aggregate
       };
       const result = await searchTools.search_target_lists(searchParams);
@@ -380,14 +385,15 @@ export class SearchCrossReferenceHandler extends BaseToolHandler {
   description = 'Multi-entity searches with correlation across different data types';
   category = 'search' as const;
 
-  async execute(args: SearchCrossReferenceArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+    const searchArgs = args as SearchCrossReferenceArgs;
     try {
       const searchTools = createSearchTools(firewalla);
       const result = await searchTools.search_cross_reference({
-        primary_query: args.primary_query,
-        secondary_queries: args.secondary_queries,
-        correlation_field: args.correlation_field,
-        limit: args.limit
+        primary_query: searchArgs.primary_query,
+        secondary_queries: searchArgs.secondary_queries,
+        correlation_field: searchArgs.correlation_field,
+        limit: searchArgs.limit
       });
       
       return this.createSuccessResponse({
@@ -417,14 +423,15 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
   description = 'Advanced multi-field correlation with temporal windows and network scoping';
   category = 'search' as const;
 
-  async execute(args: SearchEnhancedCrossReferenceArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+    const searchArgs = args as SearchEnhancedCrossReferenceArgs;
     try {
       const searchTools = createSearchTools(firewalla);
       const result = await searchTools.search_enhanced_cross_reference({
-        primary_query: args.primary_query,
-        secondary_queries: args.secondary_queries,
-        correlation_params: args.correlation_params,
-        limit: args.limit
+        primary_query: searchArgs.primary_query,
+        secondary_queries: searchArgs.secondary_queries,
+        correlation_params: searchArgs.correlation_params,
+        limit: searchArgs.limit
       });
       
       return this.createSuccessResponse({
@@ -460,11 +467,12 @@ export class GetCorrelationSuggestionsHandler extends BaseToolHandler {
   description = 'Get intelligent field combination recommendations for cross-reference searches';
   category = 'search' as const;
 
-  async execute(args: GetCorrelationSuggestionsArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+    const searchArgs = args as GetCorrelationSuggestionsArgs;
     try {
       const searchTools = createSearchTools(firewalla);
       const result = await searchTools.get_correlation_suggestions({
-        primary_query: args.primary_query,
+        primary_query: searchArgs.primary_query,
         secondary_queries: args.secondary_queries
       });
       
@@ -504,16 +512,17 @@ export class SearchFlowsByGeographyHandler extends BaseToolHandler {
   description = 'Advanced geographic flow search with location-based filtering and analysis';
   category = 'search' as const;
 
-  async execute(args: SearchFlowsByGeographyArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+    const searchArgs = args as SearchFlowsByGeographyArgs;
     try {
       const searchTools = createSearchTools(firewalla);
       const result = await searchTools.search_flows_by_geography({
-        query: args.query,
-        geographic_filters: args.geographic_filters,
-        limit: args.limit,
-        sort_by: args.sort_by,
-        sort_order: args.sort_order,
-        group_by: args.group_by,
+        query: searchArgs.query,
+        geographic_filters: searchArgs.geographic_filters,
+        limit: searchArgs.limit,
+        sort_by: searchArgs.sort_by,
+        sort_order: searchArgs.sort_order,
+        group_by: searchArgs.group_by,
         aggregate: args.aggregate
       });
       
@@ -564,15 +573,16 @@ export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
   description = 'Geographic alarm search with location-based threat analysis';
   category = 'search' as const;
 
-  async execute(args: SearchAlarmsByGeographyArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+    const searchArgs = args as SearchAlarmsByGeographyArgs;
     try {
       const searchTools = createSearchTools(firewalla);
       const result = await searchTools.search_alarms_by_geography({
-        query: args.query,
-        geographic_filters: args.geographic_filters,
-        limit: args.limit,
-        sort_by: args.sort_by,
-        group_by: args.group_by
+        query: searchArgs.query,
+        geographic_filters: searchArgs.geographic_filters,
+        limit: searchArgs.limit,
+        sort_by: searchArgs.sort_by,
+        group_by: searchArgs.group_by
       });
       
       return this.createSuccessResponse({
@@ -621,15 +631,16 @@ export class GetGeographicStatisticsHandler extends BaseToolHandler {
   description = 'Comprehensive geographic statistics and analytics for flows and alarms';
   category = 'search' as const;
 
-  async execute(args: GetGeographicStatisticsArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+  async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
+    const searchArgs = args as GetGeographicStatisticsArgs;
     try {
       const searchTools = createSearchTools(firewalla);
       const result = await searchTools.get_geographic_statistics({
-        entity_type: args.entity_type,
-        time_range: args.time_range,
+        entity_type: searchArgs.entity_type,
+        time_range: searchArgs.time_range,
         analysis_type: args.analysis_type,
-        group_by: args.group_by,
-        limit: args.limit
+        group_by: searchArgs.group_by,
+        limit: searchArgs.limit
       });
       
       return this.createSuccessResponse({

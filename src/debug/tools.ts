@@ -94,6 +94,9 @@ export class DebugTools {
           uptime: summary.uptime,
           cpu_usage: summary.cpu_usage,
           memory_usage: summary.memory_usage,
+          active_connections: summary.active_connections || 0,
+          blocked_attempts: summary.blocked_attempts || 0,
+          last_updated: summary.last_updated || new Date().toISOString(),
         },
       };
     } catch (error) {

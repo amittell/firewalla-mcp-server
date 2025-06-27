@@ -21,7 +21,7 @@
     "build": "tsc",
     "build:clean": "rimraf dist && npm run build",
     "dev": "npm run build && node dist/server.js",
-    "start": "node dist/server.js", 
+    "start": "node dist/server.js",
     "mcp:start": "npm run build && node dist/server.js",
     "mcp:test": "cross-env NODE_ENV=test npm run mcp:start",
     "mcp:debug": "cross-env DEBUG=mcp:* npm run build && node dist/server.js",
