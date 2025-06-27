@@ -7,6 +7,10 @@ describe('SecurityManager', () => {
     security = new SecurityManager();
   });
 
+  afterEach(() => {
+    security.destroy();
+  });
+
   describe('validateInput', () => {
     it('should accept safe strings', () => {
       expect(security.validateInput('safe string')).toBe(true);

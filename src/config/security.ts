@@ -14,10 +14,17 @@ export class SecurityManager {
   };
 
   private requestCounts = new Map<string, { count: number; resetTime: number }>();
+  private cleanupInterval: ReturnType<typeof setInterval>;
 
   constructor() {
     // Clean up old entries every 5 minutes
-    setInterval(() => this.cleanupRateLimits(), 5 * 60 * 1000);
+    this.cleanupInterval = setInterval(() => this.cleanupRateLimits(), 5 * 60 * 1000);
+  }
+
+  destroy(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
   }
 
   validateInput(input: unknown): boolean {

@@ -155,7 +155,6 @@ export type TokenTypeValue = typeof TokenType[keyof typeof TokenType];
  */
 export interface FilterResult {
   apiParams: Record<string, any>;
-   
   postProcessing: Array<(items: any[]) => any[]>;
   metadata: {
     filtersApplied: string[];

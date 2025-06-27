@@ -29,9 +29,7 @@ export class DebugTools {
   private startTime: number;
 
   constructor(
-     
     private readonly firewalla: FirewallaClient,
-     
     private readonly healthCheck: HealthCheckManager
   ) {
     this.startTime = Date.now();
