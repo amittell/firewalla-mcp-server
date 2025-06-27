@@ -525,7 +525,7 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/v2/target-lists`,
+        `/v2/boxes/test-box-id/target-lists`,
         { params: {} }
       );
     });

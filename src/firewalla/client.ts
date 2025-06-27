@@ -882,7 +882,7 @@ export class FirewallaClient {
       params.list_type = listType;
     }
 
-    const response = await this.request<TargetList[] | {results: TargetList[]}>('GET', `/v2/target-lists`, params);
+    const response = await this.request<TargetList[] | {results: TargetList[]}>('GET', `/v2/boxes/${this.config.boxId}/target-lists`, params);
     
     // Handle response format
     const results = Array.isArray(response) ? response : (response?.results || []);
