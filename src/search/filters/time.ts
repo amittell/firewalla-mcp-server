@@ -209,8 +209,16 @@ export class TimeRangeFilter extends BaseFilter {
           }
         }
       }
+
+      case 'group':
+      case 'logical':
+      case 'wildcard':
+        // These node types are not applicable for time-based filtering
+        return false;
+
+      default:
+        return false;
     }
-    return false;
   }
 
   getOptimizations() {

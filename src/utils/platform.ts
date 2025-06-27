@@ -23,6 +23,14 @@ export function getPlatform(): PlatformType {
       return 'mac';
     case 'linux':
       return 'linux';
+    case 'aix':
+    case 'android':
+    case 'freebsd':
+    case 'haiku':
+    case 'openbsd':
+    case 'sunos':
+    case 'cygwin':
+    case 'netbsd':
     default:
       return 'unknown';
   }
@@ -349,10 +357,13 @@ export function platformLog(message: string, level: 'info' | 'warn' | 'error' = 
   const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
   
   if (level === 'error') {
+    // eslint-disable-next-line no-console
     console.error(`${prefix} ${message}`);
   } else if (level === 'warn') {
+    // eslint-disable-next-line no-console
     console.warn(`${prefix} ${message}`);
   } else {
+    // eslint-disable-next-line no-console
     console.log(`${prefix} ${message}`);
   }
 }

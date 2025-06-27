@@ -2,8 +2,7 @@
  * Advanced search tool handlers
  */
 
-import type { ToolArgs, ToolResponse } from './base.js';
-import { BaseToolHandler } from './base.js';
+import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
 import type { FirewallaClient } from '../../firewalla/client.js';
 import { SafeAccess } from '../../validation/error-handler.js';
 import { createSearchTools } from '../search.js';

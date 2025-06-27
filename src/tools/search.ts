@@ -10,10 +10,6 @@ import type { SearchParams, SearchResult } from '../search/types.js';
 import type { SearchOptions } from '../types.js';
 import type { FirewallaClient } from '../firewalla/client.js';
 import { ParameterValidator, SafeAccess, QuerySanitizer } from '../validation/error-handler.js';
-import type {
-  EnhancedCorrelationParams,
-  ScoringCorrelationParams
-} from '../validation/field-mapper.js';
 import { 
   validateCrossReference, 
   validateEnhancedCrossReference,
@@ -23,7 +19,9 @@ import {
   performMultiFieldCorrelation,
   performEnhancedMultiFieldCorrelation,
   getSupportedCorrelationCombinations,
-  getFieldValue
+  getFieldValue,
+  type EnhancedCorrelationParams,
+  type ScoringCorrelationParams
 } from '../validation/field-mapper.js';
 
 /**
@@ -960,9 +958,9 @@ export class SearchEngine {
       const valueB = b.value;
       
       // Handle null/undefined values - sort nulls to the end
-      if (valueA == null && valueB == null) {return 0;}
-      if (valueA == null) {return 1;}  // null values go to end
-      if (valueB == null) {return -1;} // null values go to end
+      if ((valueA === null || valueA === undefined) && (valueB === null || valueB === undefined)) {return 0;}
+      if (valueA === null || valueA === undefined) {return 1;}  // null values go to end
+      if (valueB === null || valueB === undefined) {return -1;} // null values go to end
       
       if (valueA === valueB) {
         return 0;

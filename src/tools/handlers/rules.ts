@@ -2,8 +2,7 @@
  * Firewall rule management tool handlers
  */
 
-import type { ToolArgs, ToolResponse } from './base.js';
-import { BaseToolHandler } from './base.js';
+import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
 import type { FirewallaClient } from '../../firewalla/client.js';
 import { ParameterValidator, SafeAccess, createErrorResponse } from '../../validation/error-handler.js';
 import { optimizeRuleResponse, DEFAULT_OPTIMIZATION_CONFIG } from '../../optimization/index.js';

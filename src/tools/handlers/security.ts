@@ -2,8 +2,7 @@
  * Security monitoring tool handlers
  */
 
-import type { ToolArgs, ToolResponse } from './base.js';
-import { BaseToolHandler } from './base.js';
+import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
 import type { FirewallaClient } from '../../firewalla/client.js';
 import { ParameterValidator, SafeAccess, QuerySanitizer, createErrorResponse } from '../../validation/error-handler.js';
 import { unixToISOStringOrNow, getCurrentTimestamp } from '../../utils/timestamp.js';

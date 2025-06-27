@@ -2,8 +2,7 @@
  * Device monitoring tool handlers
  */
 
-import type { ToolArgs, ToolResponse } from './base.js';
-import { BaseToolHandler } from './base.js';
+import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
 import type { FirewallaClient } from '../../firewalla/client.js';
 import { ParameterValidator, SafeAccess, createErrorResponse } from '../../validation/error-handler.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';

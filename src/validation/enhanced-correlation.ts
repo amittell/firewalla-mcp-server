@@ -3,8 +3,7 @@
  * Provides intelligent correlation scoring and flexible matching strategies
  */
 
-import type { EntityType} from './field-mapper.js';
-import { getFieldValue, normalizeFieldValue } from './field-mapper.js';
+import { getFieldValue, normalizeFieldValue, type EntityType } from './field-mapper.js';
 
 /**
  * Utility function for consistent rounding to 3 decimal places

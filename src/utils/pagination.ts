@@ -147,10 +147,11 @@ export function paginateArray<T>(
   if (cursor) {
     try {
       const cursorData = decodeCursor(cursor);
-      offset = cursorData.offset;
+      const { offset: cursorOffset, page_size: cursorPageSize } = cursorData;
+      offset = cursorOffset;
       // Use cursor's page_size if available and consistent
-      if (cursorData.page_size === page_size) {
-        page_size = cursorData.page_size;
+      if (cursorPageSize === page_size) {
+        page_size = cursorPageSize;
       }
     } catch {
       // Invalid cursor, start from beginning

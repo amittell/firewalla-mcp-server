@@ -4,15 +4,14 @@
  */
 
 import { SafeAccess } from './error-handler.js';
-import type { 
-  ScoredCorrelationResult, 
-  EnhancedCorrelationStats,
-  CorrelationWeights,
-  FuzzyMatchConfig} from './enhanced-correlation.js';
 import { 
   performEnhancedCorrelation,
   DEFAULT_CORRELATION_WEIGHTS,
-  DEFAULT_FUZZY_CONFIG
+  DEFAULT_FUZZY_CONFIG,
+  type ScoredCorrelationResult, 
+  type EnhancedCorrelationStats,
+  type CorrelationWeights,
+  type FuzzyMatchConfig
 } from './enhanced-correlation.js';
 import { getRecommendedFieldCombinations } from '../config/correlation-patterns.js';
 
@@ -613,10 +612,11 @@ export function validateEnhancedCrossReference(
   // Basic validation if we have correlation fields
   if (correlationParams.correlationFields && correlationParams.correlationFields.length > 0) {
     const basicValidation = validateCrossReference(primaryQuery, secondaryQueries, correlationParams.correlationFields[0]);
-    if (!basicValidation.isValid) {
-      errors.push(...basicValidation.errors);
+    const { isValid, errors: validationErrors, entityTypes: validatedEntityTypes } = basicValidation;
+    if (!isValid) {
+      errors.push(...validationErrors);
     }
-    entityTypes = basicValidation.entityTypes;
+    entityTypes = validatedEntityTypes;
   }
   
   // Validate correlation fields array
