@@ -251,12 +251,12 @@ export function updateCorrelationPatterns(newPatterns: Partial<CorrelationPatter
   currentCorrelationPatterns = {
     ...currentCorrelationPatterns,
     ...newPatterns,
-    network: [...(currentCorrelationPatterns.network ?? []), ...(newPatterns.network ?? [])],
-    security: [...(currentCorrelationPatterns.security ?? []), ...(newPatterns.security ?? [])],
-    device: [...(currentCorrelationPatterns.device ?? []), ...(newPatterns.device ?? [])],
-    temporal: [...(currentCorrelationPatterns.temporal ?? []), ...(newPatterns.temporal ?? [])],
-    geographic: [...(currentCorrelationPatterns.geographic ?? []), ...(newPatterns.geographic ?? [])],
-    application: [...(currentCorrelationPatterns.application ?? []), ...(newPatterns.application ?? [])]
+    network: [...currentCorrelationPatterns.network, ...(newPatterns.network ?? [])],
+    security: [...currentCorrelationPatterns.security, ...(newPatterns.security ?? [])],
+    device: [...currentCorrelationPatterns.device, ...(newPatterns.device ?? [])],
+    temporal: [...currentCorrelationPatterns.temporal, ...(newPatterns.temporal ?? [])],
+    geographic: [...currentCorrelationPatterns.geographic, ...(newPatterns.geographic ?? [])],
+    application: [...currentCorrelationPatterns.application, ...(newPatterns.application ?? [])]
   };
 }
 

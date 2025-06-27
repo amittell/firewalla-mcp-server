@@ -29,9 +29,9 @@ export class DebugTools {
   private startTime: number;
 
   constructor(
-    // eslint-disable-next-line no-unused-vars
+     
     private readonly firewalla: FirewallaClient,
-    // eslint-disable-next-line no-unused-vars
+     
     private readonly healthCheck: HealthCheckManager
   ) {
     this.startTime = Date.now();
@@ -46,7 +46,7 @@ export class DebugTools {
     return {
       timestamp: getCurrentTimestamp(),
       version: '1.0.0',
-      environment: process.env.NODE_ENV || 'development',
+      environment: process.env.NODE_ENV ?? 'development',
       uptime: Math.floor((Date.now() - this.startTime) / 1000),
       memory: {
         used: Math.round(memUsage.heapUsed / 1024 / 1024),
@@ -190,7 +190,7 @@ export class DebugTools {
     // Check environment variables
     const requiredVars = ['FIREWALLA_MSP_TOKEN', 'FIREWALLA_BOX_ID'];
     for (const varName of requiredVars) {
-      if (!process.env[varName]) {
+      if (process.env[varName] === undefined || process.env[varName] === null || process.env[varName] === '') {
         issues.push({
           level: 'error',
           message: `Missing required environment variable: ${varName}`,
@@ -246,7 +246,7 @@ Environment Information:
 - Node.js Version: ${process.version}
 - Platform: ${process.platform}
 - Architecture: ${process.arch}
-- Environment: ${process.env.NODE_ENV || 'development'}
+- Environment: ${process.env.NODE_ENV ?? 'development'}
 - Uptime: ${uptime} seconds
 
 Memory Usage:
@@ -260,10 +260,10 @@ Cache Information:
 - Sample Keys: ${cacheStats.keys.slice(0, 5).join(', ')}
 
 Configuration:
-- MSP Token: ${process.env.FIREWALLA_MSP_TOKEN ? 'Set' : 'Missing'}
-- Box ID: ${process.env.FIREWALLA_BOX_ID ? 'Set' : 'Missing'}
-- Base URL: ${process.env.FIREWALLA_MSP_BASE_URL || 'Default'}
-- Log Level: ${process.env.LOG_LEVEL || 'Default'}
+- MSP Token: ${(process.env.FIREWALLA_MSP_TOKEN !== undefined && process.env.FIREWALLA_MSP_TOKEN !== null && process.env.FIREWALLA_MSP_TOKEN !== '') ? 'Set' : 'Missing'}
+- Box ID: ${(process.env.FIREWALLA_BOX_ID !== undefined && process.env.FIREWALLA_BOX_ID !== null && process.env.FIREWALLA_BOX_ID !== '') ? 'Set' : 'Missing'}
+- Base URL: ${process.env.FIREWALLA_MSP_BASE_URL ?? 'Default'}
+- Log Level: ${process.env.LOG_LEVEL ?? 'Default'}
 
 Recent Activity:
 - Use 'npm run mcp:debug' for detailed logging

@@ -118,11 +118,11 @@ interface ApiParameters {
  */
 interface SearchStrategy {
   entityType: string;
-  // eslint-disable-next-line no-unused-vars
+   
   executeApiCall: (client: FirewallaClient, params: SearchParams, apiParams: ApiParameters, searchOptions: SearchOptions) => Promise<{ results: any[], count: number, next_cursor?: string }>;
-  // eslint-disable-next-line no-unused-vars
+   
   validateParams?: (params: SearchParams) => { isValid: boolean; errors: string[] };
-  // eslint-disable-next-line no-unused-vars
+   
   processResults?: (results: any[], params: SearchParams) => any[];
 }
 
@@ -145,7 +145,7 @@ export class SearchEngine {
   private strategies: Map<string, SearchStrategy> = new Map();
 
   constructor(
-    // eslint-disable-next-line no-unused-vars
+     
     private firewalla: FirewallaClient
   ) {
     this.initializeStrategies();
@@ -178,7 +178,7 @@ export class SearchEngine {
           queryString = `timestamp:${startTs}-${endTs} AND (${params.query})`;
         }
         
-        return await client.searchFlows({ 
+        return client.searchFlows({ 
           query: queryString, 
           limit: apiParams.limit,
           group_by: params.group_by,
@@ -189,9 +189,9 @@ export class SearchEngine {
 
     this.strategies.set('alarms', {
       entityType: 'alarms',
-      // eslint-disable-next-line no-unused-vars
+       
       executeApiCall: async (client, params, apiParams, _searchOptions) => {
-        return await client.getActiveAlarms(
+        return client.getActiveAlarms(
           apiParams.queryString || params.query || undefined,
           undefined,
           'timestamp:desc',
@@ -202,12 +202,12 @@ export class SearchEngine {
 
     this.strategies.set('rules', {
       entityType: 'rules',
-      // eslint-disable-next-line no-unused-vars
+       
       executeApiCall: async (client, params, _apiParams, _searchOptions) => {
         // Use reasonable limit for search operations to prevent memory issues
         // Fetch 2x the requested limit (capped at 2000) to account for post-processing filters
         const searchLimit = params.limit ? Math.min(params.limit * 2, 2000) : 2000;
-        return await client.getNetworkRules(undefined, searchLimit);
+        return client.getNetworkRules(undefined, searchLimit);
       },
       processResults: (results, params) => {
         if (params.limit) {
@@ -237,7 +237,7 @@ export class SearchEngine {
           };
         }
         
-        return await client.searchDevices(searchQuery, searchOptions);
+        return client.searchDevices(searchQuery, searchOptions);
       },
       processResults: (results, params) => {
         if (params.offset && !params.cursor) {
@@ -254,9 +254,9 @@ export class SearchEngine {
 
     this.strategies.set('target_lists', {
       entityType: 'target_lists',
-      // eslint-disable-next-line no-unused-vars
+       
       executeApiCall: async (client, _params, _apiParams, _searchOptions) => {
-        return await client.getTargetLists();
+        return client.getTargetLists();
       },
       processResults: (results, params) => {
         if (params.limit) {
@@ -893,7 +893,7 @@ export class SearchEngine {
     switch (node.type) {
       case 'logical': {
         // For logical nodes, apply filters to operands and combine
-        // eslint-disable-next-line no-unused-vars
+         
         const combinedResult: { apiParams: ApiParameters, postProcessing?: ((items: any[]) => any[]) } = { apiParams: {} };
         
         if (node.left) {

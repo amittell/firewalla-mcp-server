@@ -176,7 +176,7 @@ export class MetricsCollector {
 
 // Pre-defined metrics for common use cases
 export class FirewallaMetrics {
-  // eslint-disable-next-line no-unused-vars
+   
   constructor(private collector: MetricsCollector) {}
 
   // API metrics

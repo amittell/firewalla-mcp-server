@@ -3,20 +3,19 @@
  * Implements recursive descent parser for complex search queries
  */
 
-import type {
-  QueryNode,
-  FieldQuery,
-  LogicalQuery,
-  GroupQuery,
-  TokenTypeValue,
-  WildcardQuery,
-  RangeQuery,
-  ComparisonQuery,
-  Token,
-  QueryValidation} from './types.js';
 import {
   TokenType,
-  SEARCH_FIELDS
+  SEARCH_FIELDS,
+  type QueryNode,
+  type FieldQuery,
+  type LogicalQuery,
+  type GroupQuery,
+  type TokenTypeValue,
+  type WildcardQuery,
+  type RangeQuery,
+  type ComparisonQuery,
+  type Token,
+  type QueryValidation
 } from './types.js';
 
 export class QueryParser {

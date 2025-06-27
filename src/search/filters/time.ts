@@ -4,8 +4,7 @@
  */
 
 import type { QueryNode, FieldQuery, RangeQuery, ComparisonQuery } from '../types.js';
-import type { FilterContext, FilterResult } from './base.js';
-import { BaseFilter } from './base.js';
+import { BaseFilter, type FilterContext, type FilterResult } from './base.js';
 import { unixToISOString } from '../../utils/timestamp.js';
 
 export class TimeRangeFilter extends BaseFilter {
@@ -32,6 +31,12 @@ export class TimeRangeFilter extends BaseFilter {
       }
       case 'comparison': {
         return this.handleComparisonQuery(node, context);
+      }
+      case 'logical':
+      case 'group':
+      case 'wildcard': {
+        // These node types are not handled by time filter
+        return { apiParams: {} };
       }
       default: {
         return { apiParams: {} };

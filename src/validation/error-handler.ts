@@ -48,7 +48,7 @@ export function createErrorResponse(tool: string, message: string, details?: Rec
  */
 export function wrapTool<T extends any[], R>(
   toolName: string,
-  // eslint-disable-next-line no-unused-vars
+   
   fn: (..._args: T) => Promise<R>
 ) {
   return async (...args: T): Promise<R> => {
@@ -414,7 +414,7 @@ export class SafeAccess {
    */
   static safeArrayAccess<T>(
     array: any,
-    // eslint-disable-next-line no-unused-vars
+     
     accessor: (_: T[]) => any,
     defaultValue: any = undefined
   ): any {
@@ -435,9 +435,9 @@ export class SafeAccess {
    */
   static safeArrayMap<T, R>(
     array: any,
-    // eslint-disable-next-line no-unused-vars
+     
     mapper: (_: T, __: number) => R,
-    // eslint-disable-next-line no-unused-vars
+     
     filter: (item: T) => boolean = (item) => item !== null && item !== undefined
   ): R[] {
     const safeArray = SafeAccess.ensureArray<T>(array);
@@ -452,7 +452,7 @@ export class SafeAccess {
    */
   static safeArrayFilter<T>(
     array: any,
-    // eslint-disable-next-line no-unused-vars
+     
     predicate: (item: T) => boolean
   ): T[] {
     const safeArray = SafeAccess.ensureArray<T>(array);

@@ -21,7 +21,7 @@ export class HealthCheckManager {
   private security: SecurityManager;
 
   constructor(
-    /* eslint-disable-next-line no-unused-vars */
+     
     private firewalla: FirewallaClient,
     security?: SecurityManager
   ) {

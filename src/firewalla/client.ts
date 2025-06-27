@@ -1195,7 +1195,7 @@ export class FirewallaClient {
 
   // Statistics API Implementation
   @optimizeResponse('statistics')
-  async getSimpleStatistics(): Promise<{count: number; results: Array<SimpleStats>; next_cursor?: string}> {
+  async getSimpleStatistics(): Promise<{count: number; results: SimpleStats[]; next_cursor?: string}> {
     const [boxes, alarms, rules] = await Promise.all([
       this.getBoxes(),
       this.getActiveAlarms(),
@@ -1219,7 +1219,7 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('statistics')
-  async getStatisticsByRegion(): Promise<{count: number; results: Array<Statistics>; next_cursor?: string}> {
+  async getStatisticsByRegion(): Promise<{count: number; results: Statistics[]; next_cursor?: string}> {
     try {
       const flows = await this.getFlowData();
       // TODO: Implement alarm-based statistics
@@ -1265,7 +1265,7 @@ export class FirewallaClient {
 
   // Trends API Implementation
   @optimizeResponse('trends')
-  async getFlowTrends(period: '1h' | '24h' | '7d' | '30d' = '24h', interval: number = 3600): Promise<{count: number; results: Array<Trend>; next_cursor?: string}> {
+  async getFlowTrends(period: '1h' | '24h' | '7d' | '30d' = '24h', interval: number = 3600): Promise<{count: number; results: Trend[]; next_cursor?: string}> {
     try {
       // Enhanced input validation and sanitization
       if (period && typeof period !== 'string') {
@@ -1322,7 +1322,7 @@ export class FirewallaClient {
         throw new Error(`Invalid actual interval: ${actualInterval}`);
       }
       
-      const trends: Array<Trend> = [];
+      const trends: Trend[] = [];
       
       // Enhanced trend data generation with better error handling
       const batchSize = Math.min(5, points); // Process in smaller batches to avoid overwhelming API
@@ -1411,7 +1411,7 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('trends')
-  async getAlarmTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: Array<Trend>; next_cursor?: string}> {
+  async getAlarmTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: Trend[]; next_cursor?: string}> {
     try {
       // Enhanced input validation and sanitization
       if (period && typeof period !== 'string') {
@@ -1472,7 +1472,7 @@ export class FirewallaClient {
         throw new Error(`Invalid interval calculation: ${interval}`);
       }
       
-      const trends: Array<Trend> = [];
+      const trends: Trend[] = [];
       
       // Enhanced alarm grouping by time intervals with comprehensive null safety
       const alarmsByInterval = new Map<number, number>();
@@ -1565,7 +1565,7 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('trends')
-  async getRuleTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: Array<Trend>; next_cursor?: string}> {
+  async getRuleTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: Trend[]; next_cursor?: string}> {
     try {
       // Enhanced input validation and sanitization
       if (period && typeof period !== 'string') {
@@ -1626,7 +1626,7 @@ export class FirewallaClient {
         throw new Error(`Invalid interval calculation: ${interval}`);
       }
       
-      const trends: Array<Trend> = [];
+      const trends: Trend[] = [];
       
       // Enhanced rule analysis with comprehensive null safety
       if (!rules?.results || !Array.isArray(rules.results)) {
@@ -1746,7 +1746,7 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('statistics')
-  async getStatisticsByBox(): Promise<{count: number; results: Array<Statistics>; next_cursor?: string}> {
+  async getStatisticsByBox(): Promise<{count: number; results: Statistics[]; next_cursor?: string}> {
     try {
       const [boxes, alarms, rules] = await Promise.all([
         this.getBoxes(),
