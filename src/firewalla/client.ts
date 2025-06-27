@@ -34,6 +34,8 @@ import {
   SearchOptions,
   CrossReferenceResult,
   Trend,
+  SimpleStats,
+  Statistics,
 } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
 import { optimizeResponse } from '../optimization/index.js';
@@ -139,7 +141,7 @@ export class FirewallaClient {
         process.stderr.write(`API Request: ${config.method?.toUpperCase()} ${config.url}\\n`);
         return config;
       },
-      (error) => {
+      async (error) => {
         process.stderr.write(`API Request Error: ${error.message}\\n`);
         return Promise.reject(error);
       }
@@ -150,7 +152,7 @@ export class FirewallaClient {
         process.stderr.write(`API Response: ${response.status} ${response.config.url}\\n`);
         return response;
       },
-      (error) => {
+      async (error) => {
         process.stderr.write(`API Response Error: ${error.response?.status} ${error.message}\\n`);
         
         if (error.response?.status === 401) {
@@ -369,7 +371,7 @@ export class FirewallaClient {
   ): Promise<{count: number; results: Alarm[]; next_cursor?: string}> {
     const params: Record<string, unknown> = {
       sortBy,
-      limit: limit, // Remove artificial limit - let pagination handle large datasets
+      limit, // Remove artificial limit - let pagination handle large datasets
     };
     
     if (query) {
@@ -425,7 +427,7 @@ export class FirewallaClient {
   ): Promise<{count: number; results: Flow[]; next_cursor?: string}> {
     const params: Record<string, unknown> = {
       sortBy,
-      limit: limit, // Remove artificial limit - let pagination handle large datasets
+      limit, // Remove artificial limit - let pagination handle large datasets
     };
     
     if (query) {
@@ -551,7 +553,7 @@ export class FirewallaClient {
           .filter(device => device && device.id && device.id !== 'unknown');
         
         // Filter by device ID if provided
-        if (deviceId && deviceId.trim()) {
+        if (deviceId?.trim()) {
           const targetId = deviceId.trim().toLowerCase();
           results = results.filter(device => 
             device.id.toLowerCase() === targetId ||
@@ -755,7 +757,7 @@ export class FirewallaClient {
         params
       );
       
-      if (!flowResponse || !flowResponse.results || flowResponse.results.length === 0) {
+      if (!flowResponse?.results || flowResponse.results.length === 0) {
         return { count: 0, results: [], next_cursor: undefined };
       }
 
@@ -951,7 +953,7 @@ export class FirewallaClient {
       // Input validation and sanitization
       const params: Record<string, unknown> = {};
       
-      if (groupId && groupId.trim()) {
+      if (groupId?.trim()) {
         params.group = groupId.trim();
       }
 
@@ -1193,7 +1195,7 @@ export class FirewallaClient {
 
   // Statistics API Implementation
   @optimizeResponse('statistics')
-  async getSimpleStatistics(): Promise<{count: number; results: import('../types').SimpleStats[]; next_cursor?: string}> {
+  async getSimpleStatistics(): Promise<{count: number; results: Array<SimpleStats>; next_cursor?: string}> {
     const [boxes, alarms, rules] = await Promise.all([
       this.getBoxes(),
       this.getActiveAlarms(),
@@ -1217,14 +1219,14 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('statistics')
-  async getStatisticsByRegion(): Promise<{count: number; results: import('../types').Statistics[]; next_cursor?: string}> {
+  async getStatisticsByRegion(): Promise<{count: number; results: Array<Statistics>; next_cursor?: string}> {
     try {
       const flows = await this.getFlowData();
       // TODO: Implement alarm-based statistics
       // const alarms = await this.getActiveAlarms();
 
       // Validate flows response structure
-      if (!flows || !flows.results || !Array.isArray(flows.results)) {
+      if (!flows?.results || !Array.isArray(flows.results)) {
         logger.debugNamespace('validation', 'getStatisticsByRegion: flows data missing or invalid structure', {
           flows_exists: !!flows,
           results_exists: !!(flows && flows.results),
@@ -1240,7 +1242,7 @@ export class FirewallaClient {
       const regionStats = new Map<string, number>();
       
       flows.results.forEach(flow => {
-        if (flow && flow.region) {
+        if (flow?.region) {
           regionStats.set(flow.region, (regionStats.get(flow.region) || 0) + 1);
         }
       });
@@ -1263,7 +1265,7 @@ export class FirewallaClient {
 
   // Trends API Implementation
   @optimizeResponse('trends')
-  async getFlowTrends(period: '1h' | '24h' | '7d' | '30d' = '24h', interval: number = 3600): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
+  async getFlowTrends(period: '1h' | '24h' | '7d' | '30d' = '24h', interval: number = 3600): Promise<{count: number; results: Array<Trend>; next_cursor?: string}> {
     try {
       // Enhanced input validation and sanitization
       if (period && typeof period !== 'string') {
@@ -1320,13 +1322,13 @@ export class FirewallaClient {
         throw new Error(`Invalid actual interval: ${actualInterval}`);
       }
       
-      const trends: import('../types').Trend[] = [];
+      const trends: Array<Trend> = [];
       
       // Enhanced trend data generation with better error handling
       const batchSize = Math.min(5, points); // Process in smaller batches to avoid overwhelming API
       for (let batchStart = 0; batchStart < points; batchStart += batchSize) {
         const batchEnd = Math.min(batchStart + batchSize, points);
-        const batchPromises: Promise<import('../types').Trend>[] = [];
+        const batchPromises: Array<Promise<Trend>> = [];
         
         for (let i = batchStart; i < batchEnd; i++) {
           const intervalStart = begin + (i * actualInterval);
@@ -1346,7 +1348,7 @@ export class FirewallaClient {
                 const flows = await this.getFlowData(query, undefined, 'ts:desc', 1000);
                 
                 // Enhanced result validation
-                if (!flows || !flows.results || !Array.isArray(flows.results)) {
+                if (!flows?.results || !Array.isArray(flows.results)) {
                   return { ts: intervalEnd, value: 0 };
                 }
                 
@@ -1409,7 +1411,7 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('trends')
-  async getAlarmTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
+  async getAlarmTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: Array<Trend>; next_cursor?: string}> {
     try {
       // Enhanced input validation and sanitization
       if (period && typeof period !== 'string') {
@@ -1470,13 +1472,13 @@ export class FirewallaClient {
         throw new Error(`Invalid interval calculation: ${interval}`);
       }
       
-      const trends: import('../types').Trend[] = [];
+      const trends: Array<Trend> = [];
       
       // Enhanced alarm grouping by time intervals with comprehensive null safety
       const alarmsByInterval = new Map<number, number>();
       
       // Validate alarms response
-      if (!alarms || !alarms.results || !Array.isArray(alarms.results)) {
+      if (!alarms?.results || !Array.isArray(alarms.results)) {
         logger.debugNamespace('validation', 'Invalid alarms response structure');
         // Generate empty trends
         for (let i = 0; i < points; i++) {
@@ -1563,7 +1565,7 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('trends')
-  async getRuleTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: import('../types').Trend[]; next_cursor?: string}> {
+  async getRuleTrends(period: '1h' | '24h' | '7d' | '30d' = '24h'): Promise<{count: number; results: Array<Trend>; next_cursor?: string}> {
     try {
       // Enhanced input validation and sanitization
       if (period && typeof period !== 'string') {
@@ -1624,10 +1626,10 @@ export class FirewallaClient {
         throw new Error(`Invalid interval calculation: ${interval}`);
       }
       
-      const trends: import('../types').Trend[] = [];
+      const trends: Array<Trend> = [];
       
       // Enhanced rule analysis with comprehensive null safety
-      if (!rules || !rules.results || !Array.isArray(rules.results)) {
+      if (!rules?.results || !Array.isArray(rules.results)) {
         logger.debugNamespace('validation', 'Invalid rules response structure');
         // Generate empty trends
         for (let i = 0; i < points; i++) {
@@ -1744,7 +1746,7 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('statistics')
-  async getStatisticsByBox(): Promise<{count: number; results: import('../types').Statistics[]; next_cursor?: string}> {
+  async getStatisticsByBox(): Promise<{count: number; results: Array<Statistics>; next_cursor?: string}> {
     try {
       const [boxes, alarms, rules] = await Promise.all([
         this.getBoxes(),
@@ -2768,7 +2770,7 @@ export class FirewallaClient {
       const rules = await this.getNetworkRules();
       
       // Enhanced null/undefined safety checks
-      if (!rules || !rules.results || !Array.isArray(rules.results)) {
+      if (!rules?.results || !Array.isArray(rules.results)) {
         return {
           count: 1,
           results: [{
@@ -2788,7 +2790,7 @@ export class FirewallaClient {
       
       if (activeOnly) {
         filteredRules = filteredRules.filter(rule => {
-          const status = rule.status;
+          const {status} = rule;
           return status === 'active' || !status || status === undefined;
         });
       }
@@ -2828,7 +2830,7 @@ export class FirewallaClient {
         summary.by_direction[direction] = (summary.by_direction[direction] || 0) + 1;
         
         // Count by status with validation
-        const status = rule.status;
+        const {status} = rule;
         if (status === 'active' || !status || status === undefined) {
           summary.active_rules++;
         } else if (status === 'paused') {
@@ -2889,7 +2891,7 @@ export class FirewallaClient {
       const rules = await this.getNetworkRules();
       
       // Enhanced null/undefined safety checks
-      if (!rules || !rules.results || !Array.isArray(rules.results)) {
+      if (!rules?.results || !Array.isArray(rules.results)) {
         return {
           count: 0,
           results: []
@@ -2981,7 +2983,7 @@ export class FirewallaClient {
       const rules = await this.getNetworkRules();
       
       // Enhanced null/undefined safety checks
-      if (!rules || !rules.results || !Array.isArray(rules.results)) {
+      if (!rules?.results || !Array.isArray(rules.results)) {
         return {
           count: 0,
           results: []

@@ -25,9 +25,9 @@
  * @since 2024-01-01
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { FirewallaClient } from '../firewalla/client.js';
+import type { FirewallaClient } from '../firewalla/client.js';
 import { createErrorResponse } from '../validation/error-handler.js';
 import { logger } from '../monitoring/logger.js';
 import { ToolRegistry } from './registry.js';

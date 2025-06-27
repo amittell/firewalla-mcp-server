@@ -2,8 +2,9 @@
  * Device monitoring tool handlers
  */
 
-import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
-import { FirewallaClient } from '../../firewalla/client.js';
+import type { ToolArgs, ToolResponse } from './base.js';
+import { BaseToolHandler } from './base.js';
+import type { FirewallaClient } from '../../firewalla/client.js';
 import { ParameterValidator, SafeAccess, createErrorResponse } from '../../validation/error-handler.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
 
@@ -35,8 +36,8 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
         devicesResponse.results,
         (devices: any[]) => devices.reduce(
           (acc: { online: number; offline: number }, d: any) => {
-            if (d.online) acc.online++;
-            else acc.offline++;
+            if (d.online) {acc.online++;}
+            else {acc.offline++;}
             return acc;
           },
           { online: 0, offline: 0 }

@@ -4,12 +4,13 @@
  */
 
 import { SafeAccess } from './error-handler.js';
-import { 
-  performEnhancedCorrelation, 
+import type { 
   ScoredCorrelationResult, 
   EnhancedCorrelationStats,
   CorrelationWeights,
-  FuzzyMatchConfig,
+  FuzzyMatchConfig} from './enhanced-correlation.js';
+import { 
+  performEnhancedCorrelation,
   DEFAULT_CORRELATION_WEIGHTS,
   DEFAULT_FUZZY_CONFIG
 } from './enhanced-correlation.js';
@@ -307,7 +308,7 @@ export function getFieldValue(entity: any, field: string, entityType: EntityType
   }
 
   const mappings = FIELD_MAPPINGS[entityType];
-  if (!mappings || !mappings[field]) {
+  if (!mappings?.[field]) {
     // Fallback to direct field access
     return SafeAccess.getNestedValue(entity, field);
   }
@@ -658,7 +659,7 @@ function calculateFieldCorrelationRate(
   index: number,
   secondaryResults: any[],
   secondaryType: EntityType,
-  correlationValueSets: Set<any>[]
+  correlationValueSets: Array<Set<any>>
 ): { field: string; matchingItems: number; correlationRate: number } {
   const matchingItems = filterItemsByFieldValue(secondaryResults, field, secondaryType, correlationValueSets[index]);
   
@@ -696,7 +697,7 @@ function filterItemsByFieldValue(
 function filterByCorrelationLogic(
   results: any[],
   correlationFields: string[],
-  correlationValueSets: Set<any>[],
+  correlationValueSets: Array<Set<any>>,
   entityType: EntityType,
   correlationType: 'AND' | 'OR'
 ): any[] {
@@ -988,7 +989,7 @@ export function performEnhancedMultiFieldCorrelation(
       enhancedStats
     };
     
-  } else {
+  } 
     // Use legacy correlation algorithm
     const legacyResult = performMultiFieldCorrelation(
       primaryResults,
@@ -1002,5 +1003,5 @@ export function performEnhancedMultiFieldCorrelation(
       correlatedResults: legacyResult.correlatedResults,
       correlationStats: legacyResult.correlationStats
     };
-  }
+  
 }

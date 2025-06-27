@@ -129,9 +129,9 @@ export function getConfigDir(): string {
     return process.env.APPDATA || joinPaths(getHomeDir(), 'AppData', 'Roaming');
   } else if (isMac()) {
     return joinPaths(getHomeDir(), 'Library', 'Application Support');
-  } else {
+  } 
     return process.env.XDG_CONFIG_HOME || joinPaths(getHomeDir(), '.config');
-  }
+  
 }
 
 /**
@@ -142,9 +142,9 @@ export function getDataDir(): string {
     return process.env.LOCALAPPDATA || joinPaths(getHomeDir(), 'AppData', 'Local');
   } else if (isMac()) {
     return joinPaths(getHomeDir(), 'Library', 'Application Support');
-  } else {
+  } 
     return process.env.XDG_DATA_HOME || joinPaths(getHomeDir(), '.local', 'share');
-  }
+  
 }
 
 /**
@@ -155,9 +155,9 @@ export function getCacheDir(): string {
     return process.env.LOCALAPPDATA || joinPaths(getHomeDir(), 'AppData', 'Local');
   } else if (isMac()) {
     return joinPaths(getHomeDir(), 'Library', 'Caches');
-  } else {
+  } 
     return process.env.XDG_CACHE_HOME || joinPaths(getHomeDir(), '.cache');
-  }
+  
 }
 
 /**
@@ -168,9 +168,9 @@ export function getLogDir(): string {
     return joinPaths(getDataDir(), 'logs');
   } else if (isMac()) {
     return joinPaths(getHomeDir(), 'Library', 'Logs');
-  } else {
+  } 
     return joinPaths(getDataDir(), 'logs');
-  }
+  
 }
 
 /**
@@ -250,9 +250,9 @@ export const fs = {
       // On Windows, this would require checking file attributes
       // For simplicity, we'll just check for dot prefix
       return filename.startsWith('.');
-    } else {
+    } 
       return filename.startsWith('.');
-    }
+    
   },
 
   /**
@@ -274,9 +274,9 @@ export const commands = {
   getShell(): string {
     if (isWindows()) {
       return process.env.COMSPEC || 'cmd.exe';
-    } else {
+    } 
       return process.env.SHELL || '/bin/sh';
-    }
+    
   },
 
   /**

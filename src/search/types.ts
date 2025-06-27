@@ -103,15 +103,13 @@ export interface SearchResult<T = any> {
   next_cursor?: string; // Cursor-based pagination (preferred)
   query: string;
   execution_time_ms: number;
-  aggregations?: {
-    [key: string]: {
+  aggregations?: Record<string, {
       count: number;
       sum?: number;
       avg?: number;
       min?: number;
       max?: number;
-    };
-  };
+    }>;
 }
 
 /**
@@ -158,7 +156,7 @@ export type TokenTypeValue = typeof TokenType[keyof typeof TokenType];
 export interface FilterResult {
   apiParams: Record<string, any>;
   // eslint-disable-next-line no-unused-vars
-  postProcessing: ((items: any[]) => any[])[];
+  postProcessing: Array<(items: any[]) => any[]>;
   metadata: {
     filtersApplied: string[];
     optimizations: string[];

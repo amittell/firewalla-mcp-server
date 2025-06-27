@@ -3,8 +3,9 @@
  * Handles timestamp-based filtering for flows, alarms, and rules
  */
 
-import { QueryNode, FieldQuery, RangeQuery, ComparisonQuery } from '../types.js';
-import { BaseFilter, FilterContext, FilterResult } from './base.js';
+import type { QueryNode, FieldQuery, RangeQuery, ComparisonQuery } from '../types.js';
+import type { FilterContext, FilterResult } from './base.js';
+import { BaseFilter } from './base.js';
 import { unixToISOString } from '../../utils/timestamp.js';
 
 export class TimeRangeFilter extends BaseFilter {
@@ -24,13 +25,13 @@ export class TimeRangeFilter extends BaseFilter {
   apply(node: QueryNode, context: FilterContext): FilterResult {
     switch (node.type) {
       case 'field': {
-        return this.handleFieldQuery(node as FieldQuery, context);
+        return this.handleFieldQuery(node, context);
       }
       case 'range': {
-        return this.handleRangeQuery(node as RangeQuery, context);
+        return this.handleRangeQuery(node, context);
       }
       case 'comparison': {
-        return this.handleComparisonQuery(node as ComparisonQuery, context);
+        return this.handleComparisonQuery(node, context);
       }
       default: {
         return { apiParams: {} };
@@ -105,14 +106,14 @@ export class TimeRangeFilter extends BaseFilter {
     // Different entities use different parameter names
     switch (context.entityType) {
       case 'flows': {
-        if (minTime) params.start_time = unixToISOString(minTime);
-        if (maxTime) params.end_time = unixToISOString(maxTime);
+        if (minTime) {params.start_time = unixToISOString(minTime);}
+        if (maxTime) {params.end_time = unixToISOString(maxTime);}
         break;
       }
       
       case 'alarms': {
-        if (minTime) params.since = minTime;
-        if (maxTime) params.until = maxTime;
+        if (minTime) {params.since = minTime;}
+        if (maxTime) {params.until = maxTime;}
         break;
       }
       
@@ -129,7 +130,7 @@ export class TimeRangeFilter extends BaseFilter {
       
       case 'target_lists': {
         // Target lists might filter by last_updated
-        if (minTime) params.updated_since = minTime;
+        if (minTime) {params.updated_since = minTime;}
         break;
       }
     }
@@ -144,7 +145,7 @@ export class TimeRangeFilter extends BaseFilter {
     return (items: any[]) => {
       return items.filter(item => {
         const timestamp = this.extractTimestamp(item);
-        if (timestamp === null) return true; // Keep items without timestamps
+        if (timestamp === null) {return true;} // Keep items without timestamps
 
         return this.matchesTimeCondition(timestamp, node);
       });
@@ -157,7 +158,7 @@ export class TimeRangeFilter extends BaseFilter {
       const value = this.getNestedValue(item, field);
       if (value) {
         const parsed = this.parseTimestamp(value);
-        if (parsed !== null) return parsed;
+        if (parsed !== null) {return parsed;}
       }
     }
     return null;
@@ -166,24 +167,24 @@ export class TimeRangeFilter extends BaseFilter {
   private matchesTimeCondition(timestamp: number, node: QueryNode): boolean {
     switch (node.type) {
       case 'field': {
-        const targetTime = this.parseTimestamp((node as FieldQuery).value);
+        const targetTime = this.parseTimestamp((node).value);
         return Boolean(targetTime && Math.abs(timestamp - targetTime) <= this.DEFAULT_POST_PROCESSING_MARGIN);
       }
 
       case 'range': {
-        const rangeNode = node as RangeQuery;
+        const rangeNode = node;
         const min = rangeNode.min ? this.parseTimestamp(rangeNode.min) : null;
         const max = rangeNode.max ? this.parseTimestamp(rangeNode.max) : null;
         
-        if (min && timestamp < min) return false;
-        if (max && timestamp > max) return false;
+        if (min && timestamp < min) {return false;}
+        if (max && timestamp > max) {return false;}
         return true;
       }
 
       case 'comparison': {
-        const compNode = node as ComparisonQuery;
+        const compNode = node;
         const compTime = this.parseTimestamp(compNode.value);
-        if (!compTime) return false;
+        if (!compTime) {return false;}
 
         switch (compNode.operator) {
           case '>': {

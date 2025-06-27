@@ -3,7 +3,7 @@
  * Implements recursive descent parser for complex search queries
  */
 
-import {
+import type {
   QueryNode,
   FieldQuery,
   LogicalQuery,
@@ -13,8 +13,9 @@ import {
   RangeQuery,
   ComparisonQuery,
   Token,
+  QueryValidation} from './types.js';
+import {
   TokenType,
-  QueryValidation,
   SEARCH_FIELDS
 } from './types.js';
 
@@ -355,23 +356,23 @@ export class QueryParser {
       const operator = this.previous().value as '>=' | '<=' | '>' | '<' | '!=';
       
       if (this.match(TokenType.VALUE, TokenType.QUOTED_VALUE)) {
-        const value = this.previous().value;
+        const {value} = this.previous();
         
         if (operator === '>=' || operator === '<=' || operator === '>' || operator === '<') {
           return {
             type: 'comparison',
             field,
-            operator: operator as '>=' | '<=' | '>' | '<',
+            operator,
             value: this.parseValue(value)
           } as ComparisonQuery;
-        } else {
+        } 
           return {
             type: 'field',
             field,
             value,
             operator: operator as '!='
           } as FieldQuery;
-        }
+        
       }
     }
 
@@ -391,7 +392,7 @@ export class QueryParser {
     }
 
     if (this.match(TokenType.VALUE, TokenType.QUOTED_VALUE, TokenType.FIELD)) {
-      const value = this.previous().value;
+      const {value} = this.previous();
       return {
         type: 'field',
         field,
@@ -464,7 +465,7 @@ export class QueryParser {
         case 'wildcard':
         case 'range':
         case 'comparison': {
-          const fieldNode = n as FieldQuery | WildcardQuery | RangeQuery | ComparisonQuery;
+          const fieldNode = n;
           // Skip validation for special match-all field '*'
           if (fieldNode.field !== '*' && !validFields.includes(fieldNode.field)) {
             this.errors.push(`Invalid field '${fieldNode.field}' for ${entityType}. Valid fields: ${validFields.join(', ')}`);

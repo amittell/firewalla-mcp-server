@@ -14,7 +14,7 @@
  * @since 2024-01-01
  */
 
-import { FirewallaClient } from '../../firewalla/client.js';
+import type { FirewallaClient } from '../../firewalla/client.js';
 
 /**
  * Generic arguments interface for MCP tool execution
@@ -22,9 +22,7 @@ import { FirewallaClient } from '../../firewalla/client.js';
  * Flexible key-value structure that allows tools to accept various parameter types
  * while maintaining type safety through individual tool implementations.
  */
-export interface ToolArgs {
-  [key: string]: any;
-}
+export type ToolArgs = Record<string, any>;
 
 /**
  * Standardized response structure for MCP tool execution
@@ -60,7 +58,7 @@ export interface ToolHandler {
    * @param firewalla - Authenticated Firewalla client for API access
    * @returns Promise resolving to formatted tool response
    */
-  execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse>;
+  execute: (args: ToolArgs, firewalla: FirewallaClient) => Promise<ToolResponse>;
   
   /** @description Unique tool identifier used in MCP tool registration */
   name: string;

@@ -3,7 +3,7 @@
  * Implements complex query parsing and search optimization
  */
 
-import { SearchFilter, SearchOptions } from '../types.js';
+import type { SearchFilter, SearchOptions } from '../types.js';
 
 /**
  * Splits a string by commas while preserving quoted substrings as single segments.
@@ -272,7 +272,7 @@ function parseFieldExpression(expression: string): QueryComponent | null {
       return {
         field,
         operator: 'in',
-        value: arrayValues.map(v => parseValue(v.trim())).filter(v => v !== null) as Array<string | number | boolean>
+        value: arrayValues.map(v => parseValue(v.trim())).filter(v => v !== null)
       };
     }
     
@@ -374,7 +374,7 @@ function convertWildcardToRegex(pattern: string): string {
   const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
   
   // Convert wildcards to regex with limited quantifiers
-  let result = escaped
+  const result = escaped
     .replace(/\*/g, '[^\\s]*')  // * becomes [^\s]* (non-greedy, no whitespace)
     .replace(/\?/g, '[^\\s]');  // ? becomes [^\s] (single non-whitespace char)
   

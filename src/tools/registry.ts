@@ -26,7 +26,7 @@
  * @since 2024-01-01
  */
 
-import { ToolHandler } from './handlers/base.js';
+import type { ToolHandler } from './handlers/base.js';
 import { GetActiveAlarmsHandler, GetSpecificAlarmHandler, DeleteAlarmHandler } from './handlers/security.js';
 import { GetFlowDataHandler, GetBandwidthUsageHandler, GetOfflineDevicesHandler } from './handlers/network.js';
 import { GetDeviceStatusHandler } from './handlers/device.js';

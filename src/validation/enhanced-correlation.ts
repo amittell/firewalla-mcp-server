@@ -3,7 +3,8 @@
  * Provides intelligent correlation scoring and flexible matching strategies
  */
 
-import { EntityType, getFieldValue, normalizeFieldValue } from './field-mapper.js';
+import type { EntityType} from './field-mapper.js';
+import { getFieldValue, normalizeFieldValue } from './field-mapper.js';
 
 /**
  * Utility function for consistent rounding to 3 decimal places
@@ -25,9 +26,7 @@ function validateScore(score: number, context: string): number {
 /**
  * Configuration for correlation scoring weights
  */
-export interface CorrelationWeights {
-  [fieldName: string]: number;
-}
+export type CorrelationWeights = Record<string, number>;
 
 /**
  * Default field weights for correlation scoring
@@ -99,8 +98,8 @@ export const DEFAULT_FUZZY_CONFIG: FuzzyMatchConfig = {
 export interface ScoredCorrelationResult {
   entity: any;
   correlationScore: number;
-  fieldScores: { [field: string]: number };
-  fieldMatchTypes: { [field: string]: 'exact' | 'fuzzy' | 'partial' };
+  fieldScores: Record<string, number>;
+  fieldMatchTypes: Record<string, 'exact' | 'fuzzy' | 'partial'>;
   matchType: 'exact' | 'fuzzy' | 'partial';
   confidence: 'high' | 'medium' | 'low';
 }
@@ -117,14 +116,12 @@ export interface EnhancedCorrelationStats {
     medium: number;  // score >= 0.5
     low: number;     // score < 0.5
   };
-  fieldStatistics: {
-    [field: string]: {
+  fieldStatistics: Record<string, {
       exactMatches: number;
       fuzzyMatches: number;
       partialMatches: number;
       averageScore: number;
-    };
-  };
+    }>;
   fuzzyMatchingEnabled: boolean;
   totalProcessingTime: number;
 }
@@ -230,8 +227,8 @@ function scoreEntityCorrelation(
   fuzzyConfig: FuzzyMatchConfig
 ): ScoredCorrelationResult {
   
-  const fieldScores: { [field: string]: number } = {};
-  const fieldMatchTypes: { [field: string]: 'exact' | 'fuzzy' | 'partial' } = {};
+  const fieldScores: Record<string, number> = {};
+  const fieldMatchTypes: Record<string, 'exact' | 'fuzzy' | 'partial'> = {};
   let totalWeightedScore = 0;
   let totalWeight = 0;
   let exactMatches = 0;
@@ -527,7 +524,7 @@ function generateEnhancedStats(
   };
   
   // Field statistics
-  const fieldStatistics: { [field: string]: any } = {};
+  const fieldStatistics: Record<string, any> = {};
   for (const field of correlationFields) {
     const exactMatches = correlatedResults.filter(r => r.fieldMatchTypes[field] === 'exact').length;
     const fuzzyMatches = correlatedResults.filter(r => r.fieldMatchTypes[field] === 'fuzzy').length;

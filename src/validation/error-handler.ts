@@ -26,8 +26,8 @@ export function createErrorResponse(tool: string, message: string, details?: Rec
 } {
   const errorResponse: StandardError = {
     error: true,
-    message: message,
-    tool: tool,
+    message,
+    tool,
     ...(details && { details }),
     ...(validationErrors?.length && { validation_errors: validationErrors })
   };
@@ -338,12 +338,12 @@ export class ParameterValidator {
         return `${paramName} must be a positive number${paramContext ? ` ${paramContext}` : ''} (got ${value}, minimum: ${min})`;
       }
       return `${paramName} is too small${paramContext ? ` ${paramContext}` : ''} (got ${value}, minimum: ${min})`;
-    } else {
+    } 
       if (max && max > 1000) {
         return `${paramName} exceeds system limits${paramContext ? ` ${paramContext}` : ''} (got ${value}, maximum: ${max} for performance reasons)`;
       }
       return `${paramName} is too large${paramContext ? ` ${paramContext}` : ''} (got ${value}, maximum: ${max})`;
-    }
+    
   }
 
   /**

@@ -5,11 +5,15 @@
 
 import { queryParser } from '../search/parser.js';
 import { filterFactory } from '../search/filters/index.js';
-import { FilterContext } from '../search/filters/base.js';
-import { SearchParams, SearchResult } from '../search/types.js';
-import { SearchOptions } from '../types.js';
-import { FirewallaClient } from '../firewalla/client.js';
+import type { FilterContext } from '../search/filters/base.js';
+import type { SearchParams, SearchResult } from '../search/types.js';
+import type { SearchOptions } from '../types.js';
+import type { FirewallaClient } from '../firewalla/client.js';
 import { ParameterValidator, SafeAccess, QuerySanitizer } from '../validation/error-handler.js';
+import type {
+  EnhancedCorrelationParams,
+  ScoringCorrelationParams
+} from '../validation/field-mapper.js';
 import { 
   validateCrossReference, 
   validateEnhancedCrossReference,
@@ -19,9 +23,7 @@ import {
   performMultiFieldCorrelation,
   performEnhancedMultiFieldCorrelation,
   getSupportedCorrelationCombinations,
-  getFieldValue,
-  EnhancedCorrelationParams,
-  ScoringCorrelationParams
+  getFieldValue
 } from '../validation/field-mapper.js';
 
 /**
@@ -117,11 +119,11 @@ interface ApiParameters {
 interface SearchStrategy {
   entityType: string;
   // eslint-disable-next-line no-unused-vars
-  executeApiCall(client: FirewallaClient, params: SearchParams, apiParams: ApiParameters, searchOptions: SearchOptions): Promise<{ results: any[], count: number, next_cursor?: string }>;
+  executeApiCall: (client: FirewallaClient, params: SearchParams, apiParams: ApiParameters, searchOptions: SearchOptions) => Promise<{ results: any[], count: number, next_cursor?: string }>;
   // eslint-disable-next-line no-unused-vars
-  validateParams?(params: SearchParams): { isValid: boolean; errors: string[] };
+  validateParams?: (params: SearchParams) => { isValid: boolean; errors: string[] };
   // eslint-disable-next-line no-unused-vars
-  processResults?(results: any[], params: SearchParams): any[];
+  processResults?: (results: any[], params: SearchParams) => any[];
 }
 
 /**
@@ -958,9 +960,9 @@ export class SearchEngine {
       const valueB = b.value;
       
       // Handle null/undefined values - sort nulls to the end
-      if (valueA == null && valueB == null) return 0;
-      if (valueA == null) return 1;  // null values go to end
-      if (valueB == null) return -1; // null values go to end
+      if (valueA == null && valueB == null) {return 0;}
+      if (valueA == null) {return 1;}  // null values go to end
+      if (valueB == null) {return -1;} // null values go to end
       
       if (valueA === valueB) {
         return 0;
@@ -984,7 +986,7 @@ export class SearchEngine {
       };
     }
 
-    const groups: { [key: string]: any[] } = {};
+    const groups: Record<string, any[]> = {};
     
     for (const item of results) {
       const groupValue = String(this.getNestedValue(item, groupBy) || 'unknown');

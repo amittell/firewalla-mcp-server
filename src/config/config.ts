@@ -23,7 +23,7 @@
  */
 
 import dotenv from 'dotenv';
-import { FirewallaConfig } from '../types';
+import type { FirewallaConfig } from '../types';
 
 dotenv.config();
 
@@ -36,7 +36,7 @@ dotenv.config();
  */
 function getRequiredEnvVar(name: string): string {
   const value = process.env[name];
-  if (!value) {
+  if (value === undefined || value === null || value === '') {
     throw new Error(`Required environment variable ${name} is not set`);
   }
   return value;
@@ -55,7 +55,7 @@ function getRequiredEnvVar(name: string): string {
  */
 function getOptionalEnvInt(name: string, defaultValue: number, min?: number, max?: number): number {
   const envValue = process.env[name];
-  if (!envValue) {
+  if (envValue === undefined || envValue === null || envValue === '') {
     return defaultValue;
   }
   

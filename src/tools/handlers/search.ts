@@ -2,13 +2,14 @@
  * Advanced search tool handlers
  */
 
-import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
-import { FirewallaClient } from '../../firewalla/client.js';
+import type { ToolArgs, ToolResponse } from './base.js';
+import { BaseToolHandler } from './base.js';
+import type { FirewallaClient } from '../../firewalla/client.js';
 import { SafeAccess } from '../../validation/error-handler.js';
 import { createSearchTools } from '../search.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
-import { SearchParams } from '../../search/types.js';
-import { ScoringCorrelationParams } from '../../validation/field-mapper.js';
+import type { SearchParams } from '../../search/types.js';
+import type { ScoringCorrelationParams } from '../../validation/field-mapper.js';
 
 // Search argument interfaces for type safety
 export interface SearchFlowsArgs extends ToolArgs {

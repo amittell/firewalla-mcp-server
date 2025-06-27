@@ -20,9 +20,9 @@
  * @since 2024-01-01
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { ReadResourceRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { FirewallaClient } from '../firewalla/client.js';
+import type { FirewallaClient } from '../firewalla/client.js';
 import { safeUnixToISOString } from '../utils/timestamp.js';
 
 /**

@@ -1,6 +1,6 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { GetPromptRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { FirewallaClient } from '../firewalla/client.js';
+import type { FirewallaClient } from '../firewalla/client.js';
 import { unixToISOString, safeUnixToISOString } from '../utils/timestamp.js';
 
 // Type definitions for health score calculation

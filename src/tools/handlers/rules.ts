@@ -2,8 +2,9 @@
  * Firewall rule management tool handlers
  */
 
-import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
-import { FirewallaClient } from '../../firewalla/client.js';
+import type { ToolArgs, ToolResponse } from './base.js';
+import { BaseToolHandler } from './base.js';
+import type { FirewallaClient } from '../../firewalla/client.js';
 import { ParameterValidator, SafeAccess, createErrorResponse } from '../../validation/error-handler.js';
 import { optimizeRuleResponse, DEFAULT_OPTIMIZATION_CONFIG } from '../../optimization/index.js';
 import { safeUnixToISOString, getCurrentTimestamp } from '../../utils/timestamp.js';
@@ -106,8 +107,8 @@ export class PauseRuleHandler extends BaseToolHandler {
       }
       
       const result = await firewalla.pauseRule(
-        ruleIdValidation.sanitizedValue!,
-        durationValidation.sanitizedValue!
+        ruleIdValidation.sanitizedValue,
+        durationValidation.sanitizedValue
       );
       
       return this.createSuccessResponse({
@@ -139,7 +140,7 @@ export class ResumeRuleHandler extends BaseToolHandler {
         return createErrorResponse(this.name, 'Parameter validation failed', undefined, ruleIdValidation.errors);
       }
       
-      const result = await firewalla.resumeRule(ruleIdValidation.sanitizedValue!);
+      const result = await firewalla.resumeRule(ruleIdValidation.sanitizedValue);
       
       return this.createSuccessResponse({
         success: SafeAccess.getNestedValue(result, 'success', false),
@@ -384,12 +385,12 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
               id: SafeAccess.getNestedValue(rule, 'id', 'unknown'),
               action: SafeAccess.getNestedValue(rule, 'action', 'unknown'),
               target_type: SafeAccess.getNestedValue(rule, 'target.type', 'unknown'),
-              target_value: targetValue.length > 60 ? targetValue.substring(0, 60) + '...' : targetValue,
+              target_value: targetValue.length > 60 ? `${targetValue.substring(0, 60)  }...` : targetValue,
               direction: SafeAccess.getNestedValue(rule, 'direction', 'unknown'),
               hit_count: SafeAccess.getNestedValue(rule, 'hit.count', 0),
               last_hit: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'hit.lastHitTs', undefined), 'Never'),
               created_at: safeUnixToISOString(SafeAccess.getNestedValue(rule, 'ts', undefined), undefined),
-              notes: notes.length > 80 ? notes.substring(0, 80) + '...' : notes,
+              notes: notes.length > 80 ? `${notes.substring(0, 80)  }...` : notes,
             };
           }
         ),
@@ -480,14 +481,14 @@ export class GetRecentRulesHandler extends BaseToolHandler {
               id: SafeAccess.getNestedValue(rule, 'id', 'unknown'),
               action: SafeAccess.getNestedValue(rule, 'action', 'unknown'),
               target_type: SafeAccess.getNestedValue(rule, 'target.type', 'unknown'),
-              target_value: targetValue.length > 60 ? targetValue.substring(0, 60) + '...' : targetValue,
+              target_value: targetValue.length > 60 ? `${targetValue.substring(0, 60)  }...` : targetValue,
               direction: SafeAccess.getNestedValue(rule, 'direction', 'unknown'),
               status: SafeAccess.getNestedValue(rule, 'status', 'active'),
               activity_type: wasModified ? 'modified' : 'created',
               created_at: safeUnixToISOString(ts, undefined),
               updated_at: safeUnixToISOString(updateTs, undefined),
               hit_count: SafeAccess.getNestedValue(rule, 'hit.count', 0),
-              notes: notes.length > 80 ? notes.substring(0, 80) + '...' : notes,
+              notes: notes.length > 80 ? `${notes.substring(0, 80)  }...` : notes,
             };
           }
         ),

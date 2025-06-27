@@ -93,7 +93,7 @@ export class SecurityManager {
     // Parse the origin URL to get hostname for secure validation
     try {
       const url = new URL(origin.startsWith('http') ? origin : `https://${origin}`);
-      const hostname = url.hostname;
+      const {hostname} = url;
       
       return SecurityManager.ALLOWED_ORIGINS.some(allowed => {
         // For localhost, allow exact match and any port
@@ -148,7 +148,7 @@ export class SecurityManager {
     for (const envVar of required) {
       if (!process.env[envVar]) {
         errors.push(`Missing required environment variable: ${envVar}`);
-      } else if (process.env[envVar]!.length < 10) {
+      } else if (process.env[envVar].length < 10) {
         errors.push(`Environment variable ${envVar} appears to be too short`);
       }
     }

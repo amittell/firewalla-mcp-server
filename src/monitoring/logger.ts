@@ -130,7 +130,7 @@ export class StructuredLogger {
     const logString = JSON.stringify(entry);
     
     // Always write to stderr in MCP server to avoid polluting stdout JSON-RPC channel
-    process.stderr.write(logString + '\\n');
+    process.stderr.write(`${logString  }\\n`);
   }
 
   error(message: string, error?: Error, metadata?: Record<string, unknown>, traceId?: string, requestId?: string): void {
@@ -237,7 +237,7 @@ export class StructuredLogger {
     this.debugNamespace('query', `${queryType} query executed`, {
       query: {
         type: queryType,
-        query: query.length > 100 ? query.substring(0, 100) + '...' : query,
+        query: query.length > 100 ? `${query.substring(0, 100)  }...` : query,
         duration_ms: duration,
         result_count: resultCount,
         ...metadata,

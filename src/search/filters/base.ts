@@ -3,7 +3,7 @@
  * Provides foundation for specialized filter implementations
  */
 
-import { QueryNode } from '../types.js';
+import type { QueryNode } from '../types.js';
 
 /**
  * Base filter interface that all filters must implement
@@ -13,13 +13,13 @@ export interface Filter {
   readonly name: string;
   
   /** Check if this filter can handle the given query node */
-  canHandle(node: QueryNode): boolean;
+  canHandle: (node: QueryNode) => boolean;
   
   /** Apply the filter to convert query node to API parameters */
-  apply(node: QueryNode, context: FilterContext): FilterResult;
+  apply: (node: QueryNode, context: FilterContext) => FilterResult;
   
   /** Get optimization hints for this filter */
-  getOptimizations?(): OptimizationHint[];
+  getOptimizations?: () => OptimizationHint[];
 }
 
 /**
@@ -33,7 +33,7 @@ export interface FilterContext {
   apiParams: Record<string, any>;
   
   /** Post-processing functions to apply */
-  postProcessing: ((items: any[]) => any[])[];
+  postProcessing: Array<(items: any[]) => any[]>;
   
   /** Metadata about filters applied */
   metadata: {
@@ -106,7 +106,7 @@ export abstract class BaseFilter implements Filter {
    * Check if a value matches a wildcard pattern
    */
   protected matchWildcard(value: string, pattern: string): boolean {
-    if (!value || !pattern) return false;
+    if (!value || !pattern) {return false;}
     
     // Convert wildcard pattern to regex
     const regexPattern = pattern
@@ -122,7 +122,7 @@ export abstract class BaseFilter implements Filter {
    * Parse numeric value with validation
    */
   protected parseNumeric(value: any): number | null {
-    if (typeof value === 'number') return value;
+    if (typeof value === 'number') {return value;}
     if (typeof value === 'string') {
       const parsed = parseFloat(value);
       return isNaN(parsed) ? null : parsed;
@@ -168,10 +168,10 @@ export abstract class BaseFilter implements Filter {
       } else if (value >= 31536000) {
         // Valid Unix timestamp for dates after 1971 (to account for older logs)
         return value;
-      } else {
+      } 
         // Too small to be a valid timestamp
         return null;
-      }
+      
     }
     
     if (typeof value === 'string') {

@@ -2,8 +2,9 @@
  * Network monitoring and analysis tool handlers
  */
 
-import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
-import { FirewallaClient } from '../../firewalla/client.js';
+import type { ToolArgs, ToolResponse } from './base.js';
+import { BaseToolHandler } from './base.js';
+import type { FirewallaClient } from '../../firewalla/client.js';
 import { ParameterValidator, SafeAccess, createErrorResponse } from '../../validation/error-handler.js';
 import { unixToISOStringOrNow, safeUnixToISOString } from '../../utils/timestamp.js';
 
@@ -104,8 +105,8 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
       }
       
       const usageResponse = await firewalla.getBandwidthUsage(
-        periodValidation.sanitizedValue!,
-        limitValidation.sanitizedValue!
+        periodValidation.sanitizedValue,
+        limitValidation.sanitizedValue
       );
       
       return this.createSuccessResponse({

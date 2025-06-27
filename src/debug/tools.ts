@@ -1,7 +1,7 @@
-import { FirewallaClient } from '../firewalla/client';
+import type { FirewallaClient } from '../firewalla/client';
 import { logger } from '../monitoring/logger';
 import { metricsCollector } from '../monitoring/metrics';
-import { HealthCheckManager } from '../health/endpoints';
+import type { HealthCheckManager, HealthStatus } from '../health/endpoints';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
 
 export interface DebugInfo {
@@ -22,7 +22,7 @@ export interface DebugInfo {
     total_metrics: number;
     recent_metrics: Array<{ name: string; value: number; timestamp: number }>;
   };
-  health: any;
+  health: HealthStatus;
 }
 
 export class DebugTools {
@@ -72,7 +72,15 @@ export class DebugTools {
     success: boolean;
     response_time: number;
     error?: string;
-    data?: any;
+    data?: {
+      status: string;
+      uptime: number;
+      cpu_usage: number;
+      memory_usage: number;
+      active_connections: number;
+      blocked_attempts: number;
+      last_updated: string;
+    };
   }> {
     const startTime = Date.now();
     

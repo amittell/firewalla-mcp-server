@@ -143,11 +143,11 @@ export function truncateText(text: string, maxLength: number, strategy: 'ellipsi
     const lastSpace = truncated.lastIndexOf(' ');
     
     if (lastSpace > maxLength * 0.8) { // If we're close to the limit, use word boundary
-      return truncated.substring(0, lastSpace) + '...';
+      return `${truncated.substring(0, lastSpace)  }...`;
     }
   }
   
-  return text.substring(0, maxLength - 3) + '...';
+  return `${text.substring(0, maxLength - 3)  }...`;
 }
 
 /**

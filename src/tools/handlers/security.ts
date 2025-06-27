@@ -2,8 +2,9 @@
  * Security monitoring tool handlers
  */
 
-import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
-import { FirewallaClient } from '../../firewalla/client.js';
+import type { ToolArgs, ToolResponse } from './base.js';
+import { BaseToolHandler } from './base.js';
+import type { FirewallaClient } from '../../firewalla/client.js';
 import { ParameterValidator, SafeAccess, QuerySanitizer, createErrorResponse } from '../../validation/error-handler.js';
 import { unixToISOStringOrNow, getCurrentTimestamp } from '../../utils/timestamp.js';
 
@@ -45,7 +46,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         sanitizedQuery,
         groupByValidation.sanitizedValue,
         sortByValidation.sanitizedValue || 'timestamp:desc',
-        limitValidation.sanitizedValue!,
+        limitValidation.sanitizedValue,
         cursorValidation.sanitizedValue
       );
       
@@ -97,7 +98,7 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
         return createErrorResponse('get_specific_alarm', 'Parameter validation failed', undefined, alarmIdValidation.errors);
       }
       
-      const response = await firewalla.getSpecificAlarm(alarmIdValidation.sanitizedValue!);
+      const response = await firewalla.getSpecificAlarm(alarmIdValidation.sanitizedValue);
       
       return this.createSuccessResponse({
         alarm: response,
@@ -124,7 +125,7 @@ export class DeleteAlarmHandler extends BaseToolHandler {
         return createErrorResponse('delete_alarm', 'Parameter validation failed', undefined, alarmIdValidation.errors);
       }
       
-      const response = await firewalla.deleteAlarm(alarmIdValidation.sanitizedValue!);
+      const response = await firewalla.deleteAlarm(alarmIdValidation.sanitizedValue);
       
       return this.createSuccessResponse({
         success: true,

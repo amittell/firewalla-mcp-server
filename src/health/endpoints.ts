@@ -1,4 +1,4 @@
-import { FirewallaClient } from '../firewalla/client';
+import type { FirewallaClient } from '../firewalla/client';
 import { SecurityManager } from '../config/security';
 import { config } from '../config/config';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
@@ -8,14 +8,12 @@ export interface HealthStatus {
   timestamp: string;
   version: string;
   uptime: number;
-  checks: {
-    [key: string]: {
+  checks: Record<string, {
       status: 'pass' | 'fail' | 'warn';
       message?: string;
       responseTime?: number;
       details?: Record<string, unknown>;
-    };
-  };
+    }>;
 }
 
 export class HealthCheckManager {

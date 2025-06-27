@@ -3,8 +3,8 @@
  * Centralized management of all search filters
  */
 
-import { QueryNode, FieldQuery, WildcardQuery } from '../types.js';
-import { Filter, FilterContext, FilterResult } from './base.js';
+import type { QueryNode, FieldQuery, WildcardQuery } from '../types.js';
+import type { Filter, FilterContext, FilterResult } from './base.js';
 import { TimeRangeFilter } from './time.js';
 
 /**

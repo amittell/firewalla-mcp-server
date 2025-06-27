@@ -2,8 +2,9 @@
  * Analytics and statistics tool handlers
  */
 
-import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
-import { FirewallaClient } from '../../firewalla/client.js';
+import type { ToolArgs, ToolResponse } from './base.js';
+import { BaseToolHandler } from './base.js';
+import type { FirewallaClient } from '../../firewalla/client.js';
 import { ParameterValidator, SafeAccess, createErrorResponse } from '../../validation/error-handler.js';
 import { unixToISOString } from '../../utils/timestamp.js';
 import { logger } from '../../monitoring/logger.js';

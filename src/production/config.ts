@@ -1,4 +1,4 @@
-import { FirewallaConfig } from '../types';
+import type { FirewallaConfig } from '../types';
 
 export interface ProductionConfig extends FirewallaConfig {
   environment: 'production' | 'staging' | 'development';

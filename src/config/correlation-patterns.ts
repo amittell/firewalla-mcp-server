@@ -3,7 +3,7 @@
  * Extracted from hardcoded patterns to improve maintainability
  */
 
-import { EntityType } from '../validation/field-mapper.js';
+import type { EntityType } from '../validation/field-mapper.js';
 
 /**
  * Definition of a correlation pattern with its fields and description
@@ -251,12 +251,12 @@ export function updateCorrelationPatterns(newPatterns: Partial<CorrelationPatter
   currentCorrelationPatterns = {
     ...currentCorrelationPatterns,
     ...newPatterns,
-    network: [...(currentCorrelationPatterns.network || []), ...(newPatterns.network || [])],
-    security: [...(currentCorrelationPatterns.security || []), ...(newPatterns.security || [])],
-    device: [...(currentCorrelationPatterns.device || []), ...(newPatterns.device || [])],
-    temporal: [...(currentCorrelationPatterns.temporal || []), ...(newPatterns.temporal || [])],
-    geographic: [...(currentCorrelationPatterns.geographic || []), ...(newPatterns.geographic || [])],
-    application: [...(currentCorrelationPatterns.application || []), ...(newPatterns.application || [])]
+    network: [...(currentCorrelationPatterns.network ?? []), ...(newPatterns.network ?? [])],
+    security: [...(currentCorrelationPatterns.security ?? []), ...(newPatterns.security ?? [])],
+    device: [...(currentCorrelationPatterns.device ?? []), ...(newPatterns.device ?? [])],
+    temporal: [...(currentCorrelationPatterns.temporal ?? []), ...(newPatterns.temporal ?? [])],
+    geographic: [...(currentCorrelationPatterns.geographic ?? []), ...(newPatterns.geographic ?? [])],
+    application: [...(currentCorrelationPatterns.application ?? []), ...(newPatterns.application ?? [])]
   };
 }
 
