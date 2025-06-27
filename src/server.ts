@@ -213,11 +213,18 @@ export class FirewallaMCPServer {
             inputSchema: {
               type: 'object',
               properties: {
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of offline devices to return',
+                  minimum: 1,
+                  maximum: 1000,
+                },
                 sort_by_last_seen: {
                   type: 'boolean',
                   description: 'Sort devices by last seen time (default: true)',
                 },
               },
+              required: ['limit'],
             },
           },
           {
