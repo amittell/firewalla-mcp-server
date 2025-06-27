@@ -15,7 +15,7 @@ export type PlatformType = 'windows' | 'mac' | 'linux' | 'unknown';
  */
 export function getPlatform(): PlatformType {
   const platformName = platform();
-  
+
   switch (platformName) {
     case 'win32':
       return 'windows';
@@ -113,20 +113,24 @@ export function toUnixPath(platformPath: string): string {
  * Get platform-specific temporary directory
  */
 export function getTempDir(): string {
-  return process.env.TMPDIR 
-    || process.env.TMP 
-    || process.env.TEMP 
-    || (isWindows() ? 'C:\\temp' : '/tmp');
+  return (
+    process.env.TMPDIR ||
+    process.env.TMP ||
+    process.env.TEMP ||
+    (isWindows() ? 'C:\\temp' : '/tmp')
+  );
 }
 
 /**
  * Get platform-specific home directory
  */
 export function getHomeDir(): string {
-  return process.env.HOME 
-    || process.env.USERPROFILE 
-    || process.env.HOMEPATH 
-    || (isWindows() ? 'C:\\Users\\Default' : '/home');
+  return (
+    process.env.HOME ||
+    process.env.USERPROFILE ||
+    process.env.HOMEPATH ||
+    (isWindows() ? 'C:\\Users\\Default' : '/home')
+  );
 }
 
 /**
@@ -137,9 +141,8 @@ export function getConfigDir(): string {
     return process.env.APPDATA || joinPaths(getHomeDir(), 'AppData', 'Roaming');
   } else if (isMac()) {
     return joinPaths(getHomeDir(), 'Library', 'Application Support');
-  } 
-    return process.env.XDG_CONFIG_HOME || joinPaths(getHomeDir(), '.config');
-  
+  }
+  return process.env.XDG_CONFIG_HOME || joinPaths(getHomeDir(), '.config');
 }
 
 /**
@@ -147,12 +150,15 @@ export function getConfigDir(): string {
  */
 export function getDataDir(): string {
   if (isWindows()) {
-    return process.env.LOCALAPPDATA || joinPaths(getHomeDir(), 'AppData', 'Local');
+    return (
+      process.env.LOCALAPPDATA || joinPaths(getHomeDir(), 'AppData', 'Local')
+    );
   } else if (isMac()) {
     return joinPaths(getHomeDir(), 'Library', 'Application Support');
-  } 
-    return process.env.XDG_DATA_HOME || joinPaths(getHomeDir(), '.local', 'share');
-  
+  }
+  return (
+    process.env.XDG_DATA_HOME || joinPaths(getHomeDir(), '.local', 'share')
+  );
 }
 
 /**
@@ -160,12 +166,13 @@ export function getDataDir(): string {
  */
 export function getCacheDir(): string {
   if (isWindows()) {
-    return process.env.LOCALAPPDATA || joinPaths(getHomeDir(), 'AppData', 'Local');
+    return (
+      process.env.LOCALAPPDATA || joinPaths(getHomeDir(), 'AppData', 'Local')
+    );
   } else if (isMac()) {
     return joinPaths(getHomeDir(), 'Library', 'Caches');
-  } 
-    return process.env.XDG_CACHE_HOME || joinPaths(getHomeDir(), '.cache');
-  
+  }
+  return process.env.XDG_CACHE_HOME || joinPaths(getHomeDir(), '.cache');
 }
 
 /**
@@ -176,9 +183,8 @@ export function getLogDir(): string {
     return joinPaths(getDataDir(), 'logs');
   } else if (isMac()) {
     return joinPaths(getHomeDir(), 'Library', 'Logs');
-  } 
-    return joinPaths(getDataDir(), 'logs');
-  
+  }
+  return joinPaths(getDataDir(), 'logs');
 }
 
 /**
@@ -214,7 +220,7 @@ export const env = {
   hasCommand(command: string): boolean {
     const paths = this.getPath();
     const extensions = isWindows() ? ['.exe', '.cmd', '.bat'] : [''];
-    
+
     for (const dir of paths) {
       for (const ext of extensions) {
         try {
@@ -227,9 +233,9 @@ export const env = {
         }
       }
     }
-    
+
     return false;
-  }
+  },
 };
 
 /**
@@ -258,9 +264,8 @@ export const fs = {
       // On Windows, this would require checking file attributes
       // For simplicity, we'll just check for dot prefix
       return filename.startsWith('.');
-    } 
-      return filename.startsWith('.');
-    
+    }
+    return filename.startsWith('.');
   },
 
   /**
@@ -269,7 +274,7 @@ export const fs = {
   isCaseSensitive(): boolean {
     // Most Unix file systems are case-sensitive, Windows is not
     return !isWindows();
-  }
+  },
 };
 
 /**
@@ -282,9 +287,8 @@ export const commands = {
   getShell(): string {
     if (isWindows()) {
       return process.env.COMSPEC || 'cmd.exe';
-    } 
-      return process.env.SHELL || '/bin/sh';
-    
+    }
+    return process.env.SHELL || '/bin/sh';
   },
 
   /**
@@ -327,7 +331,7 @@ export const commands = {
    */
   getMkdirCommand(): string {
     return isWindows() ? 'mkdir' : 'mkdir -p';
-  }
+  },
 };
 
 /**
@@ -346,16 +350,19 @@ export const platformInfo = {
   configDir: getConfigDir(),
   dataDir: getDataDir(),
   cacheDir: getCacheDir(),
-  logDir: getLogDir()
+  logDir: getLogDir(),
 };
 
 /**
  * Logging function that respects platform conventions
  */
-export function platformLog(message: string, level: 'info' | 'warn' | 'error' = 'info'): void {
+export function platformLog(
+  message: string,
+  level: 'info' | 'warn' | 'error' = 'info'
+): void {
   const timestamp = new Date().toISOString();
   const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
-  
+
   if (level === 'error') {
     // eslint-disable-next-line no-console
     console.error(`${prefix} ${message}`);

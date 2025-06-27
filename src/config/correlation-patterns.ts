@@ -38,29 +38,32 @@ export const DEFAULT_CORRELATION_PATTERNS: CorrelationPatternCatalog = {
     {
       id: 'network_flow_security',
       name: 'Network Flow Security Correlation',
-      description: 'Correlate network flows with security alarms based on IP addresses and protocol',
+      description:
+        'Correlate network flows with security alarms based on IP addresses and protocol',
       fields: ['source_ip', 'destination_ip', 'protocol'],
       entityTypes: ['flows', 'alarms'],
       priority: 'high',
-      useCase: 'Identify security threats in network traffic'
+      useCase: 'Identify security threats in network traffic',
     },
     {
       id: 'device_network_activity',
       name: 'Device Network Activity Correlation',
-      description: 'Correlate device activity with network flows and timestamps',
+      description:
+        'Correlate device activity with network flows and timestamps',
       fields: ['device_ip', 'timestamp', 'protocol'],
       entityTypes: ['flows', 'alarms', 'devices'],
       priority: 'high',
-      useCase: 'Monitor device network behavior over time'
+      useCase: 'Monitor device network behavior over time',
     },
     {
       id: 'ip_protocol_correlation',
       name: 'IP Protocol Analysis',
-      description: 'Analyze traffic patterns by correlating IP addresses with protocols',
+      description:
+        'Analyze traffic patterns by correlating IP addresses with protocols',
       fields: ['source_ip', 'protocol'],
       entityTypes: ['flows', 'alarms'],
       priority: 'medium',
-      useCase: 'Protocol-specific traffic analysis'
+      useCase: 'Protocol-specific traffic analysis',
     },
     {
       id: 'port_based_correlation',
@@ -69,18 +72,19 @@ export const DEFAULT_CORRELATION_PATTERNS: CorrelationPatternCatalog = {
       fields: ['destination_ip', 'port', 'protocol'],
       entityTypes: ['flows', 'alarms', 'rules'],
       priority: 'medium',
-      useCase: 'Service-specific traffic monitoring'
-    }
+      useCase: 'Service-specific traffic monitoring',
+    },
   ],
   security: [
     {
       id: 'threat_source_tracking',
       name: 'Threat Source Tracking',
-      description: 'Track security threats from specific IP addresses across time',
+      description:
+        'Track security threats from specific IP addresses across time',
       fields: ['source_ip', 'device_id', 'timestamp'],
       entityTypes: ['flows', 'alarms'],
       priority: 'high',
-      useCase: 'Track persistent threats and attack patterns'
+      useCase: 'Track persistent threats and attack patterns',
     },
     {
       id: 'attack_vector_analysis',
@@ -89,7 +93,7 @@ export const DEFAULT_CORRELATION_PATTERNS: CorrelationPatternCatalog = {
       fields: ['attack_vector', 'threat_level', 'device_ip'],
       entityTypes: ['alarms', 'flows'],
       priority: 'high',
-      useCase: 'Understand attack methodologies and impacts'
+      useCase: 'Understand attack methodologies and impacts',
     },
     {
       id: 'severity_correlation',
@@ -98,8 +102,8 @@ export const DEFAULT_CORRELATION_PATTERNS: CorrelationPatternCatalog = {
       fields: ['severity', 'device_ip', 'timestamp'],
       entityTypes: ['alarms'],
       priority: 'medium',
-      useCase: 'Prioritize security response based on severity'
-    }
+      useCase: 'Prioritize security response based on severity',
+    },
   ],
   device: [
     {
@@ -109,7 +113,7 @@ export const DEFAULT_CORRELATION_PATTERNS: CorrelationPatternCatalog = {
       fields: ['device_vendor', 'device_type', 'activity_level'],
       entityTypes: ['devices', 'flows'],
       priority: 'medium',
-      useCase: 'Device categorization and behavior profiling'
+      useCase: 'Device categorization and behavior profiling',
     },
     {
       id: 'device_group_activity',
@@ -118,7 +122,7 @@ export const DEFAULT_CORRELATION_PATTERNS: CorrelationPatternCatalog = {
       fields: ['device_group', 'device_ip', 'timestamp'],
       entityTypes: ['devices', 'flows', 'alarms'],
       priority: 'medium',
-      useCase: 'Group-based policy enforcement and monitoring'
+      useCase: 'Group-based policy enforcement and monitoring',
     },
     {
       id: 'mac_vendor_analysis',
@@ -127,8 +131,8 @@ export const DEFAULT_CORRELATION_PATTERNS: CorrelationPatternCatalog = {
       fields: ['mac_vendor', 'device_ip', 'online'],
       entityTypes: ['devices'],
       priority: 'low',
-      useCase: 'Vendor-specific device management'
-    }
+      useCase: 'Vendor-specific device management',
+    },
   ],
   temporal: [
     {
@@ -138,7 +142,7 @@ export const DEFAULT_CORRELATION_PATTERNS: CorrelationPatternCatalog = {
       fields: ['timestamp', 'hour_of_day', 'day_of_week'],
       entityTypes: ['flows', 'alarms'],
       priority: 'medium',
-      useCase: 'Identify unusual activity outside normal hours'
+      useCase: 'Identify unusual activity outside normal hours',
     },
     {
       id: 'session_duration_correlation',
@@ -147,8 +151,8 @@ export const DEFAULT_CORRELATION_PATTERNS: CorrelationPatternCatalog = {
       fields: ['session_duration', 'frequency_score', 'device_ip'],
       entityTypes: ['flows', 'alarms'],
       priority: 'medium',
-      useCase: 'Detect abnormal connection patterns'
-    }
+      useCase: 'Detect abnormal connection patterns',
+    },
   ],
   geographic: [
     {
@@ -158,7 +162,7 @@ export const DEFAULT_CORRELATION_PATTERNS: CorrelationPatternCatalog = {
       fields: ['country', 'geographic_risk_score', 'source_ip'],
       entityTypes: ['flows', 'alarms'],
       priority: 'high',
-      useCase: 'Geographic threat assessment'
+      useCase: 'Geographic threat assessment',
     },
     {
       id: 'asn_correlation',
@@ -167,7 +171,7 @@ export const DEFAULT_CORRELATION_PATTERNS: CorrelationPatternCatalog = {
       fields: ['asn', 'country', 'source_ip'],
       entityTypes: ['flows', 'alarms'],
       priority: 'medium',
-      useCase: 'ISP and hosting provider analysis'
+      useCase: 'ISP and hosting provider analysis',
     },
     {
       id: 'vpn_proxy_detection',
@@ -176,8 +180,8 @@ export const DEFAULT_CORRELATION_PATTERNS: CorrelationPatternCatalog = {
       fields: ['is_vpn', 'is_proxy', 'source_ip', 'country'],
       entityTypes: ['flows', 'alarms'],
       priority: 'medium',
-      useCase: 'Identify anonymization services usage'
-    }
+      useCase: 'Identify anonymization services usage',
+    },
   ],
   application: [
     {
@@ -187,7 +191,7 @@ export const DEFAULT_CORRELATION_PATTERNS: CorrelationPatternCatalog = {
       fields: ['application', 'application_category', 'severity'],
       entityTypes: ['flows', 'alarms'],
       priority: 'high',
-      useCase: 'Application-specific security monitoring'
+      useCase: 'Application-specific security monitoring',
     },
     {
       id: 'ssl_cert_analysis',
@@ -196,18 +200,19 @@ export const DEFAULT_CORRELATION_PATTERNS: CorrelationPatternCatalog = {
       fields: ['ssl_subject', 'ssl_issuer', 'destination_ip'],
       entityTypes: ['flows'],
       priority: 'medium',
-      useCase: 'Certificate validation and trust analysis'
+      useCase: 'Certificate validation and trust analysis',
     },
     {
       id: 'user_agent_correlation',
       name: 'User Agent Correlation',
-      description: 'Correlate user agent strings with applications and security events',
+      description:
+        'Correlate user agent strings with applications and security events',
       fields: ['user_agent', 'application', 'device_ip'],
       entityTypes: ['flows', 'alarms'],
       priority: 'low',
-      useCase: 'Browser and application fingerprinting'
-    }
-  ]
+      useCase: 'Browser and application fingerprinting',
+    },
+  ],
 };
 
 /**
@@ -219,44 +224,65 @@ export const COMMON_FIELD_COMBINATIONS = {
     ['device_ip', 'timestamp', 'protocol'],
     ['source_ip', 'device_id', 'timestamp'],
     ['severity', 'device_ip', 'timestamp'],
-    ['attack_vector', 'threat_level', 'source_ip']
+    ['attack_vector', 'threat_level', 'source_ip'],
   ],
   network_triples: [
     ['source_ip', 'destination_ip', 'port'],
     ['device_ip', 'protocol', 'bytes'],
     ['source_ip', 'asn', 'country'],
-    ['destination_ip', 'application', 'protocol']
+    ['destination_ip', 'application', 'protocol'],
   ],
   device_triples: [
     ['device_ip', 'device_vendor', 'device_type'],
     ['mac_vendor', 'device_group', 'online'],
-    ['device_id', 'network_segment', 'timestamp']
+    ['device_id', 'network_segment', 'timestamp'],
   ],
   application_triples: [
     ['application', 'application_category', 'user_agent'],
     ['ssl_subject', 'ssl_issuer', 'destination_ip'],
-    ['session_duration', 'frequency_score', 'application']
-  ]
+    ['session_duration', 'frequency_score', 'application'],
+  ],
 };
 
 /**
  * Current correlation patterns configuration (can be updated at runtime)
  */
-let currentCorrelationPatterns: CorrelationPatternCatalog = DEFAULT_CORRELATION_PATTERNS;
+let currentCorrelationPatterns: CorrelationPatternCatalog =
+  DEFAULT_CORRELATION_PATTERNS;
 
 /**
  * Update correlation patterns at runtime
  */
-export function updateCorrelationPatterns(newPatterns: Partial<CorrelationPatternCatalog>): void {
+export function updateCorrelationPatterns(
+  newPatterns: Partial<CorrelationPatternCatalog>
+): void {
   currentCorrelationPatterns = {
     ...currentCorrelationPatterns,
     ...newPatterns,
-    network: [...currentCorrelationPatterns.network, ...(newPatterns.network ?? [])],
-    security: [...currentCorrelationPatterns.security, ...(newPatterns.security ?? [])],
-    device: [...currentCorrelationPatterns.device, ...(newPatterns.device ?? [])],
-    temporal: [...currentCorrelationPatterns.temporal, ...(newPatterns.temporal ?? [])],
-    geographic: [...currentCorrelationPatterns.geographic, ...(newPatterns.geographic ?? [])],
-    application: [...currentCorrelationPatterns.application, ...(newPatterns.application ?? [])]
+    network: [
+      ...currentCorrelationPatterns.network,
+      ...(newPatterns.network ?? []),
+    ],
+    security: [
+      ...currentCorrelationPatterns.security,
+      ...(newPatterns.security ?? []),
+    ],
+    device: [
+      ...currentCorrelationPatterns.device,
+      ...(newPatterns.device ?? []),
+    ],
+    temporal: [
+      ...currentCorrelationPatterns.temporal,
+      ...(newPatterns.temporal ?? []),
+    ],
+    geographic: [
+      ...currentCorrelationPatterns.geographic,
+      ...(newPatterns.geographic ?? []),
+    ],
+    application: [
+      ...currentCorrelationPatterns.application,
+      ...(newPatterns.application ?? []),
+    ],
   };
 }
 
@@ -270,17 +296,19 @@ export function getCorrelationPatterns(): CorrelationPatternCatalog {
 /**
  * Get patterns by entity types
  */
-export function getPatternsByEntityTypes(entityTypes: EntityType[]): CorrelationPattern[] {
+export function getPatternsByEntityTypes(
+  entityTypes: EntityType[]
+): CorrelationPattern[] {
   const allPatterns = [
     ...currentCorrelationPatterns.network,
     ...currentCorrelationPatterns.security,
     ...currentCorrelationPatterns.device,
     ...currentCorrelationPatterns.temporal,
     ...currentCorrelationPatterns.geographic,
-    ...currentCorrelationPatterns.application
+    ...currentCorrelationPatterns.application,
   ];
-  
-  return allPatterns.filter(pattern => 
+
+  return allPatterns.filter(pattern =>
     pattern.entityTypes.some(type => entityTypes.includes(type))
   );
 }
@@ -288,41 +316,45 @@ export function getPatternsByEntityTypes(entityTypes: EntityType[]): Correlation
 /**
  * Get patterns by priority
  */
-export function getPatternsByPriority(priority: 'high' | 'medium' | 'low'): CorrelationPattern[] {
+export function getPatternsByPriority(
+  priority: 'high' | 'medium' | 'low'
+): CorrelationPattern[] {
   const allPatterns = [
     ...currentCorrelationPatterns.network,
     ...currentCorrelationPatterns.security,
     ...currentCorrelationPatterns.device,
     ...currentCorrelationPatterns.temporal,
     ...currentCorrelationPatterns.geographic,
-    ...currentCorrelationPatterns.application
+    ...currentCorrelationPatterns.application,
   ];
-  
+
   return allPatterns.filter(pattern => pattern.priority === priority);
 }
 
 /**
  * Get field combinations based on patterns and entity types
  */
-export function getRecommendedFieldCombinations(entityTypes: EntityType[]): string[][] {
+export function getRecommendedFieldCombinations(
+  entityTypes: EntityType[]
+): string[][] {
   const applicablePatterns = getPatternsByEntityTypes(entityTypes);
   const combinations = applicablePatterns.map(pattern => pattern.fields);
-  
+
   // Add common combinations based on entity types
   if (entityTypes.includes('flows') && entityTypes.includes('alarms')) {
     combinations.push(...COMMON_FIELD_COMBINATIONS.security_triples);
     combinations.push(...COMMON_FIELD_COMBINATIONS.network_triples);
   }
-  
+
   if (entityTypes.includes('devices')) {
     combinations.push(...COMMON_FIELD_COMBINATIONS.device_triples);
   }
-  
+
   // Remove duplicates and sort by length (simpler combinations first)
   const uniqueCombinations = Array.from(
     new Set(combinations.map(combo => JSON.stringify(combo.sort())))
   ).map(combo => JSON.parse(combo));
-  
+
   return uniqueCombinations.sort((a, b) => a.length - b.length);
 }
 
@@ -336,15 +368,17 @@ export function findPatternsByFields(fields: string[]): CorrelationPattern[] {
     ...currentCorrelationPatterns.device,
     ...currentCorrelationPatterns.temporal,
     ...currentCorrelationPatterns.geographic,
-    ...currentCorrelationPatterns.application
+    ...currentCorrelationPatterns.application,
   ];
-  
+
   const fieldSet = new Set(fields);
-  
+
   return allPatterns.filter(pattern => {
     const patternFieldSet = new Set(pattern.fields);
     // Check if there's overlap between pattern fields and provided fields
-    return pattern.fields.some(field => fieldSet.has(field)) ||
-           fields.some(field => patternFieldSet.has(field));
+    return (
+      pattern.fields.some(field => fieldSet.has(field)) ||
+      fields.some(field => patternFieldSet.has(field))
+    );
   });
 }

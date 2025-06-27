@@ -8,12 +8,15 @@ export interface HealthStatus {
   timestamp: string;
   version: string;
   uptime: number;
-  checks: Record<string, {
+  checks: Record<
+    string,
+    {
       status: 'pass' | 'fail' | 'warn';
       message?: string;
       responseTime?: number;
       details?: Record<string, unknown>;
-    }>;
+    }
+  >;
 }
 
 export class HealthCheckManager {
@@ -21,7 +24,6 @@ export class HealthCheckManager {
   private security: SecurityManager;
 
   constructor(
-     
     private firewalla: FirewallaClient,
     security?: SecurityManager
   ) {
@@ -48,7 +50,10 @@ export class HealthCheckManager {
     // Run checks in parallel for better performance
     const checkPromises = [
       this.checkConfig().then(result => ({ key: 'configuration', result })),
-      this.checkFirewallaAPI().then(result => ({ key: 'firewalla_api', result })),
+      this.checkFirewallaAPI().then(result => ({
+        key: 'firewalla_api',
+        result,
+      })),
       this.checkMemoryUsage().then(result => ({ key: 'memory', result })),
       this.checkCacheHealth().then(result => ({ key: 'cache', result })),
       this.checkSecurity().then(result => ({ key: 'security', result })),
@@ -60,7 +65,13 @@ export class HealthCheckManager {
       if (result.status === 'fulfilled' && result.value) {
         checks[result.value.key] = result.value.result;
       } else {
-        const checkNames = ['configuration', 'firewalla_api', 'memory', 'cache', 'security'];
+        const checkNames = [
+          'configuration',
+          'firewalla_api',
+          'memory',
+          'cache',
+          'security',
+        ];
         checks[checkNames[index] || 'unknown'] = {
           status: 'fail',
           message: 'Health check failed to execute',
@@ -95,7 +106,8 @@ export class HealthCheckManager {
     } catch (error) {
       return {
         status: 'fail',
-        message: error instanceof Error ? error.message : 'Configuration check failed',
+        message:
+          error instanceof Error ? error.message : 'Configuration check failed',
         responseTime: Date.now() - startTime,
       };
     }
@@ -125,7 +137,8 @@ export class HealthCheckManager {
     } catch (error) {
       return {
         status: 'fail',
-        message: error instanceof Error ? error.message : 'API connection failed',
+        message:
+          error instanceof Error ? error.message : 'API connection failed',
         responseTime: Date.now() - startTime,
       };
     }
@@ -138,7 +151,9 @@ export class HealthCheckManager {
       const memUsage = process.memoryUsage();
       const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
       const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
-      const heapUsagePercent = Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100);
+      const heapUsagePercent = Math.round(
+        (memUsage.heapUsed / memUsage.heapTotal) * 100
+      );
 
       const responseTime = Date.now() - startTime;
 
@@ -218,10 +233,10 @@ export class HealthCheckManager {
       // Check rate limiting functionality
       const testClientId = 'health-check-test';
       const rateLimitWorking = this.security.checkRateLimit(testClientId);
-      
+
       // Check input validation
       const validationWorking = this.security.validateInput('test input');
-      
+
       const responseTime = Date.now() - startTime;
 
       if (!rateLimitWorking || !validationWorking) {
@@ -250,17 +265,19 @@ export class HealthCheckManager {
     }
   }
 
-  private determineOverallStatus(checks: HealthStatus['checks']): HealthStatus['status'] {
+  private determineOverallStatus(
+    checks: HealthStatus['checks']
+  ): HealthStatus['status'] {
     const statuses = Object.values(checks).map(check => check.status);
-    
+
     if (statuses.includes('fail')) {
       return 'unhealthy';
     }
-    
+
     if (statuses.includes('warn')) {
       return 'degraded';
     }
-    
+
     return 'healthy';
   }
 
@@ -305,9 +322,10 @@ export class HealthCheckManager {
 
       return { ready: true };
     } catch (error) {
-      return { 
-        ready: false, 
-        reason: error instanceof Error ? error.message : 'Readiness check failed' 
+      return {
+        ready: false,
+        reason:
+          error instanceof Error ? error.message : 'Readiness check failed',
       };
     }
   }
@@ -325,9 +343,10 @@ export class HealthCheckManager {
 
       return { alive: true };
     } catch (error) {
-      return { 
-        alive: false, 
-        reason: error instanceof Error ? error.message : 'Liveness check failed' 
+      return {
+        alive: false,
+        reason:
+          error instanceof Error ? error.message : 'Liveness check failed',
       };
     }
   }

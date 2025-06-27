@@ -13,12 +13,18 @@ export class SecurityManager {
     SENSITIVE: 10, // requests per minute for sensitive operations
   };
 
-  private requestCounts = new Map<string, { count: number; resetTime: number }>();
+  private requestCounts = new Map<
+    string,
+    { count: number; resetTime: number }
+  >();
   private cleanupInterval: ReturnType<typeof setInterval>;
 
   constructor() {
     // Clean up old entries every 5 minutes
-    this.cleanupInterval = setInterval(() => this.cleanupRateLimits(), 5 * 60 * 1000);
+    this.cleanupInterval = setInterval(
+      () => this.cleanupRateLimits(),
+      5 * 60 * 1000
+    );
   }
 
   destroy(): void {
@@ -47,7 +53,7 @@ export class SecurityManager {
 
   sanitizeString(input: string): string {
     return input
-      .replace(/[<>"'&]/g, (match) => {
+      .replace(/[<>"'&]/g, match => {
         const map: Record<string, string> = {
           '<': '&lt;',
           '>': '&gt;',
@@ -61,13 +67,14 @@ export class SecurityManager {
   }
 
   checkRateLimit(clientId: string, operation = 'default'): boolean {
-    const limit = operation === 'sensitive' 
-      ? SecurityManager.RATE_LIMITS.SENSITIVE 
-      : SecurityManager.RATE_LIMITS.DEFAULT;
+    const limit =
+      operation === 'sensitive'
+        ? SecurityManager.RATE_LIMITS.SENSITIVE
+        : SecurityManager.RATE_LIMITS.DEFAULT;
 
     const now = Date.now();
     const windowStart = now - 60000; // 1 minute window
-    
+
     const key = `${clientId}:${operation}`;
     const current = this.requestCounts.get(key);
 
@@ -86,7 +93,7 @@ export class SecurityManager {
 
   private cleanupRateLimits(): void {
     const cutoff = Date.now() - 60000; // 1 minute ago
-    
+
     for (const [key, value] of this.requestCounts.entries()) {
       if (value.resetTime < cutoff) {
         this.requestCounts.delete(key);
@@ -95,29 +102,37 @@ export class SecurityManager {
   }
 
   validateOrigin(origin?: string): boolean {
-    if (!origin) {return true;} // Allow requests without origin (local tools)
-    
+    if (!origin) {
+      return true;
+    } // Allow requests without origin (local tools)
+
     // Parse the origin URL to get hostname for secure validation
     try {
-      const url = new URL(origin.startsWith('http') ? origin : `https://${origin}`);
-      const {hostname} = url;
-      
+      const url = new URL(
+        origin.startsWith('http') ? origin : `https://${origin}`
+      );
+      const { hostname } = url;
+
       return SecurityManager.ALLOWED_ORIGINS.some(allowed => {
         // For localhost, allow exact match and any port
         if (allowed === 'localhost') {
-          return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+          return (
+            hostname === 'localhost' ||
+            hostname === '127.0.0.1' ||
+            hostname === '::1'
+          );
         }
-        
+
         // For other domains, require exact match or proper subdomain match
         if (allowed === 'claude.ai') {
           return hostname === 'claude.ai' || hostname.endsWith('.claude.ai');
         }
-        
+
         // For claude-code (local application identifier), allow as-is
         if (allowed === 'claude-code') {
           return origin === 'claude-code';
         }
-        
+
         // For any other allowed origins, require exact hostname match
         return hostname === allowed || hostname.endsWith(`.${allowed}`);
       });
@@ -140,18 +155,18 @@ export class SecurityManager {
     if (data.length <= showChars * 2) {
       return '*'.repeat(data.length);
     }
-    
+
     const start = data.substring(0, showChars);
     const end = data.substring(data.length - showChars);
     const middle = '*'.repeat(data.length - showChars * 2);
-    
+
     return `${start}${middle}${end}`;
   }
 
   validateEnvironmentVars(): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
     const required = ['FIREWALLA_MSP_TOKEN', 'FIREWALLA_BOX_ID'];
-    
+
     for (const envVar of required) {
       if (!process.env[envVar]) {
         errors.push(`Missing required environment variable: ${envVar}`);
@@ -191,19 +206,23 @@ export class SecurityManager {
     process.stderr.write(`SECURITY_EVENT: ${JSON.stringify(logEntry)}\\n`);
   }
 
-  private sanitizeLogData(data: Record<string, unknown>): Record<string, unknown> {
+  private sanitizeLogData(
+    data: Record<string, unknown>
+  ): Record<string, unknown> {
     const sanitized: Record<string, unknown> = {};
-    
+
     for (const [key, value] of Object.entries(data)) {
-      if (key.toLowerCase().includes('token') || 
-          key.toLowerCase().includes('password') ||
-          key.toLowerCase().includes('secret')) {
+      if (
+        key.toLowerCase().includes('token') ||
+        key.toLowerCase().includes('password') ||
+        key.toLowerCase().includes('secret')
+      ) {
         sanitized[key] = this.maskSensitiveData(String(value));
       } else {
         sanitized[key] = value;
       }
     }
-    
+
     return sanitized;
   }
 }

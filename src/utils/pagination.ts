@@ -18,8 +18,11 @@ export interface PaginationConfig {
  * Falls back to environment variables for backward compatibility
  */
 const DEFAULT_PAGINATION_CONFIG: PaginationConfig = {
-  defaultPageSize: config.defaultPageSize || parseInt(process.env.DEFAULT_PAGE_SIZE || '100', 10),
-  maxPageSize: config.maxPageSize || parseInt(process.env.MAX_PAGE_SIZE || '10000', 10)
+  defaultPageSize:
+    config.defaultPageSize ||
+    parseInt(process.env.DEFAULT_PAGE_SIZE || '100', 10),
+  maxPageSize:
+    config.maxPageSize || parseInt(process.env.MAX_PAGE_SIZE || '10000', 10),
 };
 
 /**
@@ -30,10 +33,12 @@ let currentPaginationConfig: PaginationConfig = DEFAULT_PAGINATION_CONFIG;
 /**
  * Update pagination configuration at runtime
  */
-export function updatePaginationConfig(newConfig: Partial<PaginationConfig>): void {
+export function updatePaginationConfig(
+  newConfig: Partial<PaginationConfig>
+): void {
   currentPaginationConfig = {
     ...currentPaginationConfig,
-    ...newConfig
+    ...newConfig,
   };
 }
 
@@ -49,12 +54,12 @@ export function getPaginationConfig(): PaginationConfig {
  */
 export function getDefaultPageSize(requestedSize?: number): number {
   const config = getPaginationConfig();
-  
+
   if (requestedSize) {
     // Validate requested size against max
     return Math.min(requestedSize, config.maxPageSize);
   }
-  
+
   return config.defaultPageSize;
 }
 
@@ -86,7 +91,9 @@ export function encodeCursor(data: CursorData): string {
     const json = JSON.stringify(data);
     return Buffer.from(json, 'utf-8').toString('base64');
   } catch (error) {
-    throw new Error(`Failed to encode cursor: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(
+      `Failed to encode cursor: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }
 
@@ -102,23 +109,25 @@ export function decodeCursor(cursor: string): CursorData {
   try {
     const json = Buffer.from(cursor, 'base64').toString('utf-8');
     const data = JSON.parse(json);
-    
+
     // Validate cursor data structure
     if (!data || typeof data !== 'object') {
       throw new Error('Invalid cursor data structure');
     }
-    
+
     if (typeof data.offset !== 'number' || data.offset < 0) {
       throw new Error('Invalid cursor offset');
     }
-    
+
     if (typeof data.page_size !== 'number' || data.page_size < 1) {
       throw new Error('Invalid cursor page_size');
     }
-    
+
     return data as CursorData;
   } catch (error) {
-    throw new Error(`Failed to decode cursor: ${error instanceof Error ? error.message : 'Invalid cursor format'}`);
+    throw new Error(
+      `Failed to decode cursor: ${error instanceof Error ? error.message : 'Invalid cursor format'}`
+    );
   }
 }
 
@@ -142,7 +151,7 @@ export function paginateArray<T>(
   sort_order: 'asc' | 'desc' = 'asc'
 ): PaginatedResult<T> {
   let offset = 0;
-  
+
   // Decode cursor if provided
   if (cursor) {
     try {
@@ -158,32 +167,34 @@ export function paginateArray<T>(
       offset = 0;
     }
   }
-  
+
   // Sort items if sort_by is specified
   const sortedItems = [...items];
   if (sort_by) {
     sortedItems.sort((a: any, b: any) => {
       const aVal = a[sort_by];
       const bVal = b[sort_by];
-      
-      if (aVal === bVal) {return 0;}
-      
+
+      if (aVal === bVal) {
+        return 0;
+      }
+
       // Case-insensitive string comparison for consistent sorting
       const aStr = String(aVal).toLowerCase();
       const bStr = String(bVal).toLowerCase();
-      
+
       const comparison = aStr < bStr ? -1 : 1;
       return sort_order === 'desc' ? -comparison : comparison;
     });
   }
-  
+
   // Calculate pagination
   const total_count = sortedItems.length;
   const start_index = offset;
   const end_index = Math.min(start_index + page_size, total_count);
   const results = sortedItems.slice(start_index, end_index);
   const has_more = end_index < total_count;
-  
+
   // Generate next cursor if there are more items
   let next_cursor: string | undefined;
   if (has_more) {
@@ -192,17 +203,17 @@ export function paginateArray<T>(
       page_size,
       total_items: total_count,
       sort_by,
-      sort_order
+      sort_order,
     };
     next_cursor = encodeCursor(nextCursorData);
   }
-  
+
   return {
     results,
     next_cursor,
     total_count,
     page_size,
-    has_more
+    has_more,
   };
 }
 
@@ -228,7 +239,9 @@ export async function createPaginatedResponse<T>(
     const allItems = await dataFetcher();
     return paginateArray(allItems, cursor, page_size, sort_by, sort_order);
   } catch (error) {
-    throw new Error(`Failed to create paginated response: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(
+      `Failed to create paginated response: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }
 
@@ -260,6 +273,6 @@ export function formatPaginationResponse<T>(
     next_cursor: paginatedResult.next_cursor,
     has_more: paginatedResult.has_more,
     query,
-    execution_time_ms
+    execution_time_ms,
   };
 }

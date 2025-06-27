@@ -2,12 +2,12 @@
 
 /**
  * @fileoverview Firewalla MCP Server - Main server implementation for Model Context Protocol
- * 
+ *
  * This file implements the primary MCP server class that provides Claude with access to
  * Firewalla firewall data through standardized tools, resources, and prompts. The server
  * uses stdio transport for communication with Claude Code and supports advanced search
  * capabilities, security monitoring, and network analytics.
- * 
+ *
  * @version 1.0.0
  * @author Firewalla MCP Server Team
  * @since 2024-01-01
@@ -28,51 +28,51 @@ import { setupPrompts } from './prompts/index.js';
 
 /**
  * Main MCP Server class for Firewalla integration
- * 
+ *
  * Provides Claude with comprehensive access to Firewalla firewall data through:
  * - **Tools**: Interactive functions for querying data, managing rules, and device operations
  * - **Resources**: Read-only data sources for firewall status, metrics, and topology
  * - **Prompts**: Intelligent analysis prompts for security reports and threat investigation
- * 
+ *
  * The server communicates with Claude using the Model Context Protocol over stdio transport,
  * making it compatible with Claude Code and other MCP-enabled applications.
- * 
+ *
  * @example
  * ```typescript
  * // Create and start the MCP server
  * const server = new FirewallaMCPServer();
  * await server.start();
  * ```
- * 
+ *
  * @example
  * ```typescript
  * // Access through Claude Code
  * // "What security alerts do I have?"
- * // "Show me top bandwidth users"  
+ * // "Show me top bandwidth users"
  * // "Generate a security report for the last 24 hours"
  * ```
- * 
+ *
  * @class
  * @public
  */
 export class FirewallaMCPServer {
   /** @private The MCP server instance handling protocol communication */
   private server: Server;
-  
+
   /** @private The Firewalla API client for accessing firewall data */
   private firewalla: FirewallaClient;
 
   /**
    * Creates a new Firewalla MCP Server instance
-   * 
+   *
    * Initializes the MCP server with Firewalla integration capabilities including:
    * - Tool handlers for interactive queries and operations
    * - Resource endpoints for structured data access
    * - Prompt templates for intelligent analysis
-   * 
+   *
    * The server uses stdio transport for local Claude Code communication and
    * automatically configures authentication using environment variables.
-   * 
+   *
    * @throws {Error} If required environment variables are missing
    * @throws {Error} If Firewalla client initialization fails
    */
@@ -97,15 +97,15 @@ export class FirewallaMCPServer {
 
   /**
    * Sets up MCP protocol request handlers for tools, resources, and prompts
-   * 
+   *
    * Configures the server to respond to MCP protocol requests by registering handlers for:
    * - **ListToolsRequest**: Returns available interactive tools with input schemas
    * - **ListResourcesRequest**: Returns available data resources with URIs
    * - **ListPromptsRequest**: Returns intelligent analysis prompt templates
-   * 
+   *
    * Each handler provides complete metadata including input validation schemas,
    * descriptions, and parameter requirements for proper MCP client integration.
-   * 
+   *
    * @private
    * @returns {void}
    */
@@ -270,7 +270,8 @@ export class FirewallaMCPServer {
                 },
                 summary_only: {
                   type: 'boolean',
-                  description: 'Return minimal rule information to reduce token usage (default: false)',
+                  description:
+                    'Return minimal rule information to reduce token usage (default: false)',
                 },
               },
               required: ['limit'],
@@ -383,7 +384,8 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_statistics_by_box',
-            description: 'Get statistics for each Firewalla box with activity scores',
+            description:
+              'Get statistics for each Firewalla box with activity scores',
             inputSchema: {
               type: 'object',
               properties: {},
@@ -402,7 +404,8 @@ export class FirewallaMCPServer {
                 },
                 interval: {
                   type: 'number',
-                  description: 'Interval between data points in seconds (default: 3600)',
+                  description:
+                    'Interval between data points in seconds (default: 3600)',
                   minimum: 60,
                   maximum: 86400,
                 },
@@ -445,7 +448,8 @@ export class FirewallaMCPServer {
               properties: {
                 query: {
                   type: 'string',
-                  description: 'Search query using advanced syntax (e.g., "severity:high AND source_ip:192.168.*")',
+                  description:
+                    'Search query using advanced syntax (e.g., "severity:high AND source_ip:192.168.*")',
                 },
                 limit: {
                   type: 'number',
@@ -461,41 +465,47 @@ export class FirewallaMCPServer {
                 time_range: {
                   type: 'object',
                   properties: {
-                    start: { type: 'string', description: 'Start time (ISO 8601)' },
-                    end: { type: 'string', description: 'End time (ISO 8601)' }
+                    start: {
+                      type: 'string',
+                      description: 'Start time (ISO 8601)',
+                    },
+                    end: { type: 'string', description: 'End time (ISO 8601)' },
                   },
-                  description: 'Optional time range filter'
+                  description: 'Optional time range filter',
                 },
                 include_blocked: {
                   type: 'boolean',
-                  description: 'Include blocked flows (default: true)'
+                  description: 'Include blocked flows (default: true)',
                 },
                 min_bytes: {
                   type: 'number',
-                  description: 'Minimum flow size in bytes'
+                  description: 'Minimum flow size in bytes',
                 },
                 group_by: {
                   type: 'string',
                   enum: ['source', 'destination', 'protocol', 'device'],
-                  description: 'Group results by field'
+                  description: 'Group results by field',
                 },
                 aggregate: {
                   type: 'boolean',
-                  description: 'Include aggregation statistics (default: false)'
-                }
+                  description:
+                    'Include aggregation statistics (default: false)',
+                },
               },
               required: ['query', 'limit'],
             },
           },
           {
             name: 'search_alarms',
-            description: 'Advanced alarm searching with severity, time, and IP filters',
+            description:
+              'Advanced alarm searching with severity, time, and IP filters',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
-                  description: 'Search query (e.g., "severity:>=high AND source_ip:192.168.*")',
+                  description:
+                    'Search query (e.g., "severity:>=high AND source_ip:192.168.*")',
                 },
                 limit: {
                   type: 'number',
@@ -510,34 +520,37 @@ export class FirewallaMCPServer {
                 },
                 include_resolved: {
                   type: 'boolean',
-                  description: 'Include resolved alarms (default: false)'
+                  description: 'Include resolved alarms (default: false)',
                 },
                 min_severity: {
                   type: 'string',
                   enum: ['low', 'medium', 'high', 'critical'],
-                  description: 'Minimum severity level'
+                  description: 'Minimum severity level',
                 },
                 time_window: {
                   type: 'string',
-                  description: 'Time window for search (e.g., "24h", "7d")'
+                  description: 'Time window for search (e.g., "24h", "7d")',
                 },
                 aggregate: {
                   type: 'boolean',
-                  description: 'Include aggregation statistics (default: false)'
-                }
+                  description:
+                    'Include aggregation statistics (default: false)',
+                },
               },
               required: ['query', 'limit'],
             },
           },
           {
             name: 'search_rules',
-            description: 'Advanced rule searching with target, action, and status filters',
+            description:
+              'Advanced rule searching with target, action, and status filters',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
-                  description: 'Search query (e.g., "action:block AND target_value:*.facebook.com")',
+                  description:
+                    'Search query (e.g., "action:block AND target_value:*.facebook.com")',
                 },
                 limit: {
                   type: 'number',
@@ -552,41 +565,44 @@ export class FirewallaMCPServer {
                 },
                 include_paused: {
                   type: 'boolean',
-                  description: 'Include paused rules (default: true)'
+                  description: 'Include paused rules (default: true)',
                 },
                 actions: {
                   type: 'array',
                   items: {
                     type: 'string',
-                    enum: ['allow', 'block', 'timelimit']
+                    enum: ['allow', 'block', 'timelimit'],
                   },
-                  description: 'Filter by rule actions'
+                  description: 'Filter by rule actions',
                 },
                 directions: {
                   type: 'array',
                   items: {
                     type: 'string',
-                    enum: ['bidirection', 'inbound', 'outbound']
+                    enum: ['bidirection', 'inbound', 'outbound'],
                   },
-                  description: 'Filter by traffic directions'
+                  description: 'Filter by traffic directions',
                 },
                 aggregate: {
                   type: 'boolean',
-                  description: 'Include aggregation statistics (default: false)'
-                }
+                  description:
+                    'Include aggregation statistics (default: false)',
+                },
               },
               required: ['query', 'limit'],
             },
           },
           {
             name: 'search_devices',
-            description: 'Advanced device searching with network, status, and usage filters',
+            description:
+              'Advanced device searching with network, status, and usage filters',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
-                  description: 'Search query (e.g., "online:true AND mac_vendor:Apple")',
+                  description:
+                    'Search query (e.g., "online:true AND mac_vendor:Apple")',
                 },
                 limit: {
                   type: 'number',
@@ -596,43 +612,48 @@ export class FirewallaMCPServer {
                 },
                 offset: {
                   type: 'number',
-                  description: 'Results offset for pagination (default: 0) - DEPRECATED: use cursor',
+                  description:
+                    'Results offset for pagination (default: 0) - DEPRECATED: use cursor',
                   minimum: 0,
                 },
                 cursor: {
                   type: 'string',
-                  description: 'Pagination cursor from previous response (preferred over offset)',
+                  description:
+                    'Pagination cursor from previous response (preferred over offset)',
                 },
                 include_offline: {
                   type: 'boolean',
-                  description: 'Include offline devices (default: true)'
+                  description: 'Include offline devices (default: true)',
                 },
                 network_ids: {
                   type: 'array',
                   items: { type: 'string' },
-                  description: 'Filter by network IDs'
+                  description: 'Filter by network IDs',
                 },
                 last_seen_threshold: {
                   type: 'number',
-                  description: 'Minimum last seen threshold (seconds ago)'
+                  description: 'Minimum last seen threshold (seconds ago)',
                 },
                 aggregate: {
                   type: 'boolean',
-                  description: 'Include aggregation statistics (default: false)'
-                }
+                  description:
+                    'Include aggregation statistics (default: false)',
+                },
               },
               required: ['query', 'limit'],
             },
           },
           {
             name: 'search_target_lists',
-            description: 'Advanced target list searching with category and ownership filters',
+            description:
+              'Advanced target list searching with category and ownership filters',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
-                  description: 'Search query (e.g., "category:ad AND owner:global")',
+                  description:
+                    'Search query (e.g., "category:ad AND owner:global")',
                 },
                 limit: {
                   type: 'number',
@@ -648,28 +669,30 @@ export class FirewallaMCPServer {
                 owners: {
                   type: 'array',
                   items: { type: 'string' },
-                  description: 'Filter by list owners'
+                  description: 'Filter by list owners',
                 },
                 categories: {
                   type: 'array',
                   items: { type: 'string' },
-                  description: 'Filter by categories'
+                  description: 'Filter by categories',
                 },
                 min_targets: {
                   type: 'number',
-                  description: 'Minimum number of targets in list'
+                  description: 'Minimum number of targets in list',
                 },
                 aggregate: {
                   type: 'boolean',
-                  description: 'Include aggregation statistics (default: false)'
-                }
+                  description:
+                    'Include aggregation statistics (default: false)',
+                },
               },
               required: ['query', 'limit'],
             },
           },
           {
             name: 'search_cross_reference',
-            description: 'Multi-entity searches with correlation across different data types',
+            description:
+              'Multi-entity searches with correlation across different data types',
             inputSchema: {
               type: 'object',
               properties: {
@@ -680,25 +703,33 @@ export class FirewallaMCPServer {
                 secondary_queries: {
                   type: 'array',
                   items: { type: 'string' },
-                  description: 'Secondary queries to correlate with primary results',
+                  description:
+                    'Secondary queries to correlate with primary results',
                 },
                 correlation_field: {
                   type: 'string',
-                  description: 'Field to use for correlation (e.g., "source_ip", "destination_ip")',
+                  description:
+                    'Field to use for correlation (e.g., "source_ip", "destination_ip")',
                 },
                 limit: {
                   type: 'number',
                   description: 'Maximum results per query',
                   minimum: 1,
                   maximum: 10000,
-                }
+                },
               },
-              required: ['primary_query', 'secondary_queries', 'correlation_field', 'limit'],
+              required: [
+                'primary_query',
+                'secondary_queries',
+                'correlation_field',
+                'limit',
+              ],
             },
           },
           {
             name: 'get_network_rules_summary',
-            description: 'Get overview statistics and counts of network rules by category',
+            description:
+              'Get overview statistics and counts of network rules by category',
             inputSchema: {
               type: 'object',
               properties: {
@@ -708,14 +739,16 @@ export class FirewallaMCPServer {
                 },
                 active_only: {
                   type: 'boolean',
-                  description: 'Only include active rules in summary (default: true)',
+                  description:
+                    'Only include active rules in summary (default: true)',
                 },
               },
             },
           },
           {
             name: 'get_most_active_rules',
-            description: 'Get rules with highest hit counts for traffic analysis',
+            description:
+              'Get rules with highest hit counts for traffic analysis',
             inputSchema: {
               type: 'object',
               properties: {
@@ -746,7 +779,8 @@ export class FirewallaMCPServer {
               properties: {
                 hours: {
                   type: 'number',
-                  description: 'Look back period in hours (default: 24, max: 168)',
+                  description:
+                    'Look back period in hours (default: 24, max: 168)',
                   minimum: 1,
                   maximum: 168,
                 },
@@ -762,7 +796,8 @@ export class FirewallaMCPServer {
                 },
                 include_modified: {
                   type: 'boolean',
-                  description: 'Include recently modified rules, not just created (default: true)',
+                  description:
+                    'Include recently modified rules, not just created (default: true)',
                 },
               },
               required: ['limit'],
@@ -891,7 +926,7 @@ export class FirewallaMCPServer {
   /**
    * Starts the MCP server and begins listening for requests
    * Uses stdio transport for communication with Claude Code
-   * 
+   *
    * @returns Promise that resolves when the server is running
    * @throws Will throw an error if server startup fails
    */

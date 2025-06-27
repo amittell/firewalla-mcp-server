@@ -18,11 +18,11 @@ function smartSplitCommas(value: string): string[] {
   let current = '';
   let inQuotes = false;
   let quoteChar = '';
-  
+
   for (let i = 0; i < value.length; i++) {
     const char = value[i];
     const prevChar = i > 0 ? value[i - 1] : '';
-    
+
     if ((char === '"' || char === "'") && prevChar !== '\\') {
       if (!inQuotes) {
         inQuotes = true;
@@ -32,7 +32,7 @@ function smartSplitCommas(value: string): string[] {
         quoteChar = '';
       }
     }
-    
+
     if (char === ',' && !inQuotes) {
       result.push(current.trim());
       current = '';
@@ -40,11 +40,11 @@ function smartSplitCommas(value: string): string[] {
       current += char;
     }
   }
-  
+
   if (current.trim()) {
     result.push(current.trim());
   }
-  
+
   return result;
 }
 
@@ -53,7 +53,20 @@ function smartSplitCommas(value: string): string[] {
  */
 interface QueryComponent {
   field?: string;
-  operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'nin' | 'contains' | 'startswith' | 'endswith' | 'regex' | 'range';
+  operator:
+    | 'eq'
+    | 'neq'
+    | 'gt'
+    | 'gte'
+    | 'lt'
+    | 'lte'
+    | 'in'
+    | 'nin'
+    | 'contains'
+    | 'startswith'
+    | 'endswith'
+    | 'regex'
+    | 'range';
   value: string | number | boolean | Array<string | number | boolean>;
   logical?: 'AND' | 'OR' | 'NOT';
 }
@@ -70,7 +83,7 @@ interface ParsedQuery {
 
 /**
  * Splits a string by logical operators while respecting quoted substrings.
- * 
+ *
  * Logical operators (AND, OR, NOT) inside single or double quotes are ignored as split points.
  * Returns an array of tokens with logical operators preserved as separate elements.
  *
@@ -83,11 +96,11 @@ function smartSplitLogicalOperators(query: string): string[] {
   let inQuotes = false;
   let quoteChar = '';
   let i = 0;
-  
+
   while (i < query.length) {
     const char = query[i];
     const prevChar = i > 0 ? query[i - 1] : '';
-    
+
     // Handle quote state
     if ((char === '"' || char === "'") && prevChar !== '\\') {
       if (!inQuotes) {
@@ -101,28 +114,28 @@ function smartSplitLogicalOperators(query: string): string[] {
       i++;
       continue;
     }
-    
+
     // If we're inside quotes, just add the character
     if (inQuotes) {
       current += char;
       i++;
       continue;
     }
-    
+
     // Check for logical operators outside quotes
     const remaining = query.slice(i);
     const logicalMatch = remaining.match(/^\s+(AND|OR|NOT)\s+/i);
-    
+
     if (logicalMatch) {
       // Add current token if not empty
       if (current.trim()) {
         result.push(current.trim());
         current = '';
       }
-      
+
       // Add the logical operator
       result.push(logicalMatch[1].toUpperCase());
-      
+
       // Skip past the matched logical operator and whitespace
       i += logicalMatch[0].length;
     } else {
@@ -130,12 +143,12 @@ function smartSplitLogicalOperators(query: string): string[] {
       i++;
     }
   }
-  
+
   // Add remaining token if not empty
   if (current.trim()) {
     result.push(current.trim());
   }
-  
+
   return result;
 }
 
@@ -150,7 +163,7 @@ function smartSplitLogicalOperators(query: string): string[] {
 export function parseSearchQuery(query: string): ParsedQuery {
   const components: QueryComponent[] = [];
   const filters: SearchFilter[] = [];
-  
+
   // Complexity scoring system:
   // - Base complexity: 1
   // - Logical operators (AND, OR, NOT): +0.5 each
@@ -166,54 +179,54 @@ export function parseSearchQuery(query: string): ParsedQuery {
 
   // Remove extra whitespace and normalize
   const normalized = query.trim().replace(/\s+/g, ' ');
-  
+
   // Split by logical operators while preserving them and respecting quotes
   const tokens = smartSplitLogicalOperators(normalized);
-  
+
   let currentLogical: 'AND' | 'OR' | 'NOT' | undefined;
-  
+
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i]?.trim();
     if (!token) {
       continue;
     }
-    
+
     // Check if token is a logical operator
     if (/^(AND|OR|NOT)$/i.test(token)) {
       currentLogical = token.toUpperCase() as 'AND' | 'OR' | 'NOT';
       complexity += 0.5;
       continue;
     }
-    
+
     // Parse field:value expressions
     const component = parseFieldExpression(token);
     if (component) {
       component.logical = currentLogical;
       components.push(component);
-      
+
       // Convert to SearchFilter format
       if (component.field) {
         filters.push({
           field: component.field,
           operator: component.operator,
-          value: component.value
+          value: component.value,
         });
       }
-      
+
       complexity += getOperatorComplexity(component.operator);
     }
-    
+
     currentLogical = undefined;
   }
-  
+
   // Generate optimized query string
   const optimized = optimizeQuery(components);
-  
+
   return {
     components,
     filters,
     optimized,
-    complexity: Math.round(complexity * 100) / 100
+    complexity: Math.round(complexity * 100) / 100,
   };
 }
 
@@ -228,7 +241,7 @@ export function parseSearchQuery(query: string): ParsedQuery {
 function parseFieldExpression(expression: string): QueryComponent | null {
   // Handle parentheses (basic support)
   const cleaned = expression.replace(/[()]/g, '').trim();
-  
+
   // Range syntax: field:[min TO max]
   const rangeMatch = cleaned.match(/^(\w+):\[(.+?)\s+TO\s+(.+?)\]$/i);
   if (rangeMatch) {
@@ -236,10 +249,12 @@ function parseFieldExpression(expression: string): QueryComponent | null {
     return {
       field,
       operator: 'range',
-      value: [parseValue(min), parseValue(max)] as Array<string | number | boolean>
+      value: [parseValue(min), parseValue(max)] as Array<
+        string | number | boolean
+      >,
     };
   }
-  
+
   // Comparison operators: field:>=value, field:>value, etc.
   const comparisonMatch = cleaned.match(/^(\w+):(>=|<=|>|<|!=|=)(.+)$/);
   if (comparisonMatch) {
@@ -248,45 +263,47 @@ function parseFieldExpression(expression: string): QueryComponent | null {
     return {
       field,
       operator,
-      value: parseValue(value)
+      value: parseValue(value),
     };
   }
-  
+
   // Standard field:value syntax
   const fieldMatch = cleaned.match(/^(\w+):(.+)$/);
   if (fieldMatch) {
     const [, field, value] = fieldMatch;
-    
+
     // Detect wildcards
     if (value.includes('*') || value.includes('?')) {
       return {
         field,
         operator: 'regex',
-        value: convertWildcardToRegex(value)
+        value: convertWildcardToRegex(value),
       };
     }
-    
+
     // Detect array values (comma-separated), but handle commas within quotes
     if (value.includes(',')) {
       const arrayValues = smartSplitCommas(value);
       return {
         field,
         operator: 'in',
-        value: arrayValues.map(v => parseValue(v.trim())).filter(v => v !== null)
+        value: arrayValues
+          .map(v => parseValue(v.trim()))
+          .filter(v => v !== null),
       };
     }
-    
+
     return {
       field,
       operator: 'eq',
-      value: parseValue(value)
+      value: parseValue(value),
     };
   }
-  
+
   // Free-text search (no field specified)
   return {
     operator: 'contains',
-    value: cleaned
+    value: cleaned,
   };
 }
 
@@ -300,25 +317,27 @@ function parseFieldExpression(expression: string): QueryComponent | null {
  */
 function parseValue(value: string): string | number | boolean {
   const trimmed = value.trim();
-  
+
   // Boolean values
   if (/^(true|false)$/i.test(trimmed)) {
     return trimmed.toLowerCase() === 'true';
   }
-  
+
   // Numeric values
   if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
     return parseFloat(trimmed);
   }
-  
+
   // Remove quotes if present and handle escaped quotes
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-      (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
     const unquoted = trimmed.slice(1, -1);
     // Handle escaped quotes within the string
     return unquoted.replace(/\\(.)/g, '$1');
   }
-  
+
   return trimmed;
 }
 
@@ -330,13 +349,20 @@ function parseValue(value: string): string | number | boolean {
  */
 function mapComparisonOperator(op: string): QueryComponent['operator'] {
   switch (op) {
-    case '>=': return 'gte';
-    case '<=': return 'lte';
-    case '>': return 'gt';
-    case '<': return 'lt';
-    case '!=': return 'neq';
-    case '=': return 'eq';
-    default: return 'eq';
+    case '>=':
+      return 'gte';
+    case '<=':
+      return 'lte';
+    case '>':
+      return 'gt';
+    case '<':
+      return 'lt';
+    case '!=':
+      return 'neq';
+    case '=':
+      return 'eq';
+    default:
+      return 'eq';
   }
 }
 
@@ -355,34 +381,36 @@ function convertWildcardToRegex(pattern: string): string {
   if (pattern.length > 100) {
     throw new Error('Wildcard pattern too long (max 100 characters)');
   }
-  
+
   // Check for dangerous patterns that could cause ReDoS
   const dangerousPatterns = [
-    /(\*\+|\+\*)/,           // Nested quantifiers
-    /(\*\{|\{\*)/,           // Quantifier combinations
-    /(\.\*){5,}/,            // Too many .* sequences
-    /(\*.*\*.*\*.*\*)/,      // Multiple wildcards in sequence
+    /(\*\+|\+\*)/, // Nested quantifiers
+    /(\*\{|\{\*)/, // Quantifier combinations
+    /(\.\*){5,}/, // Too many .* sequences
+    /(\*.*\*.*\*.*\*)/, // Multiple wildcards in sequence
   ];
-  
+
   for (const dangerousPattern of dangerousPatterns) {
     if (dangerousPattern.test(pattern)) {
-      throw new Error('Wildcard pattern contains potentially dangerous sequences');
+      throw new Error(
+        'Wildcard pattern contains potentially dangerous sequences'
+      );
     }
   }
-  
+
   // Escape special regex characters except * and ?
   const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-  
+
   // Convert wildcards to regex with limited quantifiers
   const result = escaped
-    .replace(/\*/g, '[^\\s]*')  // * becomes [^\s]* (non-greedy, no whitespace)
-    .replace(/\?/g, '[^\\s]');  // ? becomes [^\s] (single non-whitespace char)
-  
+    .replace(/\*/g, '[^\\s]*') // * becomes [^\s]* (non-greedy, no whitespace)
+    .replace(/\?/g, '[^\\s]'); // ? becomes [^\s] (single non-whitespace char)
+
   // Validate the resulting regex pattern length
   if (result.length > 200) {
     throw new Error('Generated regex pattern too complex');
   }
-  
+
   return result;
 }
 
@@ -390,13 +418,13 @@ function convertWildcardToRegex(pattern: string): string {
  * Returns the complexity score associated with a given query operator.
  *
  * The complexity scoring system helps optimize query execution and resource allocation:
- * 
+ *
  * **Score Ranges:**
  * - 1.0-1.2: Simple operations (equality, comparison)
  * - 1.3-1.9: Moderate operations (array membership, basic filters)
  * - 2.0-2.9: Complex operations (pattern matching, regex, ranges)
  * - 3.0+: Very complex operations (full-text search, advanced algorithms)
- * 
+ *
  * **Usage:**
  * - Scores are summed across all query components
  * - Higher complexity queries may be subject to additional validation
@@ -409,19 +437,26 @@ function convertWildcardToRegex(pattern: string): string {
 function getOperatorComplexity(operator: QueryComponent['operator']): number {
   switch (operator) {
     case 'eq':
-    case 'neq': return 1;
+    case 'neq':
+      return 1;
     case 'gt':
     case 'gte':
     case 'lt':
-    case 'lte': return 1.2;
+    case 'lte':
+      return 1.2;
     case 'in':
-    case 'nin': return 1.5;
+    case 'nin':
+      return 1.5;
     case 'contains':
     case 'startswith':
-    case 'endswith': return 2;
-    case 'regex': return 3;
-    case 'range': return 2.5;
-    default: return 1;
+    case 'endswith':
+      return 2;
+    case 'regex':
+      return 3;
+    case 'range':
+      return 2.5;
+    default:
+      return 1;
   }
 }
 
@@ -440,19 +475,22 @@ function optimizeQuery(components: QueryComponent[]): string {
     const bComplexity = getOperatorComplexity(b.operator);
     return aComplexity - bComplexity;
   });
-  
+
   // Rebuild optimized query string
-  return sorted.map(component => {
-    const logical = component.logical ? `${component.logical} ` : '';
-    const field = component.field ? `${component.field}:` : '';
-    const value = Array.isArray(component.value) 
-      ? component.operator === 'range' 
-        ? `[${component.value.join(' TO ')}]`
-        : component.value.join(',')
-      : component.value;
-    
-    return `${logical}${field}${value}`;
-  }).join(' ').trim();
+  return sorted
+    .map(component => {
+      const logical = component.logical ? `${component.logical} ` : '';
+      const field = component.field ? `${component.field}:` : '';
+      const value = Array.isArray(component.value)
+        ? component.operator === 'range'
+          ? `[${component.value.join(' TO ')}]`
+          : component.value.join(',')
+        : component.value;
+
+      return `${logical}${field}${value}`;
+    })
+    .join(' ')
+    .trim();
 }
 
 const DEFAULT_MAX_COMPLEXITY = 10;
@@ -467,82 +505,103 @@ const DEFAULT_MAX_COMPLEXITY = 10;
  * @returns An object with a boolean `valid` flag and an array of `errors` describing any validation failures
  */
 export function validateSearchQuery(
-  query: string, 
+  query: string,
   maxComplexity: number = DEFAULT_MAX_COMPLEXITY
 ): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
-  
+
   try {
     const parsed = parseSearchQuery(query);
-    
+
     // Check for empty query
     if (!query.trim()) {
       errors.push('Query cannot be empty');
     }
-    
+
     // Check complexity limit
     if (parsed.complexity > maxComplexity) {
-      errors.push(`Query too complex (${parsed.complexity}). Maximum complexity is ${maxComplexity}.`);
+      errors.push(
+        `Query too complex (${parsed.complexity}). Maximum complexity is ${maxComplexity}.`
+      );
     }
-    
+
     // Check for unsupported operators and validate regex patterns
     for (const component of parsed.components) {
-      if (component.operator === 'regex' && typeof component.value === 'string') {
+      if (
+        component.operator === 'regex' &&
+        typeof component.value === 'string'
+      ) {
         try {
           const pattern = component.value;
-          
+
           // Check pattern length to prevent ReDoS
           if (pattern.length > 100) {
-            errors.push(`Regex pattern too long (max 100 characters): ${pattern}`);
+            errors.push(
+              `Regex pattern too long (max 100 characters): ${pattern}`
+            );
             continue;
           }
-          
+
           // Check for catastrophic backtracking patterns
           const catastrophicPatterns = [
-            /(\(.*\*.*\)){2,}/,        // Nested groups with quantifiers
-            /(\.\*\+|\+\.\*)/,         // Greedy quantifier combinations
-            /(\w\*\+|\+\w\*)/,         // Word character quantifier combinations
-            /(\.\*){3,}/,              // Multiple .* sequences
-            /(.*\+.*\+.*\+)/,          // Multiple + quantifiers
+            /(\(.*\*.*\)){2,}/, // Nested groups with quantifiers
+            /(\.\*\+|\+\.\*)/, // Greedy quantifier combinations
+            /(\w\*\+|\+\w\*)/, // Word character quantifier combinations
+            /(\.\*){3,}/, // Multiple .* sequences
+            /(.*\+.*\+.*\+)/, // Multiple + quantifiers
           ];
-          
+
           for (const catPattern of catastrophicPatterns) {
             if (catPattern.test(pattern)) {
-              errors.push(`Regex pattern contains potentially catastrophic backtracking: ${pattern}`);
+              errors.push(
+                `Regex pattern contains potentially catastrophic backtracking: ${pattern}`
+              );
               break;
             }
           }
-          
+
           const regex = new RegExp(pattern);
-          
+
           // Test regex with various inputs to ensure it doesn't hang
-          const testInputs = ['', 'a', 'test', '123', 'long_test_string_with_various_chars_123'];
+          const testInputs = [
+            '',
+            'a',
+            'test',
+            '123',
+            'long_test_string_with_various_chars_123',
+          ];
           const testTimeout = 100; // 100ms timeout for regex testing
-          
+
           for (const testInput of testInputs) {
             const start = Date.now();
             regex.test(testInput);
             const elapsed = Date.now() - start;
-            
+
             if (elapsed > testTimeout) {
-              errors.push(`Regex pattern takes too long to execute (${elapsed}ms): ${pattern}`);
+              errors.push(
+                `Regex pattern takes too long to execute (${elapsed}ms): ${pattern}`
+              );
               break;
             }
           }
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          errors.push(`Invalid regex pattern: ${component.value} (${errorMessage})`);
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          errors.push(
+            `Invalid regex pattern: ${component.value} (${errorMessage})`
+          );
         }
       }
     }
-    
   } catch (error) {
-    errors.push(`Parse error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    errors.push(
+      `Parse error: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
-  
+
   return {
     valid: errors.length === 0,
-    errors
+    errors,
   };
 }
 
@@ -559,7 +618,7 @@ export function buildSearchOptions(
 ): SearchOptions {
   return {
     filters: parsedQuery.filters,
-    ...additionalOptions
+    ...additionalOptions,
   };
 }
 
@@ -575,12 +634,12 @@ export function formatQueryForAPI(query: string): string {
   if (!query || typeof query !== 'string' || !query.trim()) {
     return '';
   }
-  
+
   const validation = validateSearchQuery(query);
   if (!validation.valid) {
     throw new Error(`Invalid query: ${validation.errors.join(', ')}`);
   }
-  
+
   const parsed = parseSearchQuery(query);
   return parsed.optimized || query;
 }

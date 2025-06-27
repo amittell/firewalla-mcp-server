@@ -15,7 +15,9 @@ interface TimestampDetectionResult {
 /**
  * Advanced timestamp detection and conversion to handle multiple formats
  */
-export function detectAndConvertTimestamp(input: number | string | null | undefined): TimestampDetectionResult | null {
+export function detectAndConvertTimestamp(
+  input: number | string | null | undefined
+): TimestampDetectionResult | null {
   if (input === null || input === undefined) {
     return null;
   }
@@ -28,10 +30,10 @@ export function detectAndConvertTimestamp(input: number | string | null | undefi
       return {
         timestamp: isoDate.getTime(),
         format: 'iso_string',
-        confidence: 1.0
+        confidence: 1.0,
       };
     }
-    
+
     // Try parsing as number string
     const numInput = Number(input);
     if (isNaN(numInput)) {
@@ -47,24 +49,28 @@ export function detectAndConvertTimestamp(input: number | string | null | undefi
   // Detect timestamp format based on magnitude
   const now = Date.now();
   const currentUnixSeconds = Math.floor(now / 1000);
-  
+
   // Unix seconds range: roughly 1970 to 2038 (and beyond)
-  if (input >= 946684800 && input <= 4102444800) { // 2000-01-01 to 2100-01-01
-    const confidence = Math.abs(input - currentUnixSeconds) < (365 * 24 * 3600) ? 0.9 : 0.7; // High confidence if within a year
+  if (input >= 946684800 && input <= 4102444800) {
+    // 2000-01-01 to 2100-01-01
+    const confidence =
+      Math.abs(input - currentUnixSeconds) < 365 * 24 * 3600 ? 0.9 : 0.7; // High confidence if within a year
     return {
       timestamp: input * 1000, // Convert to milliseconds
       format: 'unix_seconds',
-      confidence
+      confidence,
     };
   }
-  
+
   // Unix milliseconds range
-  if (input >= 946684800000 && input <= 4102444800000) { // 2000-01-01 to 2100-01-01 in ms
-    const confidence = Math.abs(input - now) < (365 * 24 * 3600 * 1000) ? 0.9 : 0.7; // High confidence if within a year
+  if (input >= 946684800000 && input <= 4102444800000) {
+    // 2000-01-01 to 2100-01-01 in ms
+    const confidence =
+      Math.abs(input - now) < 365 * 24 * 3600 * 1000 ? 0.9 : 0.7; // High confidence if within a year
     return {
       timestamp: input,
       format: 'unix_milliseconds',
-      confidence
+      confidence,
     };
   }
 
@@ -78,7 +84,9 @@ export function detectAndConvertTimestamp(input: number | string | null | undefi
  * @returns The ISO 8601 formatted date string representing the given timestamp.
  * @throws Error if the timestamp is null, undefined, not a finite number, or negative.
  */
-export function unixToISOString(timestamp: number | string | null | undefined): string {
+export function unixToISOString(
+  timestamp: number | string | null | undefined
+): string {
   if (timestamp === null || timestamp === undefined) {
     throw new Error('Timestamp cannot be null or undefined');
   }
@@ -99,7 +107,7 @@ export function unixToISOString(timestamp: number | string | null | undefined): 
  * @returns The ISO 8601 formatted date string, or the fallback value if conversion fails.
  */
 export function safeUnixToISOString(
-  timestamp: number | string | null | undefined, 
+  timestamp: number | string | null | undefined,
   fallback: string = 'Never'
 ): string {
   try {
@@ -118,7 +126,9 @@ export function safeUnixToISOString(
  * @param timestamp - The Unix timestamp in seconds, as a number or string
  * @returns The ISO 8601 formatted date string, or the current date and time if the timestamp is invalid
  */
-export function unixToISOStringOrNow(timestamp: number | string | null | undefined): string {
+export function unixToISOStringOrNow(
+  timestamp: number | string | null | undefined
+): string {
   try {
     if (timestamp === null || timestamp === undefined) {
       return new Date().toISOString();
@@ -149,25 +159,35 @@ export function convertTimestampWithDetection(
     minimumConfidence?: number;
   }
 ): string | { result: string; detection: TimestampDetectionResult } {
-  const { 
-    fallback = 'Never', 
-    includeDetectionInfo = false, 
-    minimumConfidence = 0.5 
+  const {
+    fallback = 'Never',
+    includeDetectionInfo = false,
+    minimumConfidence = 0.5,
   } = options || {};
 
   try {
     if (timestamp === null || timestamp === undefined) {
       const result = fallback;
-      return includeDetectionInfo 
-        ? { result, detection: { timestamp: 0, format: 'unknown', confidence: 0 } } 
+      return includeDetectionInfo
+        ? {
+            result,
+            detection: { timestamp: 0, format: 'unknown', confidence: 0 },
+          }
         : result;
     }
 
     const detection = detectAndConvertTimestamp(timestamp);
     if (!detection || detection.confidence < minimumConfidence) {
       const result = fallback;
-      return includeDetectionInfo 
-        ? { result, detection: detection || { timestamp: 0, format: 'unknown', confidence: 0 } } 
+      return includeDetectionInfo
+        ? {
+            result,
+            detection: detection || {
+              timestamp: 0,
+              format: 'unknown',
+              confidence: 0,
+            },
+          }
         : result;
     }
 
@@ -175,8 +195,11 @@ export function convertTimestampWithDetection(
     return includeDetectionInfo ? { result, detection } : result;
   } catch {
     const result = fallback;
-    return includeDetectionInfo 
-      ? { result, detection: { timestamp: 0, format: 'unknown', confidence: 0 } } 
+    return includeDetectionInfo
+      ? {
+          result,
+          detection: { timestamp: 0, format: 'unknown', confidence: 0 },
+        }
       : result;
   }
 }

@@ -1,22 +1,22 @@
 /**
  * @fileoverview Configuration management for Firewalla MCP Server
- * 
+ *
  * Provides centralized configuration loading from environment variables with validation
  * and type safety. Handles MSP API credentials, timeout settings, rate limiting, and
  * caching configuration for optimal Firewalla API integration.
- * 
+ *
  * Required environment variables:
  * - FIREWALLA_MSP_TOKEN: MSP API access token
  * - FIREWALLA_MSP_ID: MSP domain (e.g., 'yourdomain.firewalla.net')
  * - FIREWALLA_BOX_ID: Firewalla box Global ID (GID)
- * 
+ *
  * Optional environment variables:
  * - API_TIMEOUT: Request timeout in milliseconds (default: 30000)
- * - API_RATE_LIMIT: Requests per minute limit (default: 100)  
+ * - API_RATE_LIMIT: Requests per minute limit (default: 100)
  * - CACHE_TTL: Cache time-to-live in seconds (default: 300)
  * - DEFAULT_PAGE_SIZE: Default pagination page size (default: 100)
  * - MAX_PAGE_SIZE: Maximum allowed pagination page size (default: 10000)
- * 
+ *
  * @version 1.0.0
  * @author Firewalla MCP Server Team
  * @since 2024-01-01
@@ -29,7 +29,7 @@ dotenv.config();
 
 /**
  * Retrieves a required environment variable with validation
- * 
+ *
  * @param name - The environment variable name to retrieve
  * @returns The environment variable value
  * @throws {Error} If the environment variable is not set or empty
@@ -42,10 +42,9 @@ function getRequiredEnvVar(name: string): string {
   return value;
 }
 
-
 /**
  * Safely parses an environment variable to an integer with validation
- * 
+ *
  * @param name - The environment variable name to parse
  * @param defaultValue - The default value to use if parsing fails
  * @param min - Optional minimum value for validation
@@ -53,41 +52,52 @@ function getRequiredEnvVar(name: string): string {
  * @returns The parsed integer value or the default value
  * @throws {Error} If the parsed value is outside the valid range
  */
-function getOptionalEnvInt(name: string, defaultValue: number, min?: number, max?: number): number {
+function getOptionalEnvInt(
+  name: string,
+  defaultValue: number,
+  min?: number,
+  max?: number
+): number {
   const envValue = process.env[name];
   if (envValue === undefined || envValue === '') {
     return defaultValue;
   }
-  
+
   const parsed = parseInt(envValue, 10);
   if (isNaN(parsed)) {
     // eslint-disable-next-line no-console
-    console.warn(`Invalid numeric value for ${name}: ${envValue}, using default: ${defaultValue}`);
+    console.warn(
+      `Invalid numeric value for ${name}: ${envValue}, using default: ${defaultValue}`
+    );
     return defaultValue;
   }
-  
+
   if (min !== undefined && parsed < min) {
-    throw new Error(`Environment variable ${name} must be at least ${min}, got: ${parsed}`);
+    throw new Error(
+      `Environment variable ${name} must be at least ${min}, got: ${parsed}`
+    );
   }
-  
+
   if (max !== undefined && parsed > max) {
-    throw new Error(`Environment variable ${name} must be at most ${max}, got: ${parsed}`);
+    throw new Error(
+      `Environment variable ${name} must be at most ${max}, got: ${parsed}`
+    );
   }
-  
+
   return parsed;
 }
 
 /**
  * Creates and validates the complete Firewalla configuration
- * 
+ *
  * Loads all required and optional configuration values from environment variables,
  * validates their presence and format, and returns a typed configuration object
  * ready for use by the Firewalla client.
- * 
+ *
  * @returns {FirewallaConfig} Complete validated configuration object
  * @throws {Error} If any required environment variables are missing
  * @throws {Error} If numeric environment variables cannot be parsed
- * 
+ *
  * @example
  * ```typescript
  * const config = getConfig();
@@ -110,11 +120,11 @@ export function getConfig(): FirewallaConfig {
 
 /**
  * Default configuration instance for the Firewalla MCP Server
- * 
+ *
  * Pre-loaded configuration object that can be imported and used throughout
  * the application. This instance is created at module load time and includes
  * all validated environment variables.
- * 
+ *
  * @constant {FirewallaConfig}
  * @example
  * ```typescript
