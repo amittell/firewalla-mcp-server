@@ -4,6 +4,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
+.pnpm-debug.log*
+.pnpm-store/
+.yarn/
+.npm/
 
 # Build outputs
 dist/
@@ -11,6 +15,14 @@ build/
 *.tsbuildinfo
 lib/
 out/
+types/
+esm/
+cjs/
+umd/
+es5/
+es2015/
+es2017/
+.turbo/
 
 # Environment files - NEVER COMMIT PRODUCTION CREDENTIALS!
 .env
@@ -51,10 +63,25 @@ pids/
 coverage/
 *.lcov
 .nyc_output
+.coverage/
+coverage-final.json
+lcov.info
+clover.xml
+coverage.xml
+.jest/
+.vitest/
 
 # Test results
 test-results/
 junit.xml
+test-report.xml
+*.spec.log
+*.test.log
+.test-results/
+playwright-report/
+test-screenshots/
+__tests__/coverage/
+.vitest-cache/
 
 # Cache directories
 .cache/
@@ -65,9 +92,18 @@ junit.xml
 .rts2_cache_cjs/
 .rts2_cache_es/
 .rts2_cache_umd/
-
-# Optional npm cache directory
-.npm
+.swc/
+.next/
+.nuxt/
+.vuepress/dist/
+.vuepress/.cache/
+.serverless/
+.webpack/
+.vite/
+.rollup.cache/
+.esbuild/
+.wrangler/
+node_modules/.cache/
 
 # Optional REPL history
 .node_repl_history
@@ -87,6 +123,7 @@ junit.xml
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+!.vscode/snippets/
 .idea/
 *.swp
 *.swo
@@ -98,6 +135,12 @@ junit.xml
 .settings/
 *.sublime-workspace
 *.sublime-project
+.fleet/
+.nova/
+.vimrc.local
+.nvimrc.local
+.phpstorm.meta.php
+*.code-workspace
 
 # OS generated files
 .DS_Store
@@ -127,11 +170,18 @@ temp/
 mcp_servers.json
 test_credentials.js
 .mcp.json
+claude-desktop/
 
 # Database files
 *.db
 *.sqlite
 *.sqlite3
+*.db-journal
+*.db-shm
+*.db-wal
+database.json
+data/
+storage/
 
 # Production configs (keep examples)
 docker-compose.yml
@@ -251,12 +301,72 @@ private-key*
 *.private
 .secrets/
 secrets/
+.aws/
+.gcp/
+.azure/
+*.cert
+*.pfx
+.ssh/
+ssh_config
+auth_token*
+bearer_token*
+access_token*
+refresh_token*
 
 # Firewalla MCP specific
 firewalla-config.json
 msp-token.txt
 box-id.txt
 
+# Docker and deployment
+docker-compose.override.yml
+docker-compose.local.yml
+Dockerfile.local
+.dockerignore.local
+kubernetes/
+helm/
+terraform/
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
 # Git
 .git/
 .gitconfig.claude/settings.local.json
+
+# Modern development tools
+.husky/_/
+.commitlintrc.local.*
+.lintstagedrc.local.*
+.prettierrc.local.*
+.eslintrc.local.*
+tsconfig.local.json
+webpack.config.local.*
+vite.config.local.*
+rollup.config.local.*
+babel.config.local.*
+jest.config.local.*
+.storybook/local/
+
+# Performance monitoring
+.clinic/
+0x/
+*.cpuprofile
+*.heapdump
+
+# AI and ML models
+models/
+*.model
+*.pt
+*.onnx
+*.pkl
+*.h5
+
+# Miscellaneous
+.direnv
+.envrc
+.tool-versions
+.python-version
+.node-version
+.nvmrc.local

@@ -6,7 +6,7 @@ import { BaseToolHandler, ToolArgs, ToolResponse } from './base.js';
 import { FirewallaClient } from '../../firewalla/client.js';
 import { ParameterValidator, SafeAccess, createErrorResponse } from '../../validation/error-handler.js';
 import { optimizeRuleResponse, DEFAULT_OPTIMIZATION_CONFIG } from '../../optimization/index.js';
-import { unixToISOString, safeUnixToISOString, getCurrentTimestamp } from '../../utils/timestamp.js';
+import { safeUnixToISOString, getCurrentTimestamp } from '../../utils/timestamp.js';
 
 export class GetNetworkRulesHandler extends BaseToolHandler {
   name = 'get_network_rules';

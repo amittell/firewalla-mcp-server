@@ -13,6 +13,7 @@ import {
   DEFAULT_CORRELATION_WEIGHTS,
   DEFAULT_FUZZY_CONFIG
 } from './enhanced-correlation.js';
+import { getRecommendedFieldCombinations } from '../config/correlation-patterns.js';
 
 export type EntityType = 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists';
 
@@ -887,14 +888,12 @@ export function getSupportedCorrelationCombinations(entityTypes: EntityType[]): 
     }
   }
   
-  // Three field combinations for common patterns
-  const commonTriples = [
-    ['source_ip', 'destination_ip', 'protocol'],
-    ['device_ip', 'timestamp', 'protocol'],
-    ['source_ip', 'device_id', 'timestamp']
-  ].filter(triple => triple.every(field => supportedFields.includes(field)));
+  // Three field combinations from configurable patterns
+  const recommendedCombinations = getRecommendedFieldCombinations(entityTypes)
+    .filter(combo => combo.length === 3) // Only three-field combinations
+    .filter(combo => combo.every(field => supportedFields.includes(field)));
   
-  combinations.push(...commonTriples);
+  combinations.push(...recommendedCombinations);
   
   return combinations;
 }

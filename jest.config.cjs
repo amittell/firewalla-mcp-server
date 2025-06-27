@@ -8,7 +8,10 @@ module.exports = {
     '**/?(*.)+(spec|test).ts'
   ],
   transform: {
-    '^.+\\.ts$': ['ts-jest', { useESM: true }]
+    '^.+\\.ts$': ['ts-jest', { 
+      useESM: true,
+      tsconfig: 'tsconfig.test.json'
+    }]
   },
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1'
@@ -21,6 +24,6 @@ module.exports = {
     '/dist/',
     '/coverage/'
   ],
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/tests/setup/jest-setup.ts'],
   testTimeout: 10000
 };

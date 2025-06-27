@@ -8,7 +8,7 @@ import { SafeAccess } from '../../validation/error-handler.js';
 import { createSearchTools } from '../search.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
 import { SearchParams } from '../../search/types.js';
-import { EnhancedCorrelationParams, ScoringCorrelationParams } from '../../validation/field-mapper.js';
+import { ScoringCorrelationParams } from '../../validation/field-mapper.js';
 
 // Search argument interfaces for type safety
 export interface SearchFlowsArgs extends ToolArgs {

@@ -387,14 +387,20 @@ export class SearchEngine {
         throw new Error(`Query validation failed: ${queryCheck.errors.join(', ')}`);
       }
       
-      const validation = queryParser.parse(queryCheck.sanitizedValue, entityType as 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists');
+      // Validate entityType before parsing
+      const validEntityTypes = ['flows', 'alarms', 'rules', 'devices', 'target_lists'] as const;
+      if (!validEntityTypes.includes(entityType as any)) {
+        throw new Error(`Invalid entity type: ${entityType}`);
+      }
+      
+      const validation = queryParser.parse(queryCheck.sanitizedValue, entityType as typeof validEntityTypes[number]);
       if (!validation.isValid || !validation.ast) {
         throw new Error(`Invalid query syntax: ${validation.errors.join(', ')}`);
       }
 
-      // Set up filter context
+      // Set up filter context (entityType already validated above)
       const context: FilterContext = {
-        entityType: entityType as 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists',
+        entityType: entityType as typeof validEntityTypes[number],
         apiParams: {},
         postProcessing: [],
         metadata: {
@@ -462,9 +468,10 @@ export class SearchEngine {
         aggregations
       };
 
-      // Add cursor for devices
+      // Add cursor for devices with proper typing
       if (entityType === 'devices' && response.next_cursor) {
-        (result as any).next_cursor = response.next_cursor;
+        const resultWithCursor = result as SearchResult & { next_cursor?: string };
+        resultWithCursor.next_cursor = response.next_cursor;
       }
 
       return result;
@@ -474,15 +481,6 @@ export class SearchEngine {
     }
   }
 
-  /**
-   * Validate basic query parameters
-   */
-  private validateBasicQuery(params: SearchParams): { isValid: boolean; errors?: string[] } {
-    if (!params || !params.query || typeof params.query !== 'string') {
-      return { isValid: false, errors: ['Invalid search parameters: query is required and must be a string'] };
-    }
-    return { isValid: true };
-  }
 
   /**
    * Execute a search query for flows

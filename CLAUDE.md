@@ -17,10 +17,19 @@ npm run build
 ```bash
 npm run dev          # Build and start development server
 npm run build        # Build TypeScript to JavaScript
+npm run build:clean  # Clean build directory and rebuild
 npm run test         # Run all tests
 npm run test:watch   # Run tests in watch mode
+npm run test:ci      # Run tests with coverage for CI
+npm run test:unit    # Run unit tests only
+npm run test:integration # Run integration tests only
 npm run lint         # Run ESLint
 npm run lint:fix     # Fix ESLint issues automatically
+npm run lint:check   # Check linting with zero warnings
+npm run format       # Format code with Prettier
+npm run format:check # Check code formatting
+npm run typecheck    # Type checking without emitting files
+npm run clean        # Clean all generated files
 ```
 
 ### MCP Server Testing

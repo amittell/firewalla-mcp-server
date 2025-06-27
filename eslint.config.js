@@ -28,17 +28,132 @@ export default [
       '@typescript-eslint': tseslint
     },
     rules: {
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      // TypeScript-specific type safety rules
+      '@typescript-eslint/no-unused-vars': ['error', { 
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_'
+      }],
       '@typescript-eslint/explicit-function-return-type': 'warn',
-      '@typescript-eslint/no-explicit-any': 'warn', // Enabled to encourage better type safety
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unsafe-assignment': 'warn',
+      '@typescript-eslint/no-unsafe-call': 'warn',
+      '@typescript-eslint/no-unsafe-member-access': 'warn',
+      '@typescript-eslint/no-unsafe-return': 'warn',
+      '@typescript-eslint/no-unsafe-argument': 'warn',
+      '@typescript-eslint/strict-boolean-expressions': 'warn',
+      '@typescript-eslint/prefer-nullish-coalescing': 'warn',
+      '@typescript-eslint/prefer-optional-chain': 'error',
+      '@typescript-eslint/no-non-null-assertion': 'warn',
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/await-thenable': 'error',
+      '@typescript-eslint/require-await': 'warn',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'warn',
+      '@typescript-eslint/prefer-as-const': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/promise-function-async': 'warn',
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+      '@typescript-eslint/consistent-type-definitions': ['warn', 'interface'],
+      '@typescript-eslint/consistent-type-imports': ['warn', { prefer: 'type-imports' }],
+      '@typescript-eslint/no-import-type-side-effects': 'warn',
+      '@typescript-eslint/array-type': ['warn', { default: 'array-simple' }],
+      '@typescript-eslint/consistent-indexed-object-style': ['warn', 'record'],
+      '@typescript-eslint/method-signature-style': ['warn', 'property'],
+      
+      // Enhanced null/undefined checking
+      '@typescript-eslint/no-unnecessary-condition': 'warn',
+      '@typescript-eslint/prefer-includes': 'error',
+      '@typescript-eslint/prefer-string-starts-ends-with': 'error',
+      
+      // Function and parameter rules
+      '@typescript-eslint/explicit-member-accessibility': 'off', // Too strict for existing code
+      '@typescript-eslint/parameter-properties': 'off',
+      '@typescript-eslint/no-parameter-properties': 'off',
+      
+      // General JavaScript best practices
       'prefer-const': 'error',
       'no-var': 'error',
       'no-console': 'warn',
       'eqeqeq': 'error',
-      'curly': 'error'
+      'curly': 'error',
+      'no-throw-literal': 'error',
+      'no-return-await': 'error',
+      'prefer-template': 'error',
+      'prefer-object-spread': 'error',
+      'prefer-destructuring': ['error', { object: true, array: false }],
+      'object-shorthand': 'error',
+      'no-duplicate-imports': 'error',
+      'no-useless-return': 'error',
+      'no-else-return': 'error',
+      'no-lonely-if': 'error',
+      'no-unneeded-ternary': 'error',
+      'yoda': 'error',
+      
+      // Error handling
+      'no-empty': 'error',
+      
+      // Security and safety
+      'no-eval': 'error',
+      'no-implied-eval': 'error',
+      'no-new-func': 'error',
+      'no-script-url': 'error',
+      'no-caller': 'error',
+      'no-proto': 'error',
+      'no-extend-native': 'error',
+      
+      // Performance
+      'no-loop-func': 'error'
     }
   },
   {
-    ignores: ['dist/', 'node_modules/', '*.js', '!eslint.config.js']
+    files: ['tests/**/*.ts', '**/*.test.ts', '**/*.spec.ts'],
+    languageOptions: {
+      parser: tsparser,
+      parserOptions: {
+        ecmaVersion: 2020,
+        sourceType: 'module',
+        project: './tsconfig.test.json'
+      },
+      globals: {
+        jest: 'readonly',
+        expect: 'readonly',
+        describe: 'readonly',
+        it: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        process: 'readonly',
+        console: 'readonly'
+      }
+    },
+    plugins: {
+      '@typescript-eslint': tseslint
+    },
+    rules: {
+      // Relaxed rules for test files
+      '@typescript-eslint/no-unused-vars': ['error', { 
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_|^mock',
+        caughtErrorsIgnorePattern: '^_'
+      }],
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unsafe-assignment': 'warn',
+      '@typescript-eslint/no-unsafe-call': 'warn',
+      '@typescript-eslint/no-unsafe-member-access': 'warn',
+      '@typescript-eslint/no-unsafe-return': 'warn',
+      '@typescript-eslint/no-unsafe-argument': 'warn',
+      '@typescript-eslint/strict-boolean-expressions': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'warn',
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/explicit-member-accessibility': 'off',
+      'no-console': 'off', // Allow console.log in tests
+      'prefer-const': 'error',
+      'no-var': 'error'
+    }
+  },
+  {
+    ignores: ['dist/', 'node_modules/', '*.js', '!eslint.config.js', 'coverage/']
   }
 ];
