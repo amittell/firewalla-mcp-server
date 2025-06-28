@@ -170,7 +170,7 @@ describe('Timestamp Utilities - Edge Cases', () => {
 
     test('should return different timestamps when called multiple times', async () => {
       const timestamp1 = getCurrentTimestamp();
-      await new Promise(resolve => setTimeout(resolve, 1)); // Wait 1ms
+      await new Promise(resolve => setTimeout(resolve, 10)); // Wait 10ms to ensure different timestamps
       const timestamp2 = getCurrentTimestamp();
       expect(timestamp1).not.toBe(timestamp2);
     });
