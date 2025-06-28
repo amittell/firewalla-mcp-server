@@ -22,7 +22,7 @@ import type { FirewallaClient } from '../../firewalla/client.js';
  * Flexible key-value structure that allows tools to accept various parameter types
  * while maintaining type safety through individual tool implementations.
  */
-export type ToolArgs = Record<string, any>;
+export type ToolArgs = Record<string, unknown>;
 
 /**
  * Standardized response structure for MCP tool execution

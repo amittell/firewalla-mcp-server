@@ -273,7 +273,9 @@ function scoreEntityCorrelation(
   // Apply correlation type logic for AND/OR
   let finalScore = correlationScore;
   if (correlationType === 'AND') {
-    // For AND logic, penalize missing field matches
+    // For AND logic, penalize missing field matches by multiplying the score
+    // by the completeness ratio. This ensures that AND correlations require
+    // all fields to match for a high score (e.g., 2/3 matches = 67% penalty)
     const matchingFields = Object.values(fieldScores).filter(score => score > 0).length;
     const completeness = matchingFields / correlationFields.length;
     finalScore = correlationScore * completeness;

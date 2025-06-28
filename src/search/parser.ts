@@ -512,10 +512,18 @@ export class QueryParser {
    * Parse and convert values to appropriate types
    */
   private parseValue(value: string): string | number {
-    // Try to parse as number
-    const num = parseFloat(value);
-    if (!isNaN(num) && Number.isFinite(num)) {
-      return num;
+    // Check if value is an integer
+    if (/^-?\d+$/.test(value)) {
+      const int = parseInt(value, 10);
+      if (Number.isSafeInteger(int)) {
+        return int;
+      }
+    } else if (/^-?\d+\.\d+$/.test(value)) {
+      // Handle float values
+      const float = parseFloat(value);
+      if (!isNaN(float) && Number.isFinite(float)) {
+        return float;
+      }
     }
     return value;
   }

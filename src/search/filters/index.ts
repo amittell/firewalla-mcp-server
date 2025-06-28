@@ -271,10 +271,10 @@ export class FilterFactory {
         }
       }
 
-      // Combine cache keys
+      // Combine cache keys with unique separator to avoid conflicts
       if (filterResult.cacheKeyComponent) {
         result.cacheKeyComponent +=
-          (result.cacheKeyComponent ? '|' : '') +
+          (result.cacheKeyComponent ? '::' : '') +
           filterResult.cacheKeyComponent;
       }
     }
