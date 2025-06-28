@@ -549,7 +549,7 @@ export class SearchEngine {
         count: response.count || results.length,
         limit: params.limit || 100,
         offset: params.offset || 0,
-        query: (queryCheck?.sanitizedValue as string) || (params.query),
+        query: (queryCheck?.sanitizedValue as string) || params.query,
         execution_time_ms: Date.now() - startTime,
         aggregations,
       };
@@ -1664,7 +1664,10 @@ export class SearchEngine {
       if (isVpn) {
         analysis.vpn_flows++;
       }
-      if (riskScore && Number(riskScore) >= getRiskThresholds().highRiskFlowMin) {
+      if (
+        riskScore &&
+        Number(riskScore) >= getRiskThresholds().highRiskFlowMin
+      ) {
         analysis.high_risk_flows++;
       }
     });
@@ -1728,7 +1731,11 @@ export class SearchEngine {
       const riskScore =
         getFieldValue(alarm, 'geographic_risk_score', 'alarms') || 0;
 
-      if (country && typeof country === 'string' && Number(riskScore) >= getRiskThresholds().highRiskCountryMin) {
+      if (
+        country &&
+        typeof country === 'string' &&
+        Number(riskScore) >= getRiskThresholds().highRiskCountryMin
+      ) {
         threats.high_risk_countries[country] =
           (threats.high_risk_countries[country] || 0) + 1;
       }
@@ -1738,7 +1745,11 @@ export class SearchEngine {
           (threats.threat_by_continent[continent] || 0) + 1;
       }
 
-      if (asn && typeof asn === 'string' && Number(riskScore) >= getRiskThresholds().suspiciousAsnMin) {
+      if (
+        asn &&
+        typeof asn === 'string' &&
+        Number(riskScore) >= getRiskThresholds().suspiciousAsnMin
+      ) {
         threats.suspicious_asns[asn] = (threats.suspicious_asns[asn] || 0) + 1;
       }
 

@@ -146,31 +146,58 @@ export class SearchFlowsHandler extends BaseToolHandler {
       const result = await searchTools.search_flows(searchParams);
 
       return this.createSuccessResponse({
-        count: SafeAccess.safeArrayAccess((result as any).results, arr => arr.length, 0),
+        count: SafeAccess.safeArrayAccess(
+          (result as any).results,
+          arr => arr.length,
+          0
+        ),
         query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
         execution_time_ms: SafeAccess.getNestedValue(
           result as any,
           'execution_time_ms',
           0
         ),
-        flows: SafeAccess.safeArrayMap((result as any).results, (flow: Flow) => ({
-          timestamp: unixToISOStringOrNow(flow.ts),
-          source_ip: SafeAccess.getNestedValue(flow as any, 'source.ip', 'unknown'),
-          destination_ip: SafeAccess.getNestedValue(
-            flow as any,
-            'destination.ip',
-            'unknown'
-          ),
-          protocol: SafeAccess.getNestedValue(flow as any, 'protocol', 'unknown'),
-          // bytes field is calculated as total traffic: download + upload
-          bytes:
-            (SafeAccess.getNestedValue(flow as any, 'download', 0) as number) +
-            (SafeAccess.getNestedValue(flow as any, 'upload', 0) as number),
-          blocked: SafeAccess.getNestedValue(flow as any, 'block', false),
-          direction: SafeAccess.getNestedValue(flow as any, 'direction', 'unknown'),
-          device: SafeAccess.getNestedValue(flow as any, 'device', {}),
-        })),
-        aggregations: SafeAccess.getNestedValue(result as any, 'aggregations', null),
+        flows: SafeAccess.safeArrayMap(
+          (result as any).results,
+          (flow: Flow) => ({
+            timestamp: unixToISOStringOrNow(flow.ts),
+            source_ip: SafeAccess.getNestedValue(
+              flow as any,
+              'source.ip',
+              'unknown'
+            ),
+            destination_ip: SafeAccess.getNestedValue(
+              flow as any,
+              'destination.ip',
+              'unknown'
+            ),
+            protocol: SafeAccess.getNestedValue(
+              flow as any,
+              'protocol',
+              'unknown'
+            ),
+            // bytes field is calculated as total traffic: download + upload
+            bytes:
+              (SafeAccess.getNestedValue(
+                flow as any,
+                'download',
+                0
+              ) as number) +
+              (SafeAccess.getNestedValue(flow as any, 'upload', 0) as number),
+            blocked: SafeAccess.getNestedValue(flow as any, 'block', false),
+            direction: SafeAccess.getNestedValue(
+              flow as any,
+              'direction',
+              'unknown'
+            ),
+            device: SafeAccess.getNestedValue(flow as any, 'device', {}),
+          })
+        ),
+        aggregations: SafeAccess.getNestedValue(
+          result as any,
+          'aggregations',
+          null
+        ),
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -208,23 +235,54 @@ export class SearchAlarmsHandler extends BaseToolHandler {
       const result = await searchTools.search_alarms(searchParams);
 
       return this.createSuccessResponse({
-        count: SafeAccess.safeArrayAccess((result as any).results, arr => arr.length, 0),
+        count: SafeAccess.safeArrayAccess(
+          (result as any).results,
+          arr => arr.length,
+          0
+        ),
         query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
         execution_time_ms: SafeAccess.getNestedValue(
           result as any,
           'execution_time_ms',
           0
         ),
-        alarms: SafeAccess.safeArrayMap((result as any).results, (alarm: Alarm) => ({
-          timestamp: unixToISOStringOrNow(alarm.ts),
-          type: SafeAccess.getNestedValue(alarm as any, 'type', 'unknown'),
-          message: SafeAccess.getNestedValue(alarm as any, 'message', 'No message'),
-          direction: SafeAccess.getNestedValue(alarm as any, 'direction', 'unknown'),
-          protocol: SafeAccess.getNestedValue(alarm as any, 'protocol', 'unknown'),
-          status: SafeAccess.getNestedValue(alarm as any, 'status', 'unknown'),
-          severity: SafeAccess.getNestedValue(alarm as any, 'severity', 'unknown'),
-        })),
-        aggregations: SafeAccess.getNestedValue(result as any, 'aggregations', null),
+        alarms: SafeAccess.safeArrayMap(
+          (result as any).results,
+          (alarm: Alarm) => ({
+            timestamp: unixToISOStringOrNow(alarm.ts),
+            type: SafeAccess.getNestedValue(alarm as any, 'type', 'unknown'),
+            message: SafeAccess.getNestedValue(
+              alarm as any,
+              'message',
+              'No message'
+            ),
+            direction: SafeAccess.getNestedValue(
+              alarm as any,
+              'direction',
+              'unknown'
+            ),
+            protocol: SafeAccess.getNestedValue(
+              alarm as any,
+              'protocol',
+              'unknown'
+            ),
+            status: SafeAccess.getNestedValue(
+              alarm as any,
+              'status',
+              'unknown'
+            ),
+            severity: SafeAccess.getNestedValue(
+              alarm as any,
+              'severity',
+              'unknown'
+            ),
+          })
+        ),
+        aggregations: SafeAccess.getNestedValue(
+          result as any,
+          'aggregations',
+          null
+        ),
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -262,31 +320,46 @@ export class SearchRulesHandler extends BaseToolHandler {
       const result = await searchTools.search_rules(searchParams);
 
       return this.createSuccessResponse({
-        count: SafeAccess.safeArrayAccess((result as any).results, arr => arr.length, 0),
+        count: SafeAccess.safeArrayAccess(
+          (result as any).results,
+          arr => arr.length,
+          0
+        ),
         query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
         execution_time_ms: SafeAccess.getNestedValue(
           result as any,
           'execution_time_ms',
           0
         ),
-        rules: SafeAccess.safeArrayMap((result as any).results, (rule: NetworkRule) => ({
-          id: SafeAccess.getNestedValue(rule as any, 'id', 'unknown'),
-          action: SafeAccess.getNestedValue(rule as any, 'action', 'unknown'),
-          target_type: SafeAccess.getNestedValue(
-            rule as any,
-            'target.type',
-            'unknown'
-          ),
-          target_value: SafeAccess.getNestedValue(
-            rule as any,
-            'target.value',
-            'unknown'
-          ),
-          direction: SafeAccess.getNestedValue(rule as any, 'direction', 'unknown'),
-          status: SafeAccess.getNestedValue(rule as any, 'status', 'unknown'),
-          hit_count: SafeAccess.getNestedValue(rule as any, 'hit.count', 0),
-        })),
-        aggregations: SafeAccess.getNestedValue(result as any, 'aggregations', null),
+        rules: SafeAccess.safeArrayMap(
+          (result as any).results,
+          (rule: NetworkRule) => ({
+            id: SafeAccess.getNestedValue(rule as any, 'id', 'unknown'),
+            action: SafeAccess.getNestedValue(rule as any, 'action', 'unknown'),
+            target_type: SafeAccess.getNestedValue(
+              rule as any,
+              'target.type',
+              'unknown'
+            ),
+            target_value: SafeAccess.getNestedValue(
+              rule as any,
+              'target.value',
+              'unknown'
+            ),
+            direction: SafeAccess.getNestedValue(
+              rule as any,
+              'direction',
+              'unknown'
+            ),
+            status: SafeAccess.getNestedValue(rule as any, 'status', 'unknown'),
+            hit_count: SafeAccess.getNestedValue(rule as any, 'hit.count', 0),
+          })
+        ),
+        aggregations: SafeAccess.getNestedValue(
+          result as any,
+          'aggregations',
+          null
+        ),
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -325,22 +398,41 @@ export class SearchDevicesHandler extends BaseToolHandler {
       const result = await searchTools.search_devices(searchParams);
 
       return this.createSuccessResponse({
-        count: SafeAccess.safeArrayAccess((result as any).results, arr => arr.length, 0),
+        count: SafeAccess.safeArrayAccess(
+          (result as any).results,
+          arr => arr.length,
+          0
+        ),
         query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
         execution_time_ms: SafeAccess.getNestedValue(
           result as any,
           'execution_time_ms',
           0
         ),
-        devices: SafeAccess.safeArrayMap((result as any).results, (device: Device) => ({
-          id: SafeAccess.getNestedValue(device as any, 'id', 'unknown'),
-          name: SafeAccess.getNestedValue(device as any, 'name', 'Unknown Device'),
-          ip: SafeAccess.getNestedValue(device as any, 'ip', 'unknown'),
-          online: SafeAccess.getNestedValue(device as any, 'online', false),
-          macVendor: SafeAccess.getNestedValue(device as any, 'macVendor', 'unknown'),
-          lastSeen: SafeAccess.getNestedValue(device as any, 'lastSeen', 0),
-        })),
-        aggregations: SafeAccess.getNestedValue(result as any, 'aggregations', null),
+        devices: SafeAccess.safeArrayMap(
+          (result as any).results,
+          (device: Device) => ({
+            id: SafeAccess.getNestedValue(device as any, 'id', 'unknown'),
+            name: SafeAccess.getNestedValue(
+              device as any,
+              'name',
+              'Unknown Device'
+            ),
+            ip: SafeAccess.getNestedValue(device as any, 'ip', 'unknown'),
+            online: SafeAccess.getNestedValue(device as any, 'online', false),
+            macVendor: SafeAccess.getNestedValue(
+              device as any,
+              'macVendor',
+              'unknown'
+            ),
+            lastSeen: SafeAccess.getNestedValue(device as any, 'lastSeen', 0),
+          })
+        ),
+        aggregations: SafeAccess.getNestedValue(
+          result as any,
+          'aggregations',
+          null
+        ),
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -378,7 +470,11 @@ export class SearchTargetListsHandler extends BaseToolHandler {
       const result = await searchTools.search_target_lists(searchParams);
 
       return this.createSuccessResponse({
-        count: SafeAccess.safeArrayAccess((result as any).results, arr => arr.length, 0),
+        count: SafeAccess.safeArrayAccess(
+          (result as any).results,
+          arr => arr.length,
+          0
+        ),
         query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
         execution_time_ms: SafeAccess.getNestedValue(
           result as any,
@@ -389,8 +485,16 @@ export class SearchTargetListsHandler extends BaseToolHandler {
           result.results,
           (list: TargetList) => ({
             id: SafeAccess.getNestedValue(list as any, 'id', 'unknown'),
-            name: SafeAccess.getNestedValue(list as any, 'name', 'Unknown List'),
-            category: SafeAccess.getNestedValue(list as any, 'category', 'unknown'),
+            name: SafeAccess.getNestedValue(
+              list as any,
+              'name',
+              'Unknown List'
+            ),
+            category: SafeAccess.getNestedValue(
+              list as any,
+              'category',
+              'unknown'
+            ),
             owner: SafeAccess.getNestedValue(list as any, 'owner', 'unknown'),
             entry_count: SafeAccess.safeArrayAccess(
               list.targets,
@@ -399,7 +503,11 @@ export class SearchTargetListsHandler extends BaseToolHandler {
             ),
           })
         ),
-        aggregations: SafeAccess.getNestedValue(result as any, 'aggregations', null),
+        aggregations: SafeAccess.getNestedValue(
+          result as any,
+          'aggregations',
+          null
+        ),
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -529,7 +637,7 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
           'execution_time_ms',
           0
         ),
-        results: SafeAccess.safeArrayMap((result).results, (item: any) => ({
+        results: SafeAccess.safeArrayMap(result.results, (item: any) => ({
           entity_type: SafeAccess.getNestedValue(
             item,
             'entity_type',
@@ -646,7 +754,7 @@ export class SearchFlowsByGeographyHandler extends BaseToolHandler {
 
       return this.createSuccessResponse({
         query_executed: SafeAccess.getNestedValue(result, 'query', ''),
-        count: SafeAccess.safeArrayAccess((result).results, arr => arr.length, 0),
+        count: SafeAccess.safeArrayAccess(result.results, arr => arr.length, 0),
         geographic_analysis: {
           total_flows: SafeAccess.getNestedValue(
             result,
@@ -689,18 +797,30 @@ export class SearchFlowsByGeographyHandler extends BaseToolHandler {
             {}
           ),
         },
-        flows: SafeAccess.safeArrayMap((result).results, (flow: Flow) => ({
+        flows: SafeAccess.safeArrayMap(result.results, (flow: Flow) => ({
           timestamp: unixToISOStringOrNow(flow.ts),
-          source_ip: SafeAccess.getNestedValue(flow as any, 'source.ip', 'unknown'),
+          source_ip: SafeAccess.getNestedValue(
+            flow as any,
+            'source.ip',
+            'unknown'
+          ),
           destination_ip: SafeAccess.getNestedValue(
             flow as any,
             'destination.ip',
             'unknown'
           ),
-          protocol: SafeAccess.getNestedValue(flow as any, 'protocol', 'unknown'),
+          protocol: SafeAccess.getNestedValue(
+            flow as any,
+            'protocol',
+            'unknown'
+          ),
           bytes: SafeAccess.getNestedValue(flow as any, 'bytes', 0),
           geographic_data: {
-            country: SafeAccess.getNestedValue(flow as any, 'geo.country', 'unknown'),
+            country: SafeAccess.getNestedValue(
+              flow as any,
+              'geo.country',
+              'unknown'
+            ),
             continent: SafeAccess.getNestedValue(
               flow as any,
               'geo.continent',
@@ -708,9 +828,17 @@ export class SearchFlowsByGeographyHandler extends BaseToolHandler {
             ),
             city: SafeAccess.getNestedValue(flow as any, 'geo.city', 'unknown'),
             asn: SafeAccess.getNestedValue(flow as any, 'geo.asn', 'unknown'),
-            is_cloud: SafeAccess.getNestedValue(flow as any, 'geo.isCloud', false),
+            is_cloud: SafeAccess.getNestedValue(
+              flow as any,
+              'geo.isCloud',
+              false
+            ),
             is_vpn: SafeAccess.getNestedValue(flow as any, 'geo.isVPN', false),
-            risk_score: SafeAccess.getNestedValue(flow as any, 'geo.riskScore', 0),
+            risk_score: SafeAccess.getNestedValue(
+              flow as any,
+              'geo.riskScore',
+              0
+            ),
           },
         })),
         execution_time_ms: SafeAccess.getNestedValue(
@@ -751,7 +879,7 @@ export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
 
       return this.createSuccessResponse({
         query_executed: SafeAccess.getNestedValue(result, 'query', ''),
-        count: SafeAccess.safeArrayAccess((result).results, arr => arr.length, 0),
+        count: SafeAccess.safeArrayAccess(result.results, arr => arr.length, 0),
         geographic_threat_analysis: SafeAccess.getNestedValue(
           result,
           'geographic_threat_analysis',
@@ -800,11 +928,19 @@ export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
               ),
             }
           : null,
-        alarms: SafeAccess.safeArrayMap((result).results, (alarm: Alarm) => ({
+        alarms: SafeAccess.safeArrayMap(result.results, (alarm: Alarm) => ({
           timestamp: unixToISOStringOrNow(alarm.ts),
           type: SafeAccess.getNestedValue(alarm as any, 'type', 'unknown'),
-          severity: SafeAccess.getNestedValue(alarm as any, 'severity', 'unknown'),
-          message: SafeAccess.getNestedValue(alarm as any, 'message', 'No message'),
+          severity: SafeAccess.getNestedValue(
+            alarm as any,
+            'severity',
+            'unknown'
+          ),
+          message: SafeAccess.getNestedValue(
+            alarm as any,
+            'message',
+            'No message'
+          ),
           geographic_data: {
             country: SafeAccess.getNestedValue(
               alarm as any,
@@ -816,11 +952,31 @@ export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
               'remote.continent',
               'unknown'
             ),
-            city: SafeAccess.getNestedValue(alarm as any, 'remote.city', 'unknown'),
-            asn: SafeAccess.getNestedValue(alarm as any, 'remote.asn', 'unknown'),
-            is_cloud: SafeAccess.getNestedValue(alarm as any, 'remote.cloud', false),
-            is_vpn: SafeAccess.getNestedValue(alarm as any, 'remote.vpn', false),
-            risk_score: SafeAccess.getNestedValue(alarm as any, 'remote.geoRisk', 0),
+            city: SafeAccess.getNestedValue(
+              alarm as any,
+              'remote.city',
+              'unknown'
+            ),
+            asn: SafeAccess.getNestedValue(
+              alarm as any,
+              'remote.asn',
+              'unknown'
+            ),
+            is_cloud: SafeAccess.getNestedValue(
+              alarm as any,
+              'remote.cloud',
+              false
+            ),
+            is_vpn: SafeAccess.getNestedValue(
+              alarm as any,
+              'remote.vpn',
+              false
+            ),
+            risk_score: SafeAccess.getNestedValue(
+              alarm as any,
+              'remote.geoRisk',
+              0
+            ),
           },
         })),
         execution_time_ms: SafeAccess.getNestedValue(

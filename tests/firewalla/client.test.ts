@@ -82,8 +82,8 @@ describe('FirewallaClient', () => {
       const result = await client.getActiveAlarms('high', undefined, undefined, 10);
       
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/v2/boxes/${mockConfig.boxId}/alarms`,
-        { params: { query: 'high', limit: 10, sortBy: 'timestamp:desc' } }
+        `/v2/alarms`,
+        { params: { query: 'high', limit: 10, sortBy: 'timestamp:desc', box: mockConfig.boxId } }
       );
       
       // Verify the paginated response structure
@@ -158,12 +158,13 @@ describe('FirewallaClient', () => {
       );
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/v2/boxes/test-box-id/flows`,
+        `/v2/flows`,
         {
           params: {
             limit: 50,
             cursor: 'test-cursor',
             sortBy: 'ts:desc',
+            box: 'test-box-id',
           },
         }
       );
@@ -291,8 +292,8 @@ describe('FirewallaClient', () => {
       const result = await client.getDeviceStatus();
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/v2/boxes/${mockConfig.boxId}/devices`,
-        { params: {} }
+        `/v2/devices`,
+        { params: { box: mockConfig.boxId } }
       );
 
       expect(result.results).toHaveLength(3);
@@ -522,8 +523,8 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/v2/boxes/test-box-id/rules`,
-        { params: {} }
+        `/v2/rules`,
+        { params: { box: 'test-box-id' } }
       );
     });
 
@@ -532,8 +533,8 @@ describe('FirewallaClient', () => {
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/v2/boxes/test-box-id/target-lists`,
-        { params: {} }
+        `/v2/target-lists`,
+        { params: { box: 'test-box-id' } }
       );
     });
 
@@ -541,9 +542,10 @@ describe('FirewallaClient', () => {
       await client.getRecentThreats();
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
+      // Verify it calls real endpoints (alarms and flows) instead of fictional /threats/recent
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/v2/boxes/${mockConfig.boxId}/threats/recent`,
-        { params: { hours: 24 } }
+        `/v2/alarms`,
+        expect.objectContaining({ params: expect.objectContaining({ box: mockConfig.boxId }) })
       );
     });
 
@@ -551,9 +553,10 @@ describe('FirewallaClient', () => {
       await client.getFirewallSummary();
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
+      // Verify it calls real endpoints (boxes and flows) instead of fictional /summary
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/v2/boxes/${mockConfig.boxId}/summary`,
-        { params: undefined }
+        `/v2/boxes`,
+        expect.objectContaining({ params: expect.any(Object) })
       );
     });
 
@@ -561,9 +564,10 @@ describe('FirewallaClient', () => {
       await client.getSecurityMetrics();
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
+      // Verify it calls real endpoints (alarms and flows) instead of fictional /metrics/security
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/v2/boxes/${mockConfig.boxId}/metrics/security`,
-        { params: undefined }
+        `/v2/alarms`,
+        expect.objectContaining({ params: expect.objectContaining({ box: mockConfig.boxId }) })
       );
     });
 
@@ -571,9 +575,10 @@ describe('FirewallaClient', () => {
       await client.getNetworkTopology();
       
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
+      // Verify it calls real endpoints (devices and flows) instead of fictional /topology
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/v2/boxes/${mockConfig.boxId}/topology`,
-        { params: undefined }
+        `/v2/devices`,
+        expect.objectContaining({ params: expect.objectContaining({ box: mockConfig.boxId }) })
       );
     });
   });

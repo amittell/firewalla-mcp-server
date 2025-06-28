@@ -215,7 +215,10 @@ export function summarizeObject(
           summarized[`${key}_truncated`] = `... ${value.length - 5} more items`;
         }
       } else {
-        summarized[key] = summarizeObject(value as Record<string, unknown>, config);
+        summarized[key] = summarizeObject(
+          value as Record<string, unknown>,
+          config
+        );
       }
     } else if (typeof value === 'string') {
       // Truncate long strings
@@ -264,26 +267,31 @@ export function optimizeAlarmResponse(
               : new Date().toISOString(),
           type: typedAlarm.type,
           status: typedAlarm.status,
-          message: truncateText(String(typedAlarm.message || ''), TRUNCATION_LIMITS.MESSAGE),
+          message: truncateText(
+            String(typedAlarm.message || ''),
+            TRUNCATION_LIMITS.MESSAGE
+          ),
           direction: typedAlarm.direction,
           protocol: typedAlarm.protocol,
           gid: typedAlarm.gid,
           // Include only essential device info
-          ...(typedAlarm.device && typeof typedAlarm.device === 'object' && {
-            device_ip: (typedAlarm.device as any)?.ip || 'unknown',
-            device_name: truncateText(
-              String((typedAlarm.device as any)?.name || ''),
-              TRUNCATION_LIMITS.DEVICE_NAME
-            ),
-          }),
+          ...(typedAlarm.device &&
+            typeof typedAlarm.device === 'object' && {
+              device_ip: (typedAlarm.device as any)?.ip || 'unknown',
+              device_name: truncateText(
+                String((typedAlarm.device as any)?.name || ''),
+                TRUNCATION_LIMITS.DEVICE_NAME
+              ),
+            }),
           // Include only essential remote info
-          ...(typedAlarm.remote && typeof typedAlarm.remote === 'object' && {
-            remote_ip: (typedAlarm.remote as any)?.ip || 'unknown',
-            remote_name: truncateText(
-              String((typedAlarm.remote as any)?.name || ''),
-              TRUNCATION_LIMITS.REMOTE_NAME
-            ),
-          }),
+          ...(typedAlarm.remote &&
+            typeof typedAlarm.remote === 'object' && {
+              remote_ip: (typedAlarm.remote as any)?.ip || 'unknown',
+              remote_name: truncateText(
+                String((typedAlarm.remote as any)?.name || ''),
+                TRUNCATION_LIMITS.REMOTE_NAME
+              ),
+            }),
         };
       }),
     next_cursor: response.next_cursor,
@@ -331,17 +339,24 @@ export function optimizeFlowResponse(
             typeof typedFlow.ts === 'number'
               ? safeUnixToISOString(typedFlow.ts, new Date().toISOString())
               : new Date().toISOString(),
-          source_ip: (typedFlow.source as any)?.ip || (typedFlow.device as any)?.ip || 'unknown',
+          source_ip:
+            (typedFlow.source as any)?.ip ||
+            (typedFlow.device as any)?.ip ||
+            'unknown',
           destination_ip: (typedFlow.destination as any)?.ip || 'unknown',
           protocol: typedFlow.protocol,
-          bytes: ((typedFlow.download as number) || 0) + ((typedFlow.upload as number) || 0),
+          bytes:
+            ((typedFlow.download as number) || 0) +
+            ((typedFlow.upload as number) || 0),
           download: (typedFlow.download as number) || 0,
           upload: (typedFlow.upload as number) || 0,
           packets: typedFlow.count,
           duration: (typedFlow.duration as number) || 0,
           direction: typedFlow.direction,
           blocked: typedFlow.block,
-          ...((typedFlow.blockType as any) && { block_type: typedFlow.blockType }),
+          ...((typedFlow.blockType as any) && {
+            block_type: typedFlow.blockType,
+          }),
           device_name: truncateText(
             (typedFlow.device as any)?.name || '',
             TRUNCATION_LIMITS.FLOW_DEVICE_NAME
@@ -399,15 +414,18 @@ export function optimizeRuleResponse(
         status: rule.status || 'active',
         hit_count: (rule.hit as any)?.count || 0,
         last_hit: safeUnixToISOString((rule.hit as any)?.lastHitTs, 'Never'),
-        created_at: safeUnixToISOString((rule.ts as any), new Date().toISOString()),
+        created_at: safeUnixToISOString(
+          rule.ts as any,
+          new Date().toISOString()
+        ),
         updated_at: safeUnixToISOString(
-          (rule.updateTs as any),
+          rule.updateTs as any,
           new Date().toISOString()
         ),
         notes: truncateText((rule.notes as any) || '', TRUNCATION_LIMITS.NOTES),
         ...((rule.resumeTs as any) && {
           resume_at: safeUnixToISOString(
-            (rule.resumeTs as any),
+            rule.resumeTs as any,
             new Date().toISOString()
           ),
         }),
@@ -467,7 +485,10 @@ export function optimizeDeviceResponse(
       .map(device => ({
         id: (device as any).id,
         gid: (device as any).gid,
-        name: truncateText((device as any).name || '', TRUNCATION_LIMITS.DEVICE_NAME),
+        name: truncateText(
+          (device as any).name || '',
+          TRUNCATION_LIMITS.DEVICE_NAME
+        ),
         ip: (device as any).ip,
         macVendor: truncateText(
           (device as any).macVendor || '',
@@ -480,7 +501,8 @@ export function optimizeDeviceResponse(
         totalDownload: (device as any).totalDownload,
         totalUpload: (device as any).totalUpload,
         total_mb: Math.round(
-          ((device as any).totalDownload + (device as any).totalUpload) / (1024 * 1024)
+          ((device as any).totalDownload + (device as any).totalUpload) /
+            (1024 * 1024)
         ),
       })),
     next_cursor: response.next_cursor,
@@ -517,7 +539,8 @@ export function autoOptimizeResponse(
   try {
     estimatedSize = (response?.results as any)?.length
       ? (response.results as any).length * 200 +
-        JSON.stringify(response).length / Math.max((response.results as any).length, 1)
+        JSON.stringify(response).length /
+          Math.max((response.results as any).length, 1)
       : JSON.stringify(response).length;
   } catch (error) {
     // Fallback for circular references or other JSON.stringify errors
@@ -554,16 +577,31 @@ export function autoOptimizeResponse(
   // Apply type-specific optimization
   switch (responseType) {
     case 'alarms':
-      return optimizeAlarmResponse(response as any, config) as unknown as OptimizableObject;
+      return optimizeAlarmResponse(
+        response as any,
+        config
+      ) as unknown as OptimizableObject;
     case 'flows':
-      return optimizeFlowResponse(response as any, config) as unknown as OptimizableObject;
+      return optimizeFlowResponse(
+        response as any,
+        config
+      ) as unknown as OptimizableObject;
     case 'rules':
-      return optimizeRuleResponse(response as any, config) as unknown as OptimizableObject;
+      return optimizeRuleResponse(
+        response as any,
+        config
+      ) as unknown as OptimizableObject;
     case 'devices':
-      return optimizeDeviceResponse(response as any, config) as unknown as OptimizableObject;
+      return optimizeDeviceResponse(
+        response as any,
+        config
+      ) as unknown as OptimizableObject;
     default:
       // Generic optimization
-      return genericOptimization(response as unknown as BaseResponse, config) as unknown as OptimizableObject;
+      return genericOptimization(
+        response as unknown as BaseResponse,
+        config
+      ) as unknown as OptimizableObject;
   }
 }
 

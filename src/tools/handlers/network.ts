@@ -61,7 +61,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
       if (startTime && endTime) {
         const startTs = Math.floor(new Date(startTime).getTime() / 1000);
         const endTs = Math.floor(new Date(endTime).getTime() / 1000);
-        const timeQuery = `timestamp:${startTs}-${endTs}`;
+        const timeQuery = `ts:${startTs}-${endTs}`;
         finalQuery = query ? `${query} AND ${timeQuery}` : timeQuery;
       }
 

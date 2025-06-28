@@ -117,7 +117,11 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
           ...(alarm.severity && { severity: alarm.severity }),
         })),
         next_cursor: response.next_cursor,
-        total_count: SafeAccess.getNestedValue(response as any, 'total_count', 0),
+        total_count: SafeAccess.getNestedValue(
+          response as any,
+          'total_count',
+          0
+        ),
         has_more: SafeAccess.getNestedValue(response as any, 'has_more', false),
       });
     } catch (error: unknown) {

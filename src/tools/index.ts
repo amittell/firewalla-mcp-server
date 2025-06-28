@@ -92,17 +92,12 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
       logger.error(`Tool execution failed for ${name}:`, error as Error);
 
       // Use centralized error handling
-      return createErrorResponse(
-        name, 
-        errorMessage, 
-        ErrorType.UNKNOWN_ERROR,
-        {
-          timestamp: getCurrentTimestamp(),
-          error_type:
-            error instanceof Error ? error.constructor.name : 'UnknownError',
-          available_tools: toolRegistry.getToolNames() || [],
-        }
-      );
+      return createErrorResponse(name, errorMessage, ErrorType.UNKNOWN_ERROR, {
+        timestamp: getCurrentTimestamp(),
+        error_type:
+          error instanceof Error ? error.constructor.name : 'UnknownError',
+        available_tools: toolRegistry.getToolNames() || [],
+      });
     }
   });
 

@@ -47,9 +47,12 @@ dotenv.config();
  * ```
  */
 export function getConfig(): FirewallaConfig {
+  const mspId = getRequiredEnvVar('FIREWALLA_MSP_ID');
+
   return {
     mspToken: getRequiredEnvVar('FIREWALLA_MSP_TOKEN'),
-    mspId: getRequiredEnvVar('FIREWALLA_MSP_ID'),
+    mspId,
+    mspBaseUrl: `https://${mspId}`,
     boxId: getRequiredEnvVar('FIREWALLA_BOX_ID'),
     apiTimeout: getOptionalEnvInt('API_TIMEOUT', 30000, 1000, 300000), // 1s to 5min
     rateLimit: getOptionalEnvInt('API_RATE_LIMIT', 100, 1, 1000), // 1 to 1000 requests per minute
