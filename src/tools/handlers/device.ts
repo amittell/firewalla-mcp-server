@@ -8,6 +8,7 @@ import {
   ParameterValidator,
   SafeAccess,
   createErrorResponse,
+  ErrorType,
 } from '../../validation/error-handler.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
 
@@ -37,14 +38,15 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
-          {},
+          ErrorType.VALIDATION_ERROR,
+          undefined,
           limitValidation.errors
         );
       }
 
       const deviceId = args?.device_id as string | undefined;
       const includeOffline = (args?.include_offline as boolean) !== false; // Default to true
-      const limit = limitValidation.sanitizedValue!;
+      const limit = limitValidation.sanitizedValue! as number;
       const cursor = args?.cursor as string | undefined; // Cursor for pagination
 
       const devicesResponse = await firewalla.getDeviceStatus(
@@ -78,14 +80,14 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
           'total_count',
           0
         ),
-        online_devices: deviceCounts.online,
-        offline_devices: deviceCounts.offline,
+        online_devices: (deviceCounts as {online: number, offline: number}).online,
+        offline_devices: (deviceCounts as {online: number, offline: number}).offline,
         page_size: SafeAccess.safeArrayAccess(
           devicesResponse.results,
           arr => arr.length,
           0
         ),
-        has_more: SafeAccess.getNestedValue(devicesResponse, 'has_more', false),
+        has_more: SafeAccess.getNestedValue(devicesResponse as any, 'has_more', false),
         devices: SafeAccess.safeArrayMap(
           devicesResponse.results,
           (device: any) => ({
@@ -100,7 +102,7 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
             ),
             online: SafeAccess.getNestedValue(device, 'online', false),
             lastSeen: unixToISOStringOrNow(
-              SafeAccess.getNestedValue(device, 'lastSeen', 0)
+              SafeAccess.getNestedValue(device, 'lastSeen', 0) as number
             ),
             ipReserved: SafeAccess.getNestedValue(device, 'ipReserved', false),
             network: SafeAccess.getNestedValue(device, 'network', null),

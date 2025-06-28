@@ -17,6 +17,22 @@
  */
 
 import { safeUnixToISOString } from '../utils/timestamp.js';
+import type { Alarm, Flow } from '../types.js';
+
+/**
+ * Interface for objects that can be optimized and summarized
+ */
+export type OptimizableObject = Record<string, unknown>;
+
+/**
+ * Interface for optimization statistics
+ */
+export interface OptimizationStats {
+  originalSize: number;
+  optimizedSize: number;
+  compressionRatio: number;
+  tokensSaved: number;
+}
 
 /**
  * Default truncation limits for different text types
@@ -58,7 +74,7 @@ export function resetTruncationLimits(): void {
  */
 export interface BaseResponse {
   count: number;
-  results: any[];
+  results: OptimizableObject[];
   next_cursor?: string;
 }
 
@@ -165,14 +181,14 @@ export function truncateText(
  * @returns The summarized object
  */
 export function summarizeObject(
-  obj: any,
+  obj: Record<string, unknown>,
   config: OptimizationConfig['summaryMode']
-): any {
+): OptimizableObject {
   if (!obj || typeof obj !== 'object') {
     return obj;
   }
 
-  const summarized: any = {};
+  const summarized: OptimizableObject = {};
 
   for (const [key, value] of Object.entries(obj)) {
     // Skip excluded fields
@@ -194,12 +210,12 @@ export function summarizeObject(
         // Truncate arrays and summarize items
         summarized[key] = value
           .slice(0, Math.min(5, value.length))
-          .map(item => summarizeObject(item, config));
+          .map(item => summarizeObject(item as OptimizableObject, config));
         if (value.length > 5) {
           summarized[`${key}_truncated`] = `... ${value.length - 5} more items`;
         }
       } else {
-        summarized[key] = summarizeObject(value, config);
+        summarized[key] = summarizeObject(value as Record<string, unknown>, config);
       }
     } else if (typeof value === 'string') {
       // Truncate long strings
@@ -237,36 +253,39 @@ export function optimizeAlarmResponse(
         : response.results?.length || 0,
     results: response.results
       .slice(0, config.summaryMode.maxItems)
-      .map(alarm => ({
-        aid: alarm?.aid || 'unknown',
-        timestamp:
-          alarm?.timestamp ||
-          (alarm?.ts
-            ? safeUnixToISOString(alarm.ts, new Date().toISOString())
-            : new Date().toISOString()),
-        type: alarm.type,
-        status: alarm.status,
-        message: truncateText(alarm.message || '', TRUNCATION_LIMITS.MESSAGE),
-        direction: alarm.direction,
-        protocol: alarm.protocol,
-        gid: alarm.gid,
-        // Include only essential device info
-        ...(alarm.device && {
-          device_ip: alarm.device.ip,
-          device_name: truncateText(
-            alarm.device.name || '',
-            TRUNCATION_LIMITS.DEVICE_NAME
-          ),
-        }),
-        // Include only essential remote info
-        ...(alarm.remote && {
-          remote_ip: alarm.remote.ip,
-          remote_name: truncateText(
-            alarm.remote.name || '',
-            TRUNCATION_LIMITS.REMOTE_NAME
-          ),
-        }),
-      })),
+      .map(alarm => {
+        // Type assertion for known Alarm structure
+        const typedAlarm = alarm as Partial<Alarm>;
+        return {
+          aid: typedAlarm?.aid || 'unknown',
+          timestamp:
+            typeof typedAlarm?.ts === 'number'
+              ? safeUnixToISOString(typedAlarm.ts, new Date().toISOString())
+              : new Date().toISOString(),
+          type: typedAlarm.type,
+          status: typedAlarm.status,
+          message: truncateText(String(typedAlarm.message || ''), TRUNCATION_LIMITS.MESSAGE),
+          direction: typedAlarm.direction,
+          protocol: typedAlarm.protocol,
+          gid: typedAlarm.gid,
+          // Include only essential device info
+          ...(typedAlarm.device && typeof typedAlarm.device === 'object' && {
+            device_ip: (typedAlarm.device as any)?.ip || 'unknown',
+            device_name: truncateText(
+              String((typedAlarm.device as any)?.name || ''),
+              TRUNCATION_LIMITS.DEVICE_NAME
+            ),
+          }),
+          // Include only essential remote info
+          ...(typedAlarm.remote && typeof typedAlarm.remote === 'object' && {
+            remote_ip: (typedAlarm.remote as any)?.ip || 'unknown',
+            remote_name: truncateText(
+              String((typedAlarm.remote as any)?.name || ''),
+              TRUNCATION_LIMITS.REMOTE_NAME
+            ),
+          }),
+        };
+      }),
     next_cursor: response.next_cursor,
   };
 
@@ -304,28 +323,33 @@ export function optimizeFlowResponse(
         : response.results?.length || 0,
     results: response.results
       .slice(0, config.summaryMode.maxItems)
-      .map(flow => ({
-        timestamp:
-          flow.timestamp ||
-          safeUnixToISOString(flow.ts, new Date().toISOString()),
-        source_ip: flow.source?.ip || flow.device?.ip || 'unknown',
-        destination_ip: flow.destination?.ip || 'unknown',
-        protocol: flow.protocol,
-        bytes: (flow.download || 0) + (flow.upload || 0),
-        download: flow.download || 0,
-        upload: flow.upload || 0,
-        packets: flow.count,
-        duration: flow.duration || 0,
-        direction: flow.direction,
-        blocked: flow.block,
-        ...(flow.blockType && { block_type: flow.blockType }),
-        device_name: truncateText(
-          flow.device?.name || '',
-          TRUNCATION_LIMITS.FLOW_DEVICE_NAME
-        ),
-        ...(flow.region && { region: flow.region }),
-        ...(flow.category && { category: flow.category }),
-      })),
+      .map(flow => {
+        // Type assertion for known Flow structure
+        const typedFlow = flow as Partial<Flow>;
+        return {
+          timestamp:
+            typeof typedFlow.ts === 'number'
+              ? safeUnixToISOString(typedFlow.ts, new Date().toISOString())
+              : new Date().toISOString(),
+          source_ip: (typedFlow.source as any)?.ip || (typedFlow.device as any)?.ip || 'unknown',
+          destination_ip: (typedFlow.destination as any)?.ip || 'unknown',
+          protocol: typedFlow.protocol,
+          bytes: ((typedFlow.download as number) || 0) + ((typedFlow.upload as number) || 0),
+          download: (typedFlow.download as number) || 0,
+          upload: (typedFlow.upload as number) || 0,
+          packets: typedFlow.count,
+          duration: (typedFlow.duration as number) || 0,
+          direction: typedFlow.direction,
+          blocked: typedFlow.block,
+          ...((typedFlow.blockType as any) && { block_type: typedFlow.blockType }),
+          device_name: truncateText(
+            (typedFlow.device as any)?.name || '',
+            TRUNCATION_LIMITS.FLOW_DEVICE_NAME
+          ),
+          ...((typedFlow.region as any) && { region: typedFlow.region }),
+          ...((typedFlow.category as any) && { category: typedFlow.category }),
+        };
+      }),
     next_cursor: response.next_cursor,
   };
 
@@ -366,24 +390,24 @@ export function optimizeRuleResponse(
       .map(rule => ({
         id: rule.id,
         action: rule.action,
-        target_type: rule.target?.type,
+        target_type: (rule.target as any)?.type,
         target_value: truncateText(
-          rule.target?.value || '',
+          (rule.target as any)?.value || '',
           TRUNCATION_LIMITS.TARGET_VALUE
         ),
         direction: rule.direction,
         status: rule.status || 'active',
-        hit_count: rule.hit?.count || 0,
-        last_hit: safeUnixToISOString(rule.hit?.lastHitTs, 'Never'),
-        created_at: safeUnixToISOString(rule.ts, new Date().toISOString()),
+        hit_count: (rule.hit as any)?.count || 0,
+        last_hit: safeUnixToISOString((rule.hit as any)?.lastHitTs, 'Never'),
+        created_at: safeUnixToISOString((rule.ts as any), new Date().toISOString()),
         updated_at: safeUnixToISOString(
-          rule.updateTs,
+          (rule.updateTs as any),
           new Date().toISOString()
         ),
-        notes: truncateText(rule.notes || '', TRUNCATION_LIMITS.NOTES),
-        ...(rule.resumeTs && {
+        notes: truncateText((rule.notes as any) || '', TRUNCATION_LIMITS.NOTES),
+        ...((rule.resumeTs as any) && {
           resume_at: safeUnixToISOString(
-            rule.resumeTs,
+            (rule.resumeTs as any),
             new Date().toISOString()
           ),
         }),
@@ -420,8 +444,8 @@ export function optimizeDeviceResponse(
   }
   // Calculate online/offline counts in a single pass for better performance
   const { onlineCount, offlineCount } = response.results.reduce(
-    (acc, device) => {
-      if (device.online) {
+    (acc: { onlineCount: number; offlineCount: number }, device) => {
+      if ((device as any).online) {
         acc.onlineCount++;
       } else {
         acc.offlineCount++;
@@ -441,22 +465,22 @@ export function optimizeDeviceResponse(
     results: response.results
       .slice(0, config.summaryMode.maxItems)
       .map(device => ({
-        id: device.id,
-        gid: device.gid,
-        name: truncateText(device.name || '', TRUNCATION_LIMITS.DEVICE_NAME),
-        ip: device.ip,
+        id: (device as any).id,
+        gid: (device as any).gid,
+        name: truncateText((device as any).name || '', TRUNCATION_LIMITS.DEVICE_NAME),
+        ip: (device as any).ip,
         macVendor: truncateText(
-          device.macVendor || '',
+          (device as any).macVendor || '',
           TRUNCATION_LIMITS.VENDOR_NAME
         ),
-        online: device.online,
-        lastSeen: device.lastSeen,
-        network_name: device.network?.name,
-        group_name: device.group?.name,
-        totalDownload: device.totalDownload,
-        totalUpload: device.totalUpload,
+        online: (device as any).online,
+        lastSeen: (device as any).lastSeen,
+        network_name: (device as any).network?.name,
+        group_name: (device as any).group?.name,
+        totalDownload: (device as any).totalDownload,
+        totalUpload: (device as any).totalUpload,
         total_mb: Math.round(
-          (device.totalDownload + device.totalUpload) / (1024 * 1024)
+          ((device as any).totalDownload + (device as any).totalUpload) / (1024 * 1024)
         ),
       })),
     next_cursor: response.next_cursor,
@@ -480,10 +504,10 @@ export function optimizeDeviceResponse(
  * @returns The optimized response
  */
 export function autoOptimizeResponse(
-  response: any,
+  response: OptimizableObject,
   responseType: string,
   config: OptimizationConfig = DEFAULT_OPTIMIZATION_CONFIG
-): any {
+): OptimizableObject {
   if (!config.autoTruncate) {
     return response;
   }
@@ -491,17 +515,17 @@ export function autoOptimizeResponse(
   // Quick size estimation before expensive JSON.stringify
   let estimatedSize: number;
   try {
-    estimatedSize = response?.results?.length
-      ? response.results.length * 200 +
-        JSON.stringify(response).length / Math.max(response.results.length, 1)
+    estimatedSize = (response?.results as any)?.length
+      ? (response.results as any).length * 200 +
+        JSON.stringify(response).length / Math.max((response.results as any).length, 1)
       : JSON.stringify(response).length;
   } catch (error) {
     // Fallback for circular references or other JSON.stringify errors
     process.stderr.write(
       `JSON.stringify failed for size estimation, using fallback: ${error instanceof Error ? error.message : 'Unknown error'}\n`
     );
-    estimatedSize = response?.results?.length
-      ? response.results.length * 1000
+    estimatedSize = (response?.results as any)?.length
+      ? (response.results as any).length * 1000
       : 10000;
   }
 
@@ -530,16 +554,16 @@ export function autoOptimizeResponse(
   // Apply type-specific optimization
   switch (responseType) {
     case 'alarms':
-      return optimizeAlarmResponse(response, config);
+      return optimizeAlarmResponse(response as any, config) as unknown as OptimizableObject;
     case 'flows':
-      return optimizeFlowResponse(response, config);
+      return optimizeFlowResponse(response as any, config) as unknown as OptimizableObject;
     case 'rules':
-      return optimizeRuleResponse(response, config);
+      return optimizeRuleResponse(response as any, config) as unknown as OptimizableObject;
     case 'devices':
-      return optimizeDeviceResponse(response, config);
+      return optimizeDeviceResponse(response as any, config) as unknown as OptimizableObject;
     default:
       // Generic optimization
-      return genericOptimization(response, config);
+      return genericOptimization(response as unknown as BaseResponse, config) as unknown as OptimizableObject;
   }
 }
 
@@ -565,7 +589,9 @@ export function genericOptimization(
         : response.results?.length || 0,
     results: response.results
       .slice(0, config.summaryMode.maxItems)
-      .map((item: any) => summarizeObject(item, config.summaryMode)),
+      .map((item: OptimizableObject) =>
+        summarizeObject(item, config.summaryMode)
+      ),
     next_cursor: response.next_cursor,
   };
 
@@ -585,14 +611,9 @@ export function genericOptimization(
  * @returns Statistics about the optimization
  */
 export function getOptimizationStats(
-  original: any,
-  optimized: any
-): {
-  originalSize: number;
-  optimizedSize: number;
-  compressionRatio: number;
-  tokensSaved: number;
-} {
+  original: OptimizableObject,
+  optimized: OptimizableObject
+): OptimizationStats {
   let originalText: string;
   let optimizedText: string;
 
@@ -654,7 +675,7 @@ export function optimizeResponse(
   }
 
   return function (
-    _target: any,
+    _target: unknown,
     propertyKey: string,
     descriptor: PropertyDescriptor
   ): PropertyDescriptor {
@@ -666,7 +687,7 @@ export function optimizeResponse(
     const originalMethod = descriptor.value;
     const finalConfig = { ...DEFAULT_OPTIMIZATION_CONFIG, ...config };
 
-    descriptor.value = async function (...args: any[]): Promise<any> {
+    descriptor.value = async function (...args: unknown[]): Promise<unknown> {
       try {
         const result = await originalMethod.apply(this, args);
 

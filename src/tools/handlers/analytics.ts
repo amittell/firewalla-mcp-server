@@ -8,6 +8,7 @@ import {
   ParameterValidator,
   SafeAccess,
   createErrorResponse,
+  ErrorType,
 } from '../../validation/error-handler.js';
 import { unixToISOString } from '../../utils/timestamp.js';
 import { logger } from '../../monitoring/logger.js';
@@ -32,14 +33,15 @@ export class GetBoxesHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
-          {},
+          ErrorType.VALIDATION_ERROR,
+          undefined,
           groupIdValidation.errors
         );
       }
 
       const groupId = groupIdValidation.sanitizedValue;
 
-      const boxesResponse = await firewalla.getBoxes(groupId);
+      const boxesResponse = await firewalla.getBoxes(groupId as string);
 
       return this.createSuccessResponse({
         total_boxes: SafeAccess.safeArrayAccess(
@@ -83,27 +85,27 @@ export class GetSimpleStatisticsHandler extends BaseToolHandler {
   ): Promise<ToolResponse> {
     try {
       const statsResponse = await firewalla.getSimpleStatistics();
-      const stats = SafeAccess.getNestedValue(statsResponse, 'results[0]', {});
+      const stats = SafeAccess.getNestedValue(statsResponse, 'results[0]', {}) as any;
 
       return this.createSuccessResponse({
         statistics: {
-          online_boxes: SafeAccess.getNestedValue(stats, 'onlineBoxes', 0),
-          offline_boxes: SafeAccess.getNestedValue(stats, 'offlineBoxes', 0),
+          online_boxes: SafeAccess.getNestedValue(stats, 'onlineBoxes', 0) as number,
+          offline_boxes: SafeAccess.getNestedValue(stats, 'offlineBoxes', 0) as number,
           total_boxes:
-            SafeAccess.getNestedValue(stats, 'onlineBoxes', 0) +
-            SafeAccess.getNestedValue(stats, 'offlineBoxes', 0),
-          total_alarms: SafeAccess.getNestedValue(stats, 'alarms', 0),
-          total_rules: SafeAccess.getNestedValue(stats, 'rules', 0),
+            (SafeAccess.getNestedValue(stats, 'onlineBoxes', 0) as number) +
+            (SafeAccess.getNestedValue(stats, 'offlineBoxes', 0) as number),
+          total_alarms: SafeAccess.getNestedValue(stats, 'alarms', 0) as number,
+          total_rules: SafeAccess.getNestedValue(stats, 'rules', 0) as number,
           box_availability: this.calculateBoxAvailability(stats),
         },
         summary: {
           status:
-            SafeAccess.getNestedValue(stats, 'onlineBoxes', 0) > 0
+            (SafeAccess.getNestedValue(stats, 'onlineBoxes', 0) as number) > 0
               ? 'operational'
               : 'offline',
           health_score: this.calculateHealthScore(stats),
           active_monitoring:
-            SafeAccess.getNestedValue(stats, 'onlineBoxes', 0) > 0,
+            (SafeAccess.getNestedValue(stats, 'onlineBoxes', 0) as number) > 0,
         },
       });
     } catch (error: unknown) {
@@ -116,8 +118,8 @@ export class GetSimpleStatisticsHandler extends BaseToolHandler {
   }
 
   private calculateBoxAvailability(stats: any): number {
-    const onlineBoxes = SafeAccess.getNestedValue(stats, 'onlineBoxes', 0);
-    const offlineBoxes = SafeAccess.getNestedValue(stats, 'offlineBoxes', 0);
+    const onlineBoxes = SafeAccess.getNestedValue(stats, 'onlineBoxes', 0) as number;
+    const offlineBoxes = SafeAccess.getNestedValue(stats, 'offlineBoxes', 0) as number;
     const totalBoxes = onlineBoxes + offlineBoxes;
     return totalBoxes > 0 ? Math.round((onlineBoxes / totalBoxes) * 100) : 0;
   }
@@ -125,10 +127,10 @@ export class GetSimpleStatisticsHandler extends BaseToolHandler {
   private calculateHealthScore(stats: any): number {
     let score = 100;
 
-    const onlineBoxes = SafeAccess.getNestedValue(stats, 'onlineBoxes', 0);
-    const offlineBoxes = SafeAccess.getNestedValue(stats, 'offlineBoxes', 0);
-    const alarms = SafeAccess.getNestedValue(stats, 'alarms', 0);
-    const rules = SafeAccess.getNestedValue(stats, 'rules', 0);
+    const onlineBoxes = SafeAccess.getNestedValue(stats, 'onlineBoxes', 0) as number;
+    const offlineBoxes = SafeAccess.getNestedValue(stats, 'offlineBoxes', 0) as number;
+    const alarms = SafeAccess.getNestedValue(stats, 'alarms', 0) as number;
+    const rules = SafeAccess.getNestedValue(stats, 'rules', 0) as number;
 
     const totalBoxes = onlineBoxes + offlineBoxes;
     if (totalBoxes === 0) {
@@ -208,7 +210,7 @@ export class GetStatisticsByRegionHandler extends BaseToolHandler {
           percentage:
             totalFlowCount > 0
               ? Math.round(
-                  (SafeAccess.getNestedValue(stat, 'value', 0) /
+                  ((SafeAccess.getNestedValue(stat, 'value', 0) as number) /
                     totalFlowCount) *
                     100
                 )
@@ -226,8 +228,8 @@ export class GetStatisticsByRegionHandler extends BaseToolHandler {
       )
         .sort(
           (a: any, b: any) =>
-            SafeAccess.getNestedValue(b, 'value', 0) -
-            SafeAccess.getNestedValue(a, 'value', 0)
+            (SafeAccess.getNestedValue(b, 'value', 0) as number) -
+            (SafeAccess.getNestedValue(a, 'value', 0) as number)
         )
         .slice(0, 5)
         .map((stat: any) => ({
@@ -279,23 +281,23 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
       const boxStatistics = SafeAccess.safeArrayMap(
         stats.results,
         (stat: any) => {
-          const boxMeta = SafeAccess.getNestedValue(stat, 'meta', {});
+          const boxMeta = SafeAccess.getNestedValue(stat, 'meta', {}) as any;
           return {
-            box_id: SafeAccess.getNestedValue(boxMeta, 'gid', 'unknown'),
-            name: SafeAccess.getNestedValue(boxMeta, 'name', 'Unknown Box'),
-            model: SafeAccess.getNestedValue(boxMeta, 'model', 'unknown'),
-            status: SafeAccess.getNestedValue(boxMeta, 'online', false)
+            box_id: SafeAccess.getNestedValue(boxMeta, 'gid', 'unknown') as string,
+            name: SafeAccess.getNestedValue(boxMeta, 'name', 'Unknown Box') as string,
+            model: SafeAccess.getNestedValue(boxMeta, 'model', 'unknown') as string,
+            status: (SafeAccess.getNestedValue(boxMeta, 'online', false) as boolean)
               ? 'online'
               : 'offline',
-            version: SafeAccess.getNestedValue(boxMeta, 'version', 'unknown'),
-            location: SafeAccess.getNestedValue(boxMeta, 'location', 'unknown'),
-            device_count: SafeAccess.getNestedValue(boxMeta, 'deviceCount', 0),
-            rule_count: SafeAccess.getNestedValue(boxMeta, 'ruleCount', 0),
-            alarm_count: SafeAccess.getNestedValue(boxMeta, 'alarmCount', 0),
-            activity_score: SafeAccess.getNestedValue(stat, 'value', 0),
-            last_seen: SafeAccess.getNestedValue(boxMeta, 'lastSeen', 0)
+            version: SafeAccess.getNestedValue(boxMeta, 'version', 'unknown') as string,
+            location: SafeAccess.getNestedValue(boxMeta, 'location', 'unknown') as string,
+            device_count: SafeAccess.getNestedValue(boxMeta, 'deviceCount', 0) as number,
+            rule_count: SafeAccess.getNestedValue(boxMeta, 'ruleCount', 0) as number,
+            alarm_count: SafeAccess.getNestedValue(boxMeta, 'alarmCount', 0) as number,
+            activity_score: SafeAccess.getNestedValue(stat, 'value', 0) as number,
+            last_seen: (SafeAccess.getNestedValue(boxMeta, 'lastSeen', 0) as number)
               ? unixToISOString(
-                  SafeAccess.getNestedValue(boxMeta, 'lastSeen', 0)
+                  SafeAccess.getNestedValue(boxMeta, 'lastSeen', 0) as number
                 )
               : 'Never',
           };
@@ -304,22 +306,22 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
 
       // Calculate summary with safe operations
       const onlineBoxes = SafeAccess.safeArrayFilter(stats.results, (s: any) =>
-        SafeAccess.getNestedValue(s, 'meta.online', false)
+        SafeAccess.getNestedValue(s, 'meta.online', false) as boolean
       ).length;
 
       const totalDevices = stats.results.reduce(
         (sum: number, s: any) =>
-          sum + SafeAccess.getNestedValue(s, 'meta.deviceCount', 0),
+          sum + (SafeAccess.getNestedValue(s, 'meta.deviceCount', 0) as number),
         0
       );
       const totalRules = stats.results.reduce(
         (sum: number, s: any) =>
-          sum + SafeAccess.getNestedValue(s, 'meta.ruleCount', 0),
+          sum + (SafeAccess.getNestedValue(s, 'meta.ruleCount', 0) as number),
         0
       );
       const totalAlarms = stats.results.reduce(
         (sum: number, s: any) =>
-          sum + SafeAccess.getNestedValue(s, 'meta.alarmCount', 0),
+          sum + (SafeAccess.getNestedValue(s, 'meta.alarmCount', 0) as number),
         0
       );
 
@@ -394,7 +396,8 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
-          {},
+          ErrorType.VALIDATION_ERROR,
+          undefined,
           validationResult.errors
         );
       }
@@ -402,7 +405,7 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
       const period = periodValidation.sanitizedValue!;
       const interval = intervalValidation.sanitizedValue!;
 
-      const trends = await firewalla.getFlowTrends(period, interval);
+      const trends = await firewalla.getFlowTrends(period as '1h' | '24h' | '7d' | '30d', interval as number);
 
       // Validate trends response structure
       if (!trends || typeof trends !== 'object') {
@@ -432,14 +435,14 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
         trends: SafeAccess.safeArrayMap(validTrends, (trend: any) => ({
           timestamp: SafeAccess.getNestedValue(trend, 'ts', 0),
           timestamp_iso: unixToISOString(
-            SafeAccess.getNestedValue(trend, 'ts', 0)
+            SafeAccess.getNestedValue(trend, 'ts', 0) as number
           ),
           flow_count: SafeAccess.getNestedValue(trend, 'value', 0),
         })),
         summary: {
           total_flows: validTrends.reduce(
             (sum: number, t: any) =>
-              sum + SafeAccess.getNestedValue(t, 'value', 0),
+              sum + (SafeAccess.getNestedValue(t, 'value', 0) as number),
             0
           ),
           avg_flows_per_interval:
@@ -447,7 +450,7 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
               ? Math.round(
                   validTrends.reduce(
                     (sum: number, t: any) =>
-                      sum + SafeAccess.getNestedValue(t, 'value', 0),
+                      sum + (SafeAccess.getNestedValue(t, 'value', 0) as number),
                     0
                   ) / validTrends.length
                 )
@@ -457,7 +460,7 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
               ? Math.max(
                   ...validTrends
                     .slice(0, 1000)
-                    .map((t: any) => SafeAccess.getNestedValue(t, 'value', 0))
+                    .map((t: any) => SafeAccess.getNestedValue(t, 'value', 0) as number)
                 )
               : 0,
           min_flow_count:
@@ -465,7 +468,7 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
               ? Math.min(
                   ...validTrends
                     .slice(0, 1000)
-                    .map((t: any) => SafeAccess.getNestedValue(t, 'value', 0))
+                    .map((t: any) => SafeAccess.getNestedValue(t, 'value', 0) as number)
                 )
               : 0,
         },
@@ -509,14 +512,15 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
-          {},
+          ErrorType.VALIDATION_ERROR,
+          undefined,
           periodValidation.errors
         );
       }
 
       const period = periodValidation.sanitizedValue!;
 
-      const trends = await firewalla.getAlarmTrends(period);
+      const trends = await firewalla.getAlarmTrends(period as '1h' | '24h' | '7d' | '30d');
 
       // Defensive programming: validate trends response structure
       if (
@@ -546,8 +550,8 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
           trend &&
           typeof SafeAccess.getNestedValue(trend, 'ts') === 'number' &&
           typeof SafeAccess.getNestedValue(trend, 'value') === 'number' &&
-          SafeAccess.getNestedValue(trend, 'ts', 0) > 0 &&
-          SafeAccess.getNestedValue(trend, 'value', 0) >= 0
+          (SafeAccess.getNestedValue(trend, 'ts', 0) as number) > 0 &&
+          (SafeAccess.getNestedValue(trend, 'value', 0) as number) >= 0
       );
 
       return this.createSuccessResponse({
@@ -556,14 +560,14 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
         trends: SafeAccess.safeArrayMap(validTrends, (trend: any) => ({
           timestamp: SafeAccess.getNestedValue(trend, 'ts', 0),
           timestamp_iso: unixToISOString(
-            SafeAccess.getNestedValue(trend, 'ts', 0)
+            SafeAccess.getNestedValue(trend, 'ts', 0) as number
           ),
           alarm_count: SafeAccess.getNestedValue(trend, 'value', 0),
         })),
         summary: {
           total_alarms: validTrends.reduce(
             (sum: number, t: any) =>
-              sum + SafeAccess.getNestedValue(t, 'value', 0),
+              sum + (SafeAccess.getNestedValue(t, 'value', 0) as number),
             0
           ),
           avg_alarms_per_interval:
@@ -571,7 +575,7 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
               ? Math.round(
                   (validTrends.reduce(
                     (sum: number, t: any) =>
-                      sum + SafeAccess.getNestedValue(t, 'value', 0),
+                      sum + (SafeAccess.getNestedValue(t, 'value', 0) as number),
                     0
                   ) /
                     validTrends.length) *
@@ -583,19 +587,19 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
               ? Math.max(
                   ...validTrends
                     .slice(0, 1000)
-                    .map((t: any) => SafeAccess.getNestedValue(t, 'value', 0))
+                    .map((t: any) => SafeAccess.getNestedValue(t, 'value', 0) as number)
                 )
               : 0,
           intervals_with_alarms: SafeAccess.safeArrayFilter(
             validTrends,
-            (t: any) => SafeAccess.getNestedValue(t, 'value', 0) > 0
+            (t: any) => (SafeAccess.getNestedValue(t, 'value', 0) as number) > 0
           ).length,
           alarm_frequency:
             validTrends.length > 0
               ? Math.round(
                   (SafeAccess.safeArrayFilter(
                     validTrends,
-                    (t: any) => SafeAccess.getNestedValue(t, 'value', 0) > 0
+                    (t: any) => (SafeAccess.getNestedValue(t, 'value', 0) as number) > 0
                   ).length /
                     validTrends.length) *
                     100
@@ -636,14 +640,15 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
-          {},
+          ErrorType.VALIDATION_ERROR,
+          undefined,
           periodValidation.errors
         );
       }
 
       const period = periodValidation.sanitizedValue!;
 
-      const trends = await firewalla.getRuleTrends(period);
+      const trends = await firewalla.getRuleTrends(period as '1h' | '24h' | '7d' | '30d');
 
       // Validate trends response structure
       if (!trends || typeof trends !== 'object') {
@@ -672,7 +677,7 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
         trends: SafeAccess.safeArrayMap(validTrends, (trend: any) => ({
           timestamp: SafeAccess.getNestedValue(trend, 'ts', 0),
           timestamp_iso: unixToISOString(
-            SafeAccess.getNestedValue(trend, 'ts', 0)
+            SafeAccess.getNestedValue(trend, 'ts', 0) as number
           ),
           active_rule_count: SafeAccess.getNestedValue(trend, 'value', 0),
         })),
@@ -682,7 +687,7 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
               ? Math.round(
                   validTrends.reduce(
                     (sum: number, t: any) =>
-                      sum + SafeAccess.getNestedValue(t, 'value', 0),
+                      sum + (SafeAccess.getNestedValue(t, 'value', 0) as number),
                     0
                   ) / validTrends.length
                 )
@@ -691,7 +696,7 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
             validTrends.length > 0
               ? Math.max(
                   ...validTrends.map((t: any) =>
-                    SafeAccess.getNestedValue(t, 'value', 0)
+                    SafeAccess.getNestedValue(t, 'value', 0) as number
                   )
                 )
               : 0,
@@ -699,7 +704,7 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
             validTrends.length > 0
               ? Math.min(
                   ...validTrends.map((t: any) =>
-                    SafeAccess.getNestedValue(t, 'value', 0)
+                    SafeAccess.getNestedValue(t, 'value', 0) as number
                   )
                 )
               : 0,
@@ -746,7 +751,7 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
 
     const avgValue =
       trends.reduce(
-        (sum: number, t: any) => sum + SafeAccess.getNestedValue(t, 'value', 0),
+        (sum: number, t: any) => sum + (SafeAccess.getNestedValue(t, 'value', 0) as number),
         0
       ) / trends.length;
     if (avgValue === 0 || !Number.isFinite(avgValue)) {

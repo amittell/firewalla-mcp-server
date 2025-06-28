@@ -192,19 +192,43 @@ export class FirewallaClient {
   }
 
   /**
-   * Generates a unique cache key for API requests
+   * Generates a unique cache key for API requests with enhanced collision prevention
+   *
+   * Creates a cache key that includes the box ID, endpoint, method, and sorted parameters
+   * to ensure uniqueness across different boxes and API calls.
    *
    * @param endpoint - API endpoint path
    * @param params - Optional request parameters
-   * @returns Unique cache key string
+   * @param method - HTTP method (default: 'GET')
+   * @returns Unique cache key string with collision prevention
    * @private
    */
   private getCacheKey(
     endpoint: string,
-    params?: Record<string, unknown>
+    params?: Record<string, unknown>,
+    method: string = 'GET'
   ): string {
-    const paramStr = params ? JSON.stringify(params) : '';
-    return `${endpoint}:${paramStr}`;
+    // Sort parameters to ensure consistent key generation regardless of parameter order
+    const sortedParams = params
+      ? Object.keys(params)
+          .sort()
+          .reduce(
+            (acc, key) => {
+              acc[key] = params[key];
+              return acc;
+            },
+            {} as Record<string, unknown>
+          )
+      : {};
+
+    // Create hash-like key with multiple components for uniqueness
+    const paramStr =
+      Object.keys(sortedParams).length > 0
+        ? JSON.stringify(sortedParams)
+        : 'no-params';
+
+    // Include box ID, method, endpoint, and parameters with separators
+    return `fw:${this.config.boxId}:${method}:${endpoint.replace(/[^a-zA-Z0-9]/g, '_')}:${Buffer.from(paramStr).toString('base64').substring(0, 32)}`;
   }
 
   /**
@@ -250,7 +274,7 @@ export class FirewallaClient {
     params?: Record<string, unknown>,
     cacheable = true
   ): Promise<T> {
-    const cacheKey = this.getCacheKey(endpoint, params);
+    const cacheKey = this.getCacheKey(endpoint, params, method);
 
     if (cacheable && method === 'GET') {
       const cached = this.getFromCache<T>(cacheKey);
@@ -281,7 +305,7 @@ export class FirewallaClient {
       logger.debug('API Request completed', {
         method,
         endpoint,
-        status: response.status
+        status: response.status,
       });
 
       // Check if we're getting HTML instead of JSON

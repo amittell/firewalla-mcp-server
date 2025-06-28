@@ -9,6 +9,7 @@ import {
   SafeAccess,
   QuerySanitizer,
   createErrorResponse,
+  ErrorType,
 } from '../../validation/error-handler.js';
 import {
   unixToISOStringOrNow,
@@ -65,36 +66,38 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         return createErrorResponse(
           'get_active_alarms',
           'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
           undefined,
           validationResult.errors
         );
       }
 
       // Sanitize query if provided
-      let sanitizedQuery = queryValidation.sanitizedValue;
+      let sanitizedQuery = queryValidation.sanitizedValue as string | undefined;
       if (sanitizedQuery) {
         const queryCheck = QuerySanitizer.sanitizeSearchQuery(sanitizedQuery);
         if (!queryCheck.isValid) {
           return createErrorResponse(
             'get_active_alarms',
             'Query validation failed',
+            ErrorType.VALIDATION_ERROR,
             undefined,
             queryCheck.errors
           );
         }
-        sanitizedQuery = queryCheck.sanitizedValue;
+        sanitizedQuery = queryCheck.sanitizedValue as string;
       }
 
       const response = await firewalla.getActiveAlarms(
         sanitizedQuery,
-        groupByValidation.sanitizedValue,
-        sortByValidation.sanitizedValue || 'timestamp:desc',
-        limitValidation.sanitizedValue,
-        cursorValidation.sanitizedValue
+        groupByValidation.sanitizedValue as string | undefined,
+        (sortByValidation.sanitizedValue as string) || 'timestamp:desc',
+        limitValidation.sanitizedValue as number,
+        cursorValidation.sanitizedValue as string | undefined
       );
 
       return this.createSuccessResponse({
-        count: SafeAccess.getNestedValue(response, 'count', 0),
+        count: SafeAccess.getNestedValue(response as any, 'count', 0),
         alarms: SafeAccess.safeArrayMap(response.results, (alarm: any) => ({
           aid: SafeAccess.getNestedValue(alarm, 'aid', 0),
           timestamp: unixToISOStringOrNow(alarm.ts),
@@ -114,8 +117,8 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
           ...(alarm.severity && { severity: alarm.severity }),
         })),
         next_cursor: response.next_cursor,
-        total_count: SafeAccess.getNestedValue(response, 'total_count', 0),
-        has_more: SafeAccess.getNestedValue(response, 'has_more', false),
+        total_count: SafeAccess.getNestedValue(response as any, 'total_count', 0),
+        has_more: SafeAccess.getNestedValue(response as any, 'has_more', false),
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -146,13 +149,14 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
         return createErrorResponse(
           'get_specific_alarm',
           'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
           undefined,
           alarmIdValidation.errors
         );
       }
 
       const response = await firewalla.getSpecificAlarm(
-        alarmIdValidation.sanitizedValue
+        alarmIdValidation.sanitizedValue as string
       );
 
       return this.createSuccessResponse({
@@ -188,13 +192,14 @@ export class DeleteAlarmHandler extends BaseToolHandler {
         return createErrorResponse(
           'delete_alarm',
           'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
           undefined,
           alarmIdValidation.errors
         );
       }
 
       const response = await firewalla.deleteAlarm(
-        alarmIdValidation.sanitizedValue
+        alarmIdValidation.sanitizedValue as string
       );
 
       return this.createSuccessResponse({

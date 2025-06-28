@@ -4,6 +4,16 @@
  */
 
 import { SafeAccess } from './error-handler.js';
+
+/**
+ * Interface for entities that can be used in field mapping and correlation
+ */
+export type MappableEntity = Record<string, unknown>;
+
+/**
+ * Type for field values that can be used in correlations
+ */
+export type FieldValue = string | number | boolean | null | undefined;
 import { 
   performEnhancedCorrelation,
   DEFAULT_CORRELATION_WEIGHTS,
@@ -16,6 +26,39 @@ import {
 import { getRecommendedFieldCombinations } from '../config/correlation-patterns.js';
 
 export type EntityType = 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists';
+
+/**
+ * Valid correlation field names for type safety
+ */
+export type CorrelationFieldName = 
+  | 'source_ip' | 'destination_ip' | 'device_ip' | 'device_id'
+  | 'protocol' | 'bytes' | 'timestamp' | 'direction' | 'blocked'
+  | 'gid' | 'subnet' | 'network_segment' | 'port' | 'port_range'
+  | 'device_type' | 'device_vendor' | 'device_group' | 'mac_vendor'
+  | 'device_category' | 'time_window' | 'hour_of_day' | 'day_of_week'
+  | 'time_pattern' | 'country' | 'continent' | 'city' | 'region'
+  | 'asn' | 'organization' | 'hosting_provider' | 'is_cloud_provider'
+  | 'is_proxy' | 'is_vpn' | 'geographic_risk_score' | 'timezone'
+  | 'isp' | 'user_agent' | 'application' | 'application_category'
+  | 'domain_category' | 'ssl_subject' | 'ssl_issuer' | 'session_duration'
+  | 'frequency_score' | 'bytes_per_session' | 'connection_pattern'
+  | 'activity_level' | 'mac' | 'name' | 'vendor' | 'online' | 'last_seen'
+  | 'network_id' | 'group_id' | 'severity' | 'alarm_type' | 'type'
+  | 'resolution_status' | 'aid' | 'message_type' | 'category'
+  | 'rule_category' | 'target_domain' | 'target_category'
+  | 'action' | 'target_value' | 'creation_time' | 'last_hit'
+  | 'hit_count' | 'rule_status' | 'direction' | 'policy_group'
+  | 'owner' | 'target_count' | 'last_updated';
+
+/**
+ * Valid correlation operation types
+ */
+export type CorrelationType = 'AND' | 'OR';
+
+/**
+ * Valid time window units for temporal correlation
+ */
+export type TimeWindowUnit = 'seconds' | 'minutes' | 'hours' | 'days';
 
 /**
  * Field mapping configuration for each entity type
@@ -263,6 +306,13 @@ export const CORRELATION_FIELDS: Record<string, EntityType[]> = {
  * @param secondaryType - The second entity type to compare
  * @returns An array of correlation field names compatible with both entity types
  */
+/**
+ * Gets the list of fields that are compatible between two entity types for correlation
+ * 
+ * @param primaryType - The primary entity type to match against
+ * @param secondaryType - The secondary entity type to match against
+ * @returns Array of field names that can be used for correlation between the two types
+ */
 export function getCompatibleFields(primaryType: EntityType, secondaryType: EntityType): string[] {
   const compatibleFields: string[] = [];
   
@@ -301,7 +351,15 @@ export function isFieldCompatible(field: string, entityTypes: EntityType[]): boo
  * @param entityType - The type of the entity, used to determine field mappings
  * @returns The value of the field if found, otherwise `undefined`
  */
-export function getFieldValue(entity: any, field: string, entityType: EntityType): any {
+/**
+ * Extracts the value of a field from an entity using entity-specific field mappings
+ * 
+ * @param entity - The entity object to extract the field value from
+ * @param field - The logical field name to extract
+ * @param entityType - The type of entity to determine the correct field mapping
+ * @returns The extracted field value, or undefined if not found
+ */
+export function getFieldValue(entity: MappableEntity, field: string, entityType: EntityType): FieldValue {
   if (!entity || typeof entity !== 'object') {
     return undefined;
   }
@@ -309,7 +367,7 @@ export function getFieldValue(entity: any, field: string, entityType: EntityType
   const mappings = FIELD_MAPPINGS[entityType];
   if (!mappings?.[field]) {
     // Fallback to direct field access
-    return SafeAccess.getNestedValue(entity, field);
+    return SafeAccess.getNestedValue(entity, field) as FieldValue;
   }
 
   const fieldPaths = mappings[field];
@@ -318,7 +376,7 @@ export function getFieldValue(entity: any, field: string, entityType: EntityType
   for (const path of fieldPaths) {
     const value = SafeAccess.getNestedValue(entity, path);
     if (value !== undefined && value !== null) {
-      return value;
+      return value as FieldValue;
     }
   }
 
@@ -326,26 +384,26 @@ export function getFieldValue(entity: any, field: string, entityType: EntityType
 }
 
 /**
- * Extracts and returns a set of normalized values for a specified correlation field from an array of entities of a given type.
- *
+ * Extracts unique correlation values from a collection of entities for a specific field
+ * 
  * Normalization ensures consistent comparison of values such as IP addresses, MAC addresses, and protocol names.
- *
- * @param results - The array of entity objects to extract values from
- * @param field - The correlation field to extract and normalize
+ * 
+ * @param results - Array of entities to extract values from
+ * @param field - The field name to extract values for
  * @param entityType - The type of entities in the results array
- * @returns A set of normalized correlation field values found in the input entities
+ * @returns Set of unique field values found in the entities
  */
 export function extractCorrelationValues(
-  results: any[],
+  results: MappableEntity[],
   field: string,
   entityType: EntityType
-): Set<any> {
-  const values = new Set<any>();
+): Set<FieldValue> {
+  const values = new Set<FieldValue>();
   
   const safeResults = SafeAccess.ensureArray(results);
   
   for (const entity of safeResults) {
-    const value = getFieldValue(entity, field, entityType);
+    const value = getFieldValue(entity as MappableEntity, field, entityType);
     if (value !== undefined && value !== null && value !== '') {
       // Normalize IP addresses and other common field types
       const normalizedValue = normalizeFieldValue(value, field);
@@ -357,15 +415,16 @@ export function extractCorrelationValues(
 }
 
 /**
- * Normalizes a field value for consistent comparison across entities.
- *
- * Trims and lowercases IP addresses, removes separators and lowercases MAC addresses, lowercases protocol names, and returns other values unchanged.
- *
+ * Normalizes a field value for consistent comparison across different entities
+ * 
+ * Trims and lowercases IP addresses, removes separators and lowercases MAC addresses, 
+ * lowercases protocol names, and returns other values unchanged.
+ * 
  * @param value - The field value to normalize
- * @param field - The name of the field being normalized
- * @returns The normalized value suitable for comparison
+ * @param field - The field name (used to determine normalization strategy)
+ * @returns The normalized field value suitable for comparison
  */
-export function normalizeFieldValue(value: any, field: string): any {
+export function normalizeFieldValue(value: FieldValue, field: string): FieldValue {
   if (typeof value !== 'string') {
     return value;
   }
@@ -463,15 +522,24 @@ export function normalizeFieldValue(value: any, field: string): any {
  * @param correlationValues - Set of normalized values to match against
  * @returns An array of entities matching the correlation criteria
  */
+/**
+ * Filters entities based on correlation values for a specific field
+ * 
+ * @param results - Array of entities to filter
+ * @param field - The field name to use for correlation
+ * @param entityType - The type of entities in the results array
+ * @param correlationValues - Set of values to match against
+ * @returns Filtered array of entities that match the correlation values
+ */
 export function filterByCorrelation(
-  results: any[],
+  results: MappableEntity[],
   field: string,
   entityType: EntityType,
-  correlationValues: Set<any>
-): any[] {
+  correlationValues: Set<FieldValue>
+): MappableEntity[] {
   const safeResults = SafeAccess.ensureArray(results);
   
-  return safeResults.filter(entity => {
+  return (safeResults as MappableEntity[]).filter(entity => {
     const value = getFieldValue(entity, field, entityType);
     if (value === undefined || value === null) {
       return false;
@@ -581,19 +649,33 @@ export function validateCrossReference(
 /**
  * Enhanced correlation parameters for multi-field correlation
  */
+/**
+ * Enhanced correlation parameters with strict type checking
+ */
 export interface EnhancedCorrelationParams {
-  correlationFields: string[];
-  correlationType: 'AND' | 'OR';
+  /** Array of correlation field names (must be valid CorrelationFieldName values) */
+  correlationFields: CorrelationFieldName[];
+  /** Type of correlation logic to apply */
+  correlationType: CorrelationType;
+  /** Optional temporal window for time-based correlation */
   temporalWindow?: {
+    /** Size of the time window (must be positive) */
     windowSize: number;
-    windowUnit: 'seconds' | 'minutes' | 'hours' | 'days';
+    /** Unit of time for the window */
+    windowUnit: TimeWindowUnit;
   };
+  /** Optional network scope configuration */
   networkScope?: {
+    /** Whether to include subnet-level matching */
     includeSubnets: boolean;
+    /** Whether to include port-level matching */
     includePorts: boolean;
   };
+  /** Optional device scope configuration */
   deviceScope?: {
+    /** Whether to include vendor-level matching */
     includeVendor: boolean;
+    /** Whether to include group-level matching */
     includeGroup: boolean;
   };
 }
@@ -657,9 +739,9 @@ export function validateEnhancedCrossReference(
 function calculateFieldCorrelationRate(
   field: string,
   index: number,
-  secondaryResults: any[],
+  secondaryResults: MappableEntity[],
   secondaryType: EntityType,
-  correlationValueSets: Array<Set<any>>
+  correlationValueSets: Array<Set<FieldValue>>
 ): { field: string; matchingItems: number; correlationRate: number } {
   const matchingItems = filterItemsByFieldValue(secondaryResults, field, secondaryType, correlationValueSets[index]);
   
@@ -676,11 +758,11 @@ function calculateFieldCorrelationRate(
  * Filter items that have matching field values in the correlation set
  */
 function filterItemsByFieldValue(
-  items: any[],
+  items: MappableEntity[],
   field: string,
   entityType: EntityType,
-  correlationValues: Set<any>
-): any[] {
+  correlationValues: Set<FieldValue>
+): MappableEntity[] {
   return items.filter(item => {
     const itemValue = getFieldValue(item, field, entityType);
     if (itemValue === undefined || itemValue === null) {
@@ -695,12 +777,12 @@ function filterItemsByFieldValue(
  * Filter results based on multi-field correlation logic (AND/OR)
  */
 function filterByCorrelationLogic(
-  results: any[],
+  results: MappableEntity[],
   correlationFields: string[],
-  correlationValueSets: Array<Set<any>>,
+  correlationValueSets: Array<Set<FieldValue>>,
   entityType: EntityType,
   correlationType: 'AND' | 'OR'
-): any[] {
+): MappableEntity[] {
   return results.filter(item => {
     const fieldMatches = correlationFields.map((field, index) => {
       const itemValue = getFieldValue(item, field, entityType);
@@ -722,12 +804,12 @@ function filterByCorrelationLogic(
  * Perform multi-field correlation between entity results
  */
 export function performMultiFieldCorrelation(
-  primaryResults: any[],
-  secondaryResults: any[],
+  primaryResults: MappableEntity[],
+  secondaryResults: MappableEntity[],
   primaryType: EntityType,
   secondaryType: EntityType,
   correlationParams: EnhancedCorrelationParams
-): { correlatedResults: any[]; correlationStats: any; warnings?: string[] } {
+): { correlatedResults: MappableEntity[]; correlationStats: Record<string, unknown>; warnings?: string[] } {
   const { correlationFields, correlationType } = correlationParams;
   const warnings: string[] = [];
   
@@ -809,17 +891,17 @@ export function performMultiFieldCorrelation(
  * Apply temporal window filtering to correlation results
  */
 function applyTemporalWindowFilter(
-  correlatedResults: any[],
-  primaryResults: any[],
+  correlatedResults: MappableEntity[],
+  primaryResults: MappableEntity[],
   temporalWindow: { windowSize: number; windowUnit: string },
   secondaryType: EntityType,
   primaryType: EntityType
-): any[] {
+): MappableEntity[] {
   // Extract timestamp ranges from primary results
   const primaryTimestamps = primaryResults
     .map(item => getFieldValue(item, 'timestamp', primaryType))
     .filter(ts => ts !== undefined && ts !== null)
-    .map(ts => typeof ts === 'number' ? ts : new Date(ts).getTime() / 1000)
+    .map(ts => typeof ts === 'number' ? ts : new Date(ts as string).getTime() / 1000)
     .sort((a, b) => a - b);
   
   if (primaryTimestamps.length === 0) {
@@ -838,7 +920,7 @@ function applyTemporalWindowFilter(
     
     const normalizedTimestamp = typeof itemTimestamp === 'number' 
       ? itemTimestamp 
-      : new Date(itemTimestamp).getTime() / 1000;
+      : new Date(itemTimestamp as string).getTime() / 1000;
     
     return normalizedTimestamp >= minTimestamp && normalizedTimestamp <= maxTimestamp;
   });
@@ -914,9 +996,9 @@ export interface ScoringCorrelationParams extends EnhancedCorrelationParams {
  * Enhanced correlation result with scoring information
  */
 export interface EnhancedCorrelationResult {
-  correlatedResults: any[];
+  correlatedResults: MappableEntity[];
   scoredResults?: ScoredCorrelationResult[];
-  correlationStats: any;
+  correlationStats: Record<string, unknown>;
   enhancedStats?: EnhancedCorrelationStats;
 }
 
@@ -925,8 +1007,8 @@ export interface EnhancedCorrelationResult {
  * This extends the existing performMultiFieldCorrelation with advanced capabilities
  */
 export function performEnhancedMultiFieldCorrelation(
-  primaryResults: any[],
-  secondaryResults: any[],
+  primaryResults: MappableEntity[],
+  secondaryResults: MappableEntity[],
   primaryType: EntityType,
   secondaryType: EntityType,
   correlationParams: ScoringCorrelationParams

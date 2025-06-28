@@ -8,6 +8,7 @@ import {
   ParameterValidator,
   SafeAccess,
   createErrorResponse,
+  ErrorType,
 } from '../../validation/error-handler.js';
 import {
   optimizeRuleResponse,
@@ -44,21 +45,22 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
-          {},
+          ErrorType.VALIDATION_ERROR,
+          undefined,
           limitValidation.errors
         );
       }
 
       const query = args?.query as string | undefined;
       const summaryOnly = (args?.summary_only as boolean) ?? false;
-      const limit = limitValidation.sanitizedValue!;
+      const limit = limitValidation.sanitizedValue! as number;
 
       const response = await firewalla.getNetworkRules(query, limit);
 
       // Apply additional optimization if summary mode requested
-      let optimizedResponse = response;
+      let optimizedResponse: any = response;
       if (summaryOnly) {
-        optimizedResponse = optimizeRuleResponse(response, {
+        optimizedResponse = optimizeRuleResponse(response as any, {
           ...DEFAULT_OPTIMIZATION_CONFIG,
           summaryMode: {
             maxItems: limit,
@@ -80,9 +82,9 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
         summary_mode: summaryOnly,
         limit_applied: summaryOnly ? limit : undefined,
         rules: summaryOnly
-          ? optimizedResponse.results
+          ? (optimizedResponse).results
           : SafeAccess.safeArrayMap(
-              response.results.slice(0, limit),
+              (response.results as any[]).slice(0, limit),
               (rule: any) => ({
                 id: SafeAccess.getNestedValue(rule, 'id', 'unknown'),
                 action: SafeAccess.getNestedValue(rule, 'action', 'unknown'),
@@ -131,27 +133,27 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
                   undefined
                 ),
                 created_at: safeUnixToISOString(
-                  SafeAccess.getNestedValue(rule, 'ts', undefined),
+                  SafeAccess.getNestedValue(rule, 'ts', undefined) as number | undefined,
                   undefined
                 ),
                 updated_at: safeUnixToISOString(
-                  SafeAccess.getNestedValue(rule, 'updateTs', undefined),
+                  SafeAccess.getNestedValue(rule, 'updateTs', undefined) as number | undefined,
                   undefined
                 ),
                 resume_at: safeUnixToISOString(
-                  SafeAccess.getNestedValue(rule, 'resumeTs', undefined),
+                  SafeAccess.getNestedValue(rule, 'resumeTs', undefined) as number | undefined,
                   undefined
                 ),
               })
             ),
         next_cursor: SafeAccess.getNestedValue(
-          summaryOnly ? optimizedResponse : response,
+          (summaryOnly ? optimizedResponse : response),
           'next_cursor',
           undefined
         ),
         ...(summaryOnly &&
-          (optimizedResponse as any).pagination_note && {
-            pagination_note: (optimizedResponse as any).pagination_note,
+          (optimizedResponse).pagination_note && {
+            pagination_note: (optimizedResponse).pagination_note,
           }),
       });
     } catch (error: unknown) {
@@ -199,18 +201,19 @@ export class PauseRuleHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
           undefined,
           validationResult.errors
         );
       }
 
       const result = await firewalla.pauseRule(
-        ruleIdValidation.sanitizedValue,
-        durationValidation.sanitizedValue
+        ruleIdValidation.sanitizedValue as string,
+        durationValidation.sanitizedValue as number
       );
 
       return this.createSuccessResponse({
-        success: SafeAccess.getNestedValue(result, 'success', false),
+        success: SafeAccess.getNestedValue(result as any, 'success', false),
         message: SafeAccess.getNestedValue(
           result,
           'message',
@@ -248,17 +251,18 @@ export class ResumeRuleHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
           undefined,
           ruleIdValidation.errors
         );
       }
 
       const result = await firewalla.resumeRule(
-        ruleIdValidation.sanitizedValue
+        ruleIdValidation.sanitizedValue as string
       );
 
       return this.createSuccessResponse({
-        success: SafeAccess.getNestedValue(result, 'success', false),
+        success: SafeAccess.getNestedValue(result as any, 'success', false),
         message: SafeAccess.getNestedValue(
           result,
           'message',
@@ -294,6 +298,7 @@ export class GetTargetListsHandler extends BaseToolHandler {
           return createErrorResponse(
             this.name,
             'Invalid list_type parameter',
+            ErrorType.VALIDATION_ERROR,
             undefined,
             [`list_type must be one of: ${validTypes.join(', ')}`]
           );
@@ -333,7 +338,7 @@ export class GetTargetListsHandler extends BaseToolHandler {
               []
             ), // Increased from 100 to 500 targets per list
             last_updated: safeUnixToISOString(
-              SafeAccess.getNestedValue(list, 'lastUpdated', undefined),
+              SafeAccess.getNestedValue(list, 'lastUpdated', undefined) as number | undefined,
               undefined
             ),
             notes: SafeAccess.getNestedValue(list, 'notes', ''),
@@ -384,7 +389,8 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
-          {},
+          ErrorType.VALIDATION_ERROR,
+          undefined,
           validationResult.errors
         );
       }
@@ -403,12 +409,12 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
         allRulesResponse,
         'results',
         []
-      );
+      ) as any[];
 
       // Group rules by various categories for overview
       const rulesByAction = allRules.reduce(
         (acc: Record<string, number>, rule: any) => {
-          const action = SafeAccess.getNestedValue(rule, 'action', 'unknown');
+          const action = SafeAccess.getNestedValue(rule, 'action', 'unknown') as string;
           acc[action] = (acc[action] || 0) + 1;
           return acc;
         },
@@ -421,7 +427,7 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
             rule,
             'direction',
             'unknown'
-          );
+          ) as string;
           acc[direction] = (acc[direction] || 0) + 1;
           return acc;
         },
@@ -430,7 +436,7 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
 
       const rulesByStatus = allRules.reduce(
         (acc: Record<string, number>, rule: any) => {
-          const status = SafeAccess.getNestedValue(rule, 'status', 'active');
+          const status = SafeAccess.getNestedValue(rule, 'status', 'active') as string;
           acc[status] = (acc[status] || 0) + 1;
           return acc;
         },
@@ -443,7 +449,7 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
             rule,
             'target.type',
             'unknown'
-          );
+          ) as string;
           acc[targetType] = (acc[targetType] || 0) + 1;
           return acc;
         },
@@ -452,12 +458,12 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
 
       // Calculate hit statistics
       const rulesWithHits = allRules.filter((rule: any) => {
-        const hitCount = SafeAccess.getNestedValue(rule, 'hit.count', 0);
+        const hitCount = SafeAccess.getNestedValue(rule, 'hit.count', 0) as number;
         return hitCount > 0;
       });
       const totalHits = allRules.reduce(
         (sum: number, rule: any) =>
-          sum + SafeAccess.getNestedValue(rule, 'hit.count', 0),
+          sum + (SafeAccess.getNestedValue(rule, 'hit.count', 0) as number),
         0
       );
       const avgHitsPerRule =
@@ -472,14 +478,14 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
       if (allRules.length > 0) {
         const validTimestamps = allRules
           .map((rule: any) => {
-            const ts = SafeAccess.getNestedValue(rule, 'ts', 0);
-            const updateTs = SafeAccess.getNestedValue(rule, 'updateTs', 0);
+            const ts = SafeAccess.getNestedValue(rule, 'ts', 0) as number;
+            const updateTs = SafeAccess.getNestedValue(rule, 'updateTs', 0) as number;
             return Math.max(ts, updateTs);
           })
           .filter((ts: number) => ts > 0);
 
         const creationTimestamps = allRules
-          .map((rule: any) => SafeAccess.getNestedValue(rule, 'ts', 0))
+          .map((rule: any) => SafeAccess.getNestedValue(rule, 'ts', 0) as number)
           .filter((ts: number) => ts > 0);
 
         if (validTimestamps.length > 0) {
@@ -560,12 +566,13 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
-          {},
+          ErrorType.VALIDATION_ERROR,
+          undefined,
           limitValidation.errors
         );
       }
 
-      const limit = limitValidation.sanitizedValue!;
+      const limit = limitValidation.sanitizedValue! as number;
       const minHitsValidation = ParameterValidator.validateNumber(
         args?.min_hits,
         'min_hits',
@@ -581,12 +588,13 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
-          {},
+          ErrorType.VALIDATION_ERROR,
+          undefined,
           minHitsValidation.errors
         );
       }
 
-      const minHits = minHitsValidation.sanitizedValue!;
+      const minHits = minHitsValidation.sanitizedValue! as number;
 
       // Fetch rules with a reasonable buffer to account for filtering by minHits
       // Use 3x the limit to ensure we have enough rules after filtering
@@ -600,13 +608,13 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
       const activeRules = SafeAccess.safeArrayFilter(
         allRulesResponse.results,
         (rule: any) => {
-          const hitCount = SafeAccess.getNestedValue(rule, 'hit.count', 0);
+          const hitCount = SafeAccess.getNestedValue(rule, 'hit.count', 0) as number;
           return hitCount >= minHits;
         }
       )
         .sort((a: any, b: any) => {
-          const aHits = SafeAccess.getNestedValue(a, 'hit.count', 0);
-          const bHits = SafeAccess.getNestedValue(b, 'hit.count', 0);
+          const aHits = SafeAccess.getNestedValue(a, 'hit.count', 0) as number;
+          const bHits = SafeAccess.getNestedValue(b, 'hit.count', 0) as number;
           return bHits - aHits;
         })
         .slice(0, limit);
@@ -625,8 +633,8 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
             rule,
             'target.value',
             ''
-          );
-          const notes = SafeAccess.getNestedValue(rule, 'notes', '');
+          ) as string;
+          const notes = SafeAccess.getNestedValue(rule, 'notes', '') as string;
           return {
             id: SafeAccess.getNestedValue(rule, 'id', 'unknown'),
             action: SafeAccess.getNestedValue(rule, 'action', 'unknown'),
@@ -642,11 +650,11 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
             direction: SafeAccess.getNestedValue(rule, 'direction', 'unknown'),
             hit_count: SafeAccess.getNestedValue(rule, 'hit.count', 0),
             last_hit: safeUnixToISOString(
-              SafeAccess.getNestedValue(rule, 'hit.lastHitTs', undefined),
+              SafeAccess.getNestedValue(rule, 'hit.lastHitTs', undefined) as number | undefined,
               'Never'
             ),
             created_at: safeUnixToISOString(
-              SafeAccess.getNestedValue(rule, 'ts', undefined),
+              SafeAccess.getNestedValue(rule, 'ts', undefined) as number | undefined,
               undefined
             ),
             notes: notes.length > 80 ? `${notes.substring(0, 80)}...` : notes,
@@ -655,12 +663,12 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
         summary: {
           total_hits: activeRules.reduce(
             (sum, rule) =>
-              sum + SafeAccess.getNestedValue(rule, 'hit.count', 0),
+              sum + (SafeAccess.getNestedValue(rule, 'hit.count', 0) as number),
             0
           ),
           top_rule_hits:
             activeRules.length > 0
-              ? SafeAccess.getNestedValue(activeRules[0], 'hit.count', 0)
+              ? (SafeAccess.getNestedValue(activeRules[0], 'hit.count', 0) as number)
               : 0,
           analysis_timestamp: getCurrentTimestamp(),
         },
@@ -716,13 +724,14 @@ export class GetRecentRulesHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
-          {},
+          ErrorType.VALIDATION_ERROR,
+          undefined,
           validationResult.errors
         );
       }
 
-      const hours = hoursValidation.sanitizedValue!;
-      const limit = limitValidation.sanitizedValue!;
+      const hours = hoursValidation.sanitizedValue! as number;
+      const limit = limitValidation.sanitizedValue! as number;
       const includeModified = (args?.include_modified as boolean) ?? true;
 
       // Dynamic fetch limit calculation based on expected filtering efficiency
@@ -739,8 +748,8 @@ export class GetRecentRulesHandler extends BaseToolHandler {
       const recentRules = SafeAccess.safeArrayFilter(
         allRulesResponse.results,
         (rule: any) => {
-          const ts = SafeAccess.getNestedValue(rule, 'ts', 0);
-          const updateTs = SafeAccess.getNestedValue(rule, 'updateTs', 0);
+          const ts = SafeAccess.getNestedValue(rule, 'ts', 0) as number;
+          const updateTs = SafeAccess.getNestedValue(rule, 'updateTs', 0) as number;
           const created = ts >= hoursAgoTs;
           const modified =
             includeModified && updateTs >= hoursAgoTs && updateTs > ts;
@@ -748,10 +757,10 @@ export class GetRecentRulesHandler extends BaseToolHandler {
         }
       )
         .sort((a: any, b: any) => {
-          const aTs = SafeAccess.getNestedValue(a, 'ts', 0);
-          const aUpdateTs = SafeAccess.getNestedValue(a, 'updateTs', 0);
-          const bTs = SafeAccess.getNestedValue(b, 'ts', 0);
-          const bUpdateTs = SafeAccess.getNestedValue(b, 'updateTs', 0);
+          const aTs = SafeAccess.getNestedValue(a, 'ts', 0) as number;
+          const aUpdateTs = SafeAccess.getNestedValue(a, 'updateTs', 0) as number;
+          const bTs = SafeAccess.getNestedValue(b, 'ts', 0) as number;
+          const bUpdateTs = SafeAccess.getNestedValue(b, 'updateTs', 0) as number;
           return Math.max(bTs, bUpdateTs) - Math.max(aTs, aUpdateTs);
         }) // Sort by most recent activity
         .slice(0, limit);
@@ -767,15 +776,15 @@ export class GetRecentRulesHandler extends BaseToolHandler {
         include_modified: includeModified,
         cutoff_time: safeUnixToISOString(hoursAgoTs, undefined),
         rules: SafeAccess.safeArrayMap(recentRules, (rule: any) => {
-          const ts = SafeAccess.getNestedValue(rule, 'ts', 0);
-          const updateTs = SafeAccess.getNestedValue(rule, 'updateTs', 0);
+          const ts = SafeAccess.getNestedValue(rule, 'ts', 0) as number;
+          const updateTs = SafeAccess.getNestedValue(rule, 'updateTs', 0) as number;
           const wasModified = updateTs > ts && updateTs >= hoursAgoTs;
           const targetValue = SafeAccess.getNestedValue(
             rule,
             'target.value',
             ''
-          );
-          const notes = SafeAccess.getNestedValue(rule, 'notes', '');
+          ) as string;
+          const notes = SafeAccess.getNestedValue(rule, 'notes', '') as string;
 
           return {
             id: SafeAccess.getNestedValue(rule, 'id', 'unknown'),
@@ -800,15 +809,15 @@ export class GetRecentRulesHandler extends BaseToolHandler {
         }),
         summary: {
           newly_created: recentRules.filter((r: any) => {
-            const ts = SafeAccess.getNestedValue(r, 'ts', 0);
-            const updateTs = SafeAccess.getNestedValue(r, 'updateTs', 0);
+            const ts = SafeAccess.getNestedValue(r, 'ts', 0) as number;
+            const updateTs = SafeAccess.getNestedValue(r, 'updateTs', 0) as number;
             return (
               ts >= hoursAgoTs && (updateTs <= ts || updateTs < hoursAgoTs)
             );
           }).length,
           recently_modified: recentRules.filter((r: any) => {
-            const ts = SafeAccess.getNestedValue(r, 'ts', 0);
-            const updateTs = SafeAccess.getNestedValue(r, 'updateTs', 0);
+            const ts = SafeAccess.getNestedValue(r, 'ts', 0) as number;
+            const updateTs = SafeAccess.getNestedValue(r, 'updateTs', 0) as number;
             return updateTs > ts && updateTs >= hoursAgoTs;
           }).length,
           analysis_timestamp: getCurrentTimestamp(),

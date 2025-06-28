@@ -8,6 +8,7 @@ import {
   ParameterValidator,
   SafeAccess,
   createErrorResponse,
+  ErrorType,
 } from '../../validation/error-handler.js';
 import {
   unixToISOStringOrNow,
@@ -40,7 +41,8 @@ export class GetFlowDataHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
-          {},
+          ErrorType.VALIDATION_ERROR,
+          undefined,
           limitValidation.errors
         );
       }
@@ -48,7 +50,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
       const query = args?.query as string | undefined;
       const groupBy = args?.groupBy as string | undefined;
       const sortBy = args?.sortBy as string | undefined;
-      const limit = limitValidation.sanitizedValue!;
+      const limit = limitValidation.sanitizedValue! as number;
       const cursor = args?.cursor as string | undefined;
 
       // Build query for time range if provided
@@ -87,8 +89,8 @@ export class GetFlowDataHandler extends BaseToolHandler {
           ),
           protocol: SafeAccess.getNestedValue(flow, 'protocol', 'unknown'),
           bytes:
-            SafeAccess.getNestedValue(flow, 'download', 0) +
-            SafeAccess.getNestedValue(flow, 'upload', 0),
+            (SafeAccess.getNestedValue(flow, 'download', 0) as number) +
+            (SafeAccess.getNestedValue(flow, 'upload', 0) as number),
           download: SafeAccess.getNestedValue(flow, 'download', 0),
           upload: SafeAccess.getNestedValue(flow, 'upload', 0),
           packets: SafeAccess.getNestedValue(flow, 'count', 0),
@@ -151,14 +153,15 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
           undefined,
           validationResult.errors
         );
       }
 
       const usageResponse = await firewalla.getBandwidthUsage(
-        periodValidation.sanitizedValue,
-        limitValidation.sanitizedValue
+        periodValidation.sanitizedValue as string,
+        limitValidation.sanitizedValue as number
       );
 
       return this.createSuccessResponse({
@@ -191,13 +194,13 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
             total_bytes: SafeAccess.getNestedValue(item, 'total_bytes', 0),
             total_mb:
               Math.round(
-                (SafeAccess.getNestedValue(item, 'total_bytes', 0) /
+                ((SafeAccess.getNestedValue(item, 'total_bytes', 0) as number) /
                   (1024 * 1024)) *
                   100
               ) / 100,
             total_gb:
               Math.round(
-                (SafeAccess.getNestedValue(item, 'total_bytes', 0) /
+                ((SafeAccess.getNestedValue(item, 'total_bytes', 0) as number) /
                   (1024 * 1024 * 1024)) *
                   100
               ) / 100,
@@ -250,12 +253,13 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
-          {},
+          ErrorType.VALIDATION_ERROR,
+          undefined,
           validationResult.errors
         );
       }
 
-      const limit = limitValidation.sanitizedValue!;
+      const limit = limitValidation.sanitizedValue! as number;
       const sortByLastSeen = sortValidation.sanitizedValue!;
 
       // Get all devices including offline ones with adequate buffer for filtering
@@ -301,7 +305,7 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
             ),
             lastSeen: SafeAccess.getNestedValue(device, 'lastSeen', 0),
             lastSeenFormatted: safeUnixToISOString(
-              SafeAccess.getNestedValue(device, 'lastSeen', 0),
+              SafeAccess.getNestedValue(device, 'lastSeen', 0) as number,
               'Never'
             ),
             network: SafeAccess.getNestedValue(device, 'network', null),

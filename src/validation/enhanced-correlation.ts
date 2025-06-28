@@ -3,7 +3,7 @@
  * Provides intelligent correlation scoring and flexible matching strategies
  */
 
-import { getFieldValue, normalizeFieldValue, type EntityType } from './field-mapper.js';
+import { getFieldValue, normalizeFieldValue, type EntityType, type MappableEntity } from './field-mapper.js';
 
 /**
  * Utility function for consistent rounding to 3 decimal places
@@ -95,7 +95,7 @@ export const DEFAULT_FUZZY_CONFIG: FuzzyMatchConfig = {
  * Enhanced correlation result with scoring
  */
 export interface ScoredCorrelationResult {
-  entity: any;
+  entity: MappableEntity;
   correlationScore: number;
   fieldScores: Record<string, number>;
   fieldMatchTypes: Record<string, 'exact' | 'fuzzy' | 'partial'>;
@@ -129,8 +129,8 @@ export interface EnhancedCorrelationStats {
  * Perform enhanced multi-field correlation with scoring and fuzzy matching
  */
 export function performEnhancedCorrelation(
-  primaryResults: any[],
-  secondaryResults: any[],
+  primaryResults: MappableEntity[],
+  secondaryResults: MappableEntity[],
   primaryType: EntityType,
   secondaryType: EntityType,
   correlationFields: string[],
@@ -184,13 +184,13 @@ export function performEnhancedCorrelation(
  * Extract field values with additional metadata for scoring
  */
 function extractFieldValuesWithMetadata(
-  results: any[],
+  results: MappableEntity[],
   field: string,
   entityType: EntityType
-): { values: Set<any>; metadata: Map<any, { count: number; quality: number }> } {
+): { values: Set<unknown>; metadata: Map<unknown, { count: number; quality: number }> } {
   
-  const values = new Set<any>();
-  const metadata = new Map<any, { count: number; quality: number }>();
+  const values = new Set<unknown>();
+  const metadata = new Map<unknown, { count: number; quality: number }>();
   
   for (const entity of results) {
     const value = getFieldValue(entity, field, entityType);
@@ -217,8 +217,8 @@ function extractFieldValuesWithMetadata(
  * Score a single entity's correlation against primary results
  */
 function scoreEntityCorrelation(
-  entity: any,
-  primaryFieldValues: Array<{ values: Set<any>; metadata: Map<any, { count: number; quality: number }> }>,
+  entity: MappableEntity,
+  primaryFieldValues: Array<{ values: Set<unknown>; metadata: Map<unknown, { count: number; quality: number }> }>,
   correlationFields: string[],
   entityType: EntityType,
   correlationType: 'AND' | 'OR',
@@ -300,8 +300,8 @@ function scoreEntityCorrelation(
  * Calculate correlation score for a specific field
  */
 function calculateFieldScore(
-  entityValue: any,
-  primaryValues: { values: Set<any>; metadata: Map<any, { count: number; quality: number }> },
+  entityValue: unknown,
+  primaryValues: { values: Set<unknown>; metadata: Map<unknown, { count: number; quality: number }> },
   field: string,
   fuzzyConfig: FuzzyMatchConfig
 ): { score: number; matchType: 'exact' | 'fuzzy' | 'partial' } {
@@ -329,8 +329,8 @@ function calculateFieldScore(
  * Calculate fuzzy matching score
  */
 function calculateFuzzyScore(
-  entityValue: any,
-  primaryValues: Set<any>,
+  entityValue: unknown,
+  primaryValues: Set<unknown>,
   field: string,
   fuzzyConfig: FuzzyMatchConfig
 ): number {
@@ -341,7 +341,8 @@ function calculateFuzzyScore(
     let score = 0;
     
     // IP address subnet matching
-    if (field.includes('ip') && fuzzyConfig.ipSubnetMatching) {
+    if (field.includes('ip') && fuzzyConfig.ipSubnetMatching && 
+        typeof entityValue === 'string' && typeof primaryValue === 'string') {
       score = calculateIPSimilarity(entityValue, primaryValue);
     }
     
@@ -387,6 +388,13 @@ function isValidIPv4Address(ip: string): boolean {
 /**
  * Calculate IP address similarity (subnet matching)
  */
+/**
+ * Calculates similarity between two IP addresses using subnet matching
+ * 
+ * @param ip1 - First IP address to compare
+ * @param ip2 - Second IP address to compare
+ * @returns Similarity score between 0.0 and 1.0, where 1.0 is exact match
+ */
 export function calculateIPSimilarity(ip1: string, ip2: string): number {
   if (typeof ip1 !== 'string' || typeof ip2 !== 'string') {return 0;}
   
@@ -413,6 +421,14 @@ export function calculateIPSimilarity(ip1: string, ip2: string): number {
 
 /**
  * Calculate string similarity using Levenshtein distance
+ */
+/**
+ * Calculates string similarity using Levenshtein distance algorithm
+ * 
+ * @param str1 - First string to compare
+ * @param str2 - Second string to compare
+ * @param threshold - Minimum similarity threshold (0.0 to 1.0)
+ * @returns Similarity score between 0.0 and 1.0, where 1.0 is exact match
  */
 export function calculateStringSimilarity(str1: string, str2: string, threshold: number): number {
   if (str1 === str2) {return 1.0;}
@@ -450,7 +466,12 @@ function levenshteinDistance(str1: string, str2: string): number {
 }
 
 /**
- * Calculate numeric similarity with tolerance
+ * Calculates similarity between two numeric values with tolerance
+ * 
+ * @param num1 - First number to compare
+ * @param num2 - Second number to compare
+ * @param tolerance - Acceptable tolerance for considering values similar (0.0 to 1.0)
+ * @returns Similarity score between 0.0 and 1.0, where 1.0 is exact match
  */
 export function calculateNumericSimilarity(num1: number, num2: number, tolerance: number): number {
   const diff = Math.abs(num1 - num2);
@@ -470,7 +491,7 @@ export function calculateNumericSimilarity(num1: number, num2: number, tolerance
 /**
  * Calculate geographic similarity (simplified)
  */
-function calculateGeographicSimilarity(geo1: any, geo2: any): number {
+function calculateGeographicSimilarity(geo1: unknown, geo2: unknown): number {
   // Simple string-based geographic similarity
   if (typeof geo1 === 'string' && typeof geo2 === 'string') {
     return calculateStringSimilarity(geo1, geo2, 0.7) * 0.6; // Cap geo fuzzy at 0.6
@@ -481,7 +502,7 @@ function calculateGeographicSimilarity(geo1: any, geo2: any): number {
 /**
  * Assess data quality for scoring bonus
  */
-function assessDataQuality(value: any, field: string): number {
+function assessDataQuality(value: unknown, field: string): number {
   let quality = 1.0;
   
   // Penalize empty or default values

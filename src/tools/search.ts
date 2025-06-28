@@ -320,7 +320,7 @@ export class SearchEngine {
         errors.push(...queryValidation.errors);
       } else if (
         !config.allowEmptyQuery &&
-        !queryValidation.sanitizedValue?.trim()
+        !(queryValidation.sanitizedValue as string)?.trim()
       ) {
         errors.push('query cannot be empty');
       }
@@ -465,7 +465,7 @@ export class SearchEngine {
       }
 
       const validation = queryParser.parse(
-        queryCheck.sanitizedValue,
+        queryCheck.sanitizedValue as string,
         entityType as (typeof validEntityTypes)[number]
       );
       if (!validation.isValid || !validation.ast) {
@@ -549,7 +549,7 @@ export class SearchEngine {
         count: response.count || results.length,
         limit: params.limit || 100,
         offset: params.offset || 0,
-        query: queryCheck?.sanitizedValue || params.query,
+        query: (queryCheck?.sanitizedValue as string) || (params.query),
         execution_time_ms: Date.now() - startTime,
         aggregations,
       };
@@ -1643,7 +1643,7 @@ export class SearchEngine {
       const isVpn = getFieldValue(flow, 'is_vpn', 'flows');
       const riskScore = getFieldValue(flow, 'geographic_risk_score', 'flows');
 
-      if (country) {
+      if (country && typeof country === 'string') {
         analysis.unique_countries.add(country);
         analysis.top_countries[country] =
           (analysis.top_countries[country] || 0) + 1;
@@ -1653,7 +1653,7 @@ export class SearchEngine {
         analysis.unique_continents.add(continent);
       }
 
-      if (asn) {
+      if (asn && typeof asn === 'string') {
         analysis.unique_asns.add(asn);
         analysis.top_asns[asn] = (analysis.top_asns[asn] || 0) + 1;
       }
@@ -1664,7 +1664,7 @@ export class SearchEngine {
       if (isVpn) {
         analysis.vpn_flows++;
       }
-      if (riskScore && riskScore >= getRiskThresholds().highRiskFlowMin) {
+      if (riskScore && Number(riskScore) >= getRiskThresholds().highRiskFlowMin) {
         analysis.high_risk_flows++;
       }
     });
@@ -1728,17 +1728,17 @@ export class SearchEngine {
       const riskScore =
         getFieldValue(alarm, 'geographic_risk_score', 'alarms') || 0;
 
-      if (country && riskScore >= getRiskThresholds().highRiskCountryMin) {
+      if (country && typeof country === 'string' && Number(riskScore) >= getRiskThresholds().highRiskCountryMin) {
         threats.high_risk_countries[country] =
           (threats.high_risk_countries[country] || 0) + 1;
       }
 
-      if (continent) {
+      if (continent && typeof continent === 'string') {
         threats.threat_by_continent[continent] =
           (threats.threat_by_continent[continent] || 0) + 1;
       }
 
-      if (asn && riskScore >= getRiskThresholds().suspiciousAsnMin) {
+      if (asn && typeof asn === 'string' && Number(riskScore) >= getRiskThresholds().suspiciousAsnMin) {
         threats.suspicious_asns[asn] = (threats.suspicious_asns[asn] || 0) + 1;
       }
 
@@ -1753,11 +1753,11 @@ export class SearchEngine {
       }
 
       // Categorize risk
-      if (riskScore <= getRiskThresholds().lowMax) {
+      if (Number(riskScore) <= getRiskThresholds().lowMax) {
         threats.risk_distribution.low++;
-      } else if (riskScore <= getRiskThresholds().mediumMax) {
+      } else if (Number(riskScore) <= getRiskThresholds().mediumMax) {
         threats.risk_distribution.medium++;
-      } else if (riskScore <= getRiskThresholds().highMax) {
+      } else if (Number(riskScore) <= getRiskThresholds().highMax) {
         threats.risk_distribution.high++;
       } else {
         threats.risk_distribution.critical++;

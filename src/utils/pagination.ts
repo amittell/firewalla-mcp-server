@@ -6,6 +6,16 @@
 import { config } from '../config/config.js';
 
 /**
+ * Interface for objects that can be sorted by a field
+ */
+export type Sortable = Record<string, unknown>;
+
+/**
+ * Type for any object that can be paginated
+ */
+export type Paginatable = Record<string, unknown> | object;
+
+/**
  * Pagination configuration interface
  */
 export interface PaginationConfig {
@@ -143,7 +153,7 @@ export function decodeCursor(cursor: string): CursorData {
  * @param sort_order - Sort order, either 'asc' or 'desc' (default is 'asc')
  * @returns A paginated result containing the current page of items, pagination metadata, and a next cursor if more items are available
  */
-export function paginateArray<T>(
+export function paginateArray<T extends object>(
   items: T[],
   cursor?: string,
   page_size: number = getDefaultPageSize(),
@@ -171,9 +181,9 @@ export function paginateArray<T>(
   // Sort items if sort_by is specified
   const sortedItems = [...items];
   if (sort_by) {
-    sortedItems.sort((a: any, b: any) => {
-      const aVal = a[sort_by];
-      const bVal = b[sort_by];
+    sortedItems.sort((a: T, b: T) => {
+      const aVal = (a as any)[sort_by];
+      const bVal = (b as any)[sort_by];
 
       if (aVal === bVal) {
         return 0;
@@ -228,7 +238,7 @@ export function paginateArray<T>(
  * @returns A paginated result containing the current page of items, pagination metadata, and next cursor if more items remain
  * @throws If data fetching or pagination fails
  */
-export async function createPaginatedResponse<T>(
+export async function createPaginatedResponse<T extends object>(
   dataFetcher: () => Promise<T[]>,
   cursor?: string,
   page_size: number = getDefaultPageSize(),

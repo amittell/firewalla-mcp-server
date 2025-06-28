@@ -3,24 +3,83 @@
  * Provides consistent error responses and comprehensive validation utilities
  */
 
+/**
+ * Interface for validatable objects
+ */
+export type ValidatableValue = Record<string, unknown>;
+
+/**
+ * Enumeration of specific error types for better error categorization
+ */
+export enum ErrorType {
+  VALIDATION_ERROR = 'validation_error',
+  AUTHENTICATION_ERROR = 'authentication_error',
+  API_ERROR = 'api_error',
+  NETWORK_ERROR = 'network_error',
+  TIMEOUT_ERROR = 'timeout_error',
+  RATE_LIMIT_ERROR = 'rate_limit_error',
+  CACHE_ERROR = 'cache_error',
+  CORRELATION_ERROR = 'correlation_error',
+  SEARCH_ERROR = 'search_error',
+  UNKNOWN_ERROR = 'unknown_error'
+}
+
+/**
+ * Enhanced error interface with specific error types and context
+ */
 export interface StandardError {
   error: true;
   message: string;
   tool: string;
-  details?: Record<string, any>;
+  errorType: ErrorType;
+  details?: Record<string, unknown>;
+  validation_errors?: string[];
+  timestamp?: string;
+  context?: {
+    endpoint?: string;
+    parameters?: Record<string, unknown>;
+    userAgent?: string;
+    requestId?: string;
+  };
+}
+
+/**
+ * Legacy StandardError interface for backward compatibility
+ * @deprecated Use the enhanced StandardError interface instead
+ */
+export interface LegacyStandardError {
+  error: true;
+  message: string;
+  tool: string;
+  details?: Record<string, unknown>;
   validation_errors?: string[];
 }
 
 export interface ValidationResult {
   isValid: boolean;
   errors: string[];
-  sanitizedValue?: any;
+  sanitizedValue?: unknown;
 }
 
 /**
- * Create a standard error response
+ * Create a standard error response with enhanced error typing
+ * 
+ * @param tool - The name of the tool that generated the error
+ * @param message - The error message
+ * @param errorType - The specific type of error (defaults to UNKNOWN_ERROR)
+ * @param details - Optional additional error details
+ * @param validationErrors - Optional array of validation error messages
+ * @param context - Optional context information about the error
+ * @returns Formatted error response for MCP protocol
  */
-export function createErrorResponse(tool: string, message: string, details?: Record<string, any>, validationErrors?: string[]): {
+export function createErrorResponse(
+  tool: string,
+  message: string,
+  errorType: ErrorType = ErrorType.UNKNOWN_ERROR,
+  details?: Record<string, unknown>,
+  validationErrors?: string[],
+  context?: StandardError['context']
+): {
   content: Array<{ type: string; text: string }>;
   isError: true;
 } {
@@ -28,8 +87,11 @@ export function createErrorResponse(tool: string, message: string, details?: Rec
     error: true,
     message,
     tool,
+    errorType,
+    timestamp: new Date().toISOString(),
     ...(details && { details }),
-    ...(validationErrors?.length && { validation_errors: validationErrors })
+    ...(validationErrors?.length && { validation_errors: validationErrors }),
+    ...(context && { context })
   };
 
   return {
@@ -44,9 +106,20 @@ export function createErrorResponse(tool: string, message: string, details?: Rec
 }
 
 /**
+ * Create a legacy error response for backward compatibility
+ * @deprecated Use createErrorResponse with ErrorType instead
+ */
+export function createLegacyErrorResponse(tool: string, message: string, details?: Record<string, unknown>, validationErrors?: string[]): {
+  content: Array<{ type: string; text: string }>;
+  isError: true;
+} {
+  return createErrorResponse(tool, message, ErrorType.UNKNOWN_ERROR, details, validationErrors);
+}
+
+/**
  * Wrap a function to ensure consistent error handling
  */
-export function wrapTool<T extends any[], R>(
+export function wrapTool<T extends unknown[], R>(
   toolName: string,
    
   fn: (..._args: T) => Promise<R>
@@ -68,7 +141,7 @@ export class ParameterValidator {
   /**
    * Validate required string parameter
    */
-  static validateRequiredString(value: any, paramName: string): ValidationResult {
+  static validateRequiredString(value: unknown, paramName: string): ValidationResult {
     if (value === undefined || value === null) {
       return {
         isValid: false,
@@ -100,7 +173,7 @@ export class ParameterValidator {
   /**
    * Validate optional string parameter
    */
-  static validateOptionalString(value: any, paramName: string): ValidationResult {
+  static validateOptionalString(value: unknown, paramName: string): ValidationResult {
     if (value === undefined || value === null) {
       return {
         isValid: true,
@@ -127,7 +200,7 @@ export class ParameterValidator {
    * Validate numeric parameter with range checking
    */
   static validateNumber(
-    value: any, 
+    value: unknown, 
     paramName: string, 
     options: {
       required?: boolean;
@@ -218,7 +291,7 @@ export class ParameterValidator {
    * Validate enum parameter
    */
   static validateEnum(
-    value: any,
+    value: unknown,
     paramName: string,
     allowedValues: string[],
     required = false,
@@ -263,7 +336,7 @@ export class ParameterValidator {
    * Validate boolean parameter
    */
   static validateBoolean(
-    value: any,
+    value: unknown,
     paramName: string,
     defaultValue?: boolean
   ): ValidationResult {
@@ -371,7 +444,7 @@ export class SafeAccess {
   /**
    * Safely access nested object properties
    */
-  static getNestedValue(obj: any, path: string, defaultValue: any = undefined): any {
+  static getNestedValue(obj: ValidatableValue, path: string, defaultValue: unknown = undefined): unknown {
     if (!obj || typeof obj !== 'object') {
       return defaultValue;
     }
@@ -383,7 +456,7 @@ export class SafeAccess {
       if (current === null || current === undefined || typeof current !== 'object') {
         return defaultValue;
       }
-      current = current[key];
+      current = (current as any)[key];
     }
 
     return current !== undefined ? current : defaultValue;
@@ -392,7 +465,7 @@ export class SafeAccess {
   /**
    * Safely ensure an array
    */
-  static ensureArray<T>(value: any, defaultValue: T[] = []): T[] {
+  static ensureArray<T>(value: unknown, defaultValue: T[] = []): T[] {
     if (Array.isArray(value)) {
       return value;
     }
@@ -402,9 +475,9 @@ export class SafeAccess {
   /**
    * Safely ensure an object
    */
-  static ensureObject(value: any, defaultValue: Record<string, any> = {}): Record<string, any> {
+  static ensureObject(value: unknown, defaultValue: Record<string, unknown> = {}): Record<string, unknown> {
     if (value && typeof value === 'object' && !Array.isArray(value)) {
-      return value;
+      return value as Record<string, unknown>;
     }
     return defaultValue;
   }
@@ -413,11 +486,11 @@ export class SafeAccess {
    * Safely access array with null checking
    */
   static safeArrayAccess<T>(
-    array: any,
+    array: unknown,
      
-    accessor: (_: T[]) => any,
-    defaultValue: any = undefined
-  ): any {
+    accessor: (_: T[]) => unknown,
+    defaultValue: unknown = undefined
+  ): unknown {
     const safeArray = SafeAccess.ensureArray<T>(array);
     if (safeArray.length === 0) {
       return defaultValue;
@@ -434,7 +507,7 @@ export class SafeAccess {
    * Safely process array with filtering for null/undefined values
    */
   static safeArrayMap<T, R>(
-    array: any,
+    array: unknown,
      
     mapper: (_: T, __: number) => R,
      
@@ -451,7 +524,7 @@ export class SafeAccess {
    * Safely filter array with null/undefined checking
    */
   static safeArrayFilter<T>(
-    array: any,
+    array: unknown,
      
     predicate: (item: T) => boolean
   ): T[] {
