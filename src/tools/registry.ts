@@ -1,10 +1,4 @@
 /**
-<<<<<<< HEAD
- * Tool Registry - Centralized management of MCP tools
- * 
- * This registry pattern replaces the massive switch statement with a cleaner,
- * more maintainable architecture where each tool is a separate handler.
-=======
  * @fileoverview Tool Registry - Centralized MCP Tool Management
  * 
  * Implements a registry pattern for managing 32+ MCP tool handlers with clean
@@ -30,7 +24,6 @@
  * @version 1.0.0
  * @author Firewalla MCP Server Team
  * @since 2024-01-01
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
  */
 
 import { ToolHandler } from './handlers/base.js';
@@ -69,11 +62,6 @@ import {
   GetGeographicStatisticsHandler
 } from './handlers/search.js';
 
-<<<<<<< HEAD
-export class ToolRegistry {
-  private handlers = new Map<string, ToolHandler>();
-
-=======
 /**
  * Central registry for managing all MCP tool handlers
  * 
@@ -113,15 +101,11 @@ export class ToolRegistry {
    * 
    * @constructor
    */
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
   constructor() {
     this.registerHandlers();
   }
 
   /**
-<<<<<<< HEAD
-   * Register all tool handlers
-=======
    * Automatically registers all available tool handlers organized by category
    * 
    * Registers handlers across 6 functional categories with a total of 32+ tools.
@@ -130,7 +114,6 @@ export class ToolRegistry {
    * 
    * @private
    * @returns {void}
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
    */
   private registerHandlers(): void {
     // Security tools (3 handlers)
@@ -181,55 +164,40 @@ export class ToolRegistry {
   }
 
   /**
-<<<<<<< HEAD
-   * Register a tool handler
-=======
    * Registers a single tool handler in the registry
    * 
    * @param handler - The tool handler instance to register
    * @returns {void}
    * @public
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
    */
   register(handler: ToolHandler): void {
     this.handlers.set(handler.name, handler);
   }
 
   /**
-<<<<<<< HEAD
-   * Get a tool handler by name
-=======
    * Retrieves a tool handler by its registered name
    * 
    * @param toolName - The name of the tool to retrieve
    * @returns The tool handler if found, undefined otherwise
    * @public
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
    */
   getHandler(toolName: string): ToolHandler | undefined {
     return this.handlers.get(toolName);
   }
 
   /**
-<<<<<<< HEAD
-   * Get all registered tool names
-=======
    * Gets a list of all registered tool names
    * 
    * Useful for tool discovery, error messages, and debugging.
    * 
    * @returns Array of all registered tool names
    * @public
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
    */
   getToolNames(): string[] {
     return Array.from(this.handlers.keys());
   }
 
   /**
-<<<<<<< HEAD
-   * Get tools by category
-=======
    * Retrieves all tools belonging to a specific category
    * 
    * Categories include: 'security', 'network', 'device', 'rule', 'analytics', 'search'
@@ -237,22 +205,17 @@ export class ToolRegistry {
    * @param category - The category to filter by
    * @returns Array of tool handlers in the specified category
    * @public
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
    */
   getToolsByCategory(category: string): ToolHandler[] {
     return Array.from(this.handlers.values()).filter(handler => handler.category === category);
   }
 
   /**
-<<<<<<< HEAD
-   * Check if a tool is registered
-=======
    * Checks if a tool with the given name is registered
    * 
    * @param toolName - The tool name to check
    * @returns True if the tool is registered, false otherwise
    * @public
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
    */
   isRegistered(toolName: string): boolean {
     return this.handlers.has(toolName);

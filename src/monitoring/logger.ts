@@ -17,17 +17,10 @@ function shouldDebug(namespace: string): boolean {
   if (!DEBUG_ENABLED && DEBUG_FILTERS.length === 0) {
     return false;
   }
-<<<<<<< HEAD
-  if (DEBUG_ENABLED) {return true;}
-  return DEBUG_FILTERS.some(filter => {
-    if (filter === '*') {return true;}
-    if (filter.endsWith('*')) {return namespace.startsWith(filter.slice(0, -1));}
-=======
   if (DEBUG_ENABLED) { return true; }
   return DEBUG_FILTERS.some(filter => {
     if (filter === '*') { return true; }
     if (filter.endsWith('*')) { return namespace.startsWith(filter.slice(0, -1)); }
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
     return namespace === filter;
   });
 }

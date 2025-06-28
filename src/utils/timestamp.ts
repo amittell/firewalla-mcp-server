@@ -4,11 +4,6 @@
  */
 
 /**
-<<<<<<< HEAD
- * Converts a Unix timestamp in seconds to an ISO 8601 formatted date string.
- *
- * @param timestamp - The Unix timestamp in seconds, as a number or string.
-=======
  * Timestamp detection and conversion parameters
  */
 interface TimestampDetectionResult {
@@ -80,7 +75,6 @@ export function detectAndConvertTimestamp(input: number | string | null | undefi
  * Converts various timestamp formats to an ISO 8601 formatted date string with improved detection.
  *
  * @param timestamp - The timestamp in various formats (Unix seconds, Unix milliseconds, ISO string).
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
  * @returns The ISO 8601 formatted date string representing the given timestamp.
  * @throws Error if the timestamp is null, undefined, not a finite number, or negative.
  */
@@ -89,27 +83,12 @@ export function unixToISOString(timestamp: number | string | null | undefined): 
     throw new Error('Timestamp cannot be null or undefined');
   }
 
-<<<<<<< HEAD
-  const numTimestamp = typeof timestamp === 'string' ? Number(timestamp) : timestamp;
-  
-  if (isNaN(numTimestamp) || !Number.isFinite(numTimestamp)) {
-    throw new Error(`Invalid timestamp: ${timestamp}`);
-  }
-
-  if (numTimestamp < 0) {
-    throw new Error(`Timestamp cannot be negative: ${numTimestamp}`);
-  }
-
-  // Convert from Unix timestamp (seconds) to milliseconds and create ISO string
-  return new Date(numTimestamp * 1000).toISOString();
-=======
   const detection = detectAndConvertTimestamp(timestamp);
   if (!detection) {
     throw new Error(`Invalid timestamp: ${timestamp}`);
   }
 
   return new Date(detection.timestamp).toISOString();
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
 }
 
 /**
@@ -157,8 +136,6 @@ export function unixToISOStringOrNow(timestamp: number | string | null | undefin
  */
 export function getCurrentTimestamp(): string {
   return new Date().toISOString();
-<<<<<<< HEAD
-=======
 }
 
 /**
@@ -230,5 +207,4 @@ export function parseFlexibleTimestamp(input: unknown): Date | null {
   } catch {
     return null;
   }
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
 }

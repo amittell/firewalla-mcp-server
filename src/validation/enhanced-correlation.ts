@@ -144,31 +144,6 @@ export function performEnhancedCorrelation(
   minimumScore: number = 0.3
 ): { correlatedResults: ScoredCorrelationResult[]; stats: EnhancedCorrelationStats } {
   
-<<<<<<< HEAD
-  // Input validation
-  if (!Array.isArray(primaryResults) || !Array.isArray(secondaryResults)) {
-    throw new Error('Primary and secondary results must be arrays');
-  }
-
-  if (!Array.isArray(correlationFields) || correlationFields.length === 0) {
-    throw new Error('Correlation fields must be a non-empty array');
-  }
-
-  if (minimumScore < 0 || minimumScore > 1) {
-    throw new Error('Minimum score must be between 0 and 1');
-  }
-
-  // Performance safeguard for large datasets
-  const maxProcessingSize = 10000;
-  if (secondaryResults.length > maxProcessingSize) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `Large dataset detected (${secondaryResults.length} items). Consider pagination for better performance.`
-    );
-  }
-
-=======
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
   const startTime = Date.now();
   const correlatedResults: ScoredCorrelationResult[] = [];
   
@@ -265,12 +240,7 @@ function scoreEntityCorrelation(
   // Score each correlation field
   for (let i = 0; i < correlationFields.length; i++) {
     const field = correlationFields[i];
-<<<<<<< HEAD
-    const fieldWeight = weights[field] !== undefined ? weights[field] :
-                       weights.default !== undefined ? weights.default : 0.5;
-=======
     const fieldWeight = weights[field] || weights.default || 0.5;
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
     const primaryValues = primaryFieldValues[i];
     
     const entityValue = getFieldValue(entity, field, entityType);
@@ -404,34 +374,15 @@ function calculateFuzzyScore(
  * Validate IPv4 address format
  */
 function isValidIPv4Address(ip: string): boolean {
-<<<<<<< HEAD
-  if (typeof ip !== 'string' || ip.length === 0) {
-    return false;
-  }
-  
-  const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
-  const match = ip.match(ipv4Regex);
-  
-  if (!match) {
-    return false;
-  }
-=======
   const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
   const match = ip.match(ipv4Regex);
   
   if (!match) {return false;}
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
   
   // Check that each octet is 0-255
   for (let i = 1; i <= 4; i++) {
     const octet = parseInt(match[i], 10);
-<<<<<<< HEAD
-    if (isNaN(octet) || octet < 0 || octet > 255) {
-      return false;
-    }
-=======
     if (octet < 0 || octet > 255) {return false;}
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
   }
   
   return true;
@@ -483,36 +434,6 @@ export function calculateStringSimilarity(str1: string, str2: string, threshold:
  * Calculate Levenshtein distance between two strings
  */
 function levenshteinDistance(str1: string, str2: string): number {
-<<<<<<< HEAD
-  // Ensure str1 is the shorter string for space optimization
-  if (str1.length > str2.length) {
-    [str1, str2] = [str2, str1];
-  }
-  
-  const n = str1.length;
-  const m = str2.length;
-  
-  // Use only two rows instead of full matrix
-  let previousRow = Array(n + 1).fill(0).map((_, i) => i);
-  let currentRow = Array(n + 1).fill(0);
-  
-  for (let j = 1; j <= m; j++) {
-    currentRow[0] = j;
-    
-    for (let i = 1; i <= n; i++) {
-      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
-      currentRow[i] = Math.min(
-        currentRow[i - 1] + 1,     // deletion
-        previousRow[i] + 1,        // insertion
-        previousRow[i - 1] + cost  // substitution
-      );
-    }
-    
-    [previousRow, currentRow] = [currentRow, previousRow];
-  }
-  
-  return previousRow[n];
-=======
   const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
   
   for (let i = 0; i <= str1.length; i++) {matrix[0][i] = i;}
@@ -530,7 +451,6 @@ function levenshteinDistance(str1: string, str2: string): number {
   }
   
   return matrix[str2.length][str1.length];
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
 }
 
 /**
@@ -552,27 +472,6 @@ export function calculateNumericSimilarity(num1: number, num2: number, tolerance
 }
 
 /**
-<<<<<<< HEAD
- * Calculate geographic similarity with coordinate-based distance calculations
- */
-function calculateGeographicSimilarity(geo1: any, geo2: any): number {
-  // Handle coordinate-based matching if available
-  if (typeof geo1 === 'object' && typeof geo2 === 'object' && 
-      geo1?.lat && geo1?.lng && geo2?.lat && geo2?.lng) {
-    const distance = calculateHaversineDistance(
-      geo1.lat, geo1.lng, geo2.lat, geo2.lng
-    );
-    // Score based on distance (closer = higher score)
-    const maxDistance = 100; // km
-    return Math.max(0, (maxDistance - distance) / maxDistance) * 0.6;
-  }
-  
-  // Fallback to string-based matching for country/city names
-  if (typeof geo1 === 'string' && typeof geo2 === 'string') {
-    return calculateStringSimilarity(geo1, geo2, 0.7) * 0.6;
-  }
-  
-=======
  * Calculate geographic similarity (simplified)
  */
 function calculateGeographicSimilarity(geo1: any, geo2: any): number {
@@ -580,28 +479,10 @@ function calculateGeographicSimilarity(geo1: any, geo2: any): number {
   if (typeof geo1 === 'string' && typeof geo2 === 'string') {
     return calculateStringSimilarity(geo1, geo2, 0.7) * 0.6; // Cap geo fuzzy at 0.6
   }
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
   return 0;
 }
 
 /**
-<<<<<<< HEAD
- * Calculate Haversine distance between two geographic coordinates
- */
-function calculateHaversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371; // Earth's radius in km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLng/2) * Math.sin(dLng/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
-}
-
-/**
-=======
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
  * Assess data quality for scoring bonus
  */
 function assessDataQuality(value: any, field: string): number {

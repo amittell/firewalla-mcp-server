@@ -3,8 +3,6 @@
  * Provides consistent pagination interface across all MCP tools
  */
 
-<<<<<<< HEAD
-=======
 import { config } from '../config/config.js';
 
 /**
@@ -60,7 +58,6 @@ export function getDefaultPageSize(requestedSize?: number): number {
   return config.defaultPageSize;
 }
 
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
 export interface CursorData {
   offset: number;
   page_size: number;
@@ -132,11 +129,7 @@ export function decodeCursor(cursor: string): CursorData {
  *
  * @param items - The array of items to paginate
  * @param cursor - Optional base64-encoded cursor string indicating the current pagination state
-<<<<<<< HEAD
- * @param page_size - Number of items per page (default is 100)
-=======
  * @param page_size - Number of items per page (default: configured DEFAULT_PAGE_SIZE or 100)
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
  * @param sort_by - Optional field name to sort by
  * @param sort_order - Sort order, either 'asc' or 'desc' (default is 'asc')
  * @returns A paginated result containing the current page of items, pagination metadata, and a next cursor if more items are available
@@ -144,11 +137,7 @@ export function decodeCursor(cursor: string): CursorData {
 export function paginateArray<T>(
   items: T[],
   cursor?: string,
-<<<<<<< HEAD
-  page_size: number = 100,
-=======
   page_size: number = getDefaultPageSize(),
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
   sort_by?: string,
   sort_order: 'asc' | 'desc' = 'asc'
 ): PaginatedResult<T> {
@@ -176,13 +165,7 @@ export function paginateArray<T>(
       const aVal = a[sort_by];
       const bVal = b[sort_by];
       
-<<<<<<< HEAD
-      if (aVal === bVal) {
-        return 0;
-      }
-=======
       if (aVal === bVal) {return 0;}
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
       
       // Case-insensitive string comparison for consistent sorting
       const aStr = String(aVal).toLowerCase();
@@ -227,11 +210,7 @@ export function paginateArray<T>(
  *
  * @param dataFetcher - A function that asynchronously retrieves all items to be paginated
  * @param cursor - An optional base64-encoded cursor string representing the current pagination state
-<<<<<<< HEAD
- * @param page_size - The number of items per page (default is 100)
-=======
  * @param page_size - The number of items per page (default: configured DEFAULT_PAGE_SIZE or 100)
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
  * @param sort_by - Optional field name to sort the items by
  * @param sort_order - Sort order, either 'asc' or 'desc' (default is 'asc')
  * @returns A paginated result containing the current page of items, pagination metadata, and next cursor if more items remain
@@ -240,11 +219,7 @@ export function paginateArray<T>(
 export async function createPaginatedResponse<T>(
   dataFetcher: () => Promise<T[]>,
   cursor?: string,
-<<<<<<< HEAD
-  page_size: number = 100,
-=======
   page_size: number = getDefaultPageSize(),
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
   sort_by?: string,
   sort_order: 'asc' | 'desc' = 'asc'
 ): Promise<PaginatedResult<T>> {

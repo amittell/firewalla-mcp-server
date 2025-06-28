@@ -359,7 +359,6 @@ export class FirewallaClient {
    * @public
    * @optimizeResponse('alarms') - Automatically optimizes response for token efficiency
    */
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
   @optimizeResponse('alarms')
   async getActiveAlarms(
     query?: string, 

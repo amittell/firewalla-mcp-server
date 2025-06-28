@@ -39,9 +39,9 @@ export class DebugTools {
 
   async getDebugInfo(): Promise<DebugInfo> {
     const memUsage = process.memoryUsage();
-    const cacheStats = this._firewalla.getCacheStats();
+    const cacheStats = this.firewalla.getCacheStats();
     const allMetrics = metricsCollector.getAllMetrics();
-    const health = await this._healthCheck.performHealthCheck();
+    const health = await this.healthCheck.performHealthCheck();
 
     return {
       timestamp: getCurrentTimestamp(),
@@ -77,7 +77,7 @@ export class DebugTools {
     const startTime = Date.now();
     
     try {
-      const summary = await this._firewalla.getFirewallSummary();
+      const summary = await this.firewalla.getFirewallSummary();
       const responseTime = Date.now() - startTime;
       
       return {
@@ -121,7 +121,7 @@ export class DebugTools {
       const startTime = Date.now();
       
       try {
-        await this._firewalla.getFirewallSummary();
+        await this.firewalla.getFirewallSummary();
         const responseTime = Date.now() - startTime;
         results.push({ success: true, responseTime });
       } catch (error) {
@@ -152,10 +152,10 @@ export class DebugTools {
   }
 
   clearCache(): { cleared_entries: number } {
-    const stats = this._firewalla.getCacheStats();
+    const stats = this.firewalla.getCacheStats();
     const clearedEntries = stats.size;
     
-    this._firewalla.clearCache();
+    this.firewalla.clearCache();
     
     logger.info('Cache cleared', { cleared_entries: clearedEntries });
     
@@ -211,7 +211,7 @@ export class DebugTools {
     }
     
     // Check cache size
-    const cacheStats = this._firewalla.getCacheStats();
+    const cacheStats = this.firewalla.getCacheStats();
     if (cacheStats.size > 1000) {
       issues.push({
         level: 'warning',
@@ -227,7 +227,7 @@ export class DebugTools {
 
   generateSystemReport(): string {
     const memUsage = process.memoryUsage();
-    const cacheStats = this._firewalla.getCacheStats();
+    const cacheStats = this.firewalla.getCacheStats();
     const uptime = Math.floor((Date.now() - this.startTime) / 1000);
     
     return `
