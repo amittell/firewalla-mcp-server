@@ -13,7 +13,7 @@ This report documents the comprehensive testing and validation of the problemati
 ## Tools Tested
 
 ### 1. get_bandwidth_usage
-## Status: ✅ PASSED
+#### Status: ✅ PASSED
 - **Purpose**: Retrieve top bandwidth-consuming devices
 - **Required Parameters**: `period` (1h, 24h, 7d, 30d), `limit` (1-500)
 - **Test Results**:
@@ -26,7 +26,7 @@ This report documents the comprehensive testing and validation of the problemati
   - ✅ Calls FirewallaClient with correct parameters
 
 ### 2. get_flow_trends
-## Status: ✅ PASSED
+#### Status: ✅ PASSED
 - **Purpose**: Get historical flow data trends over time
 - **Required Parameters**: `period` (optional, default: 24h), `interval` (optional, default: 3600s)
 - **Test Results**:
@@ -38,7 +38,7 @@ This report documents the comprehensive testing and validation of the problemati
   - ✅ Handles invalid trend data gracefully
 
 ### 3. search_flows
-## Status: ✅ PASSED
+#### Status: ✅ PASSED
 - **Purpose**: Advanced flow searching with complex query syntax
 - **Required Parameters**: `query` (string), `limit` (number)
 - **Test Results**:
@@ -48,7 +48,7 @@ This report documents the comprehensive testing and validation of the problemati
   - ✅ Returns error for missing required parameters
 
 ### 4. get_statistics_by_box
-## Status: ✅ PASSED
+#### Status: ✅ PASSED
 - **Purpose**: Get statistics for each Firewalla box with activity scores
 - **Required Parameters**: None (all optional)
 - **Test Results**:
@@ -209,7 +209,7 @@ Potential improvements:
 - Response compression for large datasets
 
 ### 4. Documentation Updates
-Update documentation to include:
+Revise documentation to include:
 - New parameter validation requirements
 - Error response formats
 - Performance characteristics
