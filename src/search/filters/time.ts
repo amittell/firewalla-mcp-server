@@ -58,8 +58,27 @@ export class TimeRangeFilter extends BaseFilter {
     }
   }
 
-  private readonly DEFAULT_TIME_MARGIN = 10; // 10 seconds
-  private readonly DEFAULT_POST_PROCESSING_MARGIN = 60; // 60 seconds for post-processing
+  /**
+   * Standardized time margin for timestamp matching (30 seconds)
+   *
+   * This margin is used consistently across both API-level filtering and
+   * post-processing to ensure identical behavior regardless of where
+   * the filtering occurs. The 30-second value provides a reasonable
+   * balance between accuracy and flexibility while accounting for:
+   *
+   * - Network latency between client and Firewalla API (typically <5s)
+   * - Clock synchronization differences between systems (typically <10s)
+   * - Timestamp precision variations (seconds vs milliseconds)
+   * - Small delays in data processing pipelines (<15s)
+   *
+   * Using a consistent value prevents subtle bugs where the same query
+   * might return different results for different entity types based on
+   * whether they support API-level time filtering or require post-processing.
+   *
+   * Note: Previously used inconsistent values (10s for API, 60s for post-processing)
+   * which caused discrepancies. Standardized to 30s for optimal balance.
+   */
+  private readonly STANDARD_TIME_MARGIN = 30; // seconds
 
   private handleFieldQuery(
     node: FieldQuery,
@@ -71,7 +90,7 @@ export class TimeRangeFilter extends BaseFilter {
     }
 
     // For exact timestamp matches, use a configurable small range
-    const margin = context.timeMargin || this.DEFAULT_TIME_MARGIN;
+    const margin = context.timeMargin || this.STANDARD_TIME_MARGIN;
     return {
       apiParams: this.buildTimeParams(
         timestamp - margin,
@@ -220,8 +239,7 @@ export class TimeRangeFilter extends BaseFilter {
         const targetTime = this.parseTimestamp(node.value);
         return Boolean(
           targetTime &&
-            Math.abs(timestamp - targetTime) <=
-              this.DEFAULT_POST_PROCESSING_MARGIN
+            Math.abs(timestamp - targetTime) <= this.STANDARD_TIME_MARGIN
         );
       }
 

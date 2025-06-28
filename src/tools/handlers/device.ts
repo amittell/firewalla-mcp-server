@@ -44,10 +44,10 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
         );
       }
 
-      const deviceId = args?.device_id as string | undefined;
+      const deviceId = args?.device_id;
       const includeOffline = (args?.include_offline as boolean) !== false; // Default to true
       const limit = limitValidation.sanitizedValue! as number;
-      const cursor = args?.cursor as string | undefined; // Cursor for pagination
+      const cursor = args?.cursor; // Cursor for pagination
 
       const devicesResponse = await firewalla.getDeviceStatus(
         deviceId,

@@ -120,16 +120,16 @@ describe('ToolRegistry', () => {
     it('should log warning when force registering with reason', () => {
       const handler1 = new MockToolHandler('warning_test', 'security');
       const handler2 = new MockToolHandler('warning_test', 'network');
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+      const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation();
 
       registry.register(handler1);
       registry.forceRegister(handler2, 'Testing force registration');
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/Forced tool registration.*warning_test.*Testing force registration/)
+      expect(stderrSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/\[WARNING\] Forced tool registration.*warning_test.*Testing force registration/)
       );
 
-      consoleSpy.mockRestore();
+      stderrSpy.mockRestore();
     });
 
     it('should not log warning when force registering without reason', () => {

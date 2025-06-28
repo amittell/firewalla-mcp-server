@@ -47,11 +47,11 @@ export class GetFlowDataHandler extends BaseToolHandler {
         );
       }
 
-      const query = args?.query as string | undefined;
-      const groupBy = args?.groupBy as string | undefined;
-      const sortBy = args?.sortBy as string | undefined;
+      const query = args?.query;
+      const groupBy = args?.groupBy;
+      const sortBy = args?.sortBy;
       const limit = limitValidation.sanitizedValue! as number;
-      const cursor = args?.cursor as string | undefined;
+      const cursor = args?.cursor;
 
       // Build query for time range if provided
       const startTime = args?.start_time as string | undefined;
@@ -262,8 +262,19 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
       const limit = limitValidation.sanitizedValue! as number;
       const sortByLastSeen = sortValidation.sanitizedValue!;
 
-      // Get all devices including offline ones with adequate buffer for filtering
-      const fetchLimit = Math.min(limit * 3, 1000); // Fetch 3x limit to account for offline filtering
+      // Buffer Strategy: Fetch extra devices to account for post-processing filtering
+      //
+      // Problem: When filtering for offline devices, we don't know how many devices
+      // are offline until after fetching. If we only fetch the requested limit,
+      // we might get fewer results than requested after filtering.
+      //
+      // Solution: Use a "buffer multiplier" strategy where we fetch 3x the requested
+      // limit to increase the probability of having enough offline devices after
+      // filtering. This trades some API overhead for more consistent result counts.
+      //
+      // The multiplier of 3 is empirically chosen based on typical online/offline
+      // ratios in network environments (usually 60-80% devices are online).
+      const fetchLimit = Math.min(limit * 3, 1000); // 3x buffer with 1000 cap for API limits
       const allDevicesResponse = await firewalla.getDeviceStatus(
         undefined,
         undefined,

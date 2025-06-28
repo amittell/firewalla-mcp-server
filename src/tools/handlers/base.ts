@@ -17,12 +17,150 @@
 import type { FirewallaClient } from '../../firewalla/client.js';
 
 /**
- * Generic arguments interface for MCP tool execution
+ * Base arguments interface for MCP tool execution
  *
- * Flexible key-value structure that allows tools to accept various parameter types
- * while maintaining type safety through individual tool implementations.
+ * Provides type-safe foundation for all tool arguments while maintaining flexibility
+ * for tool-specific parameter extensions. Tools should extend this interface with
+ * their specific argument requirements to ensure proper type checking.
  */
-export type ToolArgs = Record<string, unknown>;
+export interface BaseToolArgs {
+  /** @description Optional limit for paginated results (recommended: 1-1000) */
+  limit?: number;
+  /** @description Optional offset for paginated results */
+  offset?: number;
+  /** @description Optional cursor for cursor-based pagination */
+  cursor?: string;
+  /** @description Optional sorting field specification */
+  sort_by?: string;
+  /** @description Optional sort order (ascending or descending) */
+  sort_order?: 'asc' | 'desc';
+  /** @description Optional grouping field for result aggregation */
+  group_by?: string;
+  /** @description Optional flag to enable result aggregation */
+  aggregate?: boolean;
+  [key: string]: unknown; // Allow additional properties while maintaining base structure
+}
+
+/**
+ * Common query parameters for search and filtering operations
+ */
+export interface QueryArgs {
+  /** @description Query string for filtering results */
+  query?: string;
+  /** @description Alternative query field name for compatibility */
+  queryBy?: string;
+  /** @description Alternative sort field name for compatibility */
+  sortBy?: string;
+  /** @description Alternative group field name for compatibility */
+  groupBy?: string;
+}
+
+/**
+ * Time range parameters for temporal filtering
+ */
+export interface TimeRangeArgs {
+  /** @description Start time for filtering (ISO string or Unix timestamp) */
+  start_time?: string | number;
+  /** @description End time for filtering (ISO string or Unix timestamp) */
+  end_time?: string | number;
+  /** @description Time range object with start and end */
+  time_range?: {
+    start?: string | number;
+    end?: string | number;
+  };
+}
+
+/**
+ * Device-specific parameters
+ */
+export interface DeviceArgs {
+  /** @description Specific device ID to filter by */
+  device_id?: string;
+  /** @description Whether to include offline devices */
+  include_offline?: boolean;
+}
+
+/**
+ * Geographic filtering parameters
+ */
+export interface GeographicArgs {
+  /** @description Geographic filters object */
+  geographic_filters?: {
+    countries?: string[];
+    continents?: string[];
+    regions?: string[];
+    cities?: string[];
+    asns?: string[];
+    hosting_providers?: string[];
+    exclude_cloud?: boolean;
+    exclude_vpn?: boolean;
+    min_risk_score?: number;
+  };
+}
+
+/**
+ * Cross-reference and correlation parameters
+ */
+export interface CorrelationArgs {
+  /** @description Primary query for correlation */
+  primary_query?: string;
+  /** @description Secondary queries for correlation */
+  secondary_queries?: string[];
+  /** @description Field to correlate on */
+  correlation_field?: string;
+  /** @description Correlation parameters object */
+  correlation_params?: {
+    correlationFields?: string[];
+    correlationType?: 'AND' | 'OR';
+    temporalWindow?: {
+      windowSize?: number;
+      windowUnit?: string;
+    };
+    networkScope?: {
+      includeSubnets?: boolean;
+      includePorts?: boolean;
+    };
+    enableScoring?: boolean;
+    enableFuzzyMatching?: boolean;
+    minimumScore?: number;
+    customWeights?: Record<string, number>;
+    fuzzyConfig?: {
+      enabled?: boolean;
+      stringThreshold?: number;
+      ipSubnetMatching?: boolean;
+      numericTolerance?: number;
+      geographicRadius?: number;
+    };
+  };
+}
+
+/**
+ * Box/Group management parameters
+ */
+export interface BoxArgs {
+  /** @description Group ID for filtering boxes */
+  group_id?: string;
+}
+
+/**
+ * Comprehensive tool arguments interface that includes all common parameter patterns
+ * used across the Firewalla MCP server tool handlers.
+ *
+ * This replaces the generic `any` type with specific, type-safe interfaces that
+ * cover all the parameter patterns observed in the codebase while maintaining
+ * backward compatibility.
+ */
+export interface ToolArgs
+  extends BaseToolArgs,
+    QueryArgs,
+    TimeRangeArgs,
+    DeviceArgs,
+    GeographicArgs,
+    CorrelationArgs,
+    BoxArgs {
+  // Additional tool-specific parameters can be added here
+  // while maintaining type safety through the constituent interfaces
+}
 
 /**
  * Standardized response structure for MCP tool execution

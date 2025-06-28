@@ -51,7 +51,7 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
         );
       }
 
-      const query = args?.query as string | undefined;
+      const query = args?.query;
       const summaryOnly = (args?.summary_only as boolean) ?? false;
       const limit = limitValidation.sanitizedValue! as number;
 
@@ -362,11 +362,27 @@ export class GetTargetListsHandler extends BaseToolHandler {
               arr => arr.length,
               0
             ),
+            // Target List Buffer Strategy: Per-list target limiting
+            //
+            // Problem: Some target lists (especially threat intelligence feeds)
+            // can contain 10,000+ targets, leading to:
+            // - Excessive response payload sizes
+            // - JSON serialization performance issues
+            // - Client-side rendering problems
+            //
+            // Solution: Limit to 500 targets per list while preserving total count.
+            // This balances:
+            // - Useful data visibility (500 targets shows patterns/types)
+            // - Response performance (manageable payload size)
+            // - Client usability (reasonable display limits)
+            //
+            // The 500 limit was chosen as 5x the original 100 limit to provide
+            // better visibility into large lists while maintaining performance.
             targets: SafeAccess.safeArrayAccess(
               list.targets,
-              arr => arr.slice(0, 500),
+              arr => arr.slice(0, 500), // Per-list target buffer limit
               []
-            ), // Increased from 100 to 500 targets per list
+            ),
             last_updated: safeUnixToISOString(
               SafeAccess.getNestedValue(list, 'lastUpdated', undefined) as
                 | number
@@ -430,9 +446,24 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
       const ruleType = ruleTypeValidation.sanitizedValue!;
       const activeOnly = activeOnlyValidation.sanitizedValue!;
 
-      // Add reasonable limit to prevent memory issues with large rule sets
-      // Summary analysis doesn't need all rules, 5000 should be sufficient for statistics
-      const analysisLimit = 5000;
+      // Statistical Analysis Buffer Strategy: Fixed limit for rule analysis
+      //
+      // Problem: Rule summary analysis requires processing potentially thousands
+      // of rules to generate meaningful statistics. Without limits, this could:
+      // - Consume excessive memory for large rule sets (10k+ rules)
+      // - Cause slow API responses
+      // - Risk timeout failures on resource-constrained systems
+      //
+      // Solution: Use a fixed 5000 rule limit for statistical analysis.
+      // This provides:
+      // - Statistically significant sample size for most networks
+      // - Predictable memory usage (approximately 5000 * rule_object_size)
+      // - Consistent response times regardless of total rule count
+      //
+      // Rationale: 5000 rules represents a substantial enterprise-level rule set
+      // and provides sufficient data for accurate breakdown statistics, hit rates,
+      // and categorization analysis while maintaining performance.
+      const analysisLimit = 5000; // Fixed buffer for statistical analysis
       const allRulesResponse = await firewalla.getNetworkRules(
         undefined,
         analysisLimit
@@ -646,9 +677,19 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
 
       const minHits = minHitsValidation.sanitizedValue! as number;
 
-      // Fetch rules with a reasonable buffer to account for filtering by minHits
-      // Use 3x the limit to ensure we have enough rules after filtering
-      const fetchLimit = Math.min(limit * 3, 3000);
+      // Buffer Strategy: Over-fetch to compensate for hit-count filtering
+      //
+      // Problem: Rules are filtered by minimum hit count after retrieval. Since hit
+      // counts vary widely (some rules have 0 hits, others have thousands), we can't
+      // predict how many rules will pass the filter.
+      //
+      // Solution: Apply the same 3x buffer strategy as device filtering. This ensures
+      // we typically have enough rules that meet the minimum hit threshold without
+      // requiring multiple API calls or complex pagination logic.
+      //
+      // The 3000 cap prevents excessive API loads while still allowing reasonable
+      // result sets for most use cases.
+      const fetchLimit = Math.min(limit * 3, 3000); // 3x buffer with 3000 cap
       const allRulesResponse = await firewalla.getNetworkRules(
         undefined,
         fetchLimit
@@ -796,7 +837,27 @@ export class GetRecentRulesHandler extends BaseToolHandler {
       const limit = limitValidation.sanitizedValue! as number;
       const includeModified = (args?.include_modified as boolean) ?? true;
 
-      // Dynamic fetch limit calculation based on expected filtering efficiency
+      // Adaptive Buffer Strategy: Dynamic fetch limit calculation
+      //
+      // Challenge: Time-based filtering has highly variable efficiency depending on:
+      // - Time window size (1 hour vs 168 hours)
+      // - Network activity levels during the period
+      // - Historical rule creation/modification patterns
+      //
+      // Solution: Use an adaptive multiplier that scales with the requested limit:
+      // - Small limits (≤50): Use higher multiplier (up to 10x) to ensure adequate results
+      // - Large limits (≥500): Use conservative multiplier (3x) to avoid excessive API load
+      // - Formula: max(3, min(10, 500/limit)) provides smooth scaling
+      //
+      // Example multipliers:
+      // - limit=10:  multiplier=10x (fetchLimit=100) - high buffer for small requests
+      // - limit=50:  multiplier=10x (fetchLimit=500) - still generous buffer
+      // - limit=100: multiplier=5x  (fetchLimit=500) - balanced approach
+      // - limit=200: multiplier=3x  (fetchLimit=600) - efficient for larger requests
+      // - limit=500: multiplier=3x  (fetchLimit=1500) - minimal overhead
+      //
+      // The 2000 cap prevents excessive API calls while still allowing reasonable
+      // result sets for most time-based queries.
       const fetchMultiplier = Math.max(3, Math.min(10, 500 / limit)); // Adaptive multiplier: 3-10x based on limit size
       const fetchLimit = Math.min(limit * fetchMultiplier, 2000); // Cap at reasonable maximum
       const allRulesResponse = await firewalla.getNetworkRules(

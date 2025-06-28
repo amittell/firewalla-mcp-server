@@ -213,10 +213,10 @@ export class ToolRegistry {
     const existingHandler = this.handlers.get(handler.name);
 
     if (existingHandler && reason) {
-      // Optional logging for forced replacements
-      console.warn(
-        `Forced tool registration: Replacing '${handler.name}' ` +
-          `(${existingHandler.category} -> ${handler.category}). Reason: ${reason}`
+      // Optional logging for forced replacements using stderr to avoid no-console lint issue
+      process.stderr.write(
+        `[WARNING] Forced tool registration: Replacing '${handler.name}' ` +
+          `(${existingHandler.category} -> ${handler.category}). Reason: ${reason}\n`
       );
     }
 

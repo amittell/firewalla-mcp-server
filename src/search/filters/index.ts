@@ -272,6 +272,8 @@ export class FilterFactory {
       }
 
       // Combine cache keys with unique separator to avoid conflicts
+      // Using '::' as separator instead of '|' to prevent conflicts with
+      // field values that might contain pipe characters (e.g., regex patterns)
       if (filterResult.cacheKeyComponent) {
         result.cacheKeyComponent +=
           (result.cacheKeyComponent ? '::' : '') +
