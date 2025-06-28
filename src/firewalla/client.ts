@@ -108,7 +108,7 @@ export class FirewallaClient {
     this.cache = new Map();
 
     // Use mspBaseUrl if provided, otherwise construct from mspId
-    const baseURL = config.mspBaseUrl || `https://${config.mspId}/v2`;
+    const baseURL = config.mspBaseUrl || `https://${config.mspId}`;
 
     this.api = axios.create({
       baseURL,
@@ -116,11 +116,12 @@ export class FirewallaClient {
       headers: {
         Authorization: `Token ${config.mspToken}`,
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'application/json, text/plain, */*',
         'Accept-Language': 'en-US,en;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
+        Connection: 'keep-alive',
         'Sec-Fetch-Dest': 'empty',
         'Sec-Fetch-Mode': 'cors',
         'Sec-Fetch-Site': 'same-origin',
@@ -277,12 +278,20 @@ export class FirewallaClient {
       }
 
       // Log successful API requests
-      console.log(`API Request: ${method} ${endpoint}`);
-      console.log(`API Response: ${response.status} ${endpoint}`);
+      logger.debug('API Request completed', {
+        method,
+        endpoint,
+        status: response.status
+      });
 
       // Check if we're getting HTML instead of JSON
-      if (typeof response.data === 'string' && (response.data as string).includes('<!DOCTYPE html>')) {
-        throw new Error(`Received HTML login page instead of JSON API response. This indicates authentication or API access issues. URL: ${response.config.url}`);
+      if (
+        typeof response.data === 'string' &&
+        (response.data as string).includes('<!DOCTYPE html>')
+      ) {
+        throw new Error(
+          `Received HTML login page instead of JSON API response. This indicates authentication or API access issues. URL: ${response.config.url}`
+        );
       }
 
       // Handle different response formats from Firewalla API
@@ -420,8 +429,8 @@ export class FirewallaClient {
     }
 
     const endpoint = this.config.boxId
-      ? `/boxes/${this.config.boxId}/alarms`
-      : `/alarms`;
+      ? `/v2/boxes/${this.config.boxId}/alarms`
+      : `/v2/alarms`;
 
     const response = await this.request<{
       count: number;
@@ -489,7 +498,7 @@ export class FirewallaClient {
       next_cursor?: string;
     }>(
       'GET',
-      this.config.boxId ? `/boxes/${this.config.boxId}/flows` : `/flows`,
+      this.config.boxId ? `/v2/boxes/${this.config.boxId}/flows` : `/v2/flows`,
       params
     );
 
@@ -598,8 +607,8 @@ export class FirewallaClient {
         const params: Record<string, unknown> = {};
 
         const endpoint = this.config.boxId
-          ? `/boxes/${this.config.boxId}/devices`
-          : `/devices`;
+          ? `/v2/boxes/${this.config.boxId}/devices`
+          : `/v2/devices`;
 
         // API returns direct array of devices
         const response = await this.request<Device[]>('GET', endpoint, params);
@@ -815,8 +824,8 @@ export class FirewallaClient {
 
       // Use correct Firewalla API pattern: /flows with groupBy and sortBy
       const endpoint = this.config.boxId
-        ? `/boxes/${this.config.boxId}/flows`
-        : '/flows';
+        ? `/v2/boxes/${this.config.boxId}/flows`
+        : '/v2/flows';
       const params: Record<string, unknown> = {
         query: `ts:${begin}-${end}`,
         groupBy: 'device',
@@ -907,7 +916,7 @@ export class FirewallaClient {
       next_cursor?: string;
     }>(
       'GET',
-      this.config.boxId ? `/boxes/${this.config.boxId}/rules` : `/rules`,
+      this.config.boxId ? `/v2/boxes/${this.config.boxId}/rules` : `/v2/rules`,
       params
     );
 
@@ -982,8 +991,8 @@ export class FirewallaClient {
     >(
       'GET',
       this.config.boxId
-        ? `/boxes/${this.config.boxId}/target-lists`
-        : `/target-lists`,
+        ? `/v2/boxes/${this.config.boxId}/target-lists`
+        : `/v2/target-lists`,
       params
     );
 
@@ -1009,7 +1018,7 @@ export class FirewallaClient {
   }> {
     return this.request(
       'GET',
-      `/boxes/${this.config.boxId}/summary`,
+      `/v2/boxes/${this.config.boxId}/summary`,
       undefined,
       true
     );
@@ -1025,7 +1034,7 @@ export class FirewallaClient {
   }> {
     return this.request(
       'GET',
-      `/boxes/${this.config.boxId}/metrics/security`,
+      `/v2/boxes/${this.config.boxId}/metrics/security`,
       undefined,
       true
     );
@@ -1047,7 +1056,7 @@ export class FirewallaClient {
   }> {
     return this.request(
       'GET',
-      `/boxes/${this.config.boxId}/topology`,
+      `/v2/boxes/${this.config.boxId}/topology`,
       undefined,
       true
     );
@@ -1066,7 +1075,7 @@ export class FirewallaClient {
     const params = { hours };
     return this.request(
       'GET',
-      `/boxes/${this.config.boxId}/threats/recent`,
+      `/v2/boxes/${this.config.boxId}/threats/recent`,
       params,
       true
     );
@@ -1086,12 +1095,7 @@ export class FirewallaClient {
       }
 
       // API returns direct array of boxes
-      const response = await this.request<any[]>(
-        'GET',
-        `/boxes`,
-        params,
-        true
-      );
+      const response = await this.request<any[]>('GET', `/boxes`, params, true);
 
       // Enhanced null safety and data validation
       const rawResults = Array.isArray(response) ? response : [];
@@ -1568,8 +1572,8 @@ export class FirewallaClient {
 
       // Get flow data for the period
       const endpoint = this.config.boxId
-        ? `/boxes/${this.config.boxId}/flows`
-        : '/flows';
+        ? `/v2/boxes/${this.config.boxId}/flows`
+        : '/v2/flows';
       const flowResponse = await this.request<{
         count: number;
         results: any[];
