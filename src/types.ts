@@ -42,7 +42,23 @@ export interface FirewallaConfig {
  * 15: Abnormal Traffic - Unusual traffic patterns
  * 16: Policy Violation - Security policy breach
  */
-export type AlarmType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
+export type AlarmType =
+  | 1
+  | 2
+  | 3
+  | 4
+  | 5
+  | 6
+  | 7
+  | 8
+  | 9
+  | 10
+  | 11
+  | 12
+  | 13
+  | 14
+  | 15
+  | 16;
 
 /**
  * Alarm status values
@@ -66,7 +82,19 @@ export type AlarmStatus = 1 | 2;
  * video: Video streaming services
  * vpn: Virtual private network traffic
  */
-export type CategoryType = 'ad' | 'edu' | 'games' | 'gamble' | 'intel' | 'p2p' | 'porn' | 'private' | 'social' | 'shopping' | 'video' | 'vpn';
+export type CategoryType =
+  | 'ad'
+  | 'edu'
+  | 'games'
+  | 'gamble'
+  | 'intel'
+  | 'p2p'
+  | 'porn'
+  | 'private'
+  | 'social'
+  | 'shopping'
+  | 'video'
+  | 'vpn';
 
 /**
  * Security alarm/alert from Firewalla - API Compliant
@@ -91,7 +119,7 @@ export interface Alarm {
   protocol: string;
   /** Optional severity level */
   severity?: string;
-  
+
   // Conditional properties based on alarm type
   /** Device details (when type != 4) */
   device?: {
@@ -485,7 +513,20 @@ export interface SearchFilter {
   /** Field name to filter on */
   field: string;
   /** Operator for comparison */
-  operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'nin' | 'contains' | 'startswith' | 'endswith' | 'regex' | 'range';
+  operator:
+    | 'eq'
+    | 'neq'
+    | 'gt'
+    | 'gte'
+    | 'lt'
+    | 'lte'
+    | 'in'
+    | 'nin'
+    | 'contains'
+    | 'startswith'
+    | 'endswith'
+    | 'regex'
+    | 'range';
   /** Value(s) to filter against */
   value: string | number | boolean | Array<string | number | boolean>;
 }
@@ -534,7 +575,10 @@ export interface SearchResult<T> {
   /** Pagination cursor for next page */
   next_cursor?: string;
   /** Aggregation results if requested */
-  aggregations?: Record<string, number | string | boolean | Record<string, unknown>>;
+  aggregations?: Record<
+    string,
+    number | string | boolean | Record<string, unknown>
+  >;
   /** Search metadata */
   metadata?: {
     /** Query execution time in milliseconds */

@@ -1,0 +1,95 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+.cache/
+
+# Coverage reports
+coverage/
+.nyc_output/
+*.lcov
+
+# Environment and config files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Backup files
+*.backup
+*.bak
+*.tmp
+*~
+.#*
+
+# Log files
+logs/
+*.log
+
+# Package manager files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Documentation that might have special formatting
+CHANGELOG.md
+LICENSE
+*.md
+
+# Git files
+.gitignore
+.gitattributes
+
+# CI/CD files (might have specific formatting requirements)
+.github/
+.githooks/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.csr
+
+# Compressed files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Firewalla-specific excludes
+validation/
+scripts/
+docs/
+
+# MCP server specific
+.mcp.json
+*.d.ts

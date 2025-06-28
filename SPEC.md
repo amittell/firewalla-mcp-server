@@ -262,6 +262,37 @@ interface Flow {
 
 ## v1.0.0 Implementation Features
 
+### CRITICAL: Correct API Endpoint Patterns
+
+**DO NOT use these non-existent endpoints:**
+- ❌ `/stats/topDevicesByBandwidth` - DOES NOT EXIST
+- ❌ `/stats/simple` - DOES NOT EXIST  
+- ❌ `/trends/flows` - DOES NOT EXIST
+- ❌ `/trends/alarms` - DOES NOT EXIST
+
+**ALWAYS use these real endpoints:**
+- ✅ `/v2/boxes/{box_gid}/flows` - Real endpoint for flow data
+- ✅ `/v2/boxes/{box_gid}/alarms` - Real endpoint for alarm data
+- ✅ `/v2/boxes/{box_gid}/devices` - Real endpoint for device data
+- ✅ `/v2/boxes/{box_gid}/rules` - Real endpoint for rule data
+
+**For bandwidth usage:**
+Use `/flows` endpoint with:
+```javascript
+{
+  query: "ts:begin-end",
+  groupBy: "device",
+  sortBy: "download+upload:desc",
+  limit: N
+}
+```
+
+**For trends:**
+Fetch raw data from `/flows` or `/alarms` and perform client-side time-bucketing aggregation.
+
+**For statistics:**
+Aggregate data from multiple real endpoints (`/boxes`, `/alarms`, `/rules`) instead of using fictional statistics endpoints.
+
 ### Mandatory Limit Parameters
 
 **REQUIRED**: All paginated tools now require explicit `limit` parameter in their schema.

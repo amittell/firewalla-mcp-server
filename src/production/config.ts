@@ -1,4 +1,9 @@
-import { FirewallaConfig } from '../types';
+import type { FirewallaConfig } from '../types';
+import {
+  getRequiredEnvVar,
+  getOptionalEnvVar,
+  getOptionalEnvInt,
+} from '../utils/env.js';
 
 export interface ProductionConfig extends FirewallaConfig {
   environment: 'production' | 'staging' | 'development';
@@ -25,71 +30,55 @@ export function getProductionConfig(): ProductionConfig {
 
   return {
     ...baseConfig,
-    environment: (getOptionalEnvVar('NODE_ENV', 'development') as ProductionConfig['environment']),
-    logLevel: (getOptionalEnvVar('LOG_LEVEL', 'info') as ProductionConfig['logLevel']),
+    environment: getOptionalEnvVar(
+      'NODE_ENV',
+      'development'
+    ) as ProductionConfig['environment'],
+    logLevel: getOptionalEnvVar(
+      'LOG_LEVEL',
+      'info'
+    ) as ProductionConfig['logLevel'],
     enableMetrics: getOptionalEnvVar('ENABLE_METRICS', 'true') === 'true',
-    enableHealthChecks: getOptionalEnvVar('ENABLE_HEALTH_CHECKS', 'true') === 'true',
-    corsOrigins: getOptionalEnvVar('CORS_ORIGINS', 'https://claude.ai,https://anthropic.com').split(','),
-    trustedProxies: getOptionalEnvVar('TRUSTED_PROXIES', '').split(',').filter(Boolean),
-    maxConcurrentRequests: getOptionalEnvInt('MAX_CONCURRENT_REQUESTS', 50, 1, 1000), // 1 to 1000 concurrent requests
-    gracefulShutdownTimeout: getOptionalEnvInt('GRACEFUL_SHUTDOWN_TIMEOUT', 30000, 1000, 60000), // 1s to 60s
+    enableHealthChecks:
+      getOptionalEnvVar('ENABLE_HEALTH_CHECKS', 'true') === 'true',
+    corsOrigins: getOptionalEnvVar(
+      'CORS_ORIGINS',
+      'https://claude.ai,https://anthropic.com'
+    ).split(','),
+    trustedProxies: getOptionalEnvVar('TRUSTED_PROXIES', '')
+      .split(',')
+      .filter(Boolean),
+    maxConcurrentRequests: getOptionalEnvInt(
+      'MAX_CONCURRENT_REQUESTS',
+      50,
+      1,
+      1000
+    ), // 1 to 1000 concurrent requests
+    gracefulShutdownTimeout: getOptionalEnvInt(
+      'GRACEFUL_SHUTDOWN_TIMEOUT',
+      30000,
+      1000,
+      60000
+    ), // 1s to 60s
   };
 }
 
-function getRequiredEnvVar(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Required environment variable ${name} is not set`);
-  }
-  return value;
-}
-
-function getOptionalEnvVar(name: string, defaultValue: string): string {
-  return process.env[name] || defaultValue;
-}
-
-/**
- * Safely parses an environment variable to an integer with validation
- * 
- * @param name - The environment variable name to parse
- * @param defaultValue - The default value to use if parsing fails
- * @param min - Optional minimum value for validation
- * @param max - Optional maximum value for validation
- * @returns The parsed integer value or the default value
- * @throws {Error} If the parsed value is outside the valid range
- */
-function getOptionalEnvInt(name: string, defaultValue: number, min?: number, max?: number): number {
-  const envValue = process.env[name];
-  if (!envValue) {
-    return defaultValue;
-  }
-  
-  const parsed = parseInt(envValue, 10);
-  if (isNaN(parsed)) {
-    // eslint-disable-next-line no-console
-    console.warn(`Invalid numeric value for ${name}: ${envValue}, using default: ${defaultValue}`);
-    return defaultValue;
-  }
-  
-  if (min !== undefined && parsed < min) {
-    throw new Error(`Environment variable ${name} must be at least ${min}, got: ${parsed}`);
-  }
-  
-  if (max !== undefined && parsed > max) {
-    throw new Error(`Environment variable ${name} must be at most ${max}, got: ${parsed}`);
-  }
-  
-  return parsed;
-}
-
 export class ProductionConfigValidator {
-  static validate(config: ProductionConfig): { valid: boolean; errors: string[]; warnings: string[] } {
+  static validate(config: ProductionConfig): {
+    valid: boolean;
+    errors: string[];
+    warnings: string[];
+  } {
     const errors: string[] = [];
     const warnings: string[] = [];
 
     // Validate environment
-    if (!['production', 'staging', 'development'].includes(config.environment)) {
-      errors.push('Invalid environment. Must be production, staging, or development');
+    if (
+      !['production', 'staging', 'development'].includes(config.environment)
+    ) {
+      errors.push(
+        'Invalid environment. Must be production, staging, or development'
+      );
     }
 
     // Validate log level
@@ -100,7 +89,9 @@ export class ProductionConfigValidator {
     // Production-specific validations
     if (config.environment === 'production') {
       if (config.logLevel === 'debug') {
-        warnings.push('Debug logging enabled in production may impact performance');
+        warnings.push(
+          'Debug logging enabled in production may impact performance'
+        );
       }
 
       // MSP ID validation for production - no HTTP check needed as URL is constructed
@@ -110,7 +101,9 @@ export class ProductionConfigValidator {
       }
 
       if (config.cacheTtl > 3600) {
-        warnings.push('Cache TTL over 1 hour may cause stale data in production');
+        warnings.push(
+          'Cache TTL over 1 hour may cause stale data in production'
+        );
       }
 
       if (config.corsOrigins.includes('*')) {
@@ -118,7 +111,9 @@ export class ProductionConfigValidator {
       }
 
       if (config.maxConcurrentRequests > 200) {
-        warnings.push('High concurrent request limit may impact system stability');
+        warnings.push(
+          'High concurrent request limit may impact system stability'
+        );
       }
     }
 
@@ -137,12 +132,20 @@ export class ProductionConfigValidator {
     });
 
     // Validate numeric ranges
-    if (config.maxConcurrentRequests < 1 || config.maxConcurrentRequests > 1000) {
+    if (
+      config.maxConcurrentRequests < 1 ||
+      config.maxConcurrentRequests > 1000
+    ) {
       errors.push('Max concurrent requests must be between 1 and 1000');
     }
 
-    if (config.gracefulShutdownTimeout < 1000 || config.gracefulShutdownTimeout > 60000) {
-      errors.push('Graceful shutdown timeout must be between 1000ms and 60000ms');
+    if (
+      config.gracefulShutdownTimeout < 1000 ||
+      config.gracefulShutdownTimeout > 60000
+    ) {
+      errors.push(
+        'Graceful shutdown timeout must be between 1000ms and 60000ms'
+      );
     }
 
     return {
@@ -166,7 +169,7 @@ function isValidIpOrCidr(value: string): boolean {
   // Basic IP/CIDR validation
   const ipRegex = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/;
   const ipv6Regex = /^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}(\/\d{1,3})?$/;
-  
+
   return ipRegex.test(value) || ipv6Regex.test(value);
 }
 

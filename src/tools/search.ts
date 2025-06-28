@@ -5,23 +5,27 @@
 
 import { queryParser } from '../search/parser.js';
 import { filterFactory } from '../search/filters/index.js';
-import { FilterContext } from '../search/filters/base.js';
-import { SearchParams, SearchResult } from '../search/types.js';
-import { SearchOptions } from '../types.js';
-import { FirewallaClient } from '../firewalla/client.js';
-import { ParameterValidator, SafeAccess, QuerySanitizer } from '../validation/error-handler.js';
-import { 
-  validateCrossReference, 
+import type { FilterContext } from '../search/filters/base.js';
+import type { SearchParams, SearchResult } from '../search/types.js';
+import type { SearchOptions } from '../types.js';
+import type { FirewallaClient } from '../firewalla/client.js';
+import {
+  ParameterValidator,
+  SafeAccess,
+  QuerySanitizer,
+} from '../validation/error-handler.js';
+import {
+  validateCrossReference,
   validateEnhancedCrossReference,
-  suggestEntityType, 
-  extractCorrelationValues, 
+  suggestEntityType,
+  extractCorrelationValues,
   filterByCorrelation,
   performMultiFieldCorrelation,
   performEnhancedMultiFieldCorrelation,
   getSupportedCorrelationCombinations,
   getFieldValue,
-  EnhancedCorrelationParams,
-  ScoringCorrelationParams
+  type EnhancedCorrelationParams,
+  type ScoringCorrelationParams,
 } from '../validation/field-mapper.js';
 
 /**
@@ -51,15 +55,27 @@ const DEFAULT_SEARCH_CONFIG: SearchConfig = {
     lowMax: parseInt(process.env.RISK_THRESHOLD_LOW_MAX || '3', 10),
     mediumMax: parseInt(process.env.RISK_THRESHOLD_MEDIUM_MAX || '6', 10),
     highMax: parseInt(process.env.RISK_THRESHOLD_HIGH_MAX || '8', 10),
-    highRiskCountryMin: parseInt(process.env.RISK_THRESHOLD_COUNTRY_MIN || '6', 10),
+    highRiskCountryMin: parseInt(
+      process.env.RISK_THRESHOLD_COUNTRY_MIN || '6',
+      10
+    ),
     highRiskFlowMin: parseInt(process.env.RISK_THRESHOLD_FLOW_MIN || '7', 10),
     suspiciousAsnMin: parseInt(process.env.RISK_THRESHOLD_ASN_MIN || '7', 10),
   },
   performance: {
-    correlationTimeoutMs: parseInt(process.env.CORRELATION_TIMEOUT_MS || '30000', 10),
-    maxCorrelationResults: parseInt(process.env.MAX_CORRELATION_RESULTS || '1000', 10),
-    cacheExpirationMs: parseInt(process.env.CACHE_EXPIRATION_MS || '300000', 10), // 5 minutes
-  }
+    correlationTimeoutMs: parseInt(
+      process.env.CORRELATION_TIMEOUT_MS || '30000',
+      10
+    ),
+    maxCorrelationResults: parseInt(
+      process.env.MAX_CORRELATION_RESULTS || '1000',
+      10
+    ),
+    cacheExpirationMs: parseInt(
+      process.env.CACHE_EXPIRATION_MS || '300000',
+      10
+    ), // 5 minutes
+  },
 };
 
 /**
@@ -76,12 +92,12 @@ export function updateSearchConfig(newConfig: Partial<SearchConfig>): void {
     ...newConfig,
     riskThresholds: {
       ...currentSearchConfig.riskThresholds,
-      ...(newConfig.riskThresholds || {})
+      ...(newConfig.riskThresholds || {}),
     },
     performance: {
       ...currentSearchConfig.performance,
-      ...(newConfig.performance || {})
-    }
+      ...(newConfig.performance || {}),
+    },
   };
 }
 
@@ -116,12 +132,20 @@ interface ApiParameters {
  */
 interface SearchStrategy {
   entityType: string;
-  // eslint-disable-next-line no-unused-vars
-  executeApiCall(client: FirewallaClient, params: SearchParams, apiParams: ApiParameters, searchOptions: SearchOptions): Promise<{ results: any[], count: number, next_cursor?: string }>;
-  // eslint-disable-next-line no-unused-vars
-  validateParams?(params: SearchParams): { isValid: boolean; errors: string[] };
-  // eslint-disable-next-line no-unused-vars
-  processResults?(results: any[], params: SearchParams): any[];
+
+  executeApiCall: (
+    client: FirewallaClient,
+    params: SearchParams,
+    apiParams: ApiParameters,
+    searchOptions: SearchOptions
+  ) => Promise<{ results: any[]; count: number; next_cursor?: string }>;
+
+  validateParams?: (params: SearchParams) => {
+    isValid: boolean;
+    errors: string[];
+  };
+
+  processResults?: (results: any[], params: SearchParams) => any[];
 }
 
 /**
@@ -142,10 +166,7 @@ interface SearchValidationConfig {
 export class SearchEngine {
   private strategies: Map<string, SearchStrategy> = new Map();
 
-  constructor(
-    // eslint-disable-next-line no-unused-vars
-    private firewalla: FirewallaClient
-  ) {
+  constructor(private firewalla: FirewallaClient) {
     this.initializeStrategies();
   }
 
@@ -157,62 +178,67 @@ export class SearchEngine {
       entityType: 'flows',
       executeApiCall: async (client, params, apiParams, searchOptions) => {
         let queryString = params.query;
-        
+
         // Add time range to query if provided
         if (searchOptions.time_range?.start && searchOptions.time_range?.end) {
           const startDate = new Date(searchOptions.time_range.start);
           const endDate = new Date(searchOptions.time_range.end);
-          
+
           if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
             throw new Error('Invalid time range format');
           }
-          
+
           if (startDate >= endDate) {
             throw new Error('Start time must be before end time');
           }
-          
+
           const startTs = Math.floor(startDate.getTime() / 1000);
           const endTs = Math.floor(endDate.getTime() / 1000);
           queryString = `timestamp:${startTs}-${endTs} AND (${params.query})`;
         }
-        
-        return await client.searchFlows({ 
-          query: queryString, 
-          limit: apiParams.limit,
-          group_by: params.group_by,
-          aggregate: params.aggregate
-        }, searchOptions);
-      }
+
+        return client.searchFlows(
+          {
+            query: queryString,
+            limit: apiParams.limit,
+            group_by: params.group_by,
+            aggregate: params.aggregate,
+          },
+          searchOptions
+        );
+      },
     });
 
     this.strategies.set('alarms', {
       entityType: 'alarms',
-      // eslint-disable-next-line no-unused-vars
+
       executeApiCall: async (client, params, apiParams, _searchOptions) => {
-        return await client.getActiveAlarms(
+        return client.getActiveAlarms(
           apiParams.queryString || params.query || undefined,
           undefined,
           'timestamp:desc',
           params.limit
         );
-      }
+      },
     });
 
     this.strategies.set('rules', {
       entityType: 'rules',
-      // eslint-disable-next-line no-unused-vars
+
       executeApiCall: async (client, params, _apiParams, _searchOptions) => {
         // Use reasonable limit for search operations to prevent memory issues
         // Fetch 2x the requested limit (capped at 2000) to account for post-processing filters
-        const searchLimit = params.limit ? Math.min(params.limit * 2, 2000) : 2000;
-        return await client.getNetworkRules(undefined, searchLimit);
+        const searchLimit = params.limit
+          ? Math.min(params.limit * 2, 2000)
+          : 2000;
+        return client.getNetworkRules(undefined, searchLimit);
       },
       processResults: (results, params) => {
         if (params.limit) {
           return results.slice(0, params.limit);
         }
         return results;
-      }
+      },
     });
 
     this.strategies.set('devices', {
@@ -224,18 +250,18 @@ export class SearchEngine {
           cursor: params?.cursor,
           sort_by: params?.sort_by,
           group_by: params?.group_by,
-          aggregate: params?.aggregate
+          aggregate: params?.aggregate,
         };
-        
+
         // Add time range to searchOptions if provided
         if (params.time_range?.start && params.time_range?.end) {
           searchOptions.time_range = {
             start: params.time_range.start,
-            end: params.time_range.end
+            end: params.time_range.end,
           };
         }
-        
-        return await client.searchDevices(searchQuery, searchOptions);
+
+        return client.searchDevices(searchQuery, searchOptions);
       },
       processResults: (results, params) => {
         if (params.offset && !params.cursor) {
@@ -247,28 +273,32 @@ export class SearchEngine {
           return processedResults;
         }
         return results;
-      }
+      },
     });
 
     this.strategies.set('target_lists', {
       entityType: 'target_lists',
-      // eslint-disable-next-line no-unused-vars
+
       executeApiCall: async (client, _params, _apiParams, _searchOptions) => {
-        return await client.getTargetLists();
+        return client.getTargetLists();
       },
       processResults: (results, params) => {
         if (params.limit) {
           return results.slice(0, params.limit);
         }
         return results;
-      }
+      },
     });
   }
 
   /**
    * Standardized parameter validation for all search operations
    */
-  private validateSearchParams(params: SearchParams, entityType: string, config: SearchValidationConfig): void {
+  private validateSearchParams(
+    params: SearchParams,
+    entityType: string,
+    config: SearchValidationConfig
+  ): void {
     const errors: string[] = [];
 
     // Validate params is not null/undefined
@@ -282,10 +312,16 @@ export class SearchEngine {
 
     // Validate query parameter
     if (config.requireQuery !== false) {
-      const queryValidation = ParameterValidator.validateRequiredString(params?.query, 'query');
+      const queryValidation = ParameterValidator.validateRequiredString(
+        params?.query,
+        'query'
+      );
       if (!queryValidation.isValid) {
         errors.push(...queryValidation.errors);
-      } else if (!config.allowEmptyQuery && !queryValidation.sanitizedValue?.trim()) {
+      } else if (
+        !config.allowEmptyQuery &&
+        !queryValidation.sanitizedValue?.trim()
+      ) {
         errors.push('query cannot be empty');
       }
     }
@@ -293,13 +329,17 @@ export class SearchEngine {
     // Validate limit parameter with consistent boundary checking
     if (config.requireLimit !== false) {
       const maxLimit = config.maxLimit || (entityType === 'flows' ? 1000 : 500);
-      const limitValidation = ParameterValidator.validateNumber(params?.limit, 'limit', {
-        required: true,
-        min: 1,
-        max: maxLimit,
-        integer: true
-      });
-      
+      const limitValidation = ParameterValidator.validateNumber(
+        params?.limit,
+        'limit',
+        {
+          required: true,
+          min: 1,
+          max: maxLimit,
+          integer: true,
+        }
+      );
+
       if (!limitValidation.isValid) {
         errors.push(...limitValidation.errors);
       }
@@ -307,7 +347,10 @@ export class SearchEngine {
 
     // Validate sort_by parameter if provided
     if (params.sort_by !== undefined) {
-      const sortValidation = ParameterValidator.validateOptionalString(params.sort_by, 'sort_by');
+      const sortValidation = ParameterValidator.validateOptionalString(
+        params.sort_by,
+        'sort_by'
+      );
       if (!sortValidation.isValid) {
         errors.push(...sortValidation.errors);
       }
@@ -315,7 +358,10 @@ export class SearchEngine {
 
     // Validate group_by parameter if provided
     if (params.group_by !== undefined) {
-      const groupValidation = ParameterValidator.validateOptionalString(params.group_by, 'group_by');
+      const groupValidation = ParameterValidator.validateOptionalString(
+        params.group_by,
+        'group_by'
+      );
       if (!groupValidation.isValid) {
         errors.push(...groupValidation.errors);
       }
@@ -323,7 +369,10 @@ export class SearchEngine {
 
     // Validate cursor parameter if cursor is supported
     if (config.supportsCursor && params.cursor !== undefined) {
-      const cursorValidation = ParameterValidator.validateOptionalString(params.cursor, 'cursor');
+      const cursorValidation = ParameterValidator.validateOptionalString(
+        params.cursor,
+        'cursor'
+      );
       if (!cursorValidation.isValid) {
         errors.push(...cursorValidation.errors);
       }
@@ -332,28 +381,36 @@ export class SearchEngine {
     // Validate time_range parameter if time range is supported
     if (config.supportsTimeRange && params.time_range !== undefined) {
       if (!params.time_range || typeof params.time_range !== 'object') {
-        errors.push('time_range must be an object with start and end properties');
+        errors.push(
+          'time_range must be an object with start and end properties'
+        );
       } else {
         const { start, end } = params.time_range;
-        
+
         if (start !== undefined) {
           const startDate = new Date(start);
           if (isNaN(startDate.getTime())) {
-            errors.push('time_range.start must be a valid ISO 8601 date string');
+            errors.push(
+              'time_range.start must be a valid ISO 8601 date string'
+            );
           }
         }
-        
+
         if (end !== undefined) {
           const endDate = new Date(end);
           if (isNaN(endDate.getTime())) {
             errors.push('time_range.end must be a valid ISO 8601 date string');
           }
         }
-        
+
         if (start && end) {
           const startDate = new Date(start);
           const endDate = new Date(end);
-          if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime()) && startDate >= endDate) {
+          if (
+            !isNaN(startDate.getTime()) &&
+            !isNaN(endDate.getTime()) &&
+            startDate >= endDate
+          ) {
             errors.push('time_range.start must be before time_range.end');
           }
         }
@@ -368,14 +425,20 @@ export class SearchEngine {
   /**
    * Generic search execution method that handles common patterns
    */
-  private async executeSearch(params: SearchParams, entityType: string, validationConfig: SearchValidationConfig = {}): Promise<SearchResult> {
+  private async executeSearch(
+    params: SearchParams,
+    entityType: string,
+    validationConfig: SearchValidationConfig = {}
+  ): Promise<SearchResult> {
     const startTime = Date.now();
-    
+
     try {
       // Get strategy for entity type
       const strategy = this.strategies.get(entityType);
       if (!strategy) {
-        throw new Error(`No search strategy found for entity type: ${entityType}`);
+        throw new Error(
+          `No search strategy found for entity type: ${entityType}`
+        );
       }
 
       // Use standardized parameter validation
@@ -384,40 +447,56 @@ export class SearchEngine {
       // Parse and validate query
       const queryCheck = QuerySanitizer.sanitizeSearchQuery(params.query);
       if (!queryCheck.isValid) {
-        throw new Error(`Query validation failed: ${queryCheck.errors.join(', ')}`);
+        throw new Error(
+          `Query validation failed: ${queryCheck.errors.join(', ')}`
+        );
       }
-      
+
       // Validate entityType before parsing
-      const validEntityTypes = ['flows', 'alarms', 'rules', 'devices', 'target_lists'] as const;
+      const validEntityTypes = [
+        'flows',
+        'alarms',
+        'rules',
+        'devices',
+        'target_lists',
+      ] as const;
       if (!validEntityTypes.includes(entityType as any)) {
         throw new Error(`Invalid entity type: ${entityType}`);
       }
-      
-      const validation = queryParser.parse(queryCheck.sanitizedValue, entityType as typeof validEntityTypes[number]);
+
+      const validation = queryParser.parse(
+        queryCheck.sanitizedValue,
+        entityType as (typeof validEntityTypes)[number]
+      );
       if (!validation.isValid || !validation.ast) {
-        throw new Error(`Invalid query syntax: ${validation.errors.join(', ')}`);
+        throw new Error(
+          `Invalid query syntax: ${validation.errors.join(', ')}`
+        );
       }
 
       // Set up filter context (entityType already validated above)
       const context: FilterContext = {
-        entityType: entityType as typeof validEntityTypes[number],
+        entityType: entityType as (typeof validEntityTypes)[number],
         apiParams: {},
         postProcessing: [],
         metadata: {
           filtersApplied: [],
-          optimizations: []
-        }
+          optimizations: [],
+        },
       };
 
-      const filterResult = this.applyFiltersRecursively(validation.ast, context);
-      
+      const filterResult = this.applyFiltersRecursively(
+        validation.ast,
+        context
+      );
+
       // Prepare API parameters
       const apiParams: ApiParameters = {
         ...filterResult.apiParams,
         limit: params.limit,
         start_time: params.time_range?.start,
         end_time: params.time_range?.end,
-        queryString: filterResult.queryString
+        queryString: filterResult.queryString,
       };
 
       // Prepare search options
@@ -425,15 +504,20 @@ export class SearchEngine {
       if (entityType === 'devices') {
         searchOptions.include_resolved = true;
       }
-      
+
       // Time range handling is done within individual strategies to avoid duplication
 
       // Execute API call using strategy
-      const response = await strategy.executeApiCall(this.firewalla, params, apiParams, searchOptions);
+      const response = await strategy.executeApiCall(
+        this.firewalla,
+        params,
+        apiParams,
+        searchOptions
+      );
 
       // Process results
       let results = response.results || [];
-      
+
       // Apply post-processing filters
       if (filterResult.postProcessing && results.length > 0) {
         results = filterResult.postProcessing(results);
@@ -455,7 +539,9 @@ export class SearchEngine {
       }
 
       // Generate aggregations
-      const aggregations = params.aggregate ? this.generateAggregations(results, params.group_by) : undefined;
+      const aggregations = params.aggregate
+        ? this.generateAggregations(results, params.group_by)
+        : undefined;
 
       // Build result object
       const result: SearchResult = {
@@ -465,22 +551,24 @@ export class SearchEngine {
         offset: params.offset || 0,
         query: queryCheck?.sanitizedValue || params.query,
         execution_time_ms: Date.now() - startTime,
-        aggregations
+        aggregations,
       };
 
       // Add cursor for devices with proper typing
       if (entityType === 'devices' && response.next_cursor) {
-        const resultWithCursor = result as SearchResult & { next_cursor?: string };
+        const resultWithCursor = result as SearchResult & {
+          next_cursor?: string;
+        };
         resultWithCursor.next_cursor = response.next_cursor;
       }
 
       return result;
-
     } catch (error) {
-      throw new Error(`${entityType} search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `${entityType} search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
-
 
   /**
    * Execute a search query for flows
@@ -490,7 +578,7 @@ export class SearchEngine {
       requireQuery: true,
       requireLimit: true,
       supportsTimeRange: true,
-      maxLimit: 1000
+      maxLimit: 1000,
     });
   }
 
@@ -501,7 +589,7 @@ export class SearchEngine {
     return this.executeSearch(params, 'alarms', {
       requireQuery: true,
       requireLimit: true,
-      maxLimit: 5000
+      maxLimit: 5000,
     });
   }
 
@@ -512,7 +600,7 @@ export class SearchEngine {
     return this.executeSearch(params, 'rules', {
       requireQuery: true,
       requireLimit: true,
-      maxLimit: 3000
+      maxLimit: 3000,
     });
   }
 
@@ -525,7 +613,7 @@ export class SearchEngine {
       requireLimit: true,
       supportsCursor: true,
       supportsTimeRange: true,
-      maxLimit: 2000
+      maxLimit: 2000,
     });
   }
 
@@ -536,7 +624,7 @@ export class SearchEngine {
     return this.executeSearch(params, 'target_lists', {
       requireQuery: true,
       requireLimit: true,
-      maxLimit: 1000
+      maxLimit: 1000,
     });
   }
 
@@ -567,62 +655,82 @@ export class SearchEngine {
   /**
    * Enhanced cross-reference search with multi-field correlation capabilities
    */
-  async enhancedCrossReferenceSearch(params: { 
-    primary_query: string; 
-    secondary_queries: string[]; 
+  async enhancedCrossReferenceSearch(params: {
+    primary_query: string;
+    secondary_queries: string[];
     correlation_params: EnhancedCorrelationParams;
     limit?: number;
   }): Promise<any> {
     const startTime = Date.now();
-    
+
     try {
       // Validate limit parameter
       const limit = params.limit || 1000;
-      const limitValidation = ParameterValidator.validateNumber(limit, 'limit', {
-        min: 1, max: 5000, integer: true
-      });
-      
+      const limitValidation = ParameterValidator.validateNumber(
+        limit,
+        'limit',
+        {
+          min: 1,
+          max: 5000,
+          integer: true,
+        }
+      );
+
       if (!limitValidation.isValid) {
-        throw new Error(`Parameter validation failed: ${limitValidation.errors.join(', ')}`);
+        throw new Error(
+          `Parameter validation failed: ${limitValidation.errors.join(', ')}`
+        );
       }
-      
+
       // Validate enhanced cross-reference parameters
       const validation = validateEnhancedCrossReference(
         params.primary_query,
         params.secondary_queries,
         params.correlation_params
       );
-      
+
       if (!validation.isValid) {
-        throw new Error(`Enhanced cross-reference validation failed: ${validation.errors.join(', ')}`);
+        throw new Error(
+          `Enhanced cross-reference validation failed: ${validation.errors.join(', ')}`
+        );
       }
-      
+
       // Determine entity types based on query patterns
       const primaryType = suggestEntityType(params.primary_query) || 'flows';
-      const secondaryTypes = params.secondary_queries.map(q => suggestEntityType(q) || 'alarms');
-      
+      const secondaryTypes = params.secondary_queries.map(
+        q => suggestEntityType(q) || 'alarms'
+      );
+
       // Execute primary query
-      const primaryResult = await this.executeSearchByType(primaryType, params.primary_query, limit);
-      
+      const primaryResult = await this.executeSearchByType(
+        primaryType,
+        params.primary_query,
+        limit
+      );
+
       // Execute secondary queries and perform enhanced correlation
       const correlatedResults: any = {
         primary: {
           query: params.primary_query,
           results: primaryResult.results,
           count: primaryResult.count,
-          entity_type: primaryType
+          entity_type: primaryType,
         },
         correlations: [],
-        correlation_params: params.correlation_params
+        correlation_params: params.correlation_params,
       };
 
       for (let index = 0; index < params.secondary_queries.length; index++) {
         const secondaryQuery = params.secondary_queries[index];
         const secondaryType = secondaryTypes[index];
-        
+
         // Execute secondary query
-        const secondaryResult = await this.executeSearchByType(secondaryType, secondaryQuery, limit);
-        
+        const secondaryResult = await this.executeSearchByType(
+          secondaryType,
+          secondaryQuery,
+          limit
+        );
+
         // Perform multi-field correlation
         const correlationResult = performMultiFieldCorrelation(
           primaryResult.results,
@@ -637,15 +745,25 @@ export class SearchEngine {
           results: correlationResult.correlatedResults,
           count: correlationResult.correlatedResults.length,
           correlation_stats: correlationResult.correlationStats,
-          entity_type: secondaryType
+          entity_type: secondaryType,
         });
       }
 
       // Calculate overall correlation summary
-      const totalCorrelated = correlatedResults.correlations.reduce((sum: number, c: any) => sum + c.count, 0);
-      const avgCorrelationRate = correlatedResults.correlations.length > 0
-        ? Math.round(correlatedResults.correlations.reduce((sum: number, c: any) => sum + c.correlation_stats.correlationRate, 0) / correlatedResults.correlations.length)
-        : 0;
+      const totalCorrelated = correlatedResults.correlations.reduce(
+        (sum: number, c: any) => sum + c.count,
+        0
+      );
+      const avgCorrelationRate =
+        correlatedResults.correlations.length > 0
+          ? Math.round(
+              correlatedResults.correlations.reduce(
+                (sum: number, c: any) =>
+                  sum + c.correlation_stats.correlationRate,
+                0
+              ) / correlatedResults.correlations.length
+            )
+          : 0;
 
       return {
         ...correlatedResults,
@@ -656,12 +774,13 @@ export class SearchEngine {
           average_correlation_rate: avgCorrelationRate,
           correlation_fields: params.correlation_params.correlationFields,
           correlation_type: params.correlation_params.correlationType,
-          temporal_window_applied: !!params.correlation_params.temporalWindow
-        }
+          temporal_window_applied: !!params.correlation_params.temporalWindow,
+        },
       };
-
     } catch (error) {
-      throw new Error(`Enhanced cross-reference search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Enhanced cross-reference search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -675,16 +794,24 @@ export class SearchEngine {
     limit?: number;
   }): Promise<any> {
     const startTime = Date.now();
-    
+
     try {
       // Validate limit parameter
       const limit = params.limit || 1000;
-      const limitValidation = ParameterValidator.validateNumber(limit, 'limit', {
-        min: 1, max: 5000, integer: true
-      });
-      
+      const limitValidation = ParameterValidator.validateNumber(
+        limit,
+        'limit',
+        {
+          min: 1,
+          max: 5000,
+          integer: true,
+        }
+      );
+
       if (!limitValidation.isValid) {
-        throw new Error(`Parameter validation failed: ${limitValidation.errors.join(', ')}`);
+        throw new Error(
+          `Parameter validation failed: ${limitValidation.errors.join(', ')}`
+        );
       }
 
       // Validate enhanced correlation parameters
@@ -693,33 +820,43 @@ export class SearchEngine {
         params.secondary_queries,
         params.correlation_params
       );
-      
+
       if (!validation.isValid) {
-        throw new Error(`Enhanced correlation validation failed: ${validation.errors.join(', ')}`);
+        throw new Error(
+          `Enhanced correlation validation failed: ${validation.errors.join(', ')}`
+        );
       }
 
       // Execute primary query
       const primaryType = suggestEntityType(params.primary_query) || 'flows';
-      const primaryResult = await this.executeSearchByType(primaryType, params.primary_query, limit);
+      const primaryResult = await this.executeSearchByType(
+        primaryType,
+        params.primary_query,
+        limit
+      );
 
       const correlatedResults: any = {
         primary: {
           query: params.primary_query,
           results: primaryResult.results,
           count: primaryResult.count,
-          entity_type: primaryType
+          entity_type: primaryType,
         },
-        correlations: []
+        correlations: [],
       };
 
       // Execute secondary queries and perform enhanced correlation
       for (let i = 0; i < params.secondary_queries.length; i++) {
         const secondaryQuery = params.secondary_queries[i];
         const secondaryType = suggestEntityType(secondaryQuery) || 'alarms';
-        
+
         // Execute secondary query
-        const secondaryResult = await this.executeSearchByType(secondaryType, secondaryQuery, limit);
-        
+        const secondaryResult = await this.executeSearchByType(
+          secondaryType,
+          secondaryQuery,
+          limit
+        );
+
         // Perform enhanced multi-field correlation with scoring
         const enhancedResult = performEnhancedMultiFieldCorrelation(
           primaryResult.results,
@@ -738,32 +875,50 @@ export class SearchEngine {
           scored_results: enhancedResult.scoredResults,
           entity_type: secondaryType,
           scoring_enabled: params.correlation_params.enableScoring,
-          fuzzy_matching_enabled: params.correlation_params.enableFuzzyMatching
+          fuzzy_matching_enabled: params.correlation_params.enableFuzzyMatching,
         });
       }
 
       // Calculate enhanced correlation summary
-      const totalCorrelated = correlatedResults.correlations.reduce((sum: number, c: any) => sum + c.count, 0);
-      const avgCorrelationRate = correlatedResults.correlations.length > 0
-        ? Math.round(correlatedResults.correlations.reduce((sum: number, c: any) => sum + c.correlation_stats.correlationRate, 0) / correlatedResults.correlations.length)
-        : 0;
+      const totalCorrelated = correlatedResults.correlations.reduce(
+        (sum: number, c: any) => sum + c.count,
+        0
+      );
+      const avgCorrelationRate =
+        correlatedResults.correlations.length > 0
+          ? Math.round(
+              correlatedResults.correlations.reduce(
+                (sum: number, c: any) =>
+                  sum + c.correlation_stats.correlationRate,
+                0
+              ) / correlatedResults.correlations.length
+            )
+          : 0;
 
       // Calculate enhanced metrics
       const enhancedMetrics = correlatedResults.correlations
         .filter((c: any) => c.enhanced_stats)
         .map((c: any) => c.enhanced_stats);
 
-      const avgScore = enhancedMetrics.length > 0
-        ? enhancedMetrics.reduce((sum: number, stats: any) => sum + stats.averageScore, 0) / enhancedMetrics.length
-        : 0;
+      const avgScore =
+        enhancedMetrics.length > 0
+          ? enhancedMetrics.reduce(
+              (sum: number, stats: any) => sum + stats.averageScore,
+              0
+            ) / enhancedMetrics.length
+          : 0;
 
-      const scoreDistribution = enhancedMetrics.length > 0
-        ? enhancedMetrics.reduce((acc: any, stats: any) => ({
-            high: acc.high + stats.scoreDistribution.high,
-            medium: acc.medium + stats.scoreDistribution.medium,
-            low: acc.low + stats.scoreDistribution.low
-          }), { high: 0, medium: 0, low: 0 })
-        : { high: 0, medium: 0, low: 0 };
+      const scoreDistribution =
+        enhancedMetrics.length > 0
+          ? enhancedMetrics.reduce(
+              (acc: any, stats: any) => ({
+                high: acc.high + stats.scoreDistribution.high,
+                medium: acc.medium + stats.scoreDistribution.medium,
+                low: acc.low + stats.scoreDistribution.low,
+              }),
+              { high: 0, medium: 0, low: 0 }
+            )
+          : { high: 0, medium: 0, low: 0 };
 
       return {
         ...correlatedResults,
@@ -780,50 +935,73 @@ export class SearchEngine {
           fuzzy_matching_enabled: params.correlation_params.enableFuzzyMatching,
           average_correlation_score: Math.round(avgScore * 1000) / 1000,
           score_distribution: scoreDistribution,
-          minimum_score_threshold: params.correlation_params.minimumScore || 0.3
-        }
+          minimum_score_threshold:
+            params.correlation_params.minimumScore || 0.3,
+        },
       };
-
     } catch (error) {
-      throw new Error(`Enhanced scored cross-reference search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Enhanced scored cross-reference search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
   /**
    * Cross-reference search across multiple entity types with improved field mapping
    */
-  async crossReferenceSearch(params: { primary_query: string; secondary_queries: string[]; correlation_field: string; limit?: number }): Promise<any> {
+  async crossReferenceSearch(params: {
+    primary_query: string;
+    secondary_queries: string[];
+    correlation_field: string;
+    limit?: number;
+  }): Promise<any> {
     const startTime = Date.now();
-    
+
     try {
       // Validate limit parameter
       const limit = params.limit || 1000;
-      const limitValidation = ParameterValidator.validateNumber(limit, 'limit', {
-        min: 1, max: 5000, integer: true
-      });
-      
+      const limitValidation = ParameterValidator.validateNumber(
+        limit,
+        'limit',
+        {
+          min: 1,
+          max: 5000,
+          integer: true,
+        }
+      );
+
       if (!limitValidation.isValid) {
-        throw new Error(`Parameter validation failed: ${limitValidation.errors.join(', ')}`);
+        throw new Error(
+          `Parameter validation failed: ${limitValidation.errors.join(', ')}`
+        );
       }
-      
+
       // Validate cross-reference parameters
       const validation = validateCrossReference(
         params.primary_query,
         params.secondary_queries,
         params.correlation_field
       );
-      
+
       if (!validation.isValid) {
-        throw new Error(`Cross-reference validation failed: ${validation.errors.join(', ')}`);
+        throw new Error(
+          `Cross-reference validation failed: ${validation.errors.join(', ')}`
+        );
       }
-      
+
       // Determine entity types based on query patterns
       const primaryType = suggestEntityType(params.primary_query) || 'flows';
-      const secondaryTypes = params.secondary_queries.map(q => suggestEntityType(q) || 'alarms');
-      
+      const secondaryTypes = params.secondary_queries.map(
+        q => suggestEntityType(q) || 'alarms'
+      );
+
       // Execute primary query using generic method
-      const primaryResult = await this.executeSearchByType(primaryType, params.primary_query, limit);
-      
+      const primaryResult = await this.executeSearchByType(
+        primaryType,
+        params.primary_query,
+        limit
+      );
+
       // Extract correlation values using proper field mapping
       const correlationValues = extractCorrelationValues(
         primaryResult.results,
@@ -837,18 +1015,22 @@ export class SearchEngine {
           query: params.primary_query,
           results: primaryResult.results,
           count: primaryResult.count,
-          entity_type: primaryType
+          entity_type: primaryType,
         },
-        correlations: []
+        correlations: [],
       };
 
       for (let index = 0; index < params.secondary_queries.length; index++) {
         const secondaryQuery = params.secondary_queries[index];
         const secondaryType = secondaryTypes[index];
-        
+
         // Execute secondary query using generic method
-        const secondaryResult = await this.executeSearchByType(secondaryType, secondaryQuery, limit);
-        
+        const secondaryResult = await this.executeSearchByType(
+          secondaryType,
+          secondaryQuery,
+          limit
+        );
+
         // Filter by correlation using improved field mapping
         const correlatedItems = filterByCorrelation(
           secondaryResult.results,
@@ -862,7 +1044,7 @@ export class SearchEngine {
           results: correlatedItems,
           count: correlatedItems.length,
           correlation_field: params.correlation_field,
-          entity_type: secondaryType
+          entity_type: secondaryType,
         });
       }
 
@@ -872,15 +1054,27 @@ export class SearchEngine {
         correlation_summary: {
           primary_count: primaryResult.count,
           unique_correlation_values: correlationValues.size,
-          correlated_count: correlatedResults.correlations.reduce((sum: number, c: any) => sum + c.count, 0),
-          correlation_rate: primaryResult.count > 0 
-            ? Math.round((correlatedResults.correlations.reduce((sum: number, c: any) => sum + c.count, 0) / primaryResult.count) * 100)
-            : 0
-        }
+          correlated_count: correlatedResults.correlations.reduce(
+            (sum: number, c: any) => sum + c.count,
+            0
+          ),
+          correlation_rate:
+            primaryResult.count > 0
+              ? Math.round(
+                  (correlatedResults.correlations.reduce(
+                    (sum: number, c: any) => sum + c.count,
+                    0
+                  ) /
+                    primaryResult.count) *
+                    100
+                )
+              : 0,
+        },
       };
-
     } catch (error) {
-      throw new Error(`Cross-reference search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Cross-reference search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -891,9 +1085,12 @@ export class SearchEngine {
     switch (node.type) {
       case 'logical': {
         // For logical nodes, apply filters to operands and combine
-        // eslint-disable-next-line no-unused-vars
-        const combinedResult: { apiParams: ApiParameters, postProcessing?: ((items: any[]) => any[]) } = { apiParams: {} };
-        
+
+        const combinedResult: {
+          apiParams: ApiParameters;
+          postProcessing?: (items: any[]) => any[];
+        } = { apiParams: {} };
+
         if (node.left) {
           const leftResult = this.applyFiltersRecursively(node.left, context);
           Object.assign(combinedResult.apiParams, leftResult.apiParams);
@@ -901,16 +1098,16 @@ export class SearchEngine {
             combinedResult.postProcessing = leftResult.postProcessing;
           }
         }
-        
+
         if (node.right) {
           const rightResult = this.applyFiltersRecursively(node.right, context);
           Object.assign(combinedResult.apiParams, rightResult.apiParams);
-          
+
           // Combine post-processing for logical operations
           if (rightResult.postProcessing) {
             const existingPostProcessing = combinedResult.postProcessing;
             if (existingPostProcessing && node.operator === 'AND') {
-              combinedResult.postProcessing = (items: any[]): any[] => 
+              combinedResult.postProcessing = (items: any[]): any[] =>
                 rightResult.postProcessing!(existingPostProcessing(items));
             } else if (node.operator === 'OR') {
               // OR logic is more complex, simplified for now
@@ -920,10 +1117,13 @@ export class SearchEngine {
             }
           }
         }
-        
+
         if (node.operand) {
           // NOT operation
-          const operandResult = this.applyFiltersRecursively(node.operand, context);
+          const operandResult = this.applyFiltersRecursively(
+            node.operand,
+            context
+          );
           if (operandResult.postProcessing) {
             combinedResult.postProcessing = (items: any[]): any[] => {
               const filtered = operandResult.postProcessing!(items);
@@ -931,12 +1131,12 @@ export class SearchEngine {
             };
           }
         }
-        
+
         return combinedResult;
       }
       case 'group':
         return this.applyFiltersRecursively(node.query, context);
-        
+
       default:
         // Apply filters for leaf nodes
         return filterFactory.applyFilters(node, context);
@@ -946,31 +1146,44 @@ export class SearchEngine {
   /**
    * Sort results by a field
    */
-  private sortResults(results: any[], sortBy: string, sortOrder: 'asc' | 'desc' = 'desc'): any[] {
+  private sortResults(
+    results: any[],
+    sortBy: string,
+    sortOrder: 'asc' | 'desc' = 'desc'
+  ): any[] {
     // Pre-compute values for efficient sorting
     const itemsWithValues = results.map(item => ({
       item,
-      value: this.getNestedValue(item, sortBy)
+      value: this.getNestedValue(item, sortBy),
     }));
-    
+
     itemsWithValues.sort((a, b) => {
       const valueA = a.value;
       const valueB = b.value;
-      
+
       // Handle null/undefined values - sort nulls to the end
-      if (valueA == null && valueB == null) return 0;
-      if (valueA == null) return 1;  // null values go to end
-      if (valueB == null) return -1; // null values go to end
-      
+      if (
+        (valueA === null || valueA === undefined) &&
+        (valueB === null || valueB === undefined)
+      ) {
+        return 0;
+      }
+      if (valueA === null || valueA === undefined) {
+        return 1;
+      } // null values go to end
+      if (valueB === null || valueB === undefined) {
+        return -1;
+      } // null values go to end
+
       if (valueA === valueB) {
         return 0;
       }
-      
+
       // Handle string vs number comparisons
       const comparison = valueA < valueB ? -1 : 1;
       return sortOrder === 'asc' ? comparison : -comparison;
     });
-    
+
     return itemsWithValues.map(({ item }) => item);
   }
 
@@ -980,14 +1193,16 @@ export class SearchEngine {
   private generateAggregations(results: any[], groupBy?: string): any {
     if (!groupBy) {
       return {
-        total: { count: results.length }
+        total: { count: results.length },
       };
     }
 
-    const groups: { [key: string]: any[] } = {};
-    
+    const groups: Record<string, any[]> = {};
+
     for (const item of results) {
-      const groupValue = String(this.getNestedValue(item, groupBy) || 'unknown');
+      const groupValue = String(
+        this.getNestedValue(item, groupBy) || 'unknown'
+      );
       if (!groups[groupValue]) {
         groups[groupValue] = [];
       }
@@ -995,11 +1210,11 @@ export class SearchEngine {
     }
 
     const aggregations: any = {};
-    
+
     for (const [groupValue, groupItems] of Object.entries(groups)) {
       aggregations[groupValue] = {
         count: groupItems.length,
-        percentage: Math.round((groupItems.length / results.length) * 100)
+        percentage: Math.round((groupItems.length / results.length) * 100),
       };
     }
 
@@ -1016,19 +1231,23 @@ export class SearchEngine {
   /**
    * Get suggested correlation field combinations for given queries
    */
-  async getCorrelationSuggestions(params: { 
-    primary_query: string; 
-    secondary_queries: string[] 
+  async getCorrelationSuggestions(params: {
+    primary_query: string;
+    secondary_queries: string[];
   }): Promise<any> {
     try {
       // Determine entity types from queries
       const primaryType = suggestEntityType(params.primary_query);
-      const secondaryTypes = params.secondary_queries.map(q => suggestEntityType(q));
-      const allTypes = [primaryType, ...secondaryTypes].filter(Boolean) as any[];
-      
+      const secondaryTypes = params.secondary_queries.map(q =>
+        suggestEntityType(q)
+      );
+      const allTypes = [primaryType, ...secondaryTypes].filter(
+        Boolean
+      ) as any[];
+
       // Get supported correlation combinations
       const combinations = getSupportedCorrelationCombinations(allTypes);
-      
+
       // Categorize combinations by type and complexity
       const suggestions = {
         single_field: combinations.filter(combo => combo.length === 1),
@@ -1042,13 +1261,15 @@ export class SearchEngine {
           ['timestamp', 'device_id'],
           // Security correlations
           ['source_ip', 'threat_level'],
-          ['device_ip', 'geo_location']
-        ].filter(combo => 
-          combinations.some(c => c.length === combo.length && combo.every(f => c.includes(f)))
+          ['device_ip', 'geo_location'],
+        ].filter(combo =>
+          combinations.some(
+            c => c.length === combo.length && combo.every(f => c.includes(f))
+          )
         ),
         entity_types: {
           primary: primaryType,
-          secondary: secondaryTypes
+          secondary: secondaryTypes,
         },
         supported_fields: combinations.reduce((acc: string[], combo) => {
           combo.forEach(field => {
@@ -1057,13 +1278,14 @@ export class SearchEngine {
             }
           });
           return acc;
-        }, [])
+        }, []),
       };
-      
+
       return suggestions;
-      
     } catch (error) {
-      throw new Error(`Correlation suggestions failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Correlation suggestions failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -1090,76 +1312,88 @@ export class SearchEngine {
     aggregate?: boolean;
   }): Promise<any> {
     const startTime = Date.now();
-    
+
     try {
       // Validate limit parameter
-      const limitValidation = ParameterValidator.validateNumber(params.limit, 'limit', {
-        required: true, min: 1, max: 1000, integer: true
-      });
-      
+      const limitValidation = ParameterValidator.validateNumber(
+        params.limit,
+        'limit',
+        {
+          required: true,
+          min: 1,
+          max: 1000,
+          integer: true,
+        }
+      );
+
       if (!limitValidation.isValid) {
-        throw new Error(`Parameter validation failed: ${limitValidation.errors.join(', ')}`);
+        throw new Error(
+          `Parameter validation failed: ${limitValidation.errors.join(', ')}`
+        );
       }
 
       // Build geographic query - simplified approach to avoid parsing issues
       let geographicQuery = params.query || '';
-      
+
       if (params.geographic_filters) {
         const geoConditions: string[] = [];
-        
+
         // Handle countries - take first one to avoid OR parsing issues
         if (params.geographic_filters.countries?.length) {
           const firstCountry = params.geographic_filters.countries[0];
           geoConditions.push(`country:${firstCountry}`);
         }
-        
+
         // Handle continents - take first one
         if (params.geographic_filters.continents?.length) {
           const firstContinent = params.geographic_filters.continents[0];
           geoConditions.push(`continent:${firstContinent}`);
         }
-        
+
         // Handle regions - take first one
         if (params.geographic_filters.regions?.length) {
           const firstRegion = params.geographic_filters.regions[0];
           geoConditions.push(`region:${firstRegion}`);
         }
-        
+
         // Handle cities - take first one
         if (params.geographic_filters.cities?.length) {
           const firstCity = params.geographic_filters.cities[0];
           geoConditions.push(`city:${firstCity}`);
         }
-        
+
         // Handle ASNs - take first one
         if (params.geographic_filters.asns?.length) {
           const firstAsn = params.geographic_filters.asns[0];
           geoConditions.push(`asn:${firstAsn}`);
         }
-        
+
         // Handle hosting providers - take first one
         if (params.geographic_filters.hosting_providers?.length) {
           const firstProvider = params.geographic_filters.hosting_providers[0];
           geoConditions.push(`hosting_provider:${firstProvider}`);
         }
-        
+
         if (params.geographic_filters.exclude_cloud) {
           geoConditions.push('NOT is_cloud_provider:true');
         }
-        
+
         if (params.geographic_filters.exclude_vpn) {
           geoConditions.push('NOT is_vpn:true');
         }
-        
+
         if (params.geographic_filters.min_risk_score !== undefined) {
-          geoConditions.push(`geographic_risk_score:>=${params.geographic_filters.min_risk_score}`);
+          geoConditions.push(
+            `geographic_risk_score:>=${params.geographic_filters.min_risk_score}`
+          );
         }
-        
+
         if (geoConditions.length > 0) {
           const geoQueryString = geoConditions.join(' AND ');
-          geographicQuery = (!geographicQuery || geographicQuery.trim() === '') 
-            ? geoQueryString
-            : `${geographicQuery} AND ${geoQueryString}`;
+          geographicQuery =
+            !geographicQuery || geographicQuery.trim() === ''
+              ? geoQueryString
+              : `${geographicQuery} AND ${geoQueryString}`;
         }
       }
 
@@ -1170,22 +1404,23 @@ export class SearchEngine {
         sort_by: params.sort_by,
         sort_order: params.sort_order,
         group_by: params.group_by,
-        aggregate: params.aggregate
+        aggregate: params.aggregate,
       };
 
       const result = await this.searchFlows(searchParams);
-      
+
       // Add geographic analysis
       const geographicAnalysis = this.analyzeGeographicData(result.results);
-      
+
       return {
         ...result,
         geographic_analysis: geographicAnalysis,
-        execution_time_ms: Date.now() - startTime
+        execution_time_ms: Date.now() - startTime,
       };
-      
     } catch (error) {
-      throw new Error(`Geographic flows search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Geographic flows search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -1207,56 +1442,66 @@ export class SearchEngine {
     group_by?: string;
   }): Promise<any> {
     const startTime = Date.now();
-    
+
     try {
       // Validate limit parameter
-      const limitValidation = ParameterValidator.validateNumber(params.limit, 'limit', {
-        required: true, min: 1, max: 5000, integer: true
-      });
-      
+      const limitValidation = ParameterValidator.validateNumber(
+        params.limit,
+        'limit',
+        {
+          required: true,
+          min: 1,
+          max: 5000,
+          integer: true,
+        }
+      );
+
       if (!limitValidation.isValid) {
-        throw new Error(`Parameter validation failed: ${limitValidation.errors.join(', ')}`);
+        throw new Error(
+          `Parameter validation failed: ${limitValidation.errors.join(', ')}`
+        );
       }
 
       // Build geographic threat query - simplified approach
       let geographicQuery = params.query || '';
-      
+
       if (params.geographic_filters) {
         const geoConditions: string[] = [];
-        
+
         // Handle countries - take first one to avoid OR parsing issues
         if (params.geographic_filters.countries?.length) {
           const firstCountry = params.geographic_filters.countries[0];
           geoConditions.push(`country:${firstCountry}`);
         }
-        
+
         // Handle continents - take first one
         if (params.geographic_filters.continents?.length) {
           const firstContinent = params.geographic_filters.continents[0];
           geoConditions.push(`continent:${firstContinent}`);
         }
-        
+
         // Handle regions - take first one
         if (params.geographic_filters.regions?.length) {
           const firstRegion = params.geographic_filters.regions[0];
           geoConditions.push(`region:${firstRegion}`);
         }
-        
+
         if (params.geographic_filters.high_risk_countries) {
           // Add query for countries with higher security risk
           geoConditions.push('geographic_risk_score:>=7');
         }
-        
+
         if (params.geographic_filters.exclude_known_providers) {
           geoConditions.push('NOT is_cloud_provider:true');
           geoConditions.push('NOT hosting_provider:*');
         }
-        
+
         if (geoConditions.length > 0) {
           const geoQueryString = geoConditions.join(' AND ');
-          geographicQuery = (!geographicQuery || geographicQuery.trim() === '') 
-            ? geoQueryString
-            : `${geographicQuery} AND ${geoQueryString}`;
+          geographicQuery =
+            !geographicQuery || geographicQuery.trim() === ''
+              ? geoQueryString
+              : `${geographicQuery} AND ${geoQueryString}`;
         }
       }
 
@@ -1265,25 +1510,26 @@ export class SearchEngine {
         query: geographicQuery || 'timestamp:>0',
         limit: params.limit,
         sort_by: params.sort_by,
-        group_by: params.group_by
+        group_by: params.group_by,
       };
 
       const result = await this.searchAlarms(searchParams);
-      
+
       // Add geographic threat analysis if requested
       let threatAnalysis;
       if (params.geographic_filters?.threat_analysis) {
         threatAnalysis = this.analyzeGeographicThreats(result.results);
       }
-      
+
       return {
         ...result,
         geographic_threat_analysis: threatAnalysis,
-        execution_time_ms: Date.now() - startTime
+        execution_time_ms: Date.now() - startTime,
       };
-      
     } catch (error) {
-      throw new Error(`Geographic alarms search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Geographic alarms search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -1301,24 +1547,36 @@ export class SearchEngine {
     limit?: number;
   }): Promise<any> {
     const startTime = Date.now();
-    
+
     try {
       const limit = params.limit || 1000;
-      const limitValidation = ParameterValidator.validateNumber(limit, 'limit', {
-        min: 1, max: 1000, integer: true
-      });
-      
+      const limitValidation = ParameterValidator.validateNumber(
+        limit,
+        'limit',
+        {
+          min: 1,
+          max: 1000,
+          integer: true,
+        }
+      );
+
       if (!limitValidation.isValid) {
-        throw new Error(`Parameter validation failed: ${limitValidation.errors.join(', ')}`);
+        throw new Error(
+          `Parameter validation failed: ${limitValidation.errors.join(', ')}`
+        );
       }
 
       // Build base query for geographic analysis
       let baseQuery = 'timestamp:>0';
-      
+
       // Add time range if specified
       if (params.time_range) {
-        const startTs = Math.floor(new Date(params.time_range.start).getTime() / 1000);
-        const endTs = Math.floor(new Date(params.time_range.end).getTime() / 1000);
+        const startTs = Math.floor(
+          new Date(params.time_range.start).getTime() / 1000
+        );
+        const endTs = Math.floor(
+          new Date(params.time_range.end).getTime() / 1000
+        );
         baseQuery = `timestamp:[${startTs} TO ${endTs}]`;
       }
 
@@ -1327,7 +1585,7 @@ export class SearchEngine {
         query: baseQuery,
         limit,
         group_by: params.group_by || 'country',
-        aggregate: true
+        aggregate: true,
       };
 
       let searchResult;
@@ -1339,11 +1597,11 @@ export class SearchEngine {
 
       // Generate geographic statistics
       const statistics = this.generateGeographicStatistics(
-        searchResult, 
+        searchResult,
         params.analysis_type || 'summary',
         params.group_by || 'country'
       );
-      
+
       return {
         entity_type: params.entity_type,
         time_range: params.time_range,
@@ -1351,11 +1609,12 @@ export class SearchEngine {
         group_by: params.group_by || 'country',
         statistics,
         total_records: searchResult.count,
-        execution_time_ms: Date.now() - startTime
+        execution_time_ms: Date.now() - startTime,
       };
-      
     } catch (error) {
-      throw new Error(`Geographic statistics failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Geographic statistics failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 
@@ -1372,7 +1631,7 @@ export class SearchEngine {
       vpn_flows: 0,
       high_risk_flows: 0,
       top_countries: {} as Record<string, number>,
-      top_asns: {} as Record<string, number>
+      top_asns: {} as Record<string, number>,
     };
 
     results.forEach(flow => {
@@ -1386,21 +1645,28 @@ export class SearchEngine {
 
       if (country) {
         analysis.unique_countries.add(country);
-        analysis.top_countries[country] = (analysis.top_countries[country] || 0) + 1;
+        analysis.top_countries[country] =
+          (analysis.top_countries[country] || 0) + 1;
       }
-      
+
       if (continent) {
         analysis.unique_continents.add(continent);
       }
-      
+
       if (asn) {
         analysis.unique_asns.add(asn);
         analysis.top_asns[asn] = (analysis.top_asns[asn] || 0) + 1;
       }
-      
-      if (isCloud) { analysis.cloud_provider_flows++; }
-      if (isVpn) { analysis.vpn_flows++; }
-      if (riskScore && riskScore >= getRiskThresholds().highRiskFlowMin) { analysis.high_risk_flows++; }
+
+      if (isCloud) {
+        analysis.cloud_provider_flows++;
+      }
+      if (isVpn) {
+        analysis.vpn_flows++;
+      }
+      if (riskScore && riskScore >= getRiskThresholds().highRiskFlowMin) {
+        analysis.high_risk_flows++;
+      }
     });
 
     // Convert sets to counts
@@ -1410,19 +1676,25 @@ export class SearchEngine {
       unique_continents: analysis.unique_continents.size,
       unique_asns: analysis.unique_asns.size,
       top_countries: Object.entries(analysis.top_countries)
-        .sort(([,a], [,b]) => b - a)
+        .sort(([, a], [, b]) => b - a)
         .slice(0, 10)
-        .reduce((acc, [country, count]) => {
-          acc[country] = count;
-          return acc;
-        }, {} as Record<string, number>),
+        .reduce(
+          (acc, [country, count]) => {
+            acc[country] = count;
+            return acc;
+          },
+          {} as Record<string, number>
+        ),
       top_asns: Object.entries(analysis.top_asns)
-        .sort(([,a], [,b]) => b - a)
+        .sort(([, a], [, b]) => b - a)
         .slice(0, 5)
-        .reduce((acc, [asn, count]) => {
-          acc[asn] = count;
-          return acc;
-        }, {} as Record<string, number>)
+        .reduce(
+          (acc, [asn, count]) => {
+            acc[asn] = count;
+            return acc;
+          },
+          {} as Record<string, number>
+        ),
     };
   }
 
@@ -1439,11 +1711,11 @@ export class SearchEngine {
       vpn_threats: 0,
       proxy_threats: 0,
       risk_distribution: {
-        low: 0,    // 0-3
+        low: 0, // 0-3
         medium: 0, // 4-6
-        high: 0,   // 7-8
-        critical: 0 // 9-10
-      }
+        high: 0, // 7-8
+        critical: 0, // 9-10
+      },
     };
 
     results.forEach(alarm => {
@@ -1453,29 +1725,43 @@ export class SearchEngine {
       const isCloud = getFieldValue(alarm, 'is_cloud_provider', 'alarms');
       const isVpn = getFieldValue(alarm, 'is_vpn', 'alarms');
       const isProxy = getFieldValue(alarm, 'is_proxy', 'alarms');
-      const riskScore = getFieldValue(alarm, 'geographic_risk_score', 'alarms') || 0;
+      const riskScore =
+        getFieldValue(alarm, 'geographic_risk_score', 'alarms') || 0;
 
       if (country && riskScore >= getRiskThresholds().highRiskCountryMin) {
-        threats.high_risk_countries[country] = (threats.high_risk_countries[country] || 0) + 1;
+        threats.high_risk_countries[country] =
+          (threats.high_risk_countries[country] || 0) + 1;
       }
-      
+
       if (continent) {
-        threats.threat_by_continent[continent] = (threats.threat_by_continent[continent] || 0) + 1;
+        threats.threat_by_continent[continent] =
+          (threats.threat_by_continent[continent] || 0) + 1;
       }
-      
+
       if (asn && riskScore >= getRiskThresholds().suspiciousAsnMin) {
         threats.suspicious_asns[asn] = (threats.suspicious_asns[asn] || 0) + 1;
       }
-      
-      if (isCloud) { threats.cloud_threats++; }
-      if (isVpn) { threats.vpn_threats++; }
-      if (isProxy) { threats.proxy_threats++; }
+
+      if (isCloud) {
+        threats.cloud_threats++;
+      }
+      if (isVpn) {
+        threats.vpn_threats++;
+      }
+      if (isProxy) {
+        threats.proxy_threats++;
+      }
 
       // Categorize risk
-      if (riskScore <= getRiskThresholds().lowMax) {threats.risk_distribution.low++;}
-      else if (riskScore <= getRiskThresholds().mediumMax) {threats.risk_distribution.medium++;}
-      else if (riskScore <= getRiskThresholds().highMax) {threats.risk_distribution.high++;}
-      else {threats.risk_distribution.critical++;}
+      if (riskScore <= getRiskThresholds().lowMax) {
+        threats.risk_distribution.low++;
+      } else if (riskScore <= getRiskThresholds().mediumMax) {
+        threats.risk_distribution.medium++;
+      } else if (riskScore <= getRiskThresholds().highMax) {
+        threats.risk_distribution.high++;
+      } else {
+        threats.risk_distribution.critical++;
+      }
     });
 
     return threats;
@@ -1484,39 +1770,55 @@ export class SearchEngine {
   /**
    * Generate detailed geographic statistics
    */
-  private generateGeographicStatistics(searchResult: any, analysisType: string, groupBy: string): any {
+  private generateGeographicStatistics(
+    searchResult: any,
+    analysisType: string,
+    groupBy: string
+  ): any {
     const stats = {
       summary: {
         total_records: searchResult.count || 0,
         grouped_by: groupBy,
-        analysis_type: analysisType
+        analysis_type: analysisType,
       },
       distribution: searchResult.aggregations || {},
-      insights: [] as string[]
+      insights: [] as string[],
     };
 
     // Add insights based on analysis
     if (searchResult.aggregations) {
       const entries = Object.entries(searchResult.aggregations);
       const totalRecords = searchResult.count || 0;
-      
+
       // Find top entries
-      const sortedEntries = entries.sort(([,a]: any, [,b]: any) => (b.count || 0) - (a.count || 0));
-      
+      const sortedEntries = entries.sort(
+        ([, a]: any, [, b]: any) => (b.count || 0) - (a.count || 0)
+      );
+
       if (sortedEntries.length > 0) {
         const topEntry = sortedEntries[0];
-        const percentage = Math.round(((topEntry[1] as any).count / totalRecords) * 100);
-        stats.insights.push(`Top ${groupBy}: ${topEntry[0]} (${percentage}% of total)`);
+        const percentage = Math.round(
+          ((topEntry[1] as any).count / totalRecords) * 100
+        );
+        stats.insights.push(
+          `Top ${groupBy}: ${topEntry[0]} (${percentage}% of total)`
+        );
       }
-      
+
       if (sortedEntries.length > 1) {
         const secondEntry = sortedEntries[1];
-        const percentage = Math.round(((secondEntry[1] as any).count / totalRecords) * 100);
-        stats.insights.push(`Second most active ${groupBy}: ${secondEntry[0]} (${percentage}% of total)`);
+        const percentage = Math.round(
+          ((secondEntry[1] as any).count / totalRecords) * 100
+        );
+        stats.insights.push(
+          `Second most active ${groupBy}: ${secondEntry[0]} (${percentage}% of total)`
+        );
       }
-      
+
       // Geographic diversity insight
-      stats.insights.push(`Geographic diversity: ${entries.length} unique ${groupBy}s`);
+      stats.insights.push(
+        `Geographic diversity: ${entries.length} unique ${groupBy}s`
+      );
     }
 
     return stats;
@@ -1555,12 +1857,19 @@ export function createSearchTools(firewalla: FirewallaClient): SearchTools {
     search_rules: searchEngine.searchRules.bind(searchEngine),
     search_devices: searchEngine.searchDevices.bind(searchEngine),
     search_target_lists: searchEngine.searchTargetLists.bind(searchEngine),
-    search_cross_reference: searchEngine.crossReferenceSearch.bind(searchEngine),
-    search_enhanced_cross_reference: searchEngine.enhancedCrossReferenceSearch.bind(searchEngine),
-    search_enhanced_scored_cross_reference: searchEngine.enhancedScoredCrossReferenceSearch.bind(searchEngine),
-    get_correlation_suggestions: searchEngine.getCorrelationSuggestions.bind(searchEngine),
-    search_flows_by_geography: searchEngine.searchFlowsByGeography.bind(searchEngine),
-    search_alarms_by_geography: searchEngine.searchAlarmsByGeography.bind(searchEngine),
-    get_geographic_statistics: searchEngine.getGeographicStatistics.bind(searchEngine)
+    search_cross_reference:
+      searchEngine.crossReferenceSearch.bind(searchEngine),
+    search_enhanced_cross_reference:
+      searchEngine.enhancedCrossReferenceSearch.bind(searchEngine),
+    search_enhanced_scored_cross_reference:
+      searchEngine.enhancedScoredCrossReferenceSearch.bind(searchEngine),
+    get_correlation_suggestions:
+      searchEngine.getCorrelationSuggestions.bind(searchEngine),
+    search_flows_by_geography:
+      searchEngine.searchFlowsByGeography.bind(searchEngine),
+    search_alarms_by_geography:
+      searchEngine.searchAlarmsByGeography.bind(searchEngine),
+    get_geographic_statistics:
+      searchEngine.getGeographicStatistics.bind(searchEngine),
   };
 }

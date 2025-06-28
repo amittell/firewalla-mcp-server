@@ -2,6 +2,17 @@
 
 This file contains essential commands and procedures for Claude to effectively work on this project.
 
+## 🚨 CRITICAL: Before Any API Development
+
+**READ FIRST**: `/docs/firewalla-api-reference.md` - Complete Firewalla API specification
+
+**Key Rules**:
+- ✅ ONLY use endpoints documented in `/docs/firewalla-api-reference.md`
+- ❌ NEVER assume endpoints exist without verification
+- ✅ ALWAYS use box-specific routing: `/v2/boxes/{box_gid}/{resource}`
+- ❌ NEVER use fictional endpoints like `/stats/simple` or `/trends/flows`
+- ✅ ALWAYS implement client-side aggregation for bandwidth/trends
+
 ## Project Overview
 A Model Context Protocol (MCP) server that provides Claude with access to Firewalla firewall data including security alerts, network flows, device status, and firewall rules. Features advanced search capabilities with complex query syntax, intelligent caching, and result aggregation.
 
@@ -96,13 +107,29 @@ FIREWALLA_BOX_ID=your_box_gid_here
 5. Find your Box GID (Global ID) in the box details - this is the long identifier that looks like `1eb71e38-3a95-4371-8903-ace24c83ab49`
 
 ### API Endpoint Structure
-The fixed implementation now uses the correct Firewalla MSP API v2 endpoints:
+**CRITICAL**: The implementation uses ONLY real Firewalla MSP API v2 endpoints.
+
+**📖 OFFICIAL API REFERENCE**: `/docs/firewalla-api-reference.md`
+**ALWAYS consult this file for accurate endpoint information before making any API changes.**
+
+**Real endpoints (verified from official docs):**
 - Base URL: `https://{msp_domain}/v2/`
 - Box-specific endpoints: `/v2/boxes/{box_gid}/{resource}`
 - Examples:
   - Devices: `/v2/boxes/{box_gid}/devices`
   - Alarms: `/v2/boxes/{box_gid}/alarms`
   - Flows: `/v2/boxes/{box_gid}/flows`
+  - Rules: `/v2/boxes/{box_gid}/rules`
+  - Target Lists: `/v2/boxes/{box_gid}/target-lists`
+  - Statistics: `/v2/boxes/{box_gid}/stats`
+  - Trends: `/v2/boxes/{box_gid}/trends/{type}`
+
+**NEVER use these fictional endpoints:**
+- ❌ `/stats/topDevicesByBandwidth` - DOES NOT EXIST
+- ❌ `/stats/simple` - DOES NOT EXIST
+- ❌ `/trends/flows` - DOES NOT EXIST
+- ❌ `/trends/alarms` - DOES NOT EXIST
+- ❌ `/trends/rules` - DOES NOT EXIST
 
 ## Testing Procedures
 
@@ -439,12 +466,38 @@ npm run mcp:start
 # "correlate Chrome browser flows with security alarms using fuzzy matching"
 ```
 
+## API Reference Documentation
+
+**📖 COMPREHENSIVE API REFERENCE**: `/docs/firewalla-api-reference.md`
+
+This file contains the complete, official Firewalla MSP API v2 documentation including:
+- All verified endpoint URLs and parameters
+- Complete data model definitions (TypeScript interfaces)
+- Search query syntax and examples
+- Response format specifications
+- Rate limiting and authentication details
+- Practical code examples (Node.js/Axios and cURL)
+- Error handling patterns
+
+**ALWAYS reference this file before:**
+- Adding new API endpoints
+- Modifying existing API calls
+- Implementing new tools or features
+- Debugging API integration issues
+
 ## Common Issues and Solutions
 
 ### Authentication Errors
 - Verify MSP token is valid and not expired
 - Check Box ID is correct
 - Ensure network connectivity to MSP API
+- Reference authentication section in `/docs/firewalla-api-reference.md`
+
+### API Endpoint Issues
+- **FIRST**: Check `/docs/firewalla-api-reference.md` for correct endpoint URLs
+- Verify endpoint exists in official documentation
+- Check parameter names and types
+- Validate request format against documented examples
 
 ### MCP Connection Issues
 - Confirm server is running on correct stdio transport
@@ -452,7 +505,7 @@ npm run mcp:start
 - Verify no port conflicts
 
 ### Performance Issues
-- Monitor API rate limits
+- Monitor API rate limits (documented in API reference)
 - Check caching configuration
 - Review concurrent request handling
 
@@ -463,6 +516,55 @@ npm run mcp:start
 - Secure credential handling with environment variables
 
 ## v1.0.0 Implementation Features
+
+### CRITICAL: Correct Implementation Patterns
+
+**Bandwidth Usage Implementation:**
+```javascript
+// CORRECT: Use flows endpoint with aggregation
+const endpoint = `/v2/boxes/${box_gid}/flows`;
+const params = {
+  query: `ts:${begin}-${end}`,
+  groupBy: 'device',
+  sortBy: 'download+upload:desc',
+  limit: N
+};
+// Then aggregate bandwidth data client-side by device
+```
+
+**Flow Trends Implementation:**
+```javascript
+// CORRECT: Fetch flows and create time buckets
+const endpoint = `/v2/boxes/${box_gid}/flows`;
+const params = {
+  query: `ts:${begin}-${end}`,
+  limit: 10000,
+  sortBy: 'ts:asc'
+};
+// Then group flows by time intervals client-side
+```
+
+**Statistics Implementation:**
+```javascript
+// CORRECT: Aggregate from multiple real endpoints
+const [boxes, alarms, rules] = await Promise.all([
+  this.getBoxes(),
+  this.getActiveAlarms(),
+  this.getNetworkRules()
+]);
+// Then combine data client-side
+```
+
+**Search Implementation:**
+```javascript
+// CORRECT: Use real endpoints with query parameters
+const endpoint = `/v2/boxes/${box_gid}/flows`;
+const params = {
+  query: searchQuery, // e.g., "ts:begin-end AND protocol:tcp"
+  limit: limit,
+  sortBy: 'ts:desc'
+};
+```
 
 ### Mandatory Limit Parameters
 **REQUIRED**: All paginated MCP tools require explicit `limit` parameter. This prevents artificial defaults that mask missing parameters.
@@ -542,3 +644,21 @@ DEBUG=query,optimization npm run mcp:start
 - Check server logs in `logs/` directory
 - Monitor API request/response cycles with timing
 - Performance metrics available in debug mode
+- **API Issues**: Always reference `/docs/firewalla-api-reference.md` for correct endpoints
+
+## Critical Development Guidelines
+
+### Before Making Any API Changes:
+1. **READ** `/docs/firewalla-api-reference.md` first
+2. **VERIFY** the endpoint exists in official documentation
+3. **CHECK** parameter names and types against documented examples
+4. **TEST** with the provided code examples
+5. **NEVER** assume an endpoint exists without verification
+
+### When Adding New Tools:
+1. Reference the data models section for correct TypeScript interfaces
+2. Use the documented parameter formats and response structures
+3. Follow the authentication and error handling patterns
+4. Implement proper rate limiting as documented
+
+**Remember**: The `/docs/firewalla-api-reference.md` file contains the complete, verified API specification. It is the single source of truth for all Firewalla API integration.

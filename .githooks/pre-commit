@@ -1,0 +1,81 @@
+#!/bin/bash
+# 
+# Pre-commit hook for budget-friendly CI/CD
+# Runs essential checks locally to catch issues before they reach GitHub Actions
+#
+set -e
+
+echo "🔍 Running pre-commit checks..."
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_status() {
+    echo -e "${GREEN}✅ $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}❌ $1${NC}"
+}
+
+# Check if we're in the right directory
+if [ ! -f "package.json" ]; then
+    print_error "Not in project root directory"
+    exit 1
+fi
+
+# 1. Format check (fast, catches 80% of style issues)
+echo "📝 Checking code formatting..."
+if ! npm run format:check > /dev/null 2>&1; then
+    print_warning "Code formatting issues found"
+    echo "   Running Prettier to fix formatting..."
+    npm run format
+    print_status "Code formatted automatically"
+else
+    print_status "Code formatting looks good"
+fi
+
+# 2. TypeScript compilation (essential for catching syntax errors)
+echo "🔧 Checking TypeScript compilation..."
+if ! npm run typecheck > /dev/null 2>&1; then
+    print_error "TypeScript compilation failed"
+    echo "   Please fix TypeScript errors before committing"
+    exit 1
+fi
+print_status "TypeScript compilation successful"
+
+# 3. Lint check (catches common issues)
+echo "🔍 Running ESLint..."
+if ! npm run lint > /dev/null 2>&1; then
+    print_error "ESLint found issues"
+    echo "   Try running: npm run lint:fix"
+    exit 1
+fi
+print_status "ESLint checks passed"
+
+# 4. Quick test run (unit tests only, skip slow integration tests)
+echo "🧪 Running quick tests..."
+if ! npm run test:quick > /dev/null 2>&1; then
+    print_error "Quick tests failed"
+    echo "   Please fix failing tests before committing"
+    exit 1
+fi
+print_status "Quick tests passed"
+
+# Success message
+echo ""
+print_status "All pre-commit checks passed! 🎉"
+echo "   • Code formatted correctly"
+echo "   • TypeScript compiles without errors"
+echo "   • ESLint checks passed"
+echo "   • Quick tests passed"
+echo ""
+echo "💡 Tip: This saves you GitHub Actions minutes by catching issues locally!"

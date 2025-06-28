@@ -4,18 +4,18 @@
  */
 
 import {
-  QueryNode,
-  FieldQuery,
-  LogicalQuery,
-  GroupQuery,
-  TokenTypeValue,
-  WildcardQuery,
-  RangeQuery,
-  ComparisonQuery,
-  Token,
   TokenType,
-  QueryValidation,
-  SEARCH_FIELDS
+  SEARCH_FIELDS,
+  type QueryNode,
+  type FieldQuery,
+  type LogicalQuery,
+  type GroupQuery,
+  type TokenTypeValue,
+  type WildcardQuery,
+  type RangeQuery,
+  type ComparisonQuery,
+  type Token,
+  type QueryValidation,
 } from './types.js';
 
 export class QueryParser {
@@ -26,9 +26,12 @@ export class QueryParser {
   /**
    * Parse a search query string into an AST
    */
-  parse(query: string, entityType?: keyof typeof SEARCH_FIELDS): QueryValidation {
+  parse(
+    query: string,
+    entityType?: keyof typeof SEARCH_FIELDS
+  ): QueryValidation {
     this.reset();
-    
+
     // Input validation
     if (!query || typeof query !== 'string') {
       this.errors.push('Query must be a non-empty string');
@@ -37,14 +40,14 @@ export class QueryParser {
         errors: this.errors,
         warnings: [],
         suggestions: [],
-        ast: undefined
+        ast: undefined,
       };
     }
-    
+
     try {
       this.tokens = this.tokenize(query);
       const ast = this.parseExpression();
-      
+
       // Validate fields if entity type is provided
       if (entityType && ast) {
         this.validateFields(ast, entityType);
@@ -55,17 +58,18 @@ export class QueryParser {
         errors: this.errors,
         warnings: [],
         suggestions: this.generateSuggestions(query, entityType),
-        ast: this.errors.length === 0 ? ast : undefined
+        ast: this.errors.length === 0 ? ast : undefined,
       };
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown parsing error';
+      const errorMsg =
+        error instanceof Error ? error.message : 'Unknown parsing error';
       this.errors.push(errorMsg);
-      
+
       return {
         isValid: false,
         errors: this.errors,
         warnings: [],
-        suggestions: this.generateSuggestions(query, entityType)
+        suggestions: this.generateSuggestions(query, entityType),
       };
     }
   }
@@ -82,12 +86,12 @@ export class QueryParser {
   private tokenize(input: string): Token[] {
     const tokens: Token[] = [];
     let i = 0;
-    
+
     // Additional safety check
     if (!input || typeof input !== 'string') {
       return tokens;
     }
-    
+
     const safeInput = input.trim();
     if (!safeInput) {
       return tokens;
@@ -104,33 +108,58 @@ export class QueryParser {
 
       // Parentheses
       if (char === '(') {
-        tokens.push({ type: TokenType.LPAREN, value: char, position: i, length: 1 });
+        tokens.push({
+          type: TokenType.LPAREN,
+          value: char,
+          position: i,
+          length: 1,
+        });
         i++;
         continue;
       }
 
       if (char === ')') {
-        tokens.push({ type: TokenType.RPAREN, value: char, position: i, length: 1 });
+        tokens.push({
+          type: TokenType.RPAREN,
+          value: char,
+          position: i,
+          length: 1,
+        });
         i++;
         continue;
       }
 
       // Brackets for ranges
       if (char === '[') {
-        tokens.push({ type: TokenType.LBRACKET, value: char, position: i, length: 1 });
+        tokens.push({
+          type: TokenType.LBRACKET,
+          value: char,
+          position: i,
+          length: 1,
+        });
         i++;
         continue;
       }
 
       if (char === ']') {
-        tokens.push({ type: TokenType.RBRACKET, value: char, position: i, length: 1 });
+        tokens.push({
+          type: TokenType.RBRACKET,
+          value: char,
+          position: i,
+          length: 1,
+        });
         i++;
         continue;
       }
 
       // Colon for field:value
       if (char === ':') {
-        tokens.push({ type: TokenType.COLON, value: char, position: i, length: 1 });
+        tokens.push({
+          type: TokenType.COLON,
+          value: char,
+          position: i,
+          length: 1,
+        });
         i++;
         continue;
       }
@@ -154,15 +183,17 @@ export class QueryParser {
         }
 
         if (i >= safeInput.length) {
-          throw new Error(`Unclosed quoted string starting at position ${start}`);
+          throw new Error(
+            `Unclosed quoted string starting at position ${start}`
+          );
         }
 
         i++; // Skip closing quote
-        tokens.push({ 
-          type: TokenType.QUOTED_VALUE, 
-          value, 
-          position: start, 
-          length: i - start 
+        tokens.push({
+          type: TokenType.QUOTED_VALUE,
+          value,
+          position: start,
+          length: i - start,
         });
         continue;
       }
@@ -175,17 +206,26 @@ export class QueryParser {
           operator += '=';
           i++;
         }
-        tokens.push({ 
-          type: TokenType.OPERATOR, 
-          value: operator, 
-          position: i - operator.length, 
-          length: operator.length 
+        tokens.push({
+          type: TokenType.OPERATOR,
+          value: operator,
+          position: i - operator.length,
+          length: operator.length,
         });
         continue;
       }
 
-      if (char === '!' && i + 1 < safeInput.length && safeInput[i + 1] === '=') {
-        tokens.push({ type: TokenType.OPERATOR, value: '!=', position: i, length: 2 });
+      if (
+        char === '!' &&
+        i + 1 < safeInput.length &&
+        safeInput[i + 1] === '='
+      ) {
+        tokens.push({
+          type: TokenType.OPERATOR,
+          value: '!=',
+          position: i,
+          length: 2,
+        });
         i += 2;
         continue;
       }
@@ -202,11 +242,26 @@ export class QueryParser {
 
         const upperWord = word.toUpperCase();
         if (upperWord === 'AND' || upperWord === 'OR' || upperWord === 'NOT') {
-          tokens.push({ type: TokenType.LOGICAL, value: upperWord, position: start, length: word.length });
+          tokens.push({
+            type: TokenType.LOGICAL,
+            value: upperWord,
+            position: start,
+            length: word.length,
+          });
         } else if (upperWord === 'TO') {
-          tokens.push({ type: TokenType.TO, value: upperWord, position: start, length: word.length });
+          tokens.push({
+            type: TokenType.TO,
+            value: upperWord,
+            position: start,
+            length: word.length,
+          });
         } else {
-          tokens.push({ type: TokenType.FIELD, value: word, position: start, length: word.length });
+          tokens.push({
+            type: TokenType.FIELD,
+            value: word,
+            position: start,
+            length: word.length,
+          });
         }
         continue;
       }
@@ -225,11 +280,11 @@ export class QueryParser {
           i++;
         }
 
-        tokens.push({ 
-          type: hasWildcard ? TokenType.WILDCARD : TokenType.VALUE, 
-          value, 
-          position: start, 
-          length: value.length 
+        tokens.push({
+          type: hasWildcard ? TokenType.WILDCARD : TokenType.VALUE,
+          value,
+          position: start,
+          length: value.length,
         });
         continue;
       }
@@ -238,7 +293,12 @@ export class QueryParser {
       throw new Error(`Unexpected character '${char}' at position ${i}`);
     }
 
-    tokens.push({ type: TokenType.EOF, value: '', position: safeInput.length, length: 0 });
+    tokens.push({
+      type: TokenType.EOF,
+      value: '',
+      position: safeInput.length,
+      length: 0,
+    });
     return tokens;
   }
 
@@ -247,19 +307,21 @@ export class QueryParser {
    */
   private parseExpression(): QueryNode | undefined {
     let left = this.parseAndExpression();
-    
+
     while (this.match(TokenType.LOGICAL) && this.previous().value === 'OR') {
       const right = this.parseAndExpression();
-      if (!right) {break;}
-      
+      if (!right) {
+        break;
+      }
+
       left = {
         type: 'logical',
         operator: 'OR',
         left,
-        right
+        right,
       } as LogicalQuery;
     }
-    
+
     return left;
   }
 
@@ -268,19 +330,21 @@ export class QueryParser {
    */
   private parseAndExpression(): QueryNode | undefined {
     let left = this.parseNotExpression();
-    
+
     while (this.match(TokenType.LOGICAL) && this.previous().value === 'AND') {
       const right = this.parseNotExpression();
-      if (!right) {break;}
-      
+      if (!right) {
+        break;
+      }
+
       left = {
         type: 'logical',
         operator: 'AND',
         left,
-        right
+        right,
       } as LogicalQuery;
     }
-    
+
     return left;
   }
 
@@ -294,14 +358,14 @@ export class QueryParser {
         this.errors.push('Expected expression after NOT operator');
         return undefined;
       }
-      
+
       return {
         type: 'logical',
         operator: 'NOT',
-        operand
+        operand,
       } as LogicalQuery;
     }
-    
+
     return this.parsePrimary();
   }
 
@@ -316,7 +380,7 @@ export class QueryParser {
         this.errors.push('Expected closing parenthesis');
         return undefined;
       }
-      return expr ? { type: 'group', query: expr } as GroupQuery : undefined;
+      return expr ? ({ type: 'group', query: expr } as GroupQuery) : undefined;
     }
 
     // Field query
@@ -330,7 +394,7 @@ export class QueryParser {
       return {
         type: 'field',
         field: '*',
-        value: '*'
+        value: '*',
       } as FieldQuery;
     }
 
@@ -353,25 +417,29 @@ export class QueryParser {
     // Check for operators
     if (this.match(TokenType.OPERATOR)) {
       const operator = this.previous().value as '>=' | '<=' | '>' | '<' | '!=';
-      
+
       if (this.match(TokenType.VALUE, TokenType.QUOTED_VALUE)) {
-        const value = this.previous().value;
-        
-        if (operator === '>=' || operator === '<=' || operator === '>' || operator === '<') {
+        const { value } = this.previous();
+
+        if (
+          operator === '>=' ||
+          operator === '<=' ||
+          operator === '>' ||
+          operator === '<'
+        ) {
           return {
             type: 'comparison',
             field,
-            operator: operator as '>=' | '<=' | '>' | '<',
-            value: this.parseValue(value)
+            operator,
+            value: this.parseValue(value),
           } as ComparisonQuery;
-        } else {
-          return {
-            type: 'field',
-            field,
-            value,
-            operator: operator as '!='
-          } as FieldQuery;
         }
+        return {
+          type: 'field',
+          field,
+          value,
+          operator: operator as '!=',
+        } as FieldQuery;
       }
     }
 
@@ -386,17 +454,17 @@ export class QueryParser {
       return {
         type: 'wildcard',
         field,
-        pattern
+        pattern,
       } as WildcardQuery;
     }
 
     if (this.match(TokenType.VALUE, TokenType.QUOTED_VALUE, TokenType.FIELD)) {
-      const value = this.previous().value;
+      const { value } = this.previous();
       return {
         type: 'field',
         field,
         value,
-        operator: '='
+        operator: '=',
       } as FieldQuery;
     }
 
@@ -436,7 +504,7 @@ export class QueryParser {
       field,
       min,
       max,
-      inclusive: true
+      inclusive: true,
     };
   }
 
@@ -455,7 +523,10 @@ export class QueryParser {
   /**
    * Validate fields against entity schema
    */
-  private validateFields(node: QueryNode, entityType: keyof typeof SEARCH_FIELDS): void {
+  private validateFields(
+    node: QueryNode,
+    entityType: keyof typeof SEARCH_FIELDS
+  ): void {
     const validFields = SEARCH_FIELDS[entityType];
 
     const validateNode = (n: QueryNode): void => {
@@ -464,17 +535,28 @@ export class QueryParser {
         case 'wildcard':
         case 'range':
         case 'comparison': {
-          const fieldNode = n as FieldQuery | WildcardQuery | RangeQuery | ComparisonQuery;
+          const fieldNode = n;
           // Skip validation for special match-all field '*'
-          if (fieldNode.field !== '*' && !validFields.includes(fieldNode.field)) {
-            this.errors.push(`Invalid field '${fieldNode.field}' for ${entityType}. Valid fields: ${validFields.join(', ')}`);
+          if (
+            fieldNode.field !== '*' &&
+            !validFields.includes(fieldNode.field)
+          ) {
+            this.errors.push(
+              `Invalid field '${fieldNode.field}' for ${entityType}. Valid fields: ${validFields.join(', ')}`
+            );
           }
           break;
         }
         case 'logical':
-          if (n.left) {validateNode(n.left);}
-          if (n.right) {validateNode(n.right);}
-          if (n.operand) {validateNode(n.operand);}
+          if (n.left) {
+            validateNode(n.left);
+          }
+          if (n.right) {
+            validateNode(n.right);
+          }
+          if (n.operand) {
+            validateNode(n.operand);
+          }
           break;
         case 'group':
           validateNode(n.query);
@@ -488,11 +570,16 @@ export class QueryParser {
   /**
    * Generate helpful suggestions for invalid queries
    */
-  private generateSuggestions(query: string, entityType?: keyof typeof SEARCH_FIELDS): string[] {
+  private generateSuggestions(
+    query: string,
+    entityType?: keyof typeof SEARCH_FIELDS
+  ): string[] {
     const suggestions: string[] = [];
 
     if (entityType && this.errors.some(e => e.includes('Invalid field'))) {
-      suggestions.push(`Available fields for ${entityType}: ${SEARCH_FIELDS[entityType].join(', ')}`);
+      suggestions.push(
+        `Available fields for ${entityType}: ${SEARCH_FIELDS[entityType].join(', ')}`
+      );
     }
 
     if (query.includes('(') && !query.includes(')')) {
@@ -522,12 +609,16 @@ export class QueryParser {
   }
 
   private check(type: TokenTypeValue): boolean {
-    if (this.isAtEnd()) {return false;}
+    if (this.isAtEnd()) {
+      return false;
+    }
     return this.peek().type === type;
   }
 
   private advance(): Token {
-    if (!this.isAtEnd()) {this.current++;}
+    if (!this.isAtEnd()) {
+      this.current++;
+    }
     return this.previous();
   }
 
