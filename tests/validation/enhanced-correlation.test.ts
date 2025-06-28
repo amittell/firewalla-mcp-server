@@ -7,6 +7,7 @@ import {
   calculateStringSimilarity,
   calculateIPSimilarity,
   calculateNumericSimilarity,
+  resolveFieldWeight,
   DEFAULT_CORRELATION_WEIGHTS,
   DEFAULT_FUZZY_CONFIG
 } from '../../src/validation/enhanced-correlation.js';
@@ -300,6 +301,167 @@ describe('Enhanced Correlation Algorithms', () => {
       
       // Test outside tolerance
       expect(calculateNumericSimilarity(100, 150, thresholds.correlation.numericToleranceDefault)).toBe(0);
+    });
+  });
+
+  describe('Weight Resolution Function', () => {
+    test('should resolve field weights correctly', () => {
+      const weights = { source_ip: 0.8, country: 0, protocol: null as any, default: 0.5 };
+      
+      // Test explicit weight (non-zero)
+      expect(resolveFieldWeight('source_ip', weights)).toBe(0.8);
+      
+      // Test explicit zero weight
+      expect(resolveFieldWeight('country', weights)).toBe(0);
+      
+      // Test invalid weight (should use default)
+      expect(resolveFieldWeight('protocol', weights)).toBe(0.5);
+      
+      // Test undefined field (should use default)
+      expect(resolveFieldWeight('unknown_field', weights)).toBe(0.5);
+    });
+
+    test('should handle edge cases in weight resolution', () => {
+      // Test with no default weight
+      expect(resolveFieldWeight('missing', {})).toBe(0.5);
+      
+      // Test with invalid default weight
+      expect(resolveFieldWeight('missing', { default: 'invalid' as any })).toBe(0.5);
+      
+      // Test weight clamping
+      expect(resolveFieldWeight('high', { high: 2.0 })).toBe(1.0); // Clamped to 1.0
+      expect(resolveFieldWeight('low', { low: -0.5 })).toBe(0); // Clamped to 0
+      
+      // Test with NaN and Infinity
+      expect(resolveFieldWeight('nan', { nan: NaN })).toBe(0.5);
+      expect(resolveFieldWeight('inf', { inf: Infinity })).toBe(0.5);
+    });
+  });
+
+  describe('Weight Handling and Edge Cases', () => {
+    test('should handle zero weights correctly', () => {
+      const zeroWeightConfig = {
+        source_ip: 0,    // Zero weight - should be ignored
+        country: 1.0,    // Full weight
+        default: 0.5
+      };
+
+      const { correlatedResults } = performEnhancedCorrelation(
+        mockPrimaryFlows,
+        mockSecondaryAlarms,
+        'flows',
+        'alarms',
+        ['source_ip', 'country'],
+        'AND',
+        zeroWeightConfig,
+        { ...DEFAULT_FUZZY_CONFIG, enabled: false },
+        0.0 // Accept all scores
+      );
+
+      expect(correlatedResults.length).toBeGreaterThan(0);
+      
+      // Find result with exact IP match
+      const result = correlatedResults.find(r => r.fieldScores['source_ip'] === 0);
+      expect(result).toBeDefined();
+      
+      // Zero weight field should have zero score and partial match type
+      expect(result!.fieldScores['source_ip']).toBe(0);
+      expect(result!.fieldMatchTypes['source_ip']).toBe('partial');
+      
+      // Non-zero weight field should still be processed normally
+      expect(result!.fieldScores['country']).toBeGreaterThanOrEqual(0);
+    });
+
+    test('should handle invalid weight types correctly', () => {
+      const invalidWeightConfig = {
+        source_ip: null as any,     // Invalid - should use default
+        country: false as any,      // Invalid - should use default
+        protocol: 'invalid' as any, // Invalid - should use default
+        default: 0.8
+      };
+
+      const { correlatedResults } = performEnhancedCorrelation(
+        mockPrimaryFlows,
+        mockSecondaryAlarms,
+        'flows',
+        'alarms',
+        ['source_ip', 'country', 'protocol'],
+        'OR',
+        invalidWeightConfig,
+        { ...DEFAULT_FUZZY_CONFIG, enabled: false },
+        0.0
+      );
+
+      // Should handle invalid weights gracefully by falling back to default
+      expect(correlatedResults.length).toBeGreaterThan(0);
+      expect(correlatedResults[0].correlationScore).toBeGreaterThan(0);
+    });
+
+    test('should differentiate between zero and undefined weights', () => {
+      const mockFlows = [{ source: { ip: '192.168.1.100' }, geo: { country: 'US' } }];
+      const mockAlarms = [{ device: { ip: '192.168.1.100' }, remote: { country: 'CA' } }];
+
+      // Test with zero weight
+      const zeroResult = performEnhancedCorrelation(
+        mockFlows, mockAlarms, 'flows', 'alarms',
+        ['source_ip', 'country'], 'AND',
+        { source_ip: 0, country: 1.0 },
+        { ...DEFAULT_FUZZY_CONFIG, enabled: false },
+        0.0
+      );
+
+      // Test with undefined weight (should use default)
+      const undefinedResult = performEnhancedCorrelation(
+        mockFlows, mockAlarms, 'flows', 'alarms',
+        ['source_ip', 'country'], 'AND',
+        { country: 1.0, default: 0.8 }, // source_ip undefined
+        { ...DEFAULT_FUZZY_CONFIG, enabled: false },
+        0.0
+      );
+
+      // Results should be different
+      expect(zeroResult.correlatedResults[0]?.correlationScore)
+        .not.toBe(undefinedResult.correlatedResults[0]?.correlationScore);
+      
+      // Zero weight should ignore the field completely
+      expect(zeroResult.correlatedResults[0]?.fieldScores['source_ip']).toBe(0);
+      expect(zeroResult.correlatedResults[0]?.fieldMatchTypes['source_ip']).toBe('partial');
+      
+      // Undefined weight should use default weight and process normally
+      expect(undefinedResult.correlatedResults[0]?.fieldScores['source_ip']).toBeGreaterThan(0);
+    });
+
+    test('should handle all zero weights gracefully', () => {
+      const allZeroWeights = {
+        source_ip: 0,
+        country: 0,
+        default: 0.5
+      };
+
+      const { correlatedResults, stats } = performEnhancedCorrelation(
+        mockPrimaryFlows,
+        mockSecondaryAlarms,
+        'flows',
+        'alarms',
+        ['source_ip', 'country'],
+        'AND',
+        allZeroWeights,
+        { ...DEFAULT_FUZZY_CONFIG, enabled: false },
+        0.0
+      );
+
+      // Should handle all zero weights without crashing
+      expect(Array.isArray(correlatedResults)).toBe(true);
+      expect(stats.totalSecondaryResults).toBe(mockSecondaryAlarms.length);
+      
+      // All field scores should be zero
+      if (correlatedResults.length > 0) {
+        correlatedResults.forEach(result => {
+          expect(result.fieldScores['source_ip']).toBe(0);
+          expect(result.fieldScores['country']).toBe(0);
+          expect(result.correlationScore).toBe(0);
+        });
+      }
     });
   });
 

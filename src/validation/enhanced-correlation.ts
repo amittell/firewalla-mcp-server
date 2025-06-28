@@ -1,6 +1,31 @@
 /**
  * Enhanced Correlation Algorithms with Scoring and Fuzzy Matching
  * Provides intelligent correlation scoring and flexible matching strategies
+ * 
+ * Weight Handling Logic:
+ * =====================
+ * 
+ * Field weights control the importance of each field in correlation scoring.
+ * The weight fallback hierarchy is:
+ * 
+ * 1. Explicit field weight: weights[field] - Used if it's a valid number (including 0)
+ * 2. Default weight: weights.default - Used if field weight is invalid 
+ * 3. Hardcoded fallback: 0.5 - Used as last resort
+ * 
+ * Special Weight Values:
+ * - 0: Field is completely ignored (not included in weighted average calculation)
+ * - 0.1 to 1.0: Field contributes to scoring with given weight
+ * - null/undefined/false/string: Invalid, falls back to default or 0.5
+ * 
+ * Examples:
+ * - weights = { source_ip: 0 } → source_ip ignored completely
+ * - weights = { source_ip: undefined } → uses default weight
+ * - weights = { source_ip: 0.8 } → source_ip weighted at 80% importance
+ * 
+ * Backward Compatibility:
+ * - Existing code using nullish coalescing (??) continues to work
+ * - Zero weights now properly excluded from calculations
+ * - Invalid weights (non-numbers) properly fall back to defaults
  */
 
 import { getFieldValue, normalizeFieldValue, type EntityType, type MappableEntity } from './field-mapper.js';
@@ -26,6 +51,29 @@ function validateScore(score: number, context: string): number {
  * Configuration for correlation scoring weights
  */
 export type CorrelationWeights = Record<string, number>;
+
+/**
+ * Validates and resolves field weight with proper fallback handling
+ * 
+ * @param field - The field name to get weight for
+ * @param weights - The weights configuration object
+ * @returns Validated weight value between 0 and 1
+ */
+export function resolveFieldWeight(field: string, weights: CorrelationWeights): number {
+  let fieldWeight: number;
+  
+  // Check if field weight is explicitly defined (including zero)
+  if (Object.prototype.hasOwnProperty.call(weights, field) && typeof weights[field] === 'number' && Number.isFinite(weights[field])) {
+    fieldWeight = weights[field];
+  } else if (Object.prototype.hasOwnProperty.call(weights, 'default') && typeof weights.default === 'number' && Number.isFinite(weights.default)) {
+    fieldWeight = weights.default;
+  } else {
+    fieldWeight = 0.5; // Final fallback
+  }
+  
+  // Clamp to valid range [0, 1]
+  return Math.max(0, Math.min(1, fieldWeight));
+}
 
 /**
  * Default field weights for correlation scoring
@@ -65,7 +113,7 @@ export const DEFAULT_CORRELATION_WEIGHTS: CorrelationWeights = {
   'hour_of_day': 0.3,
   'day_of_week': 0.2,
   
-  // Default weight for unspecified fields
+  // Default weight for unspecified fields (fallback for unknown field types)
   'default': 0.5
 };
 
@@ -236,7 +284,18 @@ function scoreEntityCorrelation(
   // Score each correlation field
   for (let i = 0; i < correlationFields.length; i++) {
     const field = correlationFields[i];
-    const fieldWeight = weights[field] || weights.default || 0.5;
+    
+    // Resolve field weight using the centralized validation logic
+    const fieldWeight = resolveFieldWeight(field, weights);
+    
+    // Skip processing if weight is zero (field should be ignored completely)
+    if (fieldWeight === 0) {
+      fieldScores[field] = 0;
+      fieldMatchTypes[field] = 'partial';
+      // Important: Don't add to totalWeight when weight is zero
+      continue;
+    }
+    
     const primaryValues = primaryFieldValues[i];
     
     const entityValue = getFieldValue(entity, field, entityType);
@@ -270,15 +329,32 @@ function scoreEntityCorrelation(
   // Calculate overall correlation score
   const correlationScore = totalWeight > 0 ? totalWeightedScore / totalWeight : 0;
   
-  // Apply correlation type logic for AND/OR
+  // Correlation Penalty Logic: Adjust scores based on correlation type
   let finalScore = correlationScore;
   if (correlationType === 'AND') {
-    // For AND logic, penalize missing field matches by multiplying the score
-    // by the completeness ratio. This ensures that AND correlations require
-    // all fields to match for a high score (e.g., 2/3 matches = 67% penalty)
+    // AND Correlation Penalty Strategy:
+    //
+    // Problem: AND correlations should require ALL fields to match for high confidence.
+    // A simple average might give high scores even when some fields don't match.
+    //
+    // Solution: Apply a "completeness penalty" that multiplies the base score by
+    // the ratio of matching fields to total fields. This creates exponential
+    // penalty for missing matches:
+    //
+    // Examples:
+    // - 3/3 fields match: 100% score (no penalty)
+    // - 2/3 fields match: 67% of base score (33% penalty)  
+    // - 1/3 fields match: 33% of base score (67% penalty)
+    // - 0/3 fields match: 0% score (100% penalty)
+    //
+    // This ensures AND correlations have stringent requirements while still
+    // allowing partial matches to receive proportionally lower scores.
     const matchingFields = Object.values(fieldScores).filter(score => score > 0).length;
     const completeness = matchingFields / correlationFields.length;
     finalScore = correlationScore * completeness;
+    
+    // Note: OR correlations use the base weighted average without penalty,
+    // as they should succeed when ANY field matches strongly.
   }
   
   // Determine match type and confidence
