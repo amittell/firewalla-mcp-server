@@ -19,7 +19,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
       const groupByValidation = ParameterValidator.validateOptionalString(args?.groupBy, 'groupBy');
       const sortByValidation = ParameterValidator.validateOptionalString(args?.sortBy, 'sortBy');
       const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
-        required: true, min: 1, max: 10000, integer: true
+        required: true, min: 1, max: 1000, integer: true
       });
       const cursorValidation = ParameterValidator.validateOptionalString(args?.cursor, 'cursor');
       

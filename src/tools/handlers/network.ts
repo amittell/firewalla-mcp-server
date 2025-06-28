@@ -16,7 +16,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
     try {
       // Parameter validation
       const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
-        required: true, min: 1, max: 10000, integer: true
+        required: true, min: 1, max: 1000, integer: true
       });
       
       if (!limitValidation.isValid) {
@@ -120,7 +120,7 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
             bytes_uploaded: SafeAccess.getNestedValue(item, 'bytes_uploaded', 0),
             bytes_downloaded: SafeAccess.getNestedValue(item, 'bytes_downloaded', 0),
             total_bytes: SafeAccess.getNestedValue(item, 'total_bytes', 0),
-            total_mb: Math.round(SafeAccess.getNestedValue(item, 'total_bytes', 0) / (1024 * 1024)),
+            total_mb: Math.round(SafeAccess.getNestedValue(item, 'total_bytes', 0) / (1024 * 1024) * 100) / 100,
             total_gb: Math.round(SafeAccess.getNestedValue(item, 'total_bytes', 0) / (1024 * 1024 * 1024) * 100) / 100,
           })
         ),
@@ -142,7 +142,7 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
     try {
       // Parameter validation
       const limitValidation = ParameterValidator.validateNumber(args?.limit, 'limit', {
-        required: true, min: 1, max: 10000, integer: true
+        required: true, min: 1, max: 1000, integer: true
       });
       const sortValidation = ParameterValidator.validateBoolean(args?.sort_by_last_seen, 'sort_by_last_seen', true);
       
@@ -158,7 +158,7 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
       const sortByLastSeen = sortValidation.sanitizedValue!;
       
       // Get all devices including offline ones with adequate buffer for filtering
-      const fetchLimit = Math.min(limit * 3, 10000); // Fetch 3x limit to account for offline filtering
+      const fetchLimit = Math.min(limit * 3, 1000); // Fetch 3x limit to account for offline filtering
       const allDevicesResponse = await firewalla.getDeviceStatus(undefined, undefined, fetchLimit);
       
       // Filter to only offline devices
@@ -188,8 +188,7 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
             ip: SafeAccess.getNestedValue(device, 'ip', 'unknown'),
             macVendor: SafeAccess.getNestedValue(device, 'macVendor', 'unknown'),
             lastSeen: SafeAccess.getNestedValue(device, 'lastSeen', 0),
-            lastSeenFormatted: SafeAccess.getNestedValue(device, 'lastSeen', 0) ? 
-              safeUnixToISOString(SafeAccess.getNestedValue(device, 'lastSeen', 0), 'Never') : 'Never',
+            lastSeenFormatted: safeUnixToISOString(SafeAccess.getNestedValue(device, 'lastSeen', 0), 'Never'),
             network: SafeAccess.getNestedValue(device, 'network', null),
             group: SafeAccess.getNestedValue(device, 'group', null),
           })

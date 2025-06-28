@@ -3,6 +3,61 @@
  * Provides consistent pagination interface across all MCP tools
  */
 
+import { config } from '../config/config.js';
+
+/**
+ * Pagination configuration interface
+ */
+export interface PaginationConfig {
+  defaultPageSize: number;
+  maxPageSize: number;
+}
+
+/**
+ * Default pagination configuration loaded from main configuration
+ * Falls back to environment variables for backward compatibility
+ */
+const DEFAULT_PAGINATION_CONFIG: PaginationConfig = {
+  defaultPageSize: config.defaultPageSize || parseInt(process.env.DEFAULT_PAGE_SIZE || '100', 10),
+  maxPageSize: config.maxPageSize || parseInt(process.env.MAX_PAGE_SIZE || '10000', 10)
+};
+
+/**
+ * Current pagination configuration (can be updated at runtime)
+ */
+let currentPaginationConfig: PaginationConfig = DEFAULT_PAGINATION_CONFIG;
+
+/**
+ * Update pagination configuration at runtime
+ */
+export function updatePaginationConfig(newConfig: Partial<PaginationConfig>): void {
+  currentPaginationConfig = {
+    ...currentPaginationConfig,
+    ...newConfig
+  };
+}
+
+/**
+ * Get current pagination configuration
+ */
+export function getPaginationConfig(): PaginationConfig {
+  return currentPaginationConfig;
+}
+
+/**
+ * Get default page size with validation
+ */
+export function getDefaultPageSize(requestedSize?: number): number {
+  const config = getPaginationConfig();
+  
+  if (requestedSize) {
+    // Validate requested size against max
+    return Math.min(requestedSize, config.maxPageSize);
+  }
+  
+  return config.defaultPageSize;
+}
+
 export interface CursorData {
   offset: number;
   page_size: number;
@@ -74,7 +129,7 @@ export function decodeCursor(cursor: string): CursorData {
  *
  * @param items - The array of items to paginate
  * @param cursor - Optional base64-encoded cursor string indicating the current pagination state
- * @param page_size - Number of items per page (default is 100)
+ * @param page_size - Number of items per page (default: configured DEFAULT_PAGE_SIZE or 100)
  * @param sort_by - Optional field name to sort by
  * @param sort_order - Sort order, either 'asc' or 'desc' (default is 'asc')
  * @returns A paginated result containing the current page of items, pagination metadata, and a next cursor if more items are available
@@ -82,7 +137,7 @@ export function decodeCursor(cursor: string): CursorData {
 export function paginateArray<T>(
   items: T[],
   cursor?: string,
-  page_size: number = 100,
+  page_size: number = getDefaultPageSize(),
   sort_by?: string,
   sort_order: 'asc' | 'desc' = 'asc'
 ): PaginatedResult<T> {
@@ -110,9 +165,7 @@ export function paginateArray<T>(
       const aVal = a[sort_by];
       const bVal = b[sort_by];
       
-      if (aVal === bVal) {
-        return 0;
-      }
+      if (aVal === bVal) {return 0;}
       
       // Case-insensitive string comparison for consistent sorting
       const aStr = String(aVal).toLowerCase();
@@ -157,7 +210,7 @@ export function paginateArray<T>(
  *
  * @param dataFetcher - A function that asynchronously retrieves all items to be paginated
  * @param cursor - An optional base64-encoded cursor string representing the current pagination state
- * @param page_size - The number of items per page (default is 100)
+ * @param page_size - The number of items per page (default: configured DEFAULT_PAGE_SIZE or 100)
  * @param sort_by - Optional field name to sort the items by
  * @param sort_order - Sort order, either 'asc' or 'desc' (default is 'asc')
  * @returns A paginated result containing the current page of items, pagination metadata, and next cursor if more items remain
@@ -166,7 +219,7 @@ export function paginateArray<T>(
 export async function createPaginatedResponse<T>(
   dataFetcher: () => Promise<T[]>,
   cursor?: string,
-  page_size: number = 100,
+  page_size: number = getDefaultPageSize(),
   sort_by?: string,
   sort_order: 'asc' | 'desc' = 'asc'
 ): Promise<PaginatedResult<T>> {

@@ -1,6 +1,19 @@
 /**
- * Token usage optimization utilities for Firewalla MCP Server
- * Implements response truncation, summary modes, and token management
+ * @fileoverview Token usage optimization utilities for Firewalla MCP Server
+ * 
+ * Provides comprehensive response optimization for MCP protocol communication including:
+ * - **Intelligent Truncation**: Smart text shortening with word boundary preservation
+ * - **Response Summarization**: Field-level optimization for different data types
+ * - **Token Management**: Sophisticated token counting and size estimation
+ * - **Auto-optimization**: Automatic response size management with configurable limits
+ * - **Performance Monitoring**: Optimization statistics and compression metrics
+ * 
+ * The optimization system reduces token usage while preserving essential information,
+ * ensuring Claude can process large datasets within MCP protocol constraints.
+ * 
+ * @version 1.0.0
+ * @author Firewalla MCP Server Team
+ * @since 2024-01-01
  */
 
 import { safeUnixToISOString } from '../utils/timestamp.js';
@@ -351,10 +364,20 @@ export function optimizeDeviceResponse(
   if (!Array.isArray(response.results)) {
     return { ...response, results: [] };
   }
+  // Calculate online/offline counts in a single pass for better performance
+  const { onlineCount, offlineCount } = response.results.reduce((acc, device) => {
+    if (device.online) {
+      acc.onlineCount++;
+    } else {
+      acc.offlineCount++;
+    }
+    return acc;
+  }, { onlineCount: 0, offlineCount: 0 });
+
   const optimized = {
     count: typeof response.count === 'number' ? response.count : response.results?.length || 0,
-    online_count: response.results.filter(d => d.online).length,
-    offline_count: response.results.filter(d => !d.online).length,
+    online_count: onlineCount,
+    offline_count: offlineCount,
     results: response.results.slice(0, config.summaryMode.maxItems).map(device => ({
       id: device.id,
       gid: device.gid,

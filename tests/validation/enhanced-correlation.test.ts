@@ -10,6 +10,7 @@ import {
   DEFAULT_CORRELATION_WEIGHTS,
   DEFAULT_FUZZY_CONFIG
 } from '../../src/validation/enhanced-correlation.js';
+import { getTestThresholds } from '../config/test-thresholds.js';
 
 describe('Enhanced Correlation Algorithms', () => {
   const mockPrimaryFlows = [
@@ -241,9 +242,10 @@ describe('Enhanced Correlation Algorithms', () => {
         0.1
       );
 
-      const highScoreCount = correlatedResults.filter(r => r.correlationScore >= 0.8).length;
-      const mediumScoreCount = correlatedResults.filter(r => r.correlationScore >= 0.5 && r.correlationScore < 0.8).length;
-      const lowScoreCount = correlatedResults.filter(r => r.correlationScore < 0.5).length;
+      const thresholds = getTestThresholds();
+      const highScoreCount = correlatedResults.filter(r => r.correlationScore >= thresholds.correlation.highScoreMin).length;
+      const mediumScoreCount = correlatedResults.filter(r => r.correlationScore >= thresholds.correlation.mediumScoreMin && r.correlationScore < thresholds.correlation.highScoreMin).length;
+      const lowScoreCount = correlatedResults.filter(r => r.correlationScore < thresholds.correlation.mediumScoreMin).length;
 
       expect(stats.scoreDistribution.high).toBe(highScoreCount);
       expect(stats.scoreDistribution.medium).toBe(mediumScoreCount);
@@ -257,7 +259,8 @@ describe('Enhanced Correlation Algorithms', () => {
       expect(calculateIPSimilarity('192.168.1.1', '192.168.1.1')).toBe(1.0);
       
       // Test /24 subnet match (3 octets)
-      expect(calculateIPSimilarity('192.168.1.1', '192.168.1.2')).toBe(0.75);
+      const thresholds = getTestThresholds();
+      expect(calculateIPSimilarity('192.168.1.1', '192.168.1.2')).toBe(thresholds.correlation.subnetMatchThreshold);
       
       // Test /16 subnet match (2 octets)
       expect(calculateIPSimilarity('192.168.1.1', '192.168.2.1')).toBe(0.5);
@@ -270,29 +273,33 @@ describe('Enhanced Correlation Algorithms', () => {
     });
 
     test('should calculate string similarity correctly', () => {
+      const thresholds = getTestThresholds();
+      
       // Test exact match
-      expect(calculateStringSimilarity('chrome', 'chrome', 0.8)).toBe(1.0);
+      expect(calculateStringSimilarity('chrome', 'chrome', thresholds.correlation.stringFuzzyThreshold)).toBe(1.0);
       
       // Test similar strings
       const similarity = calculateStringSimilarity('chrome', 'chromium', 0.6);
       expect(similarity).toBeGreaterThan(0);
-      expect(similarity).toBeLessThan(0.8); // Capped at 0.8 for fuzzy matches
+      expect(similarity).toBeLessThan(thresholds.correlation.stringFuzzyThreshold); // Capped at threshold for fuzzy matches
       
       // Test below threshold
-      expect(calculateStringSimilarity('chrome', 'firefox', 0.8)).toBe(0);
+      expect(calculateStringSimilarity('chrome', 'firefox', thresholds.correlation.stringFuzzyThreshold)).toBe(0);
     });
 
     test('should calculate numeric similarity correctly', () => {
+      const thresholds = getTestThresholds();
+      
       // Test exact match (returns capped score of 0.7 even for identical values to maintain consistency with fuzzy matching bounds)
-      expect(calculateNumericSimilarity(100, 100, 0.1)).toBe(0.7);
+      expect(calculateNumericSimilarity(100, 100, thresholds.correlation.numericToleranceDefault)).toBe(0.7);
       
       // Test within tolerance
-      const similarity = calculateNumericSimilarity(100, 105, 0.1);
+      const similarity = calculateNumericSimilarity(100, 105, thresholds.correlation.numericToleranceDefault);
       expect(similarity).toBeGreaterThan(0);
       expect(similarity).toBeLessThanOrEqual(0.7); // Capped at 0.7
       
       // Test outside tolerance
-      expect(calculateNumericSimilarity(100, 150, 0.1)).toBe(0);
+      expect(calculateNumericSimilarity(100, 150, thresholds.correlation.numericToleranceDefault)).toBe(0);
     });
   });
 
@@ -359,7 +366,8 @@ describe('Enhanced Correlation Algorithms', () => {
       const totalTime = Date.now() - startTime;
       
       expect(stats.totalProcessingTime).toBeGreaterThanOrEqual(0);
-      expect(totalTime).toBeLessThan(1000); // Should complete within 1 second
+      const thresholds = getTestThresholds();
+      expect(totalTime).toBeLessThan(thresholds.performance.correlationMs); // Should complete within threshold
     });
   });
 });

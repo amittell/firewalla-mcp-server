@@ -5,6 +5,8 @@
 
 import { createSearchTools } from '../../src/tools/search.js';
 import { FirewallaClient } from '../../src/firewalla/client.js';
+import { getTestThresholds } from '../config/test-thresholds.js';
+// Note: jest-setup.ts is loaded automatically by Jest configuration
 
 // Mock FirewallaClient with enhanced data
 const mockFirewallaClient = {
@@ -413,7 +415,6 @@ describe('Enhanced Cross-Reference Search Tools', () => {
 
       mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(largeFlowData);
 
-      const startTime = Date.now();
       const params = {
         primary_query: 'protocol:tcp',
         secondary_queries: ['severity:high'],
@@ -424,11 +425,13 @@ describe('Enhanced Cross-Reference Search Tools', () => {
         limit: 1000
       };
 
+      const startTime = Date.now();
       const result = await searchTools.search_enhanced_cross_reference(params);
-      const executionTime = Date.now() - startTime;
+      const duration = Date.now() - startTime;
 
       expect(result.correlation_summary.total_correlated_count).toBeGreaterThanOrEqual(0);
-      expect(executionTime).toBeLessThan(1000); // Should complete within 1 second
+      const thresholds = getTestThresholds();
+      expect(duration).toBeLessThan(thresholds.performance.crossReferenceMs);
     });
 
     test('should handle API errors gracefully', async () => {

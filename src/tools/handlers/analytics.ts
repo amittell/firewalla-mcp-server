@@ -335,8 +335,10 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
           avg_flows_per_interval: validTrends.length > 0 
             ? Math.round(validTrends.reduce((sum: number, t: any) => sum + SafeAccess.getNestedValue(t, 'value', 0), 0) / validTrends.length)
             : 0,
-          peak_flow_count: validTrends.length > 0 ? Math.max(...validTrends.map((t: any) => SafeAccess.getNestedValue(t, 'value', 0))) : 0,
-          min_flow_count: validTrends.length > 0 ? Math.min(...validTrends.map((t: any) => SafeAccess.getNestedValue(t, 'value', 0))) : 0,
+          peak_flow_count: validTrends.length > 0 ? 
+            Math.max(...validTrends.slice(0, 1000).map((t: any) => SafeAccess.getNestedValue(t, 'value', 0))) : 0,
+          min_flow_count: validTrends.length > 0 ? 
+            Math.min(...validTrends.slice(0, 1000).map((t: any) => SafeAccess.getNestedValue(t, 'value', 0))) : 0,
         }
       });
       
@@ -413,7 +415,8 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
           avg_alarms_per_interval: validTrends.length > 0 
             ? Math.round(validTrends.reduce((sum: number, t: any) => sum + SafeAccess.getNestedValue(t, 'value', 0), 0) / validTrends.length * 100) / 100
             : 0,
-          peak_alarm_count: validTrends.length > 0 ? Math.max(...validTrends.map((t: any) => SafeAccess.getNestedValue(t, 'value', 0))) : 0,
+          peak_alarm_count: validTrends.length > 0 ? 
+            Math.max(...validTrends.slice(0, 1000).map((t: any) => SafeAccess.getNestedValue(t, 'value', 0))) : 0,
           intervals_with_alarms: SafeAccess.safeArrayFilter(validTrends, (t: any) => SafeAccess.getNestedValue(t, 'value', 0) > 0).length,
           alarm_frequency: validTrends.length > 0 
             ? Math.round((SafeAccess.safeArrayFilter(validTrends, (t: any) => SafeAccess.getNestedValue(t, 'value', 0) > 0).length / validTrends.length) * 100)
@@ -512,9 +515,16 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
     }
     
     const avgValue = trends.reduce((sum: number, t: any) => sum + SafeAccess.getNestedValue(t, 'value', 0), 0) / trends.length;
-    if (avgValue === 0) { return 100; }
+    if (avgValue === 0 || !isFinite(avgValue)) { return 100; }
+    
+    // Prevent division by zero when there's only one trend
+    if (trends.length <= 1) { return 100; }
     
     const variationPercentage = (totalVariation / (trends.length - 1)) / avgValue;
+    
+    // Ensure the result is a finite number
+    if (!isFinite(variationPercentage)) { return 0; }
+    
     return Math.max(0, Math.min(100, Math.round((1 - variationPercentage) * 100)));
   }
 }

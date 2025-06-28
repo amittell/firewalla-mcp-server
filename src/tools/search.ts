@@ -25,16 +25,79 @@ import {
 } from '../validation/field-mapper.js';
 
 /**
- * Risk threshold constants for geographic analysis
+ * Configuration interface for risk thresholds and performance settings
  */
-const RISK_THRESHOLDS = {
-  LOW_MAX: 3,
-  MEDIUM_MAX: 6,
-  HIGH_MAX: 8,
-  HIGH_RISK_COUNTRY_MIN: 6,
-  HIGH_RISK_FLOW_MIN: 7,
-  SUSPICIOUS_ASN_MIN: 7
-} as const;
+export interface SearchConfig {
+  riskThresholds: {
+    lowMax: number;
+    mediumMax: number;
+    highMax: number;
+    highRiskCountryMin: number;
+    highRiskFlowMin: number;
+    suspiciousAsnMin: number;
+  };
+  performance: {
+    correlationTimeoutMs: number;
+    maxCorrelationResults: number;
+    cacheExpirationMs: number;
+  };
+}
+
+/**
+ * Default search configuration that can be overridden via environment variables or configuration
+ */
+const DEFAULT_SEARCH_CONFIG: SearchConfig = {
+  riskThresholds: {
+    lowMax: parseInt(process.env.RISK_THRESHOLD_LOW_MAX || '3', 10),
+    mediumMax: parseInt(process.env.RISK_THRESHOLD_MEDIUM_MAX || '6', 10),
+    highMax: parseInt(process.env.RISK_THRESHOLD_HIGH_MAX || '8', 10),
+    highRiskCountryMin: parseInt(process.env.RISK_THRESHOLD_COUNTRY_MIN || '6', 10),
+    highRiskFlowMin: parseInt(process.env.RISK_THRESHOLD_FLOW_MIN || '7', 10),
+    suspiciousAsnMin: parseInt(process.env.RISK_THRESHOLD_ASN_MIN || '7', 10),
+  },
+  performance: {
+    correlationTimeoutMs: parseInt(process.env.CORRELATION_TIMEOUT_MS || '30000', 10),
+    maxCorrelationResults: parseInt(process.env.MAX_CORRELATION_RESULTS || '1000', 10),
+    cacheExpirationMs: parseInt(process.env.CACHE_EXPIRATION_MS || '300000', 10), // 5 minutes
+  }
+};
+
+/**
+ * Current search configuration (can be updated at runtime)
+ */
+let currentSearchConfig: SearchConfig = DEFAULT_SEARCH_CONFIG;
+
+/**
+ * Update search configuration at runtime
+ */
+export function updateSearchConfig(newConfig: Partial<SearchConfig>): void {
+  currentSearchConfig = {
+    ...currentSearchConfig,
+    ...newConfig,
+    riskThresholds: {
+      ...currentSearchConfig.riskThresholds,
+      ...(newConfig.riskThresholds || {})
+    },
+    performance: {
+      ...currentSearchConfig.performance,
+      ...(newConfig.performance || {})
+    }
+  };
+}
+
+/**
+ * Get current search configuration
+ */
+export function getSearchConfig(): SearchConfig {
+  return currentSearchConfig;
+}
+
+/**
+ * Get risk thresholds (backward compatibility)
+ */
+function getRiskThresholds(): SearchConfig['riskThresholds'] {
+  return currentSearchConfig.riskThresholds;
+}
 
 /**
  * API parameters interface for search requests
@@ -229,7 +292,7 @@ export class SearchEngine {
 
     // Validate limit parameter with consistent boundary checking
     if (config.requireLimit !== false) {
-      const maxLimit = config.maxLimit || (entityType === 'flows' ? 10000 : 5000);
+      const maxLimit = config.maxLimit || (entityType === 'flows' ? 1000 : 500);
       const limitValidation = ParameterValidator.validateNumber(params?.limit, 'limit', {
         required: true,
         min: 1,
@@ -324,14 +387,20 @@ export class SearchEngine {
         throw new Error(`Query validation failed: ${queryCheck.errors.join(', ')}`);
       }
       
-      const validation = queryParser.parse(queryCheck.sanitizedValue, entityType as 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists');
+      // Validate entityType before parsing
+      const validEntityTypes = ['flows', 'alarms', 'rules', 'devices', 'target_lists'] as const;
+      if (!validEntityTypes.includes(entityType as any)) {
+        throw new Error(`Invalid entity type: ${entityType}`);
+      }
+      
+      const validation = queryParser.parse(queryCheck.sanitizedValue, entityType as typeof validEntityTypes[number]);
       if (!validation.isValid || !validation.ast) {
         throw new Error(`Invalid query syntax: ${validation.errors.join(', ')}`);
       }
 
-      // Set up filter context
+      // Set up filter context (entityType already validated above)
       const context: FilterContext = {
-        entityType: entityType as 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists',
+        entityType: entityType as typeof validEntityTypes[number],
         apiParams: {},
         postProcessing: [],
         metadata: {
@@ -399,9 +468,10 @@ export class SearchEngine {
         aggregations
       };
 
-      // Add cursor for devices
+      // Add cursor for devices with proper typing
       if (entityType === 'devices' && response.next_cursor) {
-        (result as any).next_cursor = response.next_cursor;
+        const resultWithCursor = result as SearchResult & { next_cursor?: string };
+        resultWithCursor.next_cursor = response.next_cursor;
       }
 
       return result;
@@ -411,15 +481,6 @@ export class SearchEngine {
     }
   }
 
-  /**
-   * Validate basic query parameters
-   */
-  private validateBasicQuery(params: SearchParams): { isValid: boolean; errors?: string[] } {
-    if (!params || !params.query || typeof params.query !== 'string') {
-      return { isValid: false, errors: ['Invalid search parameters: query is required and must be a string'] };
-    }
-    return { isValid: true };
-  }
 
   /**
    * Execute a search query for flows
@@ -429,7 +490,7 @@ export class SearchEngine {
       requireQuery: true,
       requireLimit: true,
       supportsTimeRange: true,
-      maxLimit: 10000
+      maxLimit: 1000
     });
   }
 
@@ -896,10 +957,16 @@ export class SearchEngine {
       const valueA = a.value;
       const valueB = b.value;
       
+      // Handle null/undefined values - sort nulls to the end
+      if (valueA == null && valueB == null) return 0;
+      if (valueA == null) return 1;  // null values go to end
+      if (valueB == null) return -1; // null values go to end
+      
       if (valueA === valueB) {
         return 0;
       }
       
+      // Handle string vs number comparisons
       const comparison = valueA < valueB ? -1 : 1;
       return sortOrder === 'asc' ? comparison : -comparison;
     });
@@ -1027,7 +1094,7 @@ export class SearchEngine {
     try {
       // Validate limit parameter
       const limitValidation = ParameterValidator.validateNumber(params.limit, 'limit', {
-        required: true, min: 1, max: 10000, integer: true
+        required: true, min: 1, max: 1000, integer: true
       });
       
       if (!limitValidation.isValid) {
@@ -1238,7 +1305,7 @@ export class SearchEngine {
     try {
       const limit = params.limit || 1000;
       const limitValidation = ParameterValidator.validateNumber(limit, 'limit', {
-        min: 1, max: 10000, integer: true
+        min: 1, max: 1000, integer: true
       });
       
       if (!limitValidation.isValid) {
@@ -1333,7 +1400,7 @@ export class SearchEngine {
       
       if (isCloud) { analysis.cloud_provider_flows++; }
       if (isVpn) { analysis.vpn_flows++; }
-      if (riskScore && riskScore >= RISK_THRESHOLDS.HIGH_RISK_FLOW_MIN) { analysis.high_risk_flows++; }
+      if (riskScore && riskScore >= getRiskThresholds().highRiskFlowMin) { analysis.high_risk_flows++; }
     });
 
     // Convert sets to counts
@@ -1388,7 +1455,7 @@ export class SearchEngine {
       const isProxy = getFieldValue(alarm, 'is_proxy', 'alarms');
       const riskScore = getFieldValue(alarm, 'geographic_risk_score', 'alarms') || 0;
 
-      if (country && riskScore >= RISK_THRESHOLDS.HIGH_RISK_COUNTRY_MIN) {
+      if (country && riskScore >= getRiskThresholds().highRiskCountryMin) {
         threats.high_risk_countries[country] = (threats.high_risk_countries[country] || 0) + 1;
       }
       
@@ -1396,7 +1463,7 @@ export class SearchEngine {
         threats.threat_by_continent[continent] = (threats.threat_by_continent[continent] || 0) + 1;
       }
       
-      if (asn && riskScore >= RISK_THRESHOLDS.SUSPICIOUS_ASN_MIN) {
+      if (asn && riskScore >= getRiskThresholds().suspiciousAsnMin) {
         threats.suspicious_asns[asn] = (threats.suspicious_asns[asn] || 0) + 1;
       }
       
@@ -1405,9 +1472,9 @@ export class SearchEngine {
       if (isProxy) { threats.proxy_threats++; }
 
       // Categorize risk
-      if (riskScore <= RISK_THRESHOLDS.LOW_MAX) {threats.risk_distribution.low++;}
-      else if (riskScore <= RISK_THRESHOLDS.MEDIUM_MAX) {threats.risk_distribution.medium++;}
-      else if (riskScore <= RISK_THRESHOLDS.HIGH_MAX) {threats.risk_distribution.high++;}
+      if (riskScore <= getRiskThresholds().lowMax) {threats.risk_distribution.low++;}
+      else if (riskScore <= getRiskThresholds().mediumMax) {threats.risk_distribution.medium++;}
+      else if (riskScore <= getRiskThresholds().highMax) {threats.risk_distribution.high++;}
       else {threats.risk_distribution.critical++;}
     });
 
