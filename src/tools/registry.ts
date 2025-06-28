@@ -174,12 +174,54 @@ export class ToolRegistry {
   /**
    * Registers a single tool handler in the registry
    *
+   * Includes duplicate registration protection to prevent accidental overwrites
+   * and ensure tool registry integrity. If a tool with the same name is already
+   * registered, this method will throw an error with diagnostic information.
+   *
    * @param handler - The tool handler instance to register
+   * @throws {Error} If a handler with the same name is already registered
    * @returns {void}
    * @public
    */
   register(handler: ToolHandler): void {
+    if (this.handlers.has(handler.name)) {
+      const existingHandler = this.handlers.get(handler.name);
+      throw new Error(
+        `Tool registration conflict: A handler named '${handler.name}' is already registered. ` +
+          `Existing handler category: '${existingHandler?.category}', ` +
+          `New handler category: '${handler.category}'. ` +
+          `Tool names must be unique across the registry.`
+      );
+    }
+
     this.handlers.set(handler.name, handler);
+  }
+
+  /**
+   * Forcefully registers a tool handler, replacing any existing handler with the same name
+   *
+   * Use this method only when you explicitly want to replace an existing handler.
+   * This bypasses the duplicate registration protection for testing or dynamic
+   * handler replacement scenarios.
+   *
+   * @param handler - The tool handler instance to register
+   * @param reason - Optional reason for the forced registration (for logging)
+   * @returns {string | null} Name of the replaced handler if any, null otherwise
+   * @public
+   */
+  forceRegister(handler: ToolHandler, reason?: string): string | null {
+    const existingHandler = this.handlers.get(handler.name);
+
+    if (existingHandler && reason) {
+      // Optional logging for forced replacements
+      console.warn(
+        `Forced tool registration: Replacing '${handler.name}' ` +
+          `(${existingHandler.category} -> ${handler.category}). Reason: ${reason}`
+      );
+    }
+
+    this.handlers.set(handler.name, handler);
+    return existingHandler ? existingHandler.name : null;
   }
 
   /**
