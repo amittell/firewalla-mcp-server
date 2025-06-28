@@ -30,15 +30,9 @@ export class DebugTools {
 
   constructor(
     // eslint-disable-next-line no-unused-vars
-<<<<<<< HEAD
-    private _firewalla: FirewallaClient,
-    // eslint-disable-next-line no-unused-vars
-    private _healthCheck: HealthCheckManager
-=======
     private readonly firewalla: FirewallaClient,
     // eslint-disable-next-line no-unused-vars
     private readonly healthCheck: HealthCheckManager
->>>>>>> origin/feature/comprehensive-jsdoc-documentation
   ) {
     this.startTime = Date.now();
   }
