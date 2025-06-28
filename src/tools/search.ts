@@ -1399,7 +1399,7 @@ export class SearchEngine {
 
       // Execute search with geographic query
       const searchParams = {
-        query: geographicQuery || 'timestamp:>0',
+        query: geographicQuery || '*',
         limit: params.limit,
         sort_by: params.sort_by,
         sort_order: params.sort_order,
@@ -1507,7 +1507,7 @@ export class SearchEngine {
 
       // Execute alarm search
       const searchParams = {
-        query: geographicQuery || 'timestamp:>0',
+        query: geographicQuery || '*',
         limit: params.limit,
         sort_by: params.sort_by,
         group_by: params.group_by,
@@ -1567,7 +1567,7 @@ export class SearchEngine {
       }
 
       // Build base query for geographic analysis
-      let baseQuery = 'timestamp:>0';
+      let baseQuery = '*';
 
       // Add time range if specified
       if (params.time_range) {

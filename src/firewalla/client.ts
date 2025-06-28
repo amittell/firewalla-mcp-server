@@ -996,7 +996,7 @@ export class FirewallaClient {
     blocked_attempts: number;
     last_updated: string;
   }> {
-    return this.request('GET', `/summary`, undefined, true);
+    return this.request('GET', `/v2/boxes/${this.config.boxId}/summary`, undefined, true);
   }
 
   async getSecurityMetrics(): Promise<{
@@ -1007,7 +1007,7 @@ export class FirewallaClient {
     threat_level: 'low' | 'medium' | 'high' | 'critical';
     last_threat_detected: string;
   }> {
-    return this.request('GET', `/metrics/security`, undefined, true);
+    return this.request('GET', `/v2/boxes/${this.config.boxId}/metrics/security`, undefined, true);
   }
 
   async getNetworkTopology(): Promise<{
@@ -1024,7 +1024,7 @@ export class FirewallaClient {
       bandwidth: number;
     }>;
   }> {
-    return this.request('GET', `/topology`, undefined, true);
+    return this.request('GET', `/v2/boxes/${this.config.boxId}/topology`, undefined, true);
   }
 
   async getRecentThreats(hours = 24): Promise<
@@ -1038,7 +1038,7 @@ export class FirewallaClient {
     }>
   > {
     const params = { hours };
-    return this.request('GET', `/threats/recent`, params, true);
+    return this.request('GET', `/v2/boxes/${this.config.boxId}/threats/recent`, params, true);
   }
 
   @optimizeResponse('rules')

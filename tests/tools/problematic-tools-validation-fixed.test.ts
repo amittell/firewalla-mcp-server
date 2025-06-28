@@ -390,7 +390,7 @@ describe('Problematic MCP Tools Validation', () => {
     });
 
     it('should maintain performance under load', async () => {
-      const mockTrendsData = { results: Array(100).fill(null).map((_, i) => ({ ts: i, value: i })) };
+      const mockTrendsData = { results: Array(100).fill(null).map((_, i) => ({ ts: 1672531200 + i * 60, value: i })) };
       mockFirewalla.getFlowTrends.mockResolvedValue(mockTrendsData);
 
       const startTime = Date.now();

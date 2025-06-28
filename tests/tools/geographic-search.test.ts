@@ -27,7 +27,26 @@ describe('Geographic Search Tools', () => {
     const mockFlowsWithGeoData = {
       results: [
         {
-          source: { ip: '192.168.1.1' },
+          ts: 1672531200, // Valid timestamp: 2023-01-01T00:00:00Z
+          gid: 'test-box-1',
+          protocol: 'tcp',
+          direction: 'outbound' as const,
+          block: false,
+          download: 512,
+          upload: 512,
+          bytes: 1024,
+          duration: 30,
+          count: 1,
+          device: {
+            id: 'device-1',
+            ip: '192.168.1.1',
+            name: 'Test Device 1'
+          },
+          source: { 
+            id: 'source-1',
+            name: 'Test Source 1',
+            ip: '192.168.1.1' 
+          },
           geo: { 
             country: 'United States', 
             countryCode: 'US', 
@@ -39,12 +58,29 @@ describe('Geographic Search Tools', () => {
             isCloud: false,
             isVPN: false,
             riskScore: 2
-          },
-          bytes: 1024,
-          protocol: 'tcp'
+          }
         },
         {
-          source: { ip: '203.0.113.1' },
+          ts: 1672531260, // Valid timestamp: 2023-01-01T00:01:00Z
+          gid: 'test-box-1',
+          protocol: 'tcp',
+          direction: 'outbound' as const,
+          block: false,
+          download: 1024,
+          upload: 1024,
+          bytes: 2048,
+          duration: 45,
+          count: 1,
+          device: {
+            id: 'device-2',
+            ip: '192.168.1.2',
+            name: 'Test Device 2'
+          },
+          source: { 
+            id: 'source-2',
+            name: 'Test Source 2',
+            ip: '203.0.113.1' 
+          },
           geo: { 
             country: 'China', 
             countryCode: 'CN', 
@@ -56,12 +92,29 @@ describe('Geographic Search Tools', () => {
             isCloud: false,
             isVPN: true,
             riskScore: 8
-          },
-          bytes: 2048,
-          protocol: 'tcp'
+          }
         },
         {
-          source: { ip: '198.51.100.1' },
+          ts: 1672531320, // Valid timestamp: 2023-01-01T00:02:00Z
+          gid: 'test-box-1',
+          protocol: 'https',
+          direction: 'outbound' as const,
+          block: false,
+          download: 2048,
+          upload: 2048,
+          bytes: 4096,
+          duration: 60,
+          count: 1,
+          device: {
+            id: 'device-3',
+            ip: '192.168.1.3',
+            name: 'Test Device 3'
+          },
+          source: { 
+            id: 'source-3',
+            name: 'Test Source 3',
+            ip: '198.51.100.1' 
+          },
           geo: { 
             country: 'Germany', 
             countryCode: 'DE', 
@@ -73,12 +126,17 @@ describe('Geographic Search Tools', () => {
             isCloud: true,
             isVPN: false,
             riskScore: 3
-          },
-          bytes: 4096,
-          protocol: 'https'
+          }
         }
       ],
-      count: 3
+      count: 3,
+      next_cursor: undefined,
+      aggregations: undefined,
+      metadata: {
+        execution_time: 50,
+        cached: false,
+        filters_applied: []
+      }
     };
 
     beforeEach(() => {
@@ -188,6 +246,9 @@ describe('Geographic Search Tools', () => {
     });
 
     test('should generate comprehensive geographic analysis', async () => {
+      // Set up specific mock data for this test
+      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(mockFlowsWithGeoData);
+      
       const params = {
         limit: 100,
         aggregate: true,
@@ -406,9 +467,9 @@ describe('Geographic Search Tools', () => {
   describe('get_geographic_statistics', () => {
     const mockStatisticsResult = {
       results: [
-        { geo: { country: 'US' }, bytes: 1000 },
-        { geo: { country: 'CN' }, bytes: 2000 },
-        { geo: { country: 'DE' }, bytes: 1500 }
+        { ts: 1672531200, geo: { country: 'US' }, bytes: 1000 },
+        { ts: 1672531260, geo: { country: 'CN' }, bytes: 2000 },
+        { ts: 1672531320, geo: { country: 'DE' }, bytes: 1500 }
       ],
       count: 3,
       aggregations: {
@@ -424,6 +485,9 @@ describe('Geographic Search Tools', () => {
     });
 
     test('should generate flow statistics by country', async () => {
+      // Ensure proper mock setup for this test
+      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(mockStatisticsResult);
+      
       const params = {
         entity_type: 'flows' as const,
         group_by: 'country' as const,
@@ -435,7 +499,7 @@ describe('Geographic Search Tools', () => {
 
       expect(mockFirewallaClient.searchFlows).toHaveBeenCalledWith(
         expect.objectContaining({
-          query: 'timestamp:>0',
+          query: '*',
           group_by: 'country',
           aggregate: true
         }),
@@ -464,7 +528,7 @@ describe('Geographic Search Tools', () => {
       const result = await searchTools.get_geographic_statistics(params);
 
       expect(mockFirewallaClient.getActiveAlarms).toHaveBeenCalledWith(
-        'timestamp:>0',
+        '*',
         undefined,
         'timestamp:desc',
         500
@@ -497,6 +561,9 @@ describe('Geographic Search Tools', () => {
     });
 
     test('should generate insights from aggregated data', async () => {
+      // Ensure proper mock setup for this test
+      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(mockStatisticsResult);
+      
       const params = {
         entity_type: 'flows' as const,
         analysis_type: 'detailed' as const,
@@ -535,6 +602,9 @@ describe('Geographic Search Tools', () => {
     });
 
     test('should default to reasonable values', async () => {
+      // Ensure proper mock setup for this test
+      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(mockStatisticsResult);
+      
       const minimalParams = {
         entity_type: 'flows' as const
       };
@@ -543,7 +613,7 @@ describe('Geographic Search Tools', () => {
 
       expect(mockFirewallaClient.searchFlows).toHaveBeenCalledWith(
         expect.objectContaining({
-          query: 'timestamp:>0',
+          query: '*',
           limit: 1000,
           group_by: 'country',
           aggregate: true
@@ -560,6 +630,7 @@ describe('Geographic Search Tools', () => {
       const flowData = {
         results: [
           {
+            ts: 1672531200, // Valid timestamp: 2023-01-01T00:00:00Z
             source: { ip: '1.2.3.4' },
             geo: { country: 'US', continent: 'North America', asn: '12345', riskScore: 2 },
             protocol: 'tcp'
@@ -593,6 +664,21 @@ describe('Geographic Search Tools', () => {
     test('should provide meaningful geographic insights', async () => {
       const diverseGeoData = {
         results: Array.from({ length: 50 }, (_, i) => ({
+          ts: 1672531200 + i * 60, // Valid timestamps spaced 1 minute apart
+          gid: 'test-box-1',
+          protocol: 'tcp',
+          direction: 'outbound' as const,
+          block: false,
+          download: 100 + i,
+          upload: 100 + i,
+          bytes: 200 + i * 2,
+          duration: 30,
+          count: 1,
+          device: {
+            id: `device-${i}`,
+            ip: `192.168.1.${i + 1}`,
+            name: `Test Device ${i + 1}`
+          },
           geo: { 
             country: `Country${i % 10}`, 
             asn: `ASN${i % 5}`,
@@ -623,9 +709,65 @@ describe('Geographic Search Tools', () => {
     test('should handle missing geographic data gracefully', async () => {
       const incompleteGeoData = {
         results: [
-          { source: { ip: '1.2.3.4' } }, // missing geo data
-          { geo: {} }, // empty geo data
-          { geo: { country: 'US' } } // partial geo data
+          { 
+            ts: 1672531200,
+            gid: 'test-box-1',
+            protocol: 'tcp',
+            direction: 'outbound' as const,
+            block: false,
+            download: 100,
+            upload: 100,
+            bytes: 200,
+            duration: 30,
+            count: 1,
+            device: {
+              id: 'device-1',
+              ip: '1.2.3.4',
+              name: 'Test Device 1'
+            },
+            source: { 
+              id: 'source-1',
+              name: 'Test Source 1',
+              ip: '1.2.3.4' 
+            }
+            // missing geo data
+          },
+          { 
+            ts: 1672531260,
+            gid: 'test-box-1',
+            protocol: 'tcp',
+            direction: 'outbound' as const,
+            block: false,
+            download: 150,
+            upload: 150,
+            bytes: 300,
+            duration: 30,
+            count: 1,
+            device: {
+              id: 'device-2',
+              ip: '1.2.3.5',
+              name: 'Test Device 2'
+            },
+            geo: {} // empty geo data
+          },
+          { 
+            ts: 1672531320,
+            gid: 'test-box-1',
+            protocol: 'tcp',
+            direction: 'outbound' as const,
+            block: false,
+            download: 200,
+            upload: 200,
+            bytes: 400,
+            duration: 30,
+            count: 1,
+            device: {
+              id: 'device-3',
+              ip: '1.2.3.6',
+              name: 'Test Device 3'
+            },
+            geo: { country: 'US' } // partial geo data
+          }
         ],
         count: 3
       };
@@ -648,6 +790,21 @@ describe('Geographic Search Tools', () => {
     test('should handle large geographic datasets efficiently', async () => {
       const largeGeoData = {
         results: Array.from({ length: 1000 }, (_, i) => ({
+          ts: 1672531200 + i * 60, // Valid timestamps spaced 1 minute apart
+          gid: 'test-box-1',
+          protocol: 'tcp',
+          direction: 'outbound' as const,
+          block: false,
+          download: 100 + i,
+          upload: 100 + i,
+          bytes: 200 + i * 2,
+          duration: 30,
+          count: 1,
+          device: {
+            id: `device-${i}`,
+            ip: `192.168.${Math.floor(i / 254)}.${(i % 254) + 1}`,
+            name: `Test Device ${i + 1}`
+          },
           geo: {
             country: `Country${i % 50}`,
             continent: `Continent${i % 7}`,

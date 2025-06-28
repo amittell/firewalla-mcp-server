@@ -75,7 +75,7 @@ describe('FirewallaClient', () => {
       const result = await client.getActiveAlarms('high', undefined, undefined, 10);
       
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/boxes/${mockConfig.boxId}/alarms`,
+        `/v2/boxes/${mockConfig.boxId}/alarms`,
         { params: { query: 'high', limit: 10, sortBy: 'timestamp:desc' } }
       );
       
@@ -284,7 +284,7 @@ describe('FirewallaClient', () => {
       const result = await client.getDeviceStatus();
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        `/boxes/${mockConfig.boxId}/devices`,
+        `/v2/boxes/${mockConfig.boxId}/devices`,
         { params: {} }
       );
 

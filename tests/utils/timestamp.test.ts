@@ -41,22 +41,21 @@ describe('Timestamp Utilities - Edge Cases', () => {
     });
 
     test('should throw error for negative timestamp', () => {
-      expect(() => unixToISOString(-1)).toThrow('Timestamp cannot be negative: -1');
+      expect(() => unixToISOString(-1)).toThrow('Invalid timestamp: -1');
     });
 
     test('should throw error for invalid string timestamp', () => {
       expect(() => unixToISOString('invalid')).toThrow('Invalid timestamp: invalid');
     });
 
-    test('should handle empty string timestamp as epoch', () => {
-      // Empty string converts to 0 in JavaScript
-      const result = unixToISOString('');
-      expect(result).toBe('1970-01-01T00:00:00.000Z');
+    test('should handle empty string timestamp as invalid', () => {
+      // Empty string cannot be parsed as a valid timestamp
+      expect(() => unixToISOString('')).toThrow('Invalid timestamp:');
     });
 
     test('should handle zero timestamp (Unix epoch)', () => {
-      const result = unixToISOString(0);
-      expect(result).toBe('1970-01-01T00:00:00.000Z');
+      // Zero is outside the valid range (2000-2100) in detectAndConvertTimestamp
+      expect(() => unixToISOString(0)).toThrow('Invalid timestamp: 0');
     });
 
     test('should handle large valid timestamp', () => {
@@ -111,13 +110,13 @@ describe('Timestamp Utilities - Edge Cases', () => {
 
     test('should handle zero timestamp', () => {
       const result = safeUnixToISOString(0);
-      expect(result).toBe('1970-01-01T00:00:00.000Z');
+      expect(result).toBe('Never');
     });
 
     test('should handle empty string as invalid', () => {
       const result = safeUnixToISOString('', 'Empty');
-      // Empty string converts to 0, which is valid epoch time
-      expect(result).toBe('1970-01-01T00:00:00.000Z');
+      // Empty string is invalid and should return fallback
+      expect(result).toBe('Empty');
     });
 
     test('should handle object input gracefully', () => {
@@ -186,14 +185,14 @@ describe('Timestamp Utilities - Edge Cases', () => {
   describe('Boundary Value Analysis', () => {
     test('should handle minimum safe Unix timestamp', () => {
       const result = safeUnixToISOString(0);
-      expect(result).toBe('1970-01-01T00:00:00.000Z');
+      expect(result).toBe('Never');
     });
 
     test('should handle maximum safe Unix timestamp', () => {
-      const maxSafeTimestamp = 8640000000000; // Year 275760
+      const maxSafeTimestamp = 8640000000000; // Year 275760 - outside valid range
       const result = safeUnixToISOString(maxSafeTimestamp);
-      // Year 275760 has more than 4 digits, so adjust regex
-      expect(result).toMatch(/^[\+\-]?\d{4,}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      // This timestamp is outside the valid range, should return fallback
+      expect(result).toBe('Never');
     });
 
     test('should handle timestamp at edge of 32-bit integer', () => {
