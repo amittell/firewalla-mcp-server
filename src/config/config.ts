@@ -24,68 +24,9 @@
 
 import dotenv from 'dotenv';
 import type { FirewallaConfig } from '../types';
+import { getRequiredEnvVar, getOptionalEnvInt } from '../utils/env.js';
 
 dotenv.config();
-
-/**
- * Retrieves a required environment variable with validation
- *
- * @param name - The environment variable name to retrieve
- * @returns The environment variable value
- * @throws {Error} If the environment variable is not set or empty
- */
-function getRequiredEnvVar(name: string): string {
-  const value = process.env[name];
-  if (value === undefined || value === '') {
-    throw new Error(`Required environment variable ${name} is not set`);
-  }
-  return value;
-}
-
-/**
- * Safely parses an environment variable to an integer with validation
- *
- * @param name - The environment variable name to parse
- * @param defaultValue - The default value to use if parsing fails
- * @param min - Optional minimum value for validation
- * @param max - Optional maximum value for validation
- * @returns The parsed integer value or the default value
- * @throws {Error} If the parsed value is outside the valid range
- */
-function getOptionalEnvInt(
-  name: string,
-  defaultValue: number,
-  min?: number,
-  max?: number
-): number {
-  const envValue = process.env[name];
-  if (envValue === undefined || envValue === '') {
-    return defaultValue;
-  }
-
-  const parsed = parseInt(envValue, 10);
-  if (isNaN(parsed)) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `Invalid numeric value for ${name}: ${envValue}, using default: ${defaultValue}`
-    );
-    return defaultValue;
-  }
-
-  if (min !== undefined && parsed < min) {
-    throw new Error(
-      `Environment variable ${name} must be at least ${min}, got: ${parsed}`
-    );
-  }
-
-  if (max !== undefined && parsed > max) {
-    throw new Error(
-      `Environment variable ${name} must be at most ${max}, got: ${parsed}`
-    );
-  }
-
-  return parsed;
-}
 
 /**
  * Creates and validates the complete Firewalla configuration

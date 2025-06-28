@@ -19,7 +19,7 @@ jobs:
     name: Quick Checks (Format, Build, Lint)
     runs-on: ubuntu-latest
     timeout-minutes: 10  # Prevent runaway costs
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -58,12 +58,12 @@ jobs:
     name: Full Test Suite
     runs-on: ubuntu-latest
     timeout-minutes: 15  # Comprehensive but time-bounded
-    
+
     # COST OPTIMIZATION: Only run expensive tests when absolutely necessary
     if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
-    
+
     needs: quick-checks  # Only run if quick checks pass
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -88,17 +88,22 @@ jobs:
 
     # Integration tests (if they exist)
     - name: Integration tests
-      run: npm run test:integration || echo "No integration tests defined"
+      run: |
+        if npm run | grep -q "test:integration"; then
+          npm run test:integration
+        else
+          echo "No integration tests defined"
+        fi
 
   # Security scan: Only on main branch (monthly cost impact: ~$0.20)
   security-scan:
     name: Security Audit
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    
+
     # Only run on main branch to minimize costs
     if: github.ref == 'refs/heads/main'
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -125,3 +130,4 @@ jobs:
 #
 # With git hooks catching 80% of issues locally:
 # Actual usage: ~$0.50-1.00/month 🎉
+

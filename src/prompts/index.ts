@@ -1,20 +1,10 @@
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { GetPromptRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { FirewallaClient } from '../firewalla/client.js';
+import type { Device, NetworkRule } from '../types.js';
 import { unixToISOString, safeUnixToISOString } from '../utils/timestamp.js';
 
 // Type definitions for health score calculation
-interface DeviceInfo {
-  online: boolean;
-  id?: string;
-  name?: string;
-  ip?: string;
-  macVendor?: string;
-  lastSeen?: number;
-  network?: Record<string, unknown>;
-  group?: Record<string, unknown>;
-  [key: string]: unknown;
-}
 
 interface SystemSummary {
   status: string;
@@ -33,26 +23,24 @@ interface NetworkTopology {
   subnets: Array<Record<string, unknown>>;
 }
 
-interface RuleInfo {
-  status?: string;
-  id?: string;
-  action?: string;
-  target?: Record<string, unknown>;
-  direction?: string;
-  hit?: Record<string, unknown>;
-  ts?: number;
-  updateTs?: number;
-  notes?: string;
-  resumeTs?: number;
-  [key: string]: unknown;
-}
-
 interface HealthScoreData {
   summary: SystemSummary;
-  devices: { count: number; results: DeviceInfo[] };
+  devices: {
+    count: number;
+    results: Device[];
+    next_cursor?: string;
+    total_count?: number;
+    has_more?: boolean;
+  };
   metrics: SecurityMetrics;
   topology: NetworkTopology;
-  rules: { count: number; results: RuleInfo[] };
+  rules: {
+    count: number;
+    results: NetworkRule[];
+    next_cursor?: string;
+    total_count?: number;
+    has_more?: boolean;
+  };
 }
 
 /**
@@ -414,13 +402,10 @@ Please investigate and provide:
 
           const healthScore = calculateNetworkHealthScore({
             summary,
-            devices: devices as unknown as {
-              count: number;
-              results: DeviceInfo[];
-            },
+            devices,
             metrics,
             topology,
-            rules: rules as unknown as { count: number; results: RuleInfo[] },
+            rules,
           });
 
           const prompt = `# Network Health Assessment

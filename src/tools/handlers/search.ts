@@ -4,79 +4,56 @@
 
 import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
 import type { FirewallaClient } from '../../firewalla/client.js';
+import type {
+  Flow,
+  Alarm,
+  Device,
+  NetworkRule,
+  TargetList,
+} from '../../types.js';
 import { SafeAccess } from '../../validation/error-handler.js';
 import { createSearchTools } from '../search.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
 import type { SearchParams } from '../../search/types.js';
 import type { ScoringCorrelationParams } from '../../validation/field-mapper.js';
 
+// Base search interface to reduce duplication
+export interface BaseSearchArgs extends ToolArgs {
+  query: string;
+  limit: number;
+  offset?: number;
+  cursor?: string;
+  sort_by?: string;
+  sort_order?: 'asc' | 'desc';
+  group_by?: string;
+  aggregate?: boolean;
+}
+
 // Search argument interfaces for type safety
-export interface SearchFlowsArgs extends ToolArgs {
-  query: string;
-  limit: number;
-  offset?: number;
-  cursor?: string;
-  sort_by?: string;
-  sort_order?: 'asc' | 'desc';
-  group_by?: string;
-  aggregate?: boolean;
+export interface SearchFlowsArgs extends BaseSearchArgs {
   time_range?: {
     start?: string;
     end?: string;
   };
 }
 
-export interface SearchAlarmsArgs extends ToolArgs {
-  query: string;
-  limit: number;
-  offset?: number;
-  cursor?: string;
-  sort_by?: string;
-  sort_order?: 'asc' | 'desc';
-  group_by?: string;
-  aggregate?: boolean;
+export interface SearchAlarmsArgs extends BaseSearchArgs {
   time_range?: {
     start?: string;
     end?: string;
   };
 }
 
-export interface SearchRulesArgs extends ToolArgs {
-  query: string;
-  limit: number;
-  offset?: number;
-  cursor?: string;
-  sort_by?: string;
-  sort_order?: 'asc' | 'desc';
-  group_by?: string;
-  aggregate?: boolean;
-}
+export interface SearchRulesArgs extends BaseSearchArgs {}
 
-export interface SearchDevicesArgs extends ToolArgs {
-  query: string;
-  limit: number;
-  offset?: number;
-  cursor?: string;
-  sort_by?: string;
-  sort_order?: 'asc' | 'desc';
-  group_by?: string;
-  aggregate?: boolean;
+export interface SearchDevicesArgs extends BaseSearchArgs {
   time_range?: {
     start?: string;
     end?: string;
   };
 }
 
-export interface SearchTargetListsArgs extends ToolArgs {
-  query: string;
-  limit: number;
-  offset?: number;
-  cursor?: string;
-  sort_by?: string;
-  sort_order?: 'asc' | 'desc';
-  group_by?: string;
-  aggregate?: boolean;
-}
+export interface SearchTargetListsArgs extends BaseSearchArgs {}
 
 export interface SearchCrossReferenceArgs extends ToolArgs {
   primary_query: string;
@@ -176,7 +153,7 @@ export class SearchFlowsHandler extends BaseToolHandler {
           'execution_time_ms',
           0
         ),
-        flows: SafeAccess.safeArrayMap(result.results, (flow: any) => ({
+        flows: SafeAccess.safeArrayMap(result.results, (flow: Flow) => ({
           timestamp: unixToISOStringOrNow(flow.ts),
           source_ip: SafeAccess.getNestedValue(flow, 'source.ip', 'unknown'),
           destination_ip: SafeAccess.getNestedValue(
@@ -238,7 +215,7 @@ export class SearchAlarmsHandler extends BaseToolHandler {
           'execution_time_ms',
           0
         ),
-        alarms: SafeAccess.safeArrayMap(result.results, (alarm: any) => ({
+        alarms: SafeAccess.safeArrayMap(result.results, (alarm: Alarm) => ({
           timestamp: unixToISOStringOrNow(alarm.ts),
           type: SafeAccess.getNestedValue(alarm, 'type', 'unknown'),
           message: SafeAccess.getNestedValue(alarm, 'message', 'No message'),
@@ -280,7 +257,7 @@ export class SearchRulesHandler extends BaseToolHandler {
         sort_by: searchArgs.sort_by,
         sort_order: searchArgs.sort_order,
         group_by: searchArgs.group_by,
-        aggregate: args.aggregate,
+        aggregate: searchArgs.aggregate,
       };
       const result = await searchTools.search_rules(searchParams);
 
@@ -292,7 +269,7 @@ export class SearchRulesHandler extends BaseToolHandler {
           'execution_time_ms',
           0
         ),
-        rules: SafeAccess.safeArrayMap(result.results, (rule: any) => ({
+        rules: SafeAccess.safeArrayMap(result.results, (rule: NetworkRule) => ({
           id: SafeAccess.getNestedValue(rule, 'id', 'unknown'),
           action: SafeAccess.getNestedValue(rule, 'action', 'unknown'),
           target_type: SafeAccess.getNestedValue(
@@ -355,7 +332,7 @@ export class SearchDevicesHandler extends BaseToolHandler {
           'execution_time_ms',
           0
         ),
-        devices: SafeAccess.safeArrayMap(result.results, (device: any) => ({
+        devices: SafeAccess.safeArrayMap(result.results, (device: Device) => ({
           id: SafeAccess.getNestedValue(device, 'id', 'unknown'),
           name: SafeAccess.getNestedValue(device, 'name', 'Unknown Device'),
           ip: SafeAccess.getNestedValue(device, 'ip', 'unknown'),
@@ -396,7 +373,7 @@ export class SearchTargetListsHandler extends BaseToolHandler {
         sort_by: searchArgs.sort_by,
         sort_order: searchArgs.sort_order,
         group_by: searchArgs.group_by,
-        aggregate: args.aggregate,
+        aggregate: searchArgs.aggregate,
       };
       const result = await searchTools.search_target_lists(searchParams);
 
@@ -408,17 +385,20 @@ export class SearchTargetListsHandler extends BaseToolHandler {
           'execution_time_ms',
           0
         ),
-        target_lists: SafeAccess.safeArrayMap(result.results, (list: any) => ({
-          id: SafeAccess.getNestedValue(list, 'id', 'unknown'),
-          name: SafeAccess.getNestedValue(list, 'name', 'Unknown List'),
-          category: SafeAccess.getNestedValue(list, 'category', 'unknown'),
-          owner: SafeAccess.getNestedValue(list, 'owner', 'unknown'),
-          entry_count: SafeAccess.safeArrayAccess(
-            list.targets,
-            arr => arr.length,
-            0
-          ),
-        })),
+        target_lists: SafeAccess.safeArrayMap(
+          result.results,
+          (list: TargetList) => ({
+            id: SafeAccess.getNestedValue(list, 'id', 'unknown'),
+            name: SafeAccess.getNestedValue(list, 'name', 'Unknown List'),
+            category: SafeAccess.getNestedValue(list, 'category', 'unknown'),
+            owner: SafeAccess.getNestedValue(list, 'owner', 'unknown'),
+            entry_count: SafeAccess.safeArrayAccess(
+              list.targets,
+              arr => arr.length,
+              0
+            ),
+          })
+        ),
         aggregations: SafeAccess.getNestedValue(result, 'aggregations', null),
       });
     } catch (error: unknown) {
@@ -589,7 +569,7 @@ export class GetCorrelationSuggestionsHandler extends BaseToolHandler {
       const searchTools = createSearchTools(firewalla);
       const result = await searchTools.get_correlation_suggestions({
         primary_query: searchArgs.primary_query,
-        secondary_queries: args.secondary_queries,
+        secondary_queries: searchArgs.secondary_queries,
       });
 
       return this.createSuccessResponse({
@@ -661,7 +641,7 @@ export class SearchFlowsByGeographyHandler extends BaseToolHandler {
         sort_by: searchArgs.sort_by,
         sort_order: searchArgs.sort_order,
         group_by: searchArgs.group_by,
-        aggregate: args.aggregate,
+        aggregate: searchArgs.aggregate,
       });
 
       return this.createSuccessResponse({
@@ -709,7 +689,7 @@ export class SearchFlowsByGeographyHandler extends BaseToolHandler {
             {}
           ),
         },
-        flows: SafeAccess.safeArrayMap(result.results, (flow: any) => ({
+        flows: SafeAccess.safeArrayMap(result.results, (flow: Flow) => ({
           timestamp: unixToISOStringOrNow(flow.ts),
           source_ip: SafeAccess.getNestedValue(flow, 'source.ip', 'unknown'),
           destination_ip: SafeAccess.getNestedValue(
@@ -820,7 +800,7 @@ export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
               ),
             }
           : null,
-        alarms: SafeAccess.safeArrayMap(result.results, (alarm: any) => ({
+        alarms: SafeAccess.safeArrayMap(result.results, (alarm: Alarm) => ({
           timestamp: unixToISOStringOrNow(alarm.ts),
           type: SafeAccess.getNestedValue(alarm, 'type', 'unknown'),
           severity: SafeAccess.getNestedValue(alarm, 'severity', 'unknown'),
@@ -875,7 +855,7 @@ export class GetGeographicStatisticsHandler extends BaseToolHandler {
       const result = await searchTools.get_geographic_statistics({
         entity_type: searchArgs.entity_type,
         time_range: searchArgs.time_range,
-        analysis_type: args.analysis_type,
+        analysis_type: searchArgs.analysis_type,
         group_by: searchArgs.group_by,
         limit: searchArgs.limit,
       });
