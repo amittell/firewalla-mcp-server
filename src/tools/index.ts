@@ -1,3 +1,30 @@
+/**
+ * @fileoverview MCP Tool Setup and Registry Management
+ * 
+ * Implements a clean, modular registry pattern for managing 25 distinct MCP tools
+ * that provide comprehensive Firewalla firewall management capabilities. Replaces
+ * the original 1000+ line switch statement with maintainable, testable handler classes.
+ * 
+ * Tool Categories:
+ * - **Security (3 tools)**: Alarm management and threat monitoring
+ * - **Network (3 tools)**: Flow analysis and bandwidth monitoring
+ * - **Device (1 tool)**: Device status and inventory management
+ * - **Rule (6 tools)**: Firewall rule configuration and analytics
+ * - **Analytics (6 tools)**: Statistical analysis and trend reporting
+ * - **Search (6 tools)**: Advanced search with cross-reference capabilities
+ * 
+ * Architecture Benefits:
+ * - Single Responsibility Principle for each tool handler
+ * - Improved testability with isolated handler units
+ * - Enhanced maintainability through registry pattern
+ * - Centralized error handling and validation
+ * - Comprehensive logging and monitoring integration
+ * 
+ * @version 1.0.0
+ * @author Firewalla MCP Server Team
+ * @since 2024-01-01
+ */
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { FirewallaClient } from '../firewalla/client.js';
@@ -7,12 +34,43 @@ import { ToolRegistry } from './registry.js';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
 
 /**
+<<<<<<< HEAD
  * Registers and configures all Firewalla MCP tools on the server using a modular registry pattern.
  *
  * Sets up 25 distinct firewall management tools, each encapsulated in its own handler and organized by category. Replaces a monolithic switch statement with a registry for improved maintainability, testability, and code organization. Handles tool execution requests, error reporting, and logs setup details.
  *
  * @param server - The MCP server instance where tools are registered
  * @param firewalla - The Firewalla client used for API communication
+=======
+ * Registers and configures all Firewalla MCP tools on the server using a modular registry pattern
+ * 
+ * Sets up the complete toolkit of 25 distinct firewall management tools, each encapsulated
+ * in its own handler class and organized by functional category. The registry pattern provides
+ * clean separation of concerns and enables easy testing and maintenance.
+ * 
+ * Key Features:
+ * - Automated tool discovery and registration through ToolRegistry
+ * - Centralized error handling with detailed diagnostic information
+ * - Category-based organization for better tool discoverability
+ * - Comprehensive logging for debugging and monitoring
+ * - Type-safe tool execution with parameter validation
+ * 
+ * @param server - The MCP server instance where tools will be registered
+ * @param firewalla - Authenticated Firewalla client for API communication
+ * @returns {void}
+ * 
+ * @example
+ * ```typescript
+ * const server = new Server({ name: 'firewalla-mcp' });
+ * const client = new FirewallaClient(config);
+ * setupTools(server, client);
+ * 
+ * // Tools are now available for MCP clients:
+ * // - get_active_alarms, search_flows, get_device_status, etc.
+ * ```
+ * 
+ * @public
+>>>>>>> origin/feature/comprehensive-jsdoc-documentation
  */
 export function setupTools(server: Server, firewalla: FirewallaClient): void {
   // Initialize the tool registry with all 25 handlers

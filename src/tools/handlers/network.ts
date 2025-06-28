@@ -120,7 +120,7 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
             bytes_uploaded: SafeAccess.getNestedValue(item, 'bytes_uploaded', 0),
             bytes_downloaded: SafeAccess.getNestedValue(item, 'bytes_downloaded', 0),
             total_bytes: SafeAccess.getNestedValue(item, 'total_bytes', 0),
-            total_mb: Math.round(SafeAccess.getNestedValue(item, 'total_bytes', 0) / (1024 * 1024)),
+            total_mb: Math.round(SafeAccess.getNestedValue(item, 'total_bytes', 0) / (1024 * 1024) * 100) / 100,
             total_gb: Math.round(SafeAccess.getNestedValue(item, 'total_bytes', 0) / (1024 * 1024 * 1024) * 100) / 100,
           })
         ),
@@ -188,8 +188,7 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
             ip: SafeAccess.getNestedValue(device, 'ip', 'unknown'),
             macVendor: SafeAccess.getNestedValue(device, 'macVendor', 'unknown'),
             lastSeen: SafeAccess.getNestedValue(device, 'lastSeen', 0),
-            lastSeenFormatted: SafeAccess.getNestedValue(device, 'lastSeen', 0) ? 
-              safeUnixToISOString(SafeAccess.getNestedValue(device, 'lastSeen', 0), 'Never') : 'Never',
+            lastSeenFormatted: safeUnixToISOString(SafeAccess.getNestedValue(device, 'lastSeen', 0), 'Never'),
             network: SafeAccess.getNestedValue(device, 'network', null),
             group: SafeAccess.getNestedValue(device, 'group', null),
           })

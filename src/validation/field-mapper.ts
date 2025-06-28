@@ -369,9 +369,63 @@ export function normalizeFieldValue(value: any, field: string): any {
     return value;
   }
 
-  // Normalize IP addresses
+  // Normalize IP addresses with validation
   if (field.includes('ip')) {
-    return value.trim();
+    const normalized = value.trim().toLowerCase();
+    
+    // Enhanced IP validation with comprehensive checks
+    const isValidIPv4 = (ip: string): boolean => {
+      const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+      if (!ipv4Regex.test(ip)) { return false; }
+      
+      const octets = ip.split('.');
+      // Check for leading zeros (except single '0')
+      if (octets.some(octet => octet.length > 1 && octet.startsWith('0'))) {
+        return false;
+      }
+      
+      return octets.every(octet => {
+        const num = parseInt(octet, 10);
+        return num >= 0 && num <= 255;
+      });
+    };
+    
+    const isValidIPv6 = (ip: string): boolean => {
+      // Handle IPv4-mapped IPv6 addresses
+      if (ip.includes('.')) {
+        const ipv4MappedRegex = /^::ffff:(\d{1,3}\.){3}\d{1,3}$/i;
+        if (ipv4MappedRegex.test(ip)) {
+          const ipv4Part = ip.substring(7); // Remove "::ffff:"
+          return isValidIPv4(ipv4Part);
+        }
+        return false;
+      }
+      
+      // Standard IPv6 validation
+      const fullRegex = /^([0-9a-f]{1,4}:){7}[0-9a-f]{1,4}$/i;
+      const compressedRegex = /^(([0-9a-f]{1,4}:)*)?::?(([0-9a-f]{1,4}:)*[0-9a-f]{1,4})?$/i;
+      
+      // Check for valid hex segments
+      if (fullRegex.test(ip)) { return true; }
+      if (compressedRegex.test(ip)) {
+        // Ensure no more than one "::" compression
+        const compressionCount = (ip.match(/::/g) || []).length;
+        if (compressionCount > 1) { return false; }
+        
+        // Validate segment count doesn't exceed IPv6 limits
+        const segments = ip.split(':').filter(seg => seg !== '');
+        return segments.length <= 8 && segments.every(seg => /^[0-9a-f]{0,4}$/i.test(seg));
+      }
+      
+      return false;
+    };
+    
+    if (!isValidIPv4(normalized) && !isValidIPv6(normalized)) {
+      // eslint-disable-next-line no-console
+      console.warn(`Invalid IP address format: ${normalized}`);
+    }
+    
+    return normalized;
   }
 
   // Normalize MAC addresses

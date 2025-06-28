@@ -144,6 +144,7 @@ export function performEnhancedCorrelation(
   minimumScore: number = 0.3
 ): { correlatedResults: ScoredCorrelationResult[]; stats: EnhancedCorrelationStats } {
   
+<<<<<<< HEAD
   // Input validation
   if (!Array.isArray(primaryResults) || !Array.isArray(secondaryResults)) {
     throw new Error('Primary and secondary results must be arrays');
@@ -166,6 +167,8 @@ export function performEnhancedCorrelation(
     );
   }
 
+=======
+>>>>>>> origin/feature/comprehensive-jsdoc-documentation
   const startTime = Date.now();
   const correlatedResults: ScoredCorrelationResult[] = [];
   
@@ -262,8 +265,12 @@ function scoreEntityCorrelation(
   // Score each correlation field
   for (let i = 0; i < correlationFields.length; i++) {
     const field = correlationFields[i];
+<<<<<<< HEAD
     const fieldWeight = weights[field] !== undefined ? weights[field] :
                        weights.default !== undefined ? weights.default : 0.5;
+=======
+    const fieldWeight = weights[field] || weights.default || 0.5;
+>>>>>>> origin/feature/comprehensive-jsdoc-documentation
     const primaryValues = primaryFieldValues[i];
     
     const entityValue = getFieldValue(entity, field, entityType);
@@ -397,6 +404,7 @@ function calculateFuzzyScore(
  * Validate IPv4 address format
  */
 function isValidIPv4Address(ip: string): boolean {
+<<<<<<< HEAD
   if (typeof ip !== 'string' || ip.length === 0) {
     return false;
   }
@@ -407,13 +415,23 @@ function isValidIPv4Address(ip: string): boolean {
   if (!match) {
     return false;
   }
+=======
+  const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+  const match = ip.match(ipv4Regex);
+  
+  if (!match) {return false;}
+>>>>>>> origin/feature/comprehensive-jsdoc-documentation
   
   // Check that each octet is 0-255
   for (let i = 1; i <= 4; i++) {
     const octet = parseInt(match[i], 10);
+<<<<<<< HEAD
     if (isNaN(octet) || octet < 0 || octet > 255) {
       return false;
     }
+=======
+    if (octet < 0 || octet > 255) {return false;}
+>>>>>>> origin/feature/comprehensive-jsdoc-documentation
   }
   
   return true;
@@ -465,6 +483,7 @@ export function calculateStringSimilarity(str1: string, str2: string, threshold:
  * Calculate Levenshtein distance between two strings
  */
 function levenshteinDistance(str1: string, str2: string): number {
+<<<<<<< HEAD
   // Ensure str1 is the shorter string for space optimization
   if (str1.length > str2.length) {
     [str1, str2] = [str2, str1];
@@ -493,6 +512,25 @@ function levenshteinDistance(str1: string, str2: string): number {
   }
   
   return previousRow[n];
+=======
+  const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
+  
+  for (let i = 0; i <= str1.length; i++) {matrix[0][i] = i;}
+  for (let j = 0; j <= str2.length; j++) {matrix[j][0] = j;}
+  
+  for (let j = 1; j <= str2.length; j++) {
+    for (let i = 1; i <= str1.length; i++) {
+      const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      matrix[j][i] = Math.min(
+        matrix[j][i - 1] + 1,     // deletion
+        matrix[j - 1][i] + 1,     // insertion
+        matrix[j - 1][i - 1] + indicator // substitution
+      );
+    }
+  }
+  
+  return matrix[str2.length][str1.length];
+>>>>>>> origin/feature/comprehensive-jsdoc-documentation
 }
 
 /**
@@ -514,6 +552,7 @@ export function calculateNumericSimilarity(num1: number, num2: number, tolerance
 }
 
 /**
+<<<<<<< HEAD
  * Calculate geographic similarity with coordinate-based distance calculations
  */
 function calculateGeographicSimilarity(geo1: any, geo2: any): number {
@@ -533,10 +572,20 @@ function calculateGeographicSimilarity(geo1: any, geo2: any): number {
     return calculateStringSimilarity(geo1, geo2, 0.7) * 0.6;
   }
   
+=======
+ * Calculate geographic similarity (simplified)
+ */
+function calculateGeographicSimilarity(geo1: any, geo2: any): number {
+  // Simple string-based geographic similarity
+  if (typeof geo1 === 'string' && typeof geo2 === 'string') {
+    return calculateStringSimilarity(geo1, geo2, 0.7) * 0.6; // Cap geo fuzzy at 0.6
+  }
+>>>>>>> origin/feature/comprehensive-jsdoc-documentation
   return 0;
 }
 
 /**
+<<<<<<< HEAD
  * Calculate Haversine distance between two geographic coordinates
  */
 function calculateHaversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -551,6 +600,8 @@ function calculateHaversineDistance(lat1: number, lng1: number, lat2: number, ln
 }
 
 /**
+=======
+>>>>>>> origin/feature/comprehensive-jsdoc-documentation
  * Assess data quality for scoring bonus
  */
 function assessDataQuality(value: any, field: string): number {

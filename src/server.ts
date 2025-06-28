@@ -1,5 +1,18 @@
 #!/usr/bin/env node
 
+/**
+ * @fileoverview Firewalla MCP Server - Main server implementation for Model Context Protocol
+ * 
+ * This file implements the primary MCP server class that provides Claude with access to
+ * Firewalla firewall data through standardized tools, resources, and prompts. The server
+ * uses stdio transport for communication with Claude Code and supports advanced search
+ * capabilities, security monitoring, and network analytics.
+ * 
+ * @version 1.0.0
+ * @author Firewalla MCP Server Team
+ * @since 2024-01-01
+ */
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -13,10 +26,56 @@ import { setupTools } from './tools/index.js';
 import { setupResources } from './resources/index.js';
 import { setupPrompts } from './prompts/index.js';
 
+/**
+ * Main MCP Server class for Firewalla integration
+ * 
+ * Provides Claude with comprehensive access to Firewalla firewall data through:
+ * - **Tools**: Interactive functions for querying data, managing rules, and device operations
+ * - **Resources**: Read-only data sources for firewall status, metrics, and topology
+ * - **Prompts**: Intelligent analysis prompts for security reports and threat investigation
+ * 
+ * The server communicates with Claude using the Model Context Protocol over stdio transport,
+ * making it compatible with Claude Code and other MCP-enabled applications.
+ * 
+ * @example
+ * ```typescript
+ * // Create and start the MCP server
+ * const server = new FirewallaMCPServer();
+ * await server.start();
+ * ```
+ * 
+ * @example
+ * ```typescript
+ * // Access through Claude Code
+ * // "What security alerts do I have?"
+ * // "Show me top bandwidth users"  
+ * // "Generate a security report for the last 24 hours"
+ * ```
+ * 
+ * @class
+ * @public
+ */
 export class FirewallaMCPServer {
+  /** @private The MCP server instance handling protocol communication */
   private server: Server;
+  
+  /** @private The Firewalla API client for accessing firewall data */
   private firewalla: FirewallaClient;
 
+  /**
+   * Creates a new Firewalla MCP Server instance
+   * 
+   * Initializes the MCP server with Firewalla integration capabilities including:
+   * - Tool handlers for interactive queries and operations
+   * - Resource endpoints for structured data access
+   * - Prompt templates for intelligent analysis
+   * 
+   * The server uses stdio transport for local Claude Code communication and
+   * automatically configures authentication using environment variables.
+   * 
+   * @throws {Error} If required environment variables are missing
+   * @throws {Error} If Firewalla client initialization fails
+   */
   constructor() {
     this.server = new Server(
       {
@@ -36,6 +95,20 @@ export class FirewallaMCPServer {
     this.setupHandlers();
   }
 
+  /**
+   * Sets up MCP protocol request handlers for tools, resources, and prompts
+   * 
+   * Configures the server to respond to MCP protocol requests by registering handlers for:
+   * - **ListToolsRequest**: Returns available interactive tools with input schemas
+   * - **ListResourcesRequest**: Returns available data resources with URIs
+   * - **ListPromptsRequest**: Returns intelligent analysis prompt templates
+   * 
+   * Each handler provides complete metadata including input validation schemas,
+   * descriptions, and parameter requirements for proper MCP client integration.
+   * 
+   * @private
+   * @returns {void}
+   */
   private setupHandlers(): void {
     // List available tools
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {

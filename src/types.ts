@@ -17,6 +17,10 @@ export interface FirewallaConfig {
   rateLimit: number;
   /** Cache time-to-live in seconds (default: 300) */
   cacheTtl: number;
+  /** Default pagination page size (default: 100) */
+  defaultPageSize: number;
+  /** Maximum allowed pagination page size (default: 10000) */
+  maxPageSize: number;
 }
 
 /**

@@ -25,16 +25,79 @@ import {
 } from '../validation/field-mapper.js';
 
 /**
- * Risk threshold constants for geographic analysis
+ * Configuration interface for risk thresholds and performance settings
  */
-const RISK_THRESHOLDS = {
-  LOW_MAX: 3,
-  MEDIUM_MAX: 6,
-  HIGH_MAX: 8,
-  HIGH_RISK_COUNTRY_MIN: 6,
-  HIGH_RISK_FLOW_MIN: 7,
-  SUSPICIOUS_ASN_MIN: 7
-} as const;
+export interface SearchConfig {
+  riskThresholds: {
+    lowMax: number;
+    mediumMax: number;
+    highMax: number;
+    highRiskCountryMin: number;
+    highRiskFlowMin: number;
+    suspiciousAsnMin: number;
+  };
+  performance: {
+    correlationTimeoutMs: number;
+    maxCorrelationResults: number;
+    cacheExpirationMs: number;
+  };
+}
+
+/**
+ * Default search configuration that can be overridden via environment variables or configuration
+ */
+const DEFAULT_SEARCH_CONFIG: SearchConfig = {
+  riskThresholds: {
+    lowMax: parseInt(process.env.RISK_THRESHOLD_LOW_MAX || '3', 10),
+    mediumMax: parseInt(process.env.RISK_THRESHOLD_MEDIUM_MAX || '6', 10),
+    highMax: parseInt(process.env.RISK_THRESHOLD_HIGH_MAX || '8', 10),
+    highRiskCountryMin: parseInt(process.env.RISK_THRESHOLD_COUNTRY_MIN || '6', 10),
+    highRiskFlowMin: parseInt(process.env.RISK_THRESHOLD_FLOW_MIN || '7', 10),
+    suspiciousAsnMin: parseInt(process.env.RISK_THRESHOLD_ASN_MIN || '7', 10),
+  },
+  performance: {
+    correlationTimeoutMs: parseInt(process.env.CORRELATION_TIMEOUT_MS || '30000', 10),
+    maxCorrelationResults: parseInt(process.env.MAX_CORRELATION_RESULTS || '1000', 10),
+    cacheExpirationMs: parseInt(process.env.CACHE_EXPIRATION_MS || '300000', 10), // 5 minutes
+  }
+};
+
+/**
+ * Current search configuration (can be updated at runtime)
+ */
+let currentSearchConfig: SearchConfig = DEFAULT_SEARCH_CONFIG;
+
+/**
+ * Update search configuration at runtime
+ */
+export function updateSearchConfig(newConfig: Partial<SearchConfig>): void {
+  currentSearchConfig = {
+    ...currentSearchConfig,
+    ...newConfig,
+    riskThresholds: {
+      ...currentSearchConfig.riskThresholds,
+      ...(newConfig.riskThresholds || {})
+    },
+    performance: {
+      ...currentSearchConfig.performance,
+      ...(newConfig.performance || {})
+    }
+  };
+}
+
+/**
+ * Get current search configuration
+ */
+export function getSearchConfig(): SearchConfig {
+  return currentSearchConfig;
+}
+
+/**
+ * Get risk thresholds (backward compatibility)
+ */
+function getRiskThresholds(): SearchConfig['riskThresholds'] {
+  return currentSearchConfig.riskThresholds;
+}
 
 /**
  * API parameters interface for search requests
@@ -1333,7 +1396,7 @@ export class SearchEngine {
       
       if (isCloud) { analysis.cloud_provider_flows++; }
       if (isVpn) { analysis.vpn_flows++; }
-      if (riskScore && riskScore >= RISK_THRESHOLDS.HIGH_RISK_FLOW_MIN) { analysis.high_risk_flows++; }
+      if (riskScore && riskScore >= getRiskThresholds().highRiskFlowMin) { analysis.high_risk_flows++; }
     });
 
     // Convert sets to counts
@@ -1388,7 +1451,7 @@ export class SearchEngine {
       const isProxy = getFieldValue(alarm, 'is_proxy', 'alarms');
       const riskScore = getFieldValue(alarm, 'geographic_risk_score', 'alarms') || 0;
 
-      if (country && riskScore >= RISK_THRESHOLDS.HIGH_RISK_COUNTRY_MIN) {
+      if (country && riskScore >= getRiskThresholds().highRiskCountryMin) {
         threats.high_risk_countries[country] = (threats.high_risk_countries[country] || 0) + 1;
       }
       
@@ -1396,7 +1459,7 @@ export class SearchEngine {
         threats.threat_by_continent[continent] = (threats.threat_by_continent[continent] || 0) + 1;
       }
       
-      if (asn && riskScore >= RISK_THRESHOLDS.SUSPICIOUS_ASN_MIN) {
+      if (asn && riskScore >= getRiskThresholds().suspiciousAsnMin) {
         threats.suspicious_asns[asn] = (threats.suspicious_asns[asn] || 0) + 1;
       }
       
@@ -1405,9 +1468,9 @@ export class SearchEngine {
       if (isProxy) { threats.proxy_threats++; }
 
       // Categorize risk
-      if (riskScore <= RISK_THRESHOLDS.LOW_MAX) {threats.risk_distribution.low++;}
-      else if (riskScore <= RISK_THRESHOLDS.MEDIUM_MAX) {threats.risk_distribution.medium++;}
-      else if (riskScore <= RISK_THRESHOLDS.HIGH_MAX) {threats.risk_distribution.high++;}
+      if (riskScore <= getRiskThresholds().lowMax) {threats.risk_distribution.low++;}
+      else if (riskScore <= getRiskThresholds().mediumMax) {threats.risk_distribution.medium++;}
+      else if (riskScore <= getRiskThresholds().highMax) {threats.risk_distribution.high++;}
       else {threats.risk_distribution.critical++;}
     });
 

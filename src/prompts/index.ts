@@ -63,6 +63,18 @@ interface HealthScoreData {
  * @param server - The MCP server instance to register prompt handlers with
  * @param firewalla - The Firewalla client used for retrieving security and network data
  */
+/**
+ * Convert period string to hours for threat lookback
+ */
+function getPeriodInHours(period: string): number {
+  switch (period) {
+    case '24h': return 24;
+    case '7d': return 168;
+    case '30d': return 720;
+    default: return 720; // Default to 30 days
+  }
+}
+
 export function setupPrompts(server: Server, firewalla: FirewallaClient): void {
   server.setRequestHandler(GetPromptRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
@@ -78,7 +90,7 @@ export function setupPrompts(server: Server, firewalla: FirewallaClient): void {
             firewalla.getActiveAlarms(),
             firewalla.getFirewallSummary(),
             firewalla.getSecurityMetrics(),
-            firewalla.getRecentThreats(period === '24h' ? 24 : period === '7d' ? 168 : 720),
+            firewalla.getRecentThreats(getPeriodInHours(period)),
           ]);
 
           const prompt = `# Firewalla Security Report (${period})

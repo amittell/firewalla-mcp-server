@@ -434,8 +434,9 @@ export class GetRecentRulesHandler extends BaseToolHandler {
       const limit = limitValidation.sanitizedValue!;
       const includeModified = (args?.include_modified as boolean) ?? true;
       
-      // Use limit to reduce data fetching for better performance
-      const fetchLimit = Math.min(limit * 5, 2000); // Fetch 5x limit to account for time filtering
+      // Dynamic fetch limit calculation based on expected filtering efficiency
+      const fetchMultiplier = Math.max(3, Math.min(10, 500 / limit)); // Adaptive multiplier: 3-10x based on limit size
+      const fetchLimit = Math.min(limit * fetchMultiplier, 2000); // Cap at reasonable maximum
       const allRulesResponse = await firewalla.getNetworkRules(undefined, fetchLimit);
       
       const hoursAgoTs = Math.floor(Date.now() / 1000) - (hours * 3600);
