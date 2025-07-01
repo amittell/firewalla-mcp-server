@@ -265,13 +265,50 @@ export class DeleteAlarmHandler extends BaseToolHandler {
         );
       }
 
-      const response = await firewalla.deleteAlarm(
-        alarmIdValidation.sanitizedValue as string
-      );
+      const alarmId = alarmIdValidation.sanitizedValue as string;
+
+      // First verify the alarm exists before attempting deletion
+      try {
+        const alarmCheck = await firewalla.getSpecificAlarm(alarmId);
+        if (
+          !alarmCheck ||
+          !alarmCheck.results ||
+          alarmCheck.results.length === 0
+        ) {
+          return createErrorResponse(
+            'delete_alarm',
+            `Alarm with ID '${alarmId}' not found`,
+            ErrorType.API_ERROR,
+            undefined,
+            [`Alarm ID '${alarmId}' does not exist or has already been deleted`]
+          );
+        }
+      } catch (checkError: unknown) {
+        // If we can't retrieve the alarm, it likely doesn't exist
+        const checkErrorMessage =
+          checkError instanceof Error ? checkError.message : 'Unknown error';
+        if (
+          checkErrorMessage.includes('not found') ||
+          checkErrorMessage.includes('404')
+        ) {
+          return createErrorResponse(
+            'delete_alarm',
+            `Alarm with ID '${alarmId}' not found`,
+            ErrorType.API_ERROR,
+            undefined,
+            [`Alarm ID '${alarmId}' does not exist or has already been deleted`]
+          );
+        }
+        // Re-throw other errors (network issues, auth problems, etc.)
+        throw checkError;
+      }
+
+      // Alarm exists, proceed with deletion
+      const response = await firewalla.deleteAlarm(alarmId);
 
       return this.createSuccessResponse({
         success: true,
-        alarm_id: alarmIdValidation.sanitizedValue,
+        alarm_id: alarmId,
         message: 'Alarm deleted successfully',
         deleted_at: getCurrentTimestamp(),
         details: response,

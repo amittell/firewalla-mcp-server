@@ -1901,7 +1901,11 @@ export class SearchEngine {
       high_risk_flows: 0,
       top_countries: {} as Record<string, number>,
       top_asns: {} as Record<string, number>,
+      geographic_data_available: false,
+      warnings: [] as string[],
     };
+
+    let hasGeographicData = false;
 
     results.forEach(flow => {
       // Extract geographic data using field mapping
@@ -1911,6 +1915,11 @@ export class SearchEngine {
       const isCloud = getFieldValue(flow, 'is_cloud_provider', 'flows');
       const isVpn = getFieldValue(flow, 'is_vpn', 'flows');
       const riskScore = getFieldValue(flow, 'geographic_risk_score', 'flows');
+
+      // Check if any geographic data is available
+      if (country || continent || asn || isCloud || isVpn || riskScore) {
+        hasGeographicData = true;
+      }
 
       if (country && typeof country === 'string') {
         analysis.unique_countries.add(country);
@@ -1940,6 +1949,18 @@ export class SearchEngine {
         analysis.high_risk_flows++;
       }
     });
+
+    // Add warnings if no geographic data found
+    analysis.geographic_data_available = hasGeographicData;
+
+    if (!hasGeographicData && results.length > 0) {
+      analysis.warnings.push(
+        'No geographic data found in flow results. Geographic enrichment may be disabled or unavailable.'
+      );
+      analysis.warnings.push(
+        'Consider enabling geographic enrichment in Firewalla settings or check API configuration.'
+      );
+    }
 
     // Convert sets to counts
     return {
