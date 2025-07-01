@@ -5,6 +5,12 @@
 
 import { FirewallaClient } from '../../src/firewalla/client.js';
 import { GeographicData } from '../../src/types.js';
+import {
+  isPrivateIP,
+  mapContinent,
+  calculateRiskScore,
+  getGeographicDataForIP,
+} from '../../src/utils/geographic-utils.js';
 
 // Mock axios completely
 jest.mock('axios', () => {
@@ -86,76 +92,72 @@ describe('IP Geolocation Enrichment', () => {
 
   describe('Private IP Detection', () => {
     test('should detect private IP ranges correctly', () => {
-      // Access private method for testing using type assertion
-      const clientAny = client as any;
+      // Test using the utility function directly instead of private method
       
       // Private IP ranges that should be skipped
-      expect(clientAny.isPrivateIP('192.168.1.1')).toBe(true);
-      expect(clientAny.isPrivateIP('10.0.0.1')).toBe(true);
-      expect(clientAny.isPrivateIP('172.16.0.1')).toBe(true);
-      expect(clientAny.isPrivateIP('127.0.0.1')).toBe(true);
-      expect(clientAny.isPrivateIP('169.254.1.1')).toBe(true);
+      expect(isPrivateIP('192.168.1.1')).toBe(true);
+      expect(isPrivateIP('10.0.0.1')).toBe(true);
+      expect(isPrivateIP('172.16.0.1')).toBe(true);
+      expect(isPrivateIP('127.0.0.1')).toBe(true);
+      expect(isPrivateIP('169.254.1.1')).toBe(true);
       
       // Public IPs that should be geolocated
-      expect(clientAny.isPrivateIP('8.8.8.8')).toBe(false);        // Google DNS
-      expect(clientAny.isPrivateIP('1.1.1.1')).toBe(false);        // Cloudflare DNS
-      expect(clientAny.isPrivateIP('208.67.222.222')).toBe(false); // OpenDNS
-      expect(clientAny.isPrivateIP('74.125.224.72')).toBe(false);  // Google
+      expect(isPrivateIP('8.8.8.8')).toBe(false);        // Google DNS
+      expect(isPrivateIP('1.1.1.1')).toBe(false);        // Cloudflare DNS
+      expect(isPrivateIP('208.67.222.222')).toBe(false); // OpenDNS
+      expect(isPrivateIP('74.125.224.72')).toBe(false);  // Google
     });
   });
 
   describe('Continent Mapping', () => {
     test('should map country codes to continents correctly', () => {
-      const clientAny = client as any;
+      // Test using the utility function directly
       
       // Test major continents
-      expect(clientAny.mapContinent('US')).toBe('North America');
-      expect(clientAny.mapContinent('CA')).toBe('North America');
-      expect(clientAny.mapContinent('MX')).toBe('North America');
+      expect(mapContinent('US')).toBe('North America');
+      expect(mapContinent('CA')).toBe('North America');
+      expect(mapContinent('MX')).toBe('North America');
       
-      expect(clientAny.mapContinent('BR')).toBe('South America');
-      expect(clientAny.mapContinent('AR')).toBe('South America');
+      expect(mapContinent('BR')).toBe('South America');
+      expect(mapContinent('AR')).toBe('South America');
       
-      expect(clientAny.mapContinent('GB')).toBe('Europe');
-      expect(clientAny.mapContinent('DE')).toBe('Europe');
-      expect(clientAny.mapContinent('FR')).toBe('Europe');
+      expect(mapContinent('GB')).toBe('Europe');
+      expect(mapContinent('DE')).toBe('Europe');
+      expect(mapContinent('FR')).toBe('Europe');
       
-      expect(clientAny.mapContinent('CN')).toBe('Asia');
-      expect(clientAny.mapContinent('JP')).toBe('Asia');
-      expect(clientAny.mapContinent('IN')).toBe('Asia');
+      expect(mapContinent('CN')).toBe('Asia');
+      expect(mapContinent('JP')).toBe('Asia');
+      expect(mapContinent('IN')).toBe('Asia');
       
-      expect(clientAny.mapContinent('AU')).toBe('Oceania');
-      expect(clientAny.mapContinent('NZ')).toBe('Oceania');
+      expect(mapContinent('AU')).toBe('Oceania');
+      expect(mapContinent('NZ')).toBe('Oceania');
       
       // Unknown country code should return Unknown
-      expect(clientAny.mapContinent('XX')).toBe('Unknown');
+      expect(mapContinent('XX')).toBe('Unknown');
     });
   });
 
   describe('Risk Score Calculation', () => {
     test('should calculate risk scores based on country and organization', () => {
-      const clientAny = client as any;
+      // Test using the utility function directly
       
       // High risk countries
-      expect(clientAny.calculateRiskScore('CN')).toBeGreaterThanOrEqual(7);
-      expect(clientAny.calculateRiskScore('RU')).toBeGreaterThanOrEqual(7);
-      expect(clientAny.calculateRiskScore('KP')).toBeGreaterThanOrEqual(7);
-      expect(clientAny.calculateRiskScore('IR')).toBeGreaterThanOrEqual(7);
+      expect(calculateRiskScore('CN')).toBeGreaterThanOrEqual(7);
+      expect(calculateRiskScore('RU')).toBeGreaterThanOrEqual(7);
+      expect(calculateRiskScore('KP')).toBeGreaterThanOrEqual(7);
+      expect(calculateRiskScore('IR')).toBeGreaterThanOrEqual(7);
       
       // Medium risk countries
-      expect(clientAny.calculateRiskScore('PK')).toBeGreaterThanOrEqual(4);
-      expect(clientAny.calculateRiskScore('BD')).toBeGreaterThanOrEqual(4);
+      expect(calculateRiskScore('PK')).toBeGreaterThanOrEqual(4);
+      expect(calculateRiskScore('BD')).toBeGreaterThanOrEqual(4);
       
       // Low risk countries
-      expect(clientAny.calculateRiskScore('US')).toBeLessThan(6);
-      expect(clientAny.calculateRiskScore('CA')).toBeLessThan(6);
-      expect(clientAny.calculateRiskScore('GB')).toBeLessThan(6);
+      expect(calculateRiskScore('US')).toBeLessThan(6);
+      expect(calculateRiskScore('CA')).toBeLessThan(6);
+      expect(calculateRiskScore('GB')).toBeLessThan(6);
       
-      // Cloud providers should have lower risk
-      expect(clientAny.calculateRiskScore('CN', 'Amazon Web Services')).toBeLessThan(
-        clientAny.calculateRiskScore('CN')
-      );
-      expect(clientAny.calculateRiskScore('US', 'Google LLC')).toBeLessThan(4);
+      // Unknown countries should get default score
+      expect(calculateRiskScore('XX')).toBe(5);
     });
   });
 
@@ -341,8 +343,6 @@ describe('IP Geolocation Enrichment', () => {
 
   describe('Error Handling', () => {
     test('should handle geolocation errors gracefully', () => {
-      const clientAny = client as any;
-      
       // Mock geoip.lookup to throw an error
       const originalLookup = require('geoip-lite').lookup;
       require('geoip-lite').lookup = jest.fn().mockImplementation(() => {
@@ -350,10 +350,8 @@ describe('IP Geolocation Enrichment', () => {
       });
       
       // Should not throw and should return null
-      expect(() => {
-        const result = clientAny.getGeographicData('8.8.8.8');
-        expect(result).toBeNull();
-      }).not.toThrow();
+      const result = getGeographicDataForIP('8.8.8.8');
+      expect(result).toBeNull();
       
       // Restore original function
       require('geoip-lite').lookup = originalLookup;

@@ -19,7 +19,6 @@
  */
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
-import geoip from 'geoip-lite';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
 import {
   FirewallaConfig,
@@ -43,10 +42,12 @@ import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
 import { optimizeResponse } from '../optimization/index.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
 import { logger } from '../monitoring/logger.js';
+import { GeographicCache, type GeographicCacheStats } from '../utils/geographic-cache.js';
 import {
-  GeographicCache,
-  type GeographicCacheStats,
-} from '../utils/geographic-cache.js';
+  getGeographicDataForIP,
+  enrichObjectWithGeo,
+  normalizeIP,
+} from '../utils/geographic-utils.js';
 
 /**
  * Standard API response wrapper for Firewalla MSP endpoints
@@ -118,9 +119,7 @@ export class FirewallaClient {
     this.geoCache = new GeographicCache({
       maxSize: 10000,
       ttlMs: 3600000, // 1 hour cache for geographic data
-      enableStats:
-        process.env.NODE_ENV === 'development' ||
-        process.env.NODE_ENV === 'test',
+      enableStats: process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test',
     });
 
     // Use mspBaseUrl if provided, otherwise construct from mspId
@@ -2236,330 +2235,76 @@ export class FirewallaClient {
   }
 
   /**
-   * Check if IP address is private/internal and should not be geolocated
-   */
-  private isPrivateIP(ip: string): boolean {
-    const privateRanges = [
-      /^10\./, // 10.0.0.0/8
-      /^192\.168\./, // 192.168.0.0/16
-      /^172\.(1[6-9]|2\d|3[01])\./, // 172.16.0.0/12
-      /^127\./, // 127.0.0.0/8 (localhost)
-      /^169\.254\./, // 169.254.0.0/16 (link-local)
-      /^::1$/, // IPv6 localhost
-      /^fe80:/, // IPv6 link-local
-      /^fc00:/, // IPv6 unique local
-      /^fd00:/, // IPv6 unique local
-    ];
-
-    return privateRanges.some(range => range.test(ip));
-  }
-
-  /**
-   * Map country code to continent name
-   */
-  private mapContinent(countryCode: string): string {
-    const continentMap: Record<string, string> = {
-      // North America
-      US: 'North America',
-      CA: 'North America',
-      MX: 'North America',
-      GT: 'North America',
-      BZ: 'North America',
-      SV: 'North America',
-      HN: 'North America',
-      NI: 'North America',
-      CR: 'North America',
-      PA: 'North America',
-      CU: 'North America',
-      JM: 'North America',
-      HT: 'North America',
-      DO: 'North America',
-      PR: 'North America',
-
-      // South America
-      BR: 'South America',
-      AR: 'South America',
-      CL: 'South America',
-      PE: 'South America',
-      CO: 'South America',
-      VE: 'South America',
-      EC: 'South America',
-      BO: 'South America',
-      UY: 'South America',
-      PY: 'South America',
-      GY: 'South America',
-      SR: 'South America',
-      GF: 'South America',
-
-      // Europe
-      GB: 'Europe',
-      DE: 'Europe',
-      FR: 'Europe',
-      IT: 'Europe',
-      ES: 'Europe',
-      PT: 'Europe',
-      NL: 'Europe',
-      BE: 'Europe',
-      CH: 'Europe',
-      AT: 'Europe',
-      SE: 'Europe',
-      NO: 'Europe',
-      DK: 'Europe',
-      FI: 'Europe',
-      IS: 'Europe',
-      IE: 'Europe',
-      PL: 'Europe',
-      CZ: 'Europe',
-      SK: 'Europe',
-      HU: 'Europe',
-      RO: 'Europe',
-      BG: 'Europe',
-      GR: 'Europe',
-      HR: 'Europe',
-      SI: 'Europe',
-      EE: 'Europe',
-      LV: 'Europe',
-      LT: 'Europe',
-      RU: 'Europe',
-      UA: 'Europe',
-      BY: 'Europe',
-      MD: 'Europe',
-
-      // Asia
-      CN: 'Asia',
-      JP: 'Asia',
-      IN: 'Asia',
-      KR: 'Asia',
-      TH: 'Asia',
-      VN: 'Asia',
-      MY: 'Asia',
-      SG: 'Asia',
-      ID: 'Asia',
-      PH: 'Asia',
-      TW: 'Asia',
-      HK: 'Asia',
-      MO: 'Asia',
-      KH: 'Asia',
-      LA: 'Asia',
-      MM: 'Asia',
-      BD: 'Asia',
-      LK: 'Asia',
-      NP: 'Asia',
-      BT: 'Asia',
-      PK: 'Asia',
-      AF: 'Asia',
-      IR: 'Asia',
-      IQ: 'Asia',
-      TR: 'Asia',
-      SY: 'Asia',
-      LB: 'Asia',
-      JO: 'Asia',
-      IL: 'Asia',
-      SA: 'Asia',
-      AE: 'Asia',
-      KW: 'Asia',
-      QA: 'Asia',
-      BH: 'Asia',
-      OM: 'Asia',
-      YE: 'Asia',
-
-      // Africa
-      EG: 'Africa',
-      LY: 'Africa',
-      SD: 'Africa',
-      MA: 'Africa',
-      DZ: 'Africa',
-      TN: 'Africa',
-      ET: 'Africa',
-      KE: 'Africa',
-      UG: 'Africa',
-      TZ: 'Africa',
-      ZA: 'Africa',
-      ZW: 'Africa',
-      BW: 'Africa',
-      ZM: 'Africa',
-      MW: 'Africa',
-      MZ: 'Africa',
-      MG: 'Africa',
-      AO: 'Africa',
-      NA: 'Africa',
-      SZ: 'Africa',
-      LS: 'Africa',
-      CI: 'Africa',
-      GH: 'Africa',
-      NG: 'Africa',
-      CM: 'Africa',
-      CF: 'Africa',
-      TD: 'Africa',
-      NE: 'Africa',
-      BF: 'Africa',
-      ML: 'Africa',
-      SN: 'Africa',
-      GM: 'Africa',
-      GW: 'Africa',
-      GN: 'Africa',
-      SL: 'Africa',
-      LR: 'Africa',
-
-      // Oceania
-      AU: 'Oceania',
-      NZ: 'Oceania',
-      FJ: 'Oceania',
-      PG: 'Oceania',
-      NC: 'Oceania',
-      SB: 'Oceania',
-      VU: 'Oceania',
-      WS: 'Oceania',
-      TO: 'Oceania',
-      TV: 'Oceania',
-      NR: 'Oceania',
-      KI: 'Oceania',
-      MH: 'Oceania',
-      FM: 'Oceania',
-      PW: 'Oceania',
-
-      // Antarctica
-      AQ: 'Antarctica',
-    };
-
-    return continentMap[countryCode] || 'Unknown';
-  }
-
-  /**
-   * Calculate basic geographic risk score based on country and other factors
-   */
-  private calculateRiskScore(
-    countryCode: string,
-    organization?: string
-  ): number {
-    // Basic risk scoring - can be enhanced with threat intelligence
-    const highRiskCountries = ['CN', 'RU', 'KP', 'IR'];
-    const mediumRiskCountries = ['PK', 'BD', 'IN', 'VN', 'TH'];
-
-    let riskScore = 2; // Base score
-
-    if (highRiskCountries.includes(countryCode)) {
-      riskScore += 6; // High risk
-    } else if (mediumRiskCountries.includes(countryCode)) {
-      riskScore += 3; // Medium risk
-    }
-
-    // Cloud providers generally lower risk
-    if (
-      organization &&
-      /aws|amazon|google|microsoft|azure|cloudflare/i.test(organization)
-    ) {
-      riskScore = Math.max(1, riskScore - 2);
-    }
-
-    return Math.min(10, riskScore);
-  }
-
-  /**
-   * Get geographic data for IP address with caching
+   * Get geographic data for an IP address with caching
+   * @param ip - IP address to geolocate
+   * @returns GeographicData object or null if lookup fails or IP is private
    */
   private getGeographicData(ip: string): GeographicData | null {
+    const normalizedIP = normalizeIP(ip);
+    if (!normalizedIP) {
+      return null;
+    }
+
     // Check cache first
-    const cached = this.geoCache.get(ip);
+    const cached = this.geoCache.get(normalizedIP);
     if (cached !== undefined) {
       return cached;
     }
 
-    // Skip private IPs
-    if (this.isPrivateIP(ip)) {
-      this.geoCache.set(ip, null);
-      return null;
-    }
-
-    try {
-      const geo = geoip.lookup(ip);
-      if (!geo) {
-        this.geoCache.set(ip, null);
-        return null;
-      }
-
-      const geoData: GeographicData = {
-        country: geo.country || 'Unknown',
-        country_code: geo.country || 'XX',
-        continent: this.mapContinent(geo.country),
-        region: geo.region || 'Unknown',
-        city: geo.city || 'Unknown',
-        timezone: geo.timezone || 'Unknown',
-        asn: undefined, // geoip-lite doesn't provide ASN
-        isp: undefined, // geoip-lite doesn't provide ISP
-        organization: undefined,
-        hosting_provider: undefined,
-        is_cloud_provider: false,
-        is_proxy: false,
-        is_vpn: false,
-        geographic_risk_score: this.calculateRiskScore(geo.country),
-      };
-
-      this.geoCache.set(ip, geoData);
-      return geoData;
-    } catch (error) {
-      // Log error but don't throw - geographic enrichment is optional
-      logger.debugNamespace('geographic', `Error enriching IP ${ip}:`, {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      this.geoCache.set(ip, null);
-      return null;
-    }
+    // Get fresh data and cache it
+    const geoData = getGeographicDataForIP(normalizedIP);
+    this.geoCache.set(normalizedIP, geoData);
+    return geoData;
   }
 
   /**
-   * Enrich flow data with geographic information
+   * Enrich flow object with geographic data for source and destination IPs
+   * @param flow - Flow object to enrich
+   * @returns Enriched flow object with geographic data
    */
   private enrichWithGeographicData(flow: any): any {
-    const enrichedFlow = { ...flow };
+    let enriched = { ...flow };
 
-    // Enrich destination IP if present and public
-    if (flow.destination?.ip && !this.isPrivateIP(flow.destination.ip)) {
-      const geo = this.getGeographicData(flow.destination.ip);
-      if (geo) {
-        enrichedFlow.destination = {
-          ...enrichedFlow.destination,
-          geo,
-        };
-      }
+    // Enrich destination IP
+    if (flow.destination?.ip) {
+      enriched = enrichObjectWithGeo(
+        enriched,
+        'destination.ip',
+        'destination.geo',
+        this.getGeographicData.bind(this)
+      );
     }
 
-    // Enrich source IP if present, public, and different from destination
-    if (
-      flow.source?.ip &&
-      !this.isPrivateIP(flow.source.ip) &&
-      flow.source.ip !== flow.destination?.ip
-    ) {
-      const geo = this.getGeographicData(flow.source.ip);
-      if (geo) {
-        enrichedFlow.source = {
-          ...enrichedFlow.source,
-          geo,
-        };
-      }
+    // Enrich source IP (if different from destination)
+    if (flow.source?.ip && 
+        flow.source.ip !== flow.destination?.ip) {
+      enriched = enrichObjectWithGeo(
+        enriched,
+        'source.ip',
+        'source.geo',
+        this.getGeographicData.bind(this)
+      );
     }
 
-    return enrichedFlow;
+    return enriched;
   }
 
   /**
-   * Enrich alarm data with geographic information
+   * Enrich alarm object with geographic data for remote IP
+   * @param alarm - Alarm object to enrich  
+   * @returns Enriched alarm object with geographic data
    */
   private enrichAlarmWithGeographicData(alarm: any): any {
-    const enrichedAlarm = { ...alarm };
-
-    // Enrich remote IP if present and public
-    if (alarm.remote?.ip && !this.isPrivateIP(alarm.remote.ip)) {
-      const geo = this.getGeographicData(alarm.remote.ip);
-      if (geo) {
-        enrichedAlarm.remote = {
-          ...enrichedAlarm.remote,
-          geo,
-        };
-      }
+    if (!alarm.remote?.ip) {
+      return alarm;
     }
 
-    return enrichedAlarm;
+    return enrichObjectWithGeo(
+      alarm,
+      'remote.ip',
+      'remote.geo',
+      this.getGeographicData.bind(this)
+    );
   }
 
   // Advanced Search Methods

@@ -4,6 +4,7 @@
  */
 
 import type { GeographicData } from '../types.js';
+import { CACHE_CONFIG } from './geographic-constants.js';
 
 export interface GeographicCacheEntry {
   data: GeographicData | null;
@@ -36,12 +37,12 @@ export class GeographicCache {
 
   constructor(config: Partial<GeographicCacheConfig> = {}) {
     this.config = {
-      maxSize: config.maxSize || 10000,
-      ttlMs: config.ttlMs || 3600000, // 1 hour default
+      maxSize: config.maxSize ?? CACHE_CONFIG.DEFAULT_MAX_SIZE,
+      ttlMs: config.ttlMs ?? CACHE_CONFIG.DEFAULT_TTL_MS,
       enableStats:
-        config.enableStats ||
-        process.env.NODE_ENV === 'development' ||
-        process.env.NODE_ENV === 'test',
+        config.enableStats ??
+        (process.env.NODE_ENV === 'development' ||
+         process.env.NODE_ENV === 'test'),
     };
   }
 
