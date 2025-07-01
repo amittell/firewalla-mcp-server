@@ -16,7 +16,7 @@ import {
 } from '../../utils/timestamp.js';
 import { ResponseStandardizer, BackwardCompatibilityLayer } from '../../utils/response-standardizer.js';
 import { shouldUseLegacyFormat } from '../../config/response-config.js';
-import type { PaginationMetadata } from '../../types/standard-responses.js';
+import type { PaginationMetadata } from '../../types.js';
 
 export class GetFlowDataHandler extends BaseToolHandler {
   name = 'get_flow_data';

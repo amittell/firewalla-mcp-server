@@ -13,7 +13,7 @@ import type {
   PaginationMetadata,
   StatisticalMetadata,
   ResponseCategory
-} from '../types/standard-responses.js';
+} from '../types.js';
 
 /**
  * Response standardizer class providing unified formatting utilities
@@ -213,7 +213,7 @@ export class BackwardCompatibilityLayer {
       'get_flow_data': (response) => ({
         count: response.count,
         flows: response.results,
-        next_cursor: response.pagination.cursor,
+        next_cursor: response.pagination?.cursor,
         // Keep legacy field structure for backward compatibility
         ...response.query_parameters
       }),
@@ -221,7 +221,7 @@ export class BackwardCompatibilityLayer {
       'get_active_alarms': (response) => ({
         count: response.count,
         results: response.results,
-        cursor: response.pagination.cursor
+        cursor: response.pagination?.cursor
       })
     };
     
@@ -242,7 +242,7 @@ export class BackwardCompatibilityLayer {
   ): any {
     const legacyFormats: Record<string, (response: StandardStatisticalResponse<any>) => any> = {
       'get_bandwidth_usage': (response) => ({
-        period: response.analysis.period,
+        period: response.analysis?.period,
         top_devices: response.results,
         count: response.count,
         execution_time_ms: response.execution_time_ms
@@ -251,7 +251,7 @@ export class BackwardCompatibilityLayer {
       'get_most_active_rules': (response) => ({
         rules: response.results,
         total_count: response.count,
-        analysis_period: response.analysis.period,
+        analysis_period: response.analysis?.period,
         execution_time_ms: response.execution_time_ms
       })
     };
@@ -371,6 +371,9 @@ export class ResponseFormatUtils {
         return response.primary !== undefined && 
                Array.isArray(response.correlations) &&
                response.correlation_summary !== undefined;
+               
+      case 'status':
+        return baseStandard; // Simple status responses just need basic fields
                
       default:
         return false;

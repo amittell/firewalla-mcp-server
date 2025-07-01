@@ -10,6 +10,7 @@ import type {
   Device,
   NetworkRule,
   TargetList,
+  SearchMetadata,
 } from '../../types.js';
 import { SafeAccess } from '../../validation/error-handler.js';
 import { createSearchTools } from '../search.js';
@@ -18,7 +19,7 @@ import type { SearchParams } from '../../search/types.js';
 import type { ScoringCorrelationParams } from '../../validation/field-mapper.js';
 import { ResponseStandardizer, BackwardCompatibilityLayer } from '../../utils/response-standardizer.js';
 import { shouldUseLegacyFormat } from '../../config/response-config.js';
-import type { SearchMetadata } from '../../types/standard-responses.js';
+
 
 // Base search interface to reduce duplication
 export interface BaseSearchArgs extends ToolArgs {
