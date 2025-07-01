@@ -342,6 +342,25 @@ export function isFieldCompatible(field: string, entityTypes: EntityType[]): boo
 }
 
 /**
+ * Determines whether a correlation field is suitable for cross-reference searches.
+ * For cross-reference searches, the field needs to be supported by at least 2 entity types
+ * (at least the primary and one secondary), not necessarily all entity types.
+ *
+ * @param field - The correlation field to check
+ * @param entityTypes - The list of entity types to validate against
+ * @returns True if the field is supported by at least 2 entity types; otherwise, false
+ */
+export function isFieldCompatibleForCrossReference(field: string, entityTypes: EntityType[]): boolean {
+  const supportedTypes = CORRELATION_FIELDS[field];
+  if (!supportedTypes) {
+    return false;
+  }
+  
+  const supportedEntityTypes = entityTypes.filter(type => supportedTypes.includes(type));
+  return supportedEntityTypes.length >= 2;
+}
+
+/**
  * Retrieves the value of a specified field from an entity object of a given type, using mapped field paths when available.
  *
  * If the field has mapped paths for the entity type, attempts each path in order and returns the first non-null, non-undefined value found. Falls back to direct field access if no mapping exists.
@@ -630,8 +649,8 @@ export function validateCrossReference(
   const secondaryTypes = secondaryQueries.map(q => suggestEntityType(q));
   const allTypes = [primaryType, ...secondaryTypes].filter(Boolean) as EntityType[];
   
-  // Validate field compatibility
-  if (!isFieldCompatible(correlationField, allTypes)) {
+  // Validate field compatibility for cross-reference searches
+  if (!isFieldCompatibleForCrossReference(correlationField, allTypes)) {
     const compatibleTypes = CORRELATION_FIELDS[correlationField] || [];
     errors.push(
       `Correlation field '${correlationField}' is not compatible with detected entity types. ` +

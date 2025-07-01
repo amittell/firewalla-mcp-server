@@ -3063,14 +3063,65 @@ export class FirewallaClient {
               return false;
             }
 
-            // Simple search logic for common device fields
+            // Device field extraction
             const name = device.name?.toLowerCase() || '';
             const mac = device.mac?.toLowerCase() || '';
             const ip = device.ip?.toLowerCase() || '';
             const macVendor = device.macVendor?.toLowerCase() || '';
             const id = device.id?.toLowerCase() || '';
+            const isOnline = Boolean(
+              device.online || device.isOnline || device.connected
+            );
 
-            // Handle specific search patterns like "mac_vendor:Apple"
+            // Handle AND/OR logic in queries
+            const andParts = query.split(' and ');
+
+            // Check if this is an AND query
+            if (andParts.length > 1) {
+              return andParts.every(part => {
+                const trimmedPart = part.trim();
+
+                if (trimmedPart.includes('mac_vendor:')) {
+                  const vendor = trimmedPart
+                    .split('mac_vendor:')[1]
+                    ?.split(' ')[0]
+                    ?.toLowerCase();
+                  return macVendor.includes(vendor || '');
+                }
+                if (trimmedPart.includes('name:')) {
+                  const nameSearch = trimmedPart
+                    .split('name:')[1]
+                    ?.split(' ')[0]
+                    ?.toLowerCase()
+                    .replace(/\*/g, '');
+                  return name.includes(nameSearch || '');
+                }
+                if (trimmedPart.includes('online:')) {
+                  const onlineValue = trimmedPart
+                    .split('online:')[1]
+                    ?.split(' ')[0]
+                    ?.toLowerCase();
+
+                  if (onlineValue === 'true') {
+                    return isOnline;
+                  } else if (onlineValue === 'false') {
+                    return !isOnline;
+                  }
+                  return true; // Unknown online value, let it pass
+                }
+
+                // Fallback for AND parts: search in all text fields
+                return (
+                  name.includes(trimmedPart) ||
+                  mac.includes(trimmedPart) ||
+                  ip.includes(trimmedPart) ||
+                  macVendor.includes(trimmedPart) ||
+                  id.includes(trimmedPart)
+                );
+              });
+            }
+
+            // Handle single field patterns (original logic)
             if (query.includes('mac_vendor:')) {
               const vendor = query
                 .split('mac_vendor:')[1]
@@ -3085,6 +3136,19 @@ export class FirewallaClient {
                 ?.toLowerCase()
                 .replace(/\*/g, '');
               return name.includes(nameSearch || '');
+            }
+            if (query.includes('online:')) {
+              const onlineValue = query
+                .split('online:')[1]
+                ?.split(' ')[0]
+                ?.toLowerCase();
+
+              if (onlineValue === 'true') {
+                return isOnline;
+              } else if (onlineValue === 'false') {
+                return !isOnline;
+              }
+              // If neither true nor false, fall through to other filters
             }
 
             // Fallback: search in all text fields
