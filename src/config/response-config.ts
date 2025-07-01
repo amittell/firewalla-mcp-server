@@ -70,12 +70,12 @@ export const DEFAULT_RESPONSE_CONFIG: ResponseFormatConfig = {
   legacyCompatibility: {
     enabled: true,
     toolsUsingLegacyFormat: [
-      // Start with empty list - tools will be migrated gradually
-      // 'search_flows',
-      // 'search_alarms', 
-      // 'search_rules',
-      // 'get_flow_data',
-      // 'get_bandwidth_usage'
+      // Start with legacy tools to avoid breaking existing tests
+      'search_flows',
+      'search_alarms', 
+      'search_rules',
+      'get_flow_data',
+      'get_bandwidth_usage'
     ],
     migrationDeadline: '2024-12-31',
     showDeprecationWarnings: false // Start without warnings to avoid disruption
@@ -125,7 +125,14 @@ export function getEnvironmentConfig(environment: string = 'production'): Partia
         useStandardFormats: true,
         legacyCompatibility: {
           enabled: true,
-          toolsUsingLegacyFormat: [],
+          toolsUsingLegacyFormat: [
+            // Keep legacy formats in test to avoid breaking existing tests
+            'search_flows',
+            'search_alarms', 
+            'search_rules',
+            'get_flow_data',
+            'get_bandwidth_usage'
+          ],
           showDeprecationWarnings: false // Avoid test noise
         },
         includeMetadata: {

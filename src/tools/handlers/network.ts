@@ -14,6 +14,9 @@ import {
   unixToISOStringOrNow,
   safeUnixToISOString,
 } from '../../utils/timestamp.js';
+import { ResponseStandardizer, BackwardCompatibilityLayer } from '../../utils/response-standardizer.js';
+import { shouldUseLegacyFormat } from '../../config/response-config.js';
+import type { PaginationMetadata } from '../../types/standard-responses.js';
 
 export class GetFlowDataHandler extends BaseToolHandler {
   name = 'get_flow_data';
@@ -24,6 +27,8 @@ export class GetFlowDataHandler extends BaseToolHandler {
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
+    const startTime = Date.now();
+    
     try {
       // Parameter validation
       const limitValidation = ParameterValidator.validateNumber(
@@ -54,12 +59,12 @@ export class GetFlowDataHandler extends BaseToolHandler {
       const cursor = args?.cursor;
 
       // Build query for time range if provided
-      const startTime = args?.start_time as string | undefined;
+      const startTimeArg = args?.start_time as string | undefined;
       const endTime = args?.end_time as string | undefined;
       let finalQuery = query;
 
-      if (startTime && endTime) {
-        const startTs = Math.floor(new Date(startTime).getTime() / 1000);
+      if (startTimeArg && endTime) {
+        const startTs = Math.floor(new Date(startTimeArg).getTime() / 1000);
         const endTs = Math.floor(new Date(endTime).getTime() / 1000);
         const timeQuery = `ts:${startTs}-${endTs}`;
         finalQuery = query ? `${query} AND ${timeQuery}` : timeQuery;
@@ -72,40 +77,69 @@ export class GetFlowDataHandler extends BaseToolHandler {
         limit,
         cursor
       );
+      const executionTime = Date.now() - startTime;
 
-      return this.createSuccessResponse({
-        count: response.count,
-        flows: SafeAccess.safeArrayMap(response.results, (flow: any) => ({
-          timestamp: unixToISOStringOrNow(flow.ts),
-          source_ip: SafeAccess.getNestedValue(
-            flow,
-            'source.ip',
-            SafeAccess.getNestedValue(flow, 'device.ip', 'unknown')
-          ),
-          destination_ip: SafeAccess.getNestedValue(
-            flow,
-            'destination.ip',
-            'unknown'
-          ),
-          protocol: SafeAccess.getNestedValue(flow, 'protocol', 'unknown'),
-          bytes:
-            (SafeAccess.getNestedValue(flow, 'download', 0) as number) +
-            (SafeAccess.getNestedValue(flow, 'upload', 0) as number),
-          download: SafeAccess.getNestedValue(flow, 'download', 0),
-          upload: SafeAccess.getNestedValue(flow, 'upload', 0),
-          packets: SafeAccess.getNestedValue(flow, 'count', 0),
-          duration: SafeAccess.getNestedValue(flow, 'duration', 0),
-          direction: SafeAccess.getNestedValue(flow, 'direction', 'unknown'),
-          blocked: SafeAccess.getNestedValue(flow, 'block', false),
-          block_type: SafeAccess.getNestedValue(flow, 'blockType', null),
-          device: SafeAccess.getNestedValue(flow, 'device', {}),
-          source: SafeAccess.getNestedValue(flow, 'source', {}),
-          destination: SafeAccess.getNestedValue(flow, 'destination', {}),
-          region: SafeAccess.getNestedValue(flow, 'region', null),
-          category: SafeAccess.getNestedValue(flow, 'category', null),
-        })),
-        next_cursor: response.next_cursor,
-      });
+      // Process flow data
+      const processedFlows = SafeAccess.safeArrayMap(response.results, (flow: any) => ({
+        timestamp: unixToISOStringOrNow(flow.ts),
+        source_ip: SafeAccess.getNestedValue(
+          flow,
+          'source.ip',
+          SafeAccess.getNestedValue(flow, 'device.ip', 'unknown')
+        ),
+        destination_ip: SafeAccess.getNestedValue(
+          flow,
+          'destination.ip',
+          'unknown'
+        ),
+        protocol: SafeAccess.getNestedValue(flow, 'protocol', 'unknown'),
+        bytes:
+          (SafeAccess.getNestedValue(flow, 'download', 0) as number) +
+          (SafeAccess.getNestedValue(flow, 'upload', 0) as number),
+        download: SafeAccess.getNestedValue(flow, 'download', 0),
+        upload: SafeAccess.getNestedValue(flow, 'upload', 0),
+        packets: SafeAccess.getNestedValue(flow, 'count', 0),
+        duration: SafeAccess.getNestedValue(flow, 'duration', 0),
+        direction: SafeAccess.getNestedValue(flow, 'direction', 'unknown'),
+        blocked: SafeAccess.getNestedValue(flow, 'block', false),
+        block_type: SafeAccess.getNestedValue(flow, 'blockType', null),
+        device: SafeAccess.getNestedValue(flow, 'device', {}),
+        source: SafeAccess.getNestedValue(flow, 'source', {}),
+        destination: SafeAccess.getNestedValue(flow, 'destination', {}),
+        region: SafeAccess.getNestedValue(flow, 'region', null),
+        category: SafeAccess.getNestedValue(flow, 'category', null),
+      }));
+
+      // Create metadata for standardized response
+      const metadata: PaginationMetadata = {
+        cursor: response.next_cursor,
+        hasMore: !!response.next_cursor,
+        limit,
+        executionTime,
+        cached: false,
+        source: 'firewalla_api',
+        queryParams: { 
+          query: finalQuery, 
+          groupBy, 
+          sortBy, 
+          limit, 
+          cursor,
+          start_time: startTimeArg,
+          end_time: endTime 
+        },
+        totalCount: (response as any).total_count
+      };
+
+      // Create standardized response
+      const standardResponse = ResponseStandardizer.toPaginatedResponse(processedFlows, metadata);
+
+      // Apply backward compatibility if needed
+      if (shouldUseLegacyFormat(this.name)) {
+        const legacyResponse = BackwardCompatibilityLayer.toLegacyPaginatedFormat(standardResponse, this.name);
+        return this.createSuccessResponse(legacyResponse);
+      }
+
+      return this.createSuccessResponse(standardResponse);
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
