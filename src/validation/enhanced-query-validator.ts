@@ -3,7 +3,7 @@
  * Provides detailed syntax error reporting with position tracking and suggestions
  */
 
-import { QueryValidation, SEARCH_FIELDS } from '../search/types.js';
+import type { QueryValidation, SEARCH_FIELDS } from '../search/types.js';
 
 /**
  * Detailed error information with position and suggestions
@@ -150,7 +150,7 @@ export class EnhancedQueryValidator {
             message: `Unexpected closing parenthesis at position ${i}`,
             position: i,
             errorType: 'syntax',
-            context: context,
+            context,
             suggestion: 'Add matching opening parenthesis or remove this closing parenthesis'
           });
           
@@ -176,7 +176,7 @@ export class EnhancedQueryValidator {
         message: `Unclosed opening parenthesis at position ${unmatched.position}`,
         position: unmatched.position,
         errorType: 'syntax',
-        context: context,
+        context,
         suggestion: 'Add matching closing parenthesis'
       });
       
@@ -224,7 +224,7 @@ export class EnhancedQueryValidator {
         message: `Unclosed quoted string starting at position ${quoteStart}`,
         position: quoteStart,
         errorType: 'syntax',
-        context: context,
+        context,
         suggestion: `Add matching ${quoteChar} to close the quoted string`
       });
       
@@ -282,7 +282,7 @@ export class EnhancedQueryValidator {
           message: `Expected ':' after field '${field}' at position ${position + field.length}`,
           position: position + field.length,
           errorType: 'syntax',
-          context: context,
+          context,
           suggestion: `Use '${field}:${value}' instead of '${field} ${value}'`
         });
         
@@ -290,8 +290,8 @@ export class EnhancedQueryValidator {
           description: `Add colon after field '${field}'`,
           action: 'fix_syntax',
           position: position + field.length,
-          original: field + ' ' + value,
-          replacement: field + ':' + value
+          original: `${field  } ${  value}`,
+          replacement: `${field  }:${  value}`
         });
       }
       
@@ -302,7 +302,7 @@ export class EnhancedQueryValidator {
           message: `Use ':' instead of '=' for field queries at position ${position + field.length}`,
           position: position + field.length,
           errorType: 'syntax',
-          context: context,
+          context,
           suggestion: `Use '${field}:${value}' instead of '${field}=${value}'`
         });
         
@@ -383,7 +383,7 @@ export class EnhancedQueryValidator {
       if (position + operator.length === trimmedQuery.length) {
         errors.push({
           message: `Logical operator '${operator}' cannot appear at the end of the query`,
-          position: position,
+          position,
           errorType: 'syntax',
           suggestion: `Add a condition after '${operator}' or remove it`
         });
@@ -402,9 +402,9 @@ export class EnhancedQueryValidator {
     
     return {
       message: `Syntax error at position ${position}: ${error.message}`,
-      position: position,
+      position,
       errorType: 'syntax',
-      context: context,
+      context,
       suggestion: this.getSyntaxFixSuggestion(error.message)
     };
   }

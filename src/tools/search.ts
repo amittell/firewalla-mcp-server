@@ -719,7 +719,7 @@ export class SearchEngine {
             const fieldMatch = error.match(/field '([^']+)'/);
             if (fieldMatch) {
               const field = fieldMatch[1];
-              const entityTypes = ['flows', 'alarms', 'rules', 'devices'] as ('flows' | 'alarms' | 'rules' | 'devices')[];
+              const entityTypes = ['flows', 'alarms', 'rules', 'devices'] as Array<'flows' | 'alarms' | 'rules' | 'devices'>;
               const fieldValidation = FieldValidator.validateFieldAcrossTypes(field, entityTypes);
               
               if (!fieldValidation.isValid && fieldValidation.suggestions.length > 0) {

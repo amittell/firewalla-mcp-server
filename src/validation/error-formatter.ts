@@ -3,7 +3,7 @@
  * Provides user-friendly error message formatting and grouping
  */
 
-import { DetailedError, QuickFix } from './enhanced-query-validator.js';
+import type { DetailedError, QuickFix } from './enhanced-query-validator.js';
 
 /**
  * Formatted error with enhanced presentation
@@ -266,11 +266,11 @@ export class ErrorFormatter {
    * Calculate overall severity
    */
   private static calculateOverallSeverity(errors: DetailedError[]): 'high' | 'medium' | 'low' {
-    if (errors.length >= 5) return 'high';
-    if (errors.length >= 2) return 'medium';
+    if (errors.length >= 5) {return 'high';}
+    if (errors.length >= 2) {return 'medium';}
     
     const hasSyntaxErrors = errors.some(e => e.errorType === 'syntax');
-    if (hasSyntaxErrors) return 'medium';
+    if (hasSyntaxErrors) {return 'medium';}
     
     return 'low';
   }
@@ -279,7 +279,7 @@ export class ErrorFormatter {
    * Enhance error message with additional context
    */
   private static enhanceErrorMessage(error: DetailedError): string {
-    let message = error.message;
+    let {message} = error;
     
     // Add position information if available
     if (error.position !== undefined) {

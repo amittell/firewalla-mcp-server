@@ -219,7 +219,7 @@ export class FieldValidator {
           closestMatches.push({
             field: similarField.field,
             similarity: similarField.similarity,
-            entityType: entityType
+            entityType
           });
         }
       }
@@ -296,7 +296,7 @@ export class FieldValidator {
     }
 
     const maxLength = Math.max(len1, len2);
-    if (maxLength === 0) return 1;
+    if (maxLength === 0) {return 1;}
     
     return (maxLength - matrix[len1][len2]) / maxLength;
   }
@@ -352,7 +352,7 @@ export class FieldValidator {
     maxSuggestions = 10
   ): string[] {
     const validFields = SEARCH_FIELDS[entityType];
-    if (!validFields) return [];
+    if (!validFields) {return [];}
 
     const lowerPartial = partialField.toLowerCase();
     

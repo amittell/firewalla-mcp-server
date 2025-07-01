@@ -31,9 +31,7 @@ export interface OperatorValidation {
 /**
  * Operator compatibility matrix
  */
-interface OperatorCompatibility {
-  [fieldType: string]: QueryOperator[];
-}
+type OperatorCompatibility = Record<string, QueryOperator[]>;
 
 export class OperatorValidator {
   private static readonly FIELD_TYPE_MAP: Record<string, FieldType> = {
@@ -267,6 +265,12 @@ export class OperatorValidator {
         }
         break;
         
+      case 'ip':
+        if (['startswith', 'endswith'].includes(operator)) {
+          return `Text operator '${operator}' cannot be used with IP field '${field}'. Use CIDR notation, equality (:, =), or pattern matching (~) instead.`;
+        }
+        break;
+        
       default:
         return `Operator '${operator}' is not compatible with field '${field}' of type ${fieldType}.`;
     }
@@ -452,6 +456,32 @@ export class OperatorValidator {
             };
           }
         }
+        break;
+
+      case 'string':
+        // String fields are generally flexible with values
+        break;
+
+      case 'ip':
+        if (operator === ':' || operator === '=') {
+          // Basic IP validation for exact matches
+          if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(cleanValue) && 
+              !cleanValue.includes('*') && !cleanValue.includes('/')) {
+            return {
+              isValid: false,
+              error: `IP field requires valid IP address or pattern, got '${cleanValue}'`,
+              suggestion: 'Use: 192.168.1.1, 192.168.*, or 192.168.1.0/24'
+            };
+          }
+        }
+        break;
+
+      case 'array':
+        // Array fields are generally flexible with values
+        break;
+
+      case 'enum':
+        // Enum validation would require field-specific allowed values
         break;
     }
 

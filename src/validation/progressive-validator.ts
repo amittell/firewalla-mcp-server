@@ -3,11 +3,11 @@
  * Provides step-by-step validation guidance for complex queries
  */
 
-import { SEARCH_FIELDS } from '../search/types.js';
-import { EnhancedQueryValidator, DetailedError } from './enhanced-query-validator.js';
+import type { SEARCH_FIELDS } from '../search/types.js';
+import { EnhancedQueryValidator, type DetailedError } from './enhanced-query-validator.js';
 import { FieldValidator } from './field-validator.js';
 import { OperatorValidator } from './operator-validator.js';
-import { ErrorFormatter, FormattedErrorReport } from './error-formatter.js';
+import { ErrorFormatter, type FormattedErrorReport } from './error-formatter.js';
 
 type EntityType = keyof typeof SEARCH_FIELDS;
 
@@ -469,6 +469,8 @@ export class ProgressiveValidator {
         return 'operator';
       case 'semanticCorrectness':
         return 'semantic';
+      case 'performanceOptimization':
+        return 'semantic'; // Performance optimizations are semantic-level suggestions
       default:
         return 'syntax';
     }
