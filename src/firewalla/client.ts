@@ -36,11 +36,18 @@ import {
   Trend,
   SimpleStats,
   Statistics,
+  GeographicData,
 } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
 import { optimizeResponse } from '../optimization/index.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
 import { logger } from '../monitoring/logger.js';
+import { GeographicCache, type GeographicCacheStats } from '../utils/geographic-cache.js';
+import {
+  getGeographicDataForIP,
+  enrichObjectWithGeo,
+  normalizeIP,
+} from '../utils/geographic-utils.js';
 
 /**
  * Standard API response wrapper for Firewalla MSP endpoints
@@ -98,6 +105,9 @@ export class FirewallaClient {
   /** @private In-memory cache for API responses with TTL management */
   private cache: Map<string, { data: unknown; expires: number }>;
 
+  /** @private Geographic cache for IP geolocation lookups */
+  private geoCache: GeographicCache;
+
   /**
    * Creates a new Firewalla API client instance
    *
@@ -106,6 +116,11 @@ export class FirewallaClient {
    */
   constructor(private config: FirewallaConfig) {
     this.cache = new Map();
+    this.geoCache = new GeographicCache({
+      maxSize: 10000,
+      ttlMs: 3600000, // 1 hour cache for geographic data
+      enableStats: process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test',
+    });
 
     // Use mspBaseUrl if provided, otherwise construct from mspId
     const baseURL = config.mspBaseUrl || `https://${config.mspId}`;
@@ -490,7 +505,7 @@ export class FirewallaClient {
 
     return {
       count: response.count || alarms.length,
-      results: alarms,
+      results: alarms.map(alarm => this.enrichAlarmWithGeographicData(alarm)),
       next_cursor: response.next_cursor,
     };
   }
@@ -609,7 +624,7 @@ export class FirewallaClient {
 
     return {
       count: response.count || flows.length,
-      results: flows,
+      results: flows.map(flow => this.enrichWithGeographicData(flow)),
       next_cursor: response.next_cursor,
     };
   }
@@ -2263,6 +2278,93 @@ export class FirewallaClient {
       size: this.cache.size,
       keys: Array.from(this.cache.keys()),
     };
+  }
+
+  /**
+   * Get geographic cache statistics
+   */
+  getGeographicCacheStats(): GeographicCacheStats {
+    return this.geoCache.getStats();
+  }
+
+  /**
+   * Clear geographic cache
+   */
+  clearGeographicCache(): void {
+    this.geoCache.clear();
+  }
+
+  /**
+   * Get geographic data for an IP address with caching
+   * @param ip - IP address to geolocate
+   * @returns GeographicData object or null if lookup fails or IP is private
+   */
+  private getGeographicData(ip: string): GeographicData | null {
+    const normalizedIP = normalizeIP(ip);
+    if (!normalizedIP) {
+      return null;
+    }
+
+    // Check cache first
+    const cached = this.geoCache.get(normalizedIP);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    // Get fresh data and cache it
+    const geoData = getGeographicDataForIP(normalizedIP);
+    this.geoCache.set(normalizedIP, geoData);
+    return geoData;
+  }
+
+  /**
+   * Enrich flow object with geographic data for source and destination IPs
+   * @param flow - Flow object to enrich
+   * @returns Enriched flow object with geographic data
+   */
+  private enrichWithGeographicData(flow: any): any {
+    let enriched = { ...flow };
+
+    // Enrich destination IP
+    if (flow.destination?.ip) {
+      enriched = enrichObjectWithGeo(
+        enriched,
+        'destination.ip',
+        'destination.geo',
+        this.getGeographicData.bind(this)
+      );
+    }
+
+    // Enrich source IP (if different from destination)
+    if (flow.source?.ip && 
+        flow.source.ip !== flow.destination?.ip) {
+      enriched = enrichObjectWithGeo(
+        enriched,
+        'source.ip',
+        'source.geo',
+        this.getGeographicData.bind(this)
+      );
+    }
+
+    return enriched;
+  }
+
+  /**
+   * Enrich alarm object with geographic data for remote IP
+   * @param alarm - Alarm object to enrich  
+   * @returns Enriched alarm object with geographic data
+   */
+  private enrichAlarmWithGeographicData(alarm: any): any {
+    if (!alarm.remote?.ip) {
+      return alarm;
+    }
+
+    return enrichObjectWithGeo(
+      alarm,
+      'remote.ip',
+      'remote.geo',
+      this.getGeographicData.bind(this)
+    );
   }
 
   // Advanced Search Methods

@@ -95,7 +95,14 @@ export const FIELD_MAPPINGS: Record<EntityType, Record<string, string[]>> = {
     'threat_level': ['threat.level', 'risk_level'],
     'attack_vector': ['attack.vector', 'method'],
     'geo_location': ['geo.country', 'location.country', 'country'],
-    'asn': ['geo.asn', 'location.asn', 'asn', 'as_number'],
+    'asn': [
+      'destination.geo.asn',
+      'source.geo.asn',
+      'geo.asn', 
+      'location.asn', 
+      'asn', 
+      'as_number'
+    ],
     // Application-level fields
     'user_agent': ['headers.userAgent', 'userAgent', 'ua'],
     'application': ['app', 'application', 'service'],
@@ -109,20 +116,96 @@ export const FIELD_MAPPINGS: Record<EntityType, Record<string, string[]>> = {
     'bytes_per_session': ['bytesPerSession', 'avgBytes'],
     'connection_pattern': ['pattern', 'connectionPattern'],
     'activity_level': ['activity', 'level'],
-    // Enhanced geographic fields
-    'country': ['geo.country', 'location.country', 'country', 'region'],
-    'country_code': ['geo.countryCode', 'location.countryCode', 'countryCode'],
-    'continent': ['geo.continent', 'location.continent'],
-    'region': ['geo.region', 'location.region', 'region'],
-    'city': ['geo.city', 'location.city'],
-    'timezone': ['geo.timezone', 'location.timezone'],
-    'isp': ['geo.isp', 'location.isp', 'isp'],
-    'organization': ['geo.organization', 'location.organization', 'org'],
-    'hosting_provider': ['geo.hosting', 'location.hosting', 'hosting'],
-    'is_cloud_provider': ['geo.isCloud', 'location.isCloud', 'cloud'],
-    'is_proxy': ['geo.isProxy', 'location.isProxy', 'proxy'],
-    'is_vpn': ['geo.isVPN', 'location.isVPN', 'vpn'],
-    'geographic_risk_score': ['geo.riskScore', 'location.riskScore', 'geoRisk']
+    // Enhanced geographic fields (prioritize enriched data)
+    'country': [
+      'destination.geo.country', 
+      'source.geo.country',
+      'geo.country', 
+      'location.country', 
+      'country', 
+      'region'
+    ],
+    'country_code': [
+      'destination.geo.country_code',
+      'source.geo.country_code',
+      'geo.countryCode', 
+      'location.countryCode', 
+      'countryCode'
+    ],
+    'continent': [
+      'destination.geo.continent',
+      'source.geo.continent',
+      'geo.continent', 
+      'location.continent'
+    ],
+    'region': [
+      'destination.geo.region',
+      'source.geo.region',
+      'geo.region', 
+      'location.region', 
+      'region'
+    ],
+    'city': [
+      'destination.geo.city',
+      'source.geo.city',
+      'geo.city', 
+      'location.city'
+    ],
+    'timezone': [
+      'destination.geo.timezone',
+      'source.geo.timezone',
+      'geo.timezone', 
+      'location.timezone'
+    ],
+    'isp': [
+      'destination.geo.isp',
+      'source.geo.isp',
+      'geo.isp', 
+      'location.isp', 
+      'isp'
+    ],
+    'organization': [
+      'destination.geo.organization',
+      'source.geo.organization',
+      'geo.organization', 
+      'location.organization', 
+      'org'
+    ],
+    'hosting_provider': [
+      'destination.geo.hosting_provider',
+      'source.geo.hosting_provider',
+      'geo.hosting', 
+      'location.hosting', 
+      'hosting'
+    ],
+    'is_cloud_provider': [
+      'destination.geo.is_cloud_provider',
+      'source.geo.is_cloud_provider',
+      'geo.isCloud', 
+      'location.isCloud', 
+      'cloud'
+    ],
+    'is_proxy': [
+      'destination.geo.is_proxy',
+      'source.geo.is_proxy',
+      'geo.isProxy', 
+      'location.isProxy', 
+      'proxy'
+    ],
+    'is_vpn': [
+      'destination.geo.is_vpn',
+      'source.geo.is_vpn',
+      'geo.isVPN', 
+      'location.isVPN', 
+      'vpn'
+    ],
+    'geographic_risk_score': [
+      'destination.geo.geographic_risk_score',
+      'source.geo.geographic_risk_score',
+      'geo.riskScore', 
+      'location.riskScore', 
+      'geoRisk'
+    ]
   },
   alarms: {
     'source_ip': ['device.ip', 'remote.ip'],
@@ -148,7 +231,14 @@ export const FIELD_MAPPINGS: Record<EntityType, Record<string, string[]>> = {
     'threat_level': ['threat.level', 'risk_level', 'severity'],
     'attack_vector': ['attack.vector', 'method', 'type'],
     'geo_location': ['geo.country', 'location.country', 'country'],
-    'asn': ['geo.asn', 'location.asn', 'asn', 'as_number', 'remote.asn'],
+    'asn': [
+      'remote.geo.asn',
+      'geo.asn', 
+      'location.asn', 
+      'asn', 
+      'as_number', 
+      'remote.asn'
+    ],
     // Application-level fields
     'user_agent': ['headers.userAgent', 'userAgent', 'ua', 'remote.userAgent'],
     'application': ['app', 'application', 'service', 'remote.app'],
@@ -162,20 +252,86 @@ export const FIELD_MAPPINGS: Record<EntityType, Record<string, string[]>> = {
     'bytes_per_session': ['bytesPerSession', 'avgBytes', 'remote.avgBytes'],
     'connection_pattern': ['pattern', 'connectionPattern', 'remote.pattern'],
     'activity_level': ['activity', 'level', 'remote.activity'],
-    // Enhanced geographic fields
-    'country': ['geo.country', 'location.country', 'country', 'remote.country'],
-    'country_code': ['geo.countryCode', 'location.countryCode', 'remote.countryCode'],
-    'continent': ['geo.continent', 'location.continent', 'remote.continent'],
-    'region': ['geo.region', 'location.region', 'remote.region'],
-    'city': ['geo.city', 'location.city', 'remote.city'],
-    'timezone': ['geo.timezone', 'location.timezone', 'remote.timezone'],
-    'isp': ['geo.isp', 'location.isp', 'remote.isp'],
-    'organization': ['geo.organization', 'location.organization', 'remote.org'],
-    'hosting_provider': ['geo.hosting', 'location.hosting', 'remote.hosting'],
-    'is_cloud_provider': ['geo.isCloud', 'location.isCloud', 'remote.cloud'],
-    'is_proxy': ['geo.isProxy', 'location.isProxy', 'remote.proxy'],
-    'is_vpn': ['geo.isVPN', 'location.isVPN', 'remote.vpn'],
-    'geographic_risk_score': ['geo.riskScore', 'location.riskScore', 'remote.geoRisk']
+    // Enhanced geographic fields (prioritize enriched data)
+    'country': [
+      'remote.geo.country',
+      'geo.country', 
+      'location.country', 
+      'country', 
+      'remote.country'
+    ],
+    'country_code': [
+      'remote.geo.country_code',
+      'geo.countryCode', 
+      'location.countryCode', 
+      'remote.countryCode'
+    ],
+    'continent': [
+      'remote.geo.continent',
+      'geo.continent', 
+      'location.continent', 
+      'remote.continent'
+    ],
+    'region': [
+      'remote.geo.region',
+      'geo.region', 
+      'location.region', 
+      'remote.region'
+    ],
+    'city': [
+      'remote.geo.city',
+      'geo.city', 
+      'location.city', 
+      'remote.city'
+    ],
+    'timezone': [
+      'remote.geo.timezone',
+      'geo.timezone', 
+      'location.timezone', 
+      'remote.timezone'
+    ],
+    'isp': [
+      'remote.geo.isp',
+      'geo.isp', 
+      'location.isp', 
+      'remote.isp'
+    ],
+    'organization': [
+      'remote.geo.organization',
+      'geo.organization', 
+      'location.organization', 
+      'remote.org'
+    ],
+    'hosting_provider': [
+      'remote.geo.hosting_provider',
+      'geo.hosting', 
+      'location.hosting', 
+      'remote.hosting'
+    ],
+    'is_cloud_provider': [
+      'remote.geo.is_cloud_provider',
+      'geo.isCloud', 
+      'location.isCloud', 
+      'remote.cloud'
+    ],
+    'is_proxy': [
+      'remote.geo.is_proxy',
+      'geo.isProxy', 
+      'location.isProxy', 
+      'remote.proxy'
+    ],
+    'is_vpn': [
+      'remote.geo.is_vpn',
+      'geo.isVPN', 
+      'location.isVPN', 
+      'remote.vpn'
+    ],
+    'geographic_risk_score': [
+      'remote.geo.geographic_risk_score',
+      'geo.riskScore', 
+      'location.riskScore', 
+      'remote.geoRisk'
+    ]
   },
   rules: {
     'target_value': ['target.value'],
