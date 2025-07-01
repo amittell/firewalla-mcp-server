@@ -104,11 +104,11 @@ const mockFirewallaClient = {
     count: 1
   }),
   // Additional search methods that might be called
-  searchFlows: jest.fn(),
-  searchAlarms: jest.fn(),
-  searchRules: jest.fn(),
-  searchDevices: jest.fn(),
-  searchTargetLists: jest.fn()
+  searchFlows: jest.fn().mockResolvedValue({ results: [], count: 0 }),
+  searchAlarms: jest.fn().mockResolvedValue({ results: [], count: 0 }),
+  searchRules: jest.fn().mockResolvedValue({ results: [], count: 0 }),
+  searchDevices: jest.fn().mockResolvedValue({ results: [], count: 0 }),
+  searchTargetLists: jest.fn().mockResolvedValue({ results: [], count: 0 })
 } as unknown as FirewallaClient;
 
 describe('Enhanced Search Tools', () => {
@@ -436,7 +436,7 @@ describe('Enhanced Search Tools', () => {
         count: 1
       };
 
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(legacyFlowResults);
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(legacyFlowResults);
       mockFirewallaClient.getActiveAlarms = jest.fn().mockResolvedValue(legacyAlarmResults);
 
       const legacyParams = {
@@ -454,12 +454,12 @@ describe('Enhanced Search Tools', () => {
     });
 
     test('should work with all entity types', async () => {
-      // Mock all entity type responses
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue({ results: [], count: 0 });
-      mockFirewallaClient.getActiveAlarms = jest.fn().mockResolvedValue({ results: [], count: 0 });
-      mockFirewallaClient.getNetworkRules = jest.fn().mockResolvedValue({ results: [], count: 0 });
-      mockFirewallaClient.searchDevices = jest.fn().mockResolvedValue({ results: [], count: 0 });
-      mockFirewallaClient.getTargetLists = jest.fn().mockResolvedValue({ results: [], count: 0 });
+      // Mock all entity type responses with proper structure
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue({ results: [], count: 0, next_cursor: undefined });
+      mockFirewallaClient.getActiveAlarms = jest.fn().mockResolvedValue({ results: [], count: 0, next_cursor: undefined });
+      mockFirewallaClient.getNetworkRules = jest.fn().mockResolvedValue({ results: [], count: 0, next_cursor: undefined });
+      mockFirewallaClient.getDeviceStatus = jest.fn().mockResolvedValue({ results: [], count: 0, next_cursor: undefined });
+      mockFirewallaClient.getTargetLists = jest.fn().mockResolvedValue({ results: [], count: 0, next_cursor: undefined });
 
       const correlationParams: EnhancedCorrelationParams = {
         correlationFields: ['gid'],  // gid is supported by flows, alarms, rules, devices
@@ -482,6 +482,7 @@ describe('Enhanced Search Tools', () => {
       expect(result.correlations).toHaveLength(3);
       // Check that the actual methods called by search strategies are invoked
       expect(mockFirewallaClient.getFlowData).toHaveBeenCalled();
+      expect(mockFirewallaClient.getFlowData).toHaveBeenCalled();
       expect(mockFirewallaClient.getActiveAlarms).toHaveBeenCalled();
       expect(mockFirewallaClient.getNetworkRules).toHaveBeenCalled();
       expect(mockFirewallaClient.getDeviceStatus).toHaveBeenCalled();
@@ -500,7 +501,7 @@ describe('Enhanced Search Tools', () => {
         count: 1000
       };
 
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(largeResults);
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(largeResults);
       mockFirewallaClient.getActiveAlarms = jest.fn().mockResolvedValue(largeResults);
 
       const correlationParams: EnhancedCorrelationParams = {
@@ -534,7 +535,7 @@ describe('Enhanced Search Tools', () => {
         count: 4
       };
 
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(incompleteResults);
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(incompleteResults);
       mockFirewallaClient.getActiveAlarms = jest.fn().mockResolvedValue(incompleteResults);
 
       const correlationParams: EnhancedCorrelationParams = {

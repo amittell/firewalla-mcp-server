@@ -269,9 +269,9 @@ describe('Geographic Search Tools', () => {
 
       expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
         expect.stringContaining('NOT is_cloud_provider:true'),
-        undefined,           // groupBy
-        'ts:desc',          // sortBy  
-        100                 // limit
+        undefined,
+        'ts:desc',
+        100
       );
     });
 
@@ -287,9 +287,9 @@ describe('Geographic Search Tools', () => {
 
       expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
         expect.stringContaining('geographic_risk_score:>=7'),
-        undefined,           // groupBy
-        'ts:desc',          // sortBy  
-        100                 // limit
+        undefined,
+        'ts:desc',
+        100
       );
     });
 
@@ -308,9 +308,9 @@ describe('Geographic Search Tools', () => {
 
       expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
         expect.stringContaining('bytes:>1000'),
-        undefined,           // groupBy
-        'ts:desc',          // sortBy  
-        100                 // limit
+        undefined,
+        'ts:desc',
+        100
       );
     });
 

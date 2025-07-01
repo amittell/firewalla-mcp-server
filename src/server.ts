@@ -150,7 +150,8 @@ export class FirewallaMCPServer {
                 },
                 include_total_count: {
                   type: 'boolean',
-                  description: 'Calculate true total count by traversing all pages (slower)',
+                  description:
+                    'Calculate true total count by traversing all pages (slower)',
                 },
               },
               required: ['limit'],

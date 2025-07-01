@@ -415,7 +415,7 @@ describe('Enhanced Cross-Reference Search Tools', () => {
         count: 1000
       };
 
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(largeFlowData);
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(largeFlowData);
 
       const params = {
         primary_query: 'protocol:tcp',
@@ -437,7 +437,7 @@ describe('Enhanced Cross-Reference Search Tools', () => {
     });
 
     test('should handle API errors gracefully', async () => {
-      mockFirewallaClient.searchFlows = jest.fn().mockRejectedValue(new Error('API Error'));
+      mockFirewallaClient.getFlowData = jest.fn().mockRejectedValue(new Error('API Error'));
 
       const params = {
         primary_query: 'protocol:tcp',
@@ -486,7 +486,7 @@ describe('Enhanced Cross-Reference Search Tools', () => {
         count: 1
       };
       
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(mockData);
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(mockData);
       mockFirewallaClient.getActiveAlarms = jest.fn().mockResolvedValue(mockData);
       
       const params = {

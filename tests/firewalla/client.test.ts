@@ -492,7 +492,7 @@ describe('FirewallaClient', () => {
       const result = await client.pauseRule('rule-123', 120);
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        `/rules/rule-123/pause`,
+        `/v2/rules/rule-123/pause`,
         { duration: 120 }
       );
       expect(result).toEqual({ success: true, message: 'Rule rule-123 paused for 120 minutes' });

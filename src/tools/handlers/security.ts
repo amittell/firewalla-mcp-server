@@ -103,15 +103,22 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
       );
 
       // Calculate total count if requested
-      let totalCount: number = SafeAccess.getNestedValue(response as any, 'count', 0) as number;
+      let totalCount: number = SafeAccess.getNestedValue(
+        response as any,
+        'count',
+        0
+      ) as number;
       let pagesTraversed = 1;
-      
-      if (includeTotalValidation.sanitizedValue === true && response.next_cursor) {
+
+      if (
+        includeTotalValidation.sanitizedValue === true &&
+        response.next_cursor
+      ) {
         // Traverse all pages to get true total count
         let cursor: string | undefined = response.next_cursor;
         const pageSize = 100; // Use smaller pages for counting
         const maxPages = 100; // Safety limit
-        
+
         while (cursor && pagesTraversed < maxPages) {
           const nextPage = await firewalla.getActiveAlarms(
             sanitizedQuery,
@@ -120,8 +127,12 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
             pageSize,
             cursor
           );
-          
-          const pageCount = SafeAccess.getNestedValue(nextPage as any, 'count', 0) as number;
+
+          const pageCount = SafeAccess.getNestedValue(
+            nextPage as any,
+            'count',
+            0
+          ) as number;
           totalCount += pageCount;
           cursor = nextPage.next_cursor;
           pagesTraversed++;
