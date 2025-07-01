@@ -492,43 +492,26 @@ describe('FirewallaClient', () => {
       const result = await client.pauseRule('rule-123', 120);
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        `/v2/boxes/test-box-id/rules/rule-123/pause`,
-        { duration: 120 }
+        `/v2/rules/rule-123/pause`,
+        { duration: 120, box: 'test-box-id' }
       );
       expect(result).toEqual({ success: true, message: 'Rule rule-123 paused for 120 minutes' });
     });
 
-    it('should handle 404 error and fallback to generic endpoint', async () => {
+    it('should handle API errors gracefully', async () => {
       const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       
-      // Mock the axios.isAxiosError function to return true for our test error
-      jest.spyOn(axios, 'isAxiosError').mockReturnValue(true);
-      
-      // First call (box-specific) fails with 404
-      const error404 = new Error('Request failed with status code 404');
-      (error404 as any).response = { status: 404 };
-      (error404 as any).config = { url: '/v2/boxes/test-box-id/rules/rule-123/pause' };
-      (error404 as any).isAxiosError = true;
-      
-      mockAxiosInstance.post = jest.fn()
-        .mockRejectedValueOnce(error404)
-        .mockResolvedValueOnce({
-          data: { success: true, message: 'Rule paused successfully' }
-        });
+      // Mock API error for pause endpoint
+      const apiError = new Error('Resource not found: /v2/rules/rule-123/pause does not exist');
+      mockAxiosInstance.post = jest.fn().mockRejectedValue(apiError);
 
-      const result = await client.pauseRule('rule-123', 60);
+      // Should throw error when API endpoint doesn't exist
+      await expect(client.pauseRule('rule-123', 60)).rejects.toThrow();
 
-      // Should try box-specific endpoint first, then fallback to generic
-      expect(mockAxiosInstance.post).toHaveBeenCalledTimes(2);
-      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(1,
-        `/v2/boxes/test-box-id/rules/rule-123/pause`,
-        { duration: 60 }
-      );
-      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(2,
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
         `/v2/rules/rule-123/pause`,
-        { duration: 60 }
+        { duration: 60, box: 'test-box-id' }
       );
-      expect(result).toEqual({ success: true, message: 'Rule rule-123 paused for 60 minutes' });
     });
   });
 
