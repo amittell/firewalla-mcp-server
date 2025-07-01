@@ -14,7 +14,10 @@ import {
   unixToISOStringOrNow,
   safeUnixToISOString,
 } from '../../utils/timestamp.js';
-import { ResponseStandardizer, BackwardCompatibilityLayer } from '../../utils/response-standardizer.js';
+import {
+  ResponseStandardizer,
+  BackwardCompatibilityLayer,
+} from '../../utils/response-standardizer.js';
 import { shouldUseLegacyFormat } from '../../config/response-config.js';
 import type { PaginationMetadata } from '../../types.js';
 
@@ -28,7 +31,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     const startTime = Date.now();
-    
+
     try {
       // Parameter validation
       const limitValidation = ParameterValidator.validateNumber(
@@ -80,35 +83,38 @@ export class GetFlowDataHandler extends BaseToolHandler {
       const executionTime = Date.now() - startTime;
 
       // Process flow data
-      const processedFlows = SafeAccess.safeArrayMap(response.results, (flow: any) => ({
-        timestamp: unixToISOStringOrNow(flow.ts),
-        source_ip: SafeAccess.getNestedValue(
-          flow,
-          'source.ip',
-          SafeAccess.getNestedValue(flow, 'device.ip', 'unknown')
-        ),
-        destination_ip: SafeAccess.getNestedValue(
-          flow,
-          'destination.ip',
-          'unknown'
-        ),
-        protocol: SafeAccess.getNestedValue(flow, 'protocol', 'unknown'),
-        bytes:
-          (SafeAccess.getNestedValue(flow, 'download', 0) as number) +
-          (SafeAccess.getNestedValue(flow, 'upload', 0) as number),
-        download: SafeAccess.getNestedValue(flow, 'download', 0),
-        upload: SafeAccess.getNestedValue(flow, 'upload', 0),
-        packets: SafeAccess.getNestedValue(flow, 'count', 0),
-        duration: SafeAccess.getNestedValue(flow, 'duration', 0),
-        direction: SafeAccess.getNestedValue(flow, 'direction', 'unknown'),
-        blocked: SafeAccess.getNestedValue(flow, 'block', false),
-        block_type: SafeAccess.getNestedValue(flow, 'blockType', null),
-        device: SafeAccess.getNestedValue(flow, 'device', {}),
-        source: SafeAccess.getNestedValue(flow, 'source', {}),
-        destination: SafeAccess.getNestedValue(flow, 'destination', {}),
-        region: SafeAccess.getNestedValue(flow, 'region', null),
-        category: SafeAccess.getNestedValue(flow, 'category', null),
-      }));
+      const processedFlows = SafeAccess.safeArrayMap(
+        response.results,
+        (flow: any) => ({
+          timestamp: unixToISOStringOrNow(flow.ts),
+          source_ip: SafeAccess.getNestedValue(
+            flow,
+            'source.ip',
+            SafeAccess.getNestedValue(flow, 'device.ip', 'unknown')
+          ),
+          destination_ip: SafeAccess.getNestedValue(
+            flow,
+            'destination.ip',
+            'unknown'
+          ),
+          protocol: SafeAccess.getNestedValue(flow, 'protocol', 'unknown'),
+          bytes:
+            (SafeAccess.getNestedValue(flow, 'download', 0) as number) +
+            (SafeAccess.getNestedValue(flow, 'upload', 0) as number),
+          download: SafeAccess.getNestedValue(flow, 'download', 0),
+          upload: SafeAccess.getNestedValue(flow, 'upload', 0),
+          packets: SafeAccess.getNestedValue(flow, 'count', 0),
+          duration: SafeAccess.getNestedValue(flow, 'duration', 0),
+          direction: SafeAccess.getNestedValue(flow, 'direction', 'unknown'),
+          blocked: SafeAccess.getNestedValue(flow, 'block', false),
+          block_type: SafeAccess.getNestedValue(flow, 'blockType', null),
+          device: SafeAccess.getNestedValue(flow, 'device', {}),
+          source: SafeAccess.getNestedValue(flow, 'source', {}),
+          destination: SafeAccess.getNestedValue(flow, 'destination', {}),
+          region: SafeAccess.getNestedValue(flow, 'region', null),
+          category: SafeAccess.getNestedValue(flow, 'category', null),
+        })
+      );
 
       // Create metadata for standardized response
       const metadata: PaginationMetadata = {
@@ -118,24 +124,31 @@ export class GetFlowDataHandler extends BaseToolHandler {
         executionTime,
         cached: false,
         source: 'firewalla_api',
-        queryParams: { 
-          query: finalQuery, 
-          groupBy, 
-          sortBy, 
-          limit, 
+        queryParams: {
+          query: finalQuery,
+          groupBy,
+          sortBy,
+          limit,
           cursor,
           start_time: startTimeArg,
-          end_time: endTime 
+          end_time: endTime,
         },
-        totalCount: (response as any).total_count
+        totalCount: (response as any).total_count,
       };
 
       // Create standardized response
-      const standardResponse = ResponseStandardizer.toPaginatedResponse(processedFlows, metadata);
+      const standardResponse = ResponseStandardizer.toPaginatedResponse(
+        processedFlows,
+        metadata
+      );
 
       // Apply backward compatibility if needed
       if (shouldUseLegacyFormat(this.name)) {
-        const legacyResponse = BackwardCompatibilityLayer.toLegacyPaginatedFormat(standardResponse, this.name);
+        const legacyResponse =
+          BackwardCompatibilityLayer.toLegacyPaginatedFormat(
+            standardResponse,
+            this.name
+          );
         return this.createSuccessResponse(legacyResponse);
       }
 

@@ -17,9 +17,11 @@ import { createSearchTools } from '../search.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
 import type { SearchParams } from '../../search/types.js';
 import type { ScoringCorrelationParams } from '../../validation/field-mapper.js';
-import { ResponseStandardizer, BackwardCompatibilityLayer } from '../../utils/response-standardizer.js';
+import {
+  ResponseStandardizer,
+  BackwardCompatibilityLayer,
+} from '../../utils/response-standardizer.js';
 import { shouldUseLegacyFormat } from '../../config/response-config.js';
-
 
 // Base search interface to reduce duplication
 export interface BaseSearchArgs extends ToolArgs {
@@ -135,7 +137,7 @@ export class SearchFlowsHandler extends BaseToolHandler {
   ): Promise<ToolResponse> {
     const searchArgs = args as SearchFlowsArgs;
     const startTime = Date.now();
-    
+
     try {
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
@@ -174,11 +176,7 @@ export class SearchFlowsHandler extends BaseToolHandler {
           ),
           // bytes field is calculated as total traffic: download + upload
           bytes:
-            (SafeAccess.getNestedValue(
-              flow as any,
-              'download',
-              0
-            ) as number) +
+            (SafeAccess.getNestedValue(flow as any, 'download', 0) as number) +
             (SafeAccess.getNestedValue(flow as any, 'upload', 0) as number),
           blocked: SafeAccess.getNestedValue(flow as any, 'block', false),
           direction: SafeAccess.getNestedValue(
@@ -192,22 +190,40 @@ export class SearchFlowsHandler extends BaseToolHandler {
 
       // Create metadata for standardized response
       const metadata: SearchMetadata = {
-        query: SafeAccess.getNestedValue(result as any, 'query', searchArgs.query || '') as string,
+        query: SafeAccess.getNestedValue(
+          result as any,
+          'query',
+          searchArgs.query || ''
+        ) as string,
         entityType: 'flows',
-        executionTime: SafeAccess.getNestedValue(result as any, 'execution_time_ms', executionTime) as number,
+        executionTime: SafeAccess.getNestedValue(
+          result as any,
+          'execution_time_ms',
+          executionTime
+        ) as number,
         cached: false, // TODO: Detect from result if available
         cursor: (result as any).next_cursor,
         hasMore: !!(result as any).next_cursor,
         limit: searchArgs.limit,
-        aggregations: SafeAccess.getNestedValue(result as any, 'aggregations', null) as Record<string, any> | undefined
+        aggregations: SafeAccess.getNestedValue(
+          result as any,
+          'aggregations',
+          null
+        ) as Record<string, any> | undefined,
       };
 
       // Create standardized response
-      const standardResponse = ResponseStandardizer.toSearchResponse(processedFlows, metadata);
+      const standardResponse = ResponseStandardizer.toSearchResponse(
+        processedFlows,
+        metadata
+      );
 
       // Apply backward compatibility if needed
       if (shouldUseLegacyFormat(this.name)) {
-        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(standardResponse, this.name);
+        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
+          standardResponse,
+          this.name
+        );
         return this.createSuccessResponse(legacyResponse);
       }
 
@@ -233,7 +249,7 @@ export class SearchAlarmsHandler extends BaseToolHandler {
   ): Promise<ToolResponse> {
     const searchArgs = args as SearchAlarmsArgs;
     const startTime = Date.now();
-    
+
     try {
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
@@ -271,11 +287,7 @@ export class SearchAlarmsHandler extends BaseToolHandler {
             'protocol',
             'unknown'
           ),
-          status: SafeAccess.getNestedValue(
-            alarm as any,
-            'status',
-            'unknown'
-          ),
+          status: SafeAccess.getNestedValue(alarm as any, 'status', 'unknown'),
           severity: SafeAccess.getNestedValue(
             alarm as any,
             'severity',
@@ -286,22 +298,40 @@ export class SearchAlarmsHandler extends BaseToolHandler {
 
       // Create metadata for standardized response
       const metadata: SearchMetadata = {
-        query: SafeAccess.getNestedValue(result as any, 'query', searchArgs.query || '') as string,
+        query: SafeAccess.getNestedValue(
+          result as any,
+          'query',
+          searchArgs.query || ''
+        ) as string,
         entityType: 'alarms',
-        executionTime: SafeAccess.getNestedValue(result as any, 'execution_time_ms', executionTime) as number,
+        executionTime: SafeAccess.getNestedValue(
+          result as any,
+          'execution_time_ms',
+          executionTime
+        ) as number,
         cached: false,
         cursor: (result as any).next_cursor,
         hasMore: !!(result as any).next_cursor,
         limit: searchArgs.limit,
-        aggregations: SafeAccess.getNestedValue(result as any, 'aggregations', null) as Record<string, any> | undefined
+        aggregations: SafeAccess.getNestedValue(
+          result as any,
+          'aggregations',
+          null
+        ) as Record<string, any> | undefined,
       };
 
       // Create standardized response
-      const standardResponse = ResponseStandardizer.toSearchResponse(processedAlarms, metadata);
+      const standardResponse = ResponseStandardizer.toSearchResponse(
+        processedAlarms,
+        metadata
+      );
 
       // Apply backward compatibility if needed
       if (shouldUseLegacyFormat(this.name)) {
-        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(standardResponse, this.name);
+        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
+          standardResponse,
+          this.name
+        );
         return this.createSuccessResponse(legacyResponse);
       }
 
@@ -328,7 +358,7 @@ export class SearchRulesHandler extends BaseToolHandler {
   ): Promise<ToolResponse> {
     const searchArgs = args as SearchRulesArgs;
     const startTime = Date.now();
-    
+
     try {
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
@@ -372,22 +402,40 @@ export class SearchRulesHandler extends BaseToolHandler {
 
       // Create metadata for standardized response
       const metadata: SearchMetadata = {
-        query: SafeAccess.getNestedValue(result as any, 'query', searchArgs.query || '') as string,
+        query: SafeAccess.getNestedValue(
+          result as any,
+          'query',
+          searchArgs.query || ''
+        ) as string,
         entityType: 'rules',
-        executionTime: SafeAccess.getNestedValue(result as any, 'execution_time_ms', executionTime) as number,
+        executionTime: SafeAccess.getNestedValue(
+          result as any,
+          'execution_time_ms',
+          executionTime
+        ) as number,
         cached: false,
         cursor: (result as any).next_cursor,
         hasMore: !!(result as any).next_cursor,
         limit: searchArgs.limit,
-        aggregations: SafeAccess.getNestedValue(result as any, 'aggregations', null) as Record<string, any> | undefined
+        aggregations: SafeAccess.getNestedValue(
+          result as any,
+          'aggregations',
+          null
+        ) as Record<string, any> | undefined,
       };
 
       // Create standardized response
-      const standardResponse = ResponseStandardizer.toSearchResponse(processedRules, metadata);
+      const standardResponse = ResponseStandardizer.toSearchResponse(
+        processedRules,
+        metadata
+      );
 
       // Apply backward compatibility if needed
       if (shouldUseLegacyFormat(this.name)) {
-        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(standardResponse, this.name);
+        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
+          standardResponse,
+          this.name
+        );
         return this.createSuccessResponse(legacyResponse);
       }
 
