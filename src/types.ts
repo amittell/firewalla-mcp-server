@@ -650,3 +650,363 @@ export interface CrossReferenceResult {
     correlation_strength?: number;
   };
 }
+
+/**
+ * Standard response type definitions for response format standardization
+ *
+ * Defines consistent response structures across all MCP tools with enhanced
+ * metadata and backward compatibility support.
+ */
+
+/**
+ * Category of response indicating the type of operation
+ */
+export type ResponseCategory =
+  | 'search'
+  | 'paginated'
+  | 'statistical'
+  | 'correlation'
+  | 'status';
+
+/**
+ * Base metadata included in all standardized responses
+ */
+export interface BaseResponseMetadata {
+  /** Query execution time in milliseconds */
+  execution_time_ms: number;
+
+  /** Whether the response was served from cache */
+  cached: boolean;
+
+  /** Entity type being returned (flows, alarms, devices, etc.) */
+  entity_type: string;
+
+  /** Response category */
+  category: ResponseCategory;
+
+  /** Timestamp when response was generated */
+  generated_at: string;
+}
+
+/**
+ * Search-specific metadata for search operations
+ */
+export interface SearchMetadata {
+  /** Original query that was executed */
+  query: string;
+
+  /** Entity type being searched */
+  entityType: string;
+
+  /** Query execution time in milliseconds */
+  executionTime: number;
+
+  /** Whether the response was served from cache */
+  cached: boolean;
+
+  /** Pagination cursor for next page */
+  cursor?: string;
+
+  /** Whether there are more results available */
+  hasMore?: boolean;
+
+  /** Limit applied to the search */
+  limit?: number;
+
+  /** Aggregation results */
+  aggregations?: Record<string, any>;
+
+  /** Total number of possible results (before limit applied) */
+  totalPossible?: number;
+
+  /** Search strategy used (optimized, full_scan, cached) */
+  strategy?: 'optimized' | 'full_scan' | 'cached';
+
+  /** Applied optimizations */
+  optimizations?: string[];
+}
+
+/**
+ * Pagination metadata for paginated responses
+ */
+export interface PaginationMetadata {
+  /** Cursor for next page of results */
+  cursor?: string;
+
+  /** Whether there are more results available */
+  hasMore?: boolean;
+
+  /** Number of results requested (limit parameter) */
+  limit?: number;
+
+  /** Query execution time in milliseconds */
+  executionTime?: number;
+
+  /** Whether the response was served from cache */
+  cached?: boolean;
+
+  /** Source of the data */
+  source?: string;
+
+  /** Query parameters used */
+  queryParams?: Record<string, any>;
+
+  /** Offset for pagination */
+  offset?: number;
+
+  /** Total count of items available */
+  totalCount?: number;
+
+  /** Actual number of results returned */
+  results_returned?: number;
+
+  /** Total number of pages (if calculable) */
+  total_pages?: number;
+
+  /** Current page number (if applicable) */
+  current_page?: number;
+}
+
+/**
+ * Statistical metadata for analytics responses
+ */
+export interface StatisticalMetadata {
+  /** Analysis period */
+  period?: string;
+
+  /** Start time for analysis */
+  startTime?: string;
+
+  /** End time for analysis */
+  endTime?: string;
+
+  /** Total items analyzed */
+  totalAnalyzed?: number;
+
+  /** Analysis criteria */
+  criteria?: Record<string, any>;
+
+  /** Query execution time in milliseconds */
+  executionTime?: number;
+
+  /** Whether the response was served from cache */
+  cached?: boolean;
+
+  /** Statistical results */
+  statistics?: Record<string, any>;
+}
+
+/**
+ * Standard response format for search operations
+ */
+export interface StandardSearchResponse<T> {
+  /** Array of search results */
+  results: T[];
+
+  /** Total count of results returned */
+  count: number;
+
+  /** Query that was executed */
+  query_executed?: string;
+
+  /** Entity type being returned */
+  entity_type?: string;
+
+  /** Execution time in milliseconds */
+  execution_time_ms?: number;
+
+  /** Whether response was cached */
+  cached?: boolean;
+
+  /** Pagination information (if applicable) */
+  pagination?: {
+    cursor?: string;
+    has_more?: boolean;
+    limit_applied?: number;
+    offset?: number;
+  };
+
+  /** Search metadata with enhanced information */
+  search_metadata?: {
+    total_possible_results?: number;
+    search_strategy?: 'optimized' | 'full_scan' | 'cached';
+    optimizations_applied?: string[];
+    query_complexity?: 'simple' | 'medium' | 'complex';
+  };
+
+  /** Aggregation results */
+  aggregations?: Record<string, any>;
+}
+
+/**
+ * Standard response format for paginated data retrieval
+ */
+export interface StandardPaginatedResponse<T> {
+  /** Array of paginated results */
+  results: T[];
+
+  /** Total count of results returned */
+  count: number;
+
+  /** Pagination information */
+  pagination?: {
+    cursor?: string;
+    has_more?: boolean;
+    limit_applied?: number;
+    offset?: number;
+  };
+
+  /** Optional query parameters that were used */
+  query_parameters?: Record<string, any>;
+
+  /** Execution time in milliseconds */
+  execution_time_ms?: number;
+
+  /** Whether response was cached */
+  cached?: boolean;
+
+  /** Data source identifier */
+  data_source?: string;
+
+  /** Total count of items available */
+  total_count?: number;
+}
+
+/**
+ * Standard response format for statistical/analytics operations
+ */
+export interface StandardStatisticalResponse<T> {
+  /** Statistical results or aggregated data */
+  results: T[];
+
+  /** Total count of results */
+  count: number;
+
+  /** Analysis configuration */
+  analysis?: {
+    period?: string;
+    start_time?: string;
+    end_time?: string;
+    total_analyzed?: number;
+    criteria?: Record<string, any>;
+  };
+
+  /** Execution time in milliseconds */
+  execution_time_ms?: number;
+
+  /** Whether response was cached */
+  cached?: boolean;
+
+  /** Statistical results */
+  statistics?: Record<string, any>;
+
+  /** Summary statistics */
+  summary?: {
+    /** Total value across all results */
+    total?: number;
+
+    /** Average value */
+    average?: number;
+
+    /** Minimum value */
+    min?: number;
+
+    /** Maximum value */
+    max?: number;
+
+    /** Standard deviation */
+    std_dev?: number;
+  };
+}
+
+/**
+ * Correlation-specific metadata for cross-reference operations
+ */
+export interface CorrelationMetadata extends BaseResponseMetadata {
+  /** Fields used for correlation */
+  correlation_fields: string[];
+
+  /** Type of correlation performed */
+  correlation_type: 'AND' | 'OR';
+
+  /** Number of entities correlated */
+  correlated_entities: number;
+
+  /** Correlation strength (0.0 - 1.0) */
+  correlation_strength?: number;
+
+  /** Minimum confidence score applied */
+  minimum_confidence?: number;
+
+  /** Whether fuzzy matching was enabled */
+  fuzzy_matching_enabled?: boolean;
+}
+
+/**
+ * Standard response format for correlation operations
+ */
+export interface StandardCorrelationResponse {
+  /** Primary search results */
+  primary_results: any[];
+
+  /** Secondary correlated results */
+  secondary_results: Record<string, any[]>;
+
+  /** Correlation metadata */
+  correlation_metadata: CorrelationMetadata;
+
+  /** Correlation statistics */
+  correlation_stats: {
+    /** Total correlations found */
+    total_correlations: number;
+
+    /** High confidence correlations (≥0.8) */
+    high_confidence_correlations: number;
+
+    /** Medium confidence correlations (≥0.5) */
+    medium_confidence_correlations: number;
+
+    /** Low confidence correlations (<0.5) */
+    low_confidence_correlations: number;
+  };
+}
+
+/**
+ * Union type for all standard response formats
+ */
+export type StandardResponse<T> =
+  | StandardSearchResponse<T>
+  | StandardPaginatedResponse<T>
+  | StandardStatisticalResponse<T>
+  | StandardCorrelationResponse;
+
+/**
+ * Legacy response format mapping for backward compatibility
+ */
+export interface LegacyResponseMapping {
+  /** Map standard field names to legacy field names */
+  fieldMapping: Record<string, string>;
+
+  /** Fields to exclude from legacy response */
+  excludeFields: string[];
+
+  /** Additional legacy fields to include */
+  additionalFields: Record<string, any>;
+}
+
+/**
+ * Configuration for response format transformation
+ */
+export interface ResponseTransformConfig {
+  /** Whether to use standard format */
+  useStandardFormat: boolean;
+
+  /** Legacy mapping configuration */
+  legacyMapping?: LegacyResponseMapping;
+
+  /** Whether to include metadata in legacy format */
+  includeMetadataInLegacy: boolean;
+
+  /** Metadata fields to include in legacy format */
+  legacyMetadataFields?: string[];
+}
