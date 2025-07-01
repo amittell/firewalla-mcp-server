@@ -43,7 +43,10 @@ import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
 import { optimizeResponse } from '../optimization/index.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
 import { logger } from '../monitoring/logger.js';
-import { GeographicCache, type GeographicCacheStats } from '../utils/geographic-cache.js';
+import {
+  GeographicCache,
+  type GeographicCacheStats,
+} from '../utils/geographic-cache.js';
 
 /**
  * Standard API response wrapper for Firewalla MSP endpoints
@@ -115,7 +118,9 @@ export class FirewallaClient {
     this.geoCache = new GeographicCache({
       maxSize: 10000,
       ttlMs: 3600000, // 1 hour cache for geographic data
-      enableStats: process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test',
+      enableStats:
+        process.env.NODE_ENV === 'development' ||
+        process.env.NODE_ENV === 'test',
     });
 
     // Use mspBaseUrl if provided, otherwise construct from mspId
@@ -2235,15 +2240,15 @@ export class FirewallaClient {
    */
   private isPrivateIP(ip: string): boolean {
     const privateRanges = [
-      /^10\./,                          // 10.0.0.0/8
-      /^192\.168\./,                    // 192.168.0.0/16
-      /^172\.(1[6-9]|2\d|3[01])\./,    // 172.16.0.0/12
-      /^127\./,                         // 127.0.0.0/8 (localhost)
-      /^169\.254\./,                    // 169.254.0.0/16 (link-local)
-      /^::1$/,                          // IPv6 localhost
-      /^fe80:/,                         // IPv6 link-local
-      /^fc00:/,                         // IPv6 unique local
-      /^fd00:/,                         // IPv6 unique local
+      /^10\./, // 10.0.0.0/8
+      /^192\.168\./, // 192.168.0.0/16
+      /^172\.(1[6-9]|2\d|3[01])\./, // 172.16.0.0/12
+      /^127\./, // 127.0.0.0/8 (localhost)
+      /^169\.254\./, // 169.254.0.0/16 (link-local)
+      /^::1$/, // IPv6 localhost
+      /^fe80:/, // IPv6 link-local
+      /^fc00:/, // IPv6 unique local
+      /^fd00:/, // IPv6 unique local
     ];
 
     return privateRanges.some(range => range.test(ip));
@@ -2255,59 +2260,166 @@ export class FirewallaClient {
   private mapContinent(countryCode: string): string {
     const continentMap: Record<string, string> = {
       // North America
-      'US': 'North America', 'CA': 'North America', 'MX': 'North America',
-      'GT': 'North America', 'BZ': 'North America', 'SV': 'North America',
-      'HN': 'North America', 'NI': 'North America', 'CR': 'North America',
-      'PA': 'North America', 'CU': 'North America', 'JM': 'North America',
-      'HT': 'North America', 'DO': 'North America', 'PR': 'North America',
-      
+      US: 'North America',
+      CA: 'North America',
+      MX: 'North America',
+      GT: 'North America',
+      BZ: 'North America',
+      SV: 'North America',
+      HN: 'North America',
+      NI: 'North America',
+      CR: 'North America',
+      PA: 'North America',
+      CU: 'North America',
+      JM: 'North America',
+      HT: 'North America',
+      DO: 'North America',
+      PR: 'North America',
+
       // South America
-      'BR': 'South America', 'AR': 'South America', 'CL': 'South America',
-      'PE': 'South America', 'CO': 'South America', 'VE': 'South America',
-      'EC': 'South America', 'BO': 'South America', 'UY': 'South America',
-      'PY': 'South America', 'GY': 'South America', 'SR': 'South America',
-      'GF': 'South America',
-      
+      BR: 'South America',
+      AR: 'South America',
+      CL: 'South America',
+      PE: 'South America',
+      CO: 'South America',
+      VE: 'South America',
+      EC: 'South America',
+      BO: 'South America',
+      UY: 'South America',
+      PY: 'South America',
+      GY: 'South America',
+      SR: 'South America',
+      GF: 'South America',
+
       // Europe
-      'GB': 'Europe', 'DE': 'Europe', 'FR': 'Europe', 'IT': 'Europe',
-      'ES': 'Europe', 'PT': 'Europe', 'NL': 'Europe', 'BE': 'Europe',
-      'CH': 'Europe', 'AT': 'Europe', 'SE': 'Europe', 'NO': 'Europe',
-      'DK': 'Europe', 'FI': 'Europe', 'IS': 'Europe', 'IE': 'Europe',
-      'PL': 'Europe', 'CZ': 'Europe', 'SK': 'Europe', 'HU': 'Europe',
-      'RO': 'Europe', 'BG': 'Europe', 'GR': 'Europe', 'HR': 'Europe',
-      'SI': 'Europe', 'EE': 'Europe', 'LV': 'Europe', 'LT': 'Europe',
-      'RU': 'Europe', 'UA': 'Europe', 'BY': 'Europe', 'MD': 'Europe',
-      
+      GB: 'Europe',
+      DE: 'Europe',
+      FR: 'Europe',
+      IT: 'Europe',
+      ES: 'Europe',
+      PT: 'Europe',
+      NL: 'Europe',
+      BE: 'Europe',
+      CH: 'Europe',
+      AT: 'Europe',
+      SE: 'Europe',
+      NO: 'Europe',
+      DK: 'Europe',
+      FI: 'Europe',
+      IS: 'Europe',
+      IE: 'Europe',
+      PL: 'Europe',
+      CZ: 'Europe',
+      SK: 'Europe',
+      HU: 'Europe',
+      RO: 'Europe',
+      BG: 'Europe',
+      GR: 'Europe',
+      HR: 'Europe',
+      SI: 'Europe',
+      EE: 'Europe',
+      LV: 'Europe',
+      LT: 'Europe',
+      RU: 'Europe',
+      UA: 'Europe',
+      BY: 'Europe',
+      MD: 'Europe',
+
       // Asia
-      'CN': 'Asia', 'JP': 'Asia', 'IN': 'Asia', 'KR': 'Asia',
-      'TH': 'Asia', 'VN': 'Asia', 'MY': 'Asia', 'SG': 'Asia',
-      'ID': 'Asia', 'PH': 'Asia', 'TW': 'Asia', 'HK': 'Asia',
-      'MO': 'Asia', 'KH': 'Asia', 'LA': 'Asia', 'MM': 'Asia',
-      'BD': 'Asia', 'LK': 'Asia', 'NP': 'Asia', 'BT': 'Asia',
-      'PK': 'Asia', 'AF': 'Asia', 'IR': 'Asia', 'IQ': 'Asia',
-      'TR': 'Asia', 'SY': 'Asia', 'LB': 'Asia', 'JO': 'Asia',
-      'IL': 'Asia', 'SA': 'Asia', 'AE': 'Asia', 'KW': 'Asia',
-      'QA': 'Asia', 'BH': 'Asia', 'OM': 'Asia', 'YE': 'Asia',
-      
+      CN: 'Asia',
+      JP: 'Asia',
+      IN: 'Asia',
+      KR: 'Asia',
+      TH: 'Asia',
+      VN: 'Asia',
+      MY: 'Asia',
+      SG: 'Asia',
+      ID: 'Asia',
+      PH: 'Asia',
+      TW: 'Asia',
+      HK: 'Asia',
+      MO: 'Asia',
+      KH: 'Asia',
+      LA: 'Asia',
+      MM: 'Asia',
+      BD: 'Asia',
+      LK: 'Asia',
+      NP: 'Asia',
+      BT: 'Asia',
+      PK: 'Asia',
+      AF: 'Asia',
+      IR: 'Asia',
+      IQ: 'Asia',
+      TR: 'Asia',
+      SY: 'Asia',
+      LB: 'Asia',
+      JO: 'Asia',
+      IL: 'Asia',
+      SA: 'Asia',
+      AE: 'Asia',
+      KW: 'Asia',
+      QA: 'Asia',
+      BH: 'Asia',
+      OM: 'Asia',
+      YE: 'Asia',
+
       // Africa
-      'EG': 'Africa', 'LY': 'Africa', 'SD': 'Africa', 'MA': 'Africa',
-      'DZ': 'Africa', 'TN': 'Africa', 'ET': 'Africa', 'KE': 'Africa',
-      'UG': 'Africa', 'TZ': 'Africa', 'ZA': 'Africa', 'ZW': 'Africa',
-      'BW': 'Africa', 'ZM': 'Africa', 'MW': 'Africa', 'MZ': 'Africa',
-      'MG': 'Africa', 'AO': 'Africa', 'NA': 'Africa', 'SZ': 'Africa',
-      'LS': 'Africa', 'CI': 'Africa', 'GH': 'Africa', 'NG': 'Africa',
-      'CM': 'Africa', 'CF': 'Africa', 'TD': 'Africa', 'NE': 'Africa',
-      'BF': 'Africa', 'ML': 'Africa', 'SN': 'Africa', 'GM': 'Africa',
-      'GW': 'Africa', 'GN': 'Africa', 'SL': 'Africa', 'LR': 'Africa',
-      
+      EG: 'Africa',
+      LY: 'Africa',
+      SD: 'Africa',
+      MA: 'Africa',
+      DZ: 'Africa',
+      TN: 'Africa',
+      ET: 'Africa',
+      KE: 'Africa',
+      UG: 'Africa',
+      TZ: 'Africa',
+      ZA: 'Africa',
+      ZW: 'Africa',
+      BW: 'Africa',
+      ZM: 'Africa',
+      MW: 'Africa',
+      MZ: 'Africa',
+      MG: 'Africa',
+      AO: 'Africa',
+      NA: 'Africa',
+      SZ: 'Africa',
+      LS: 'Africa',
+      CI: 'Africa',
+      GH: 'Africa',
+      NG: 'Africa',
+      CM: 'Africa',
+      CF: 'Africa',
+      TD: 'Africa',
+      NE: 'Africa',
+      BF: 'Africa',
+      ML: 'Africa',
+      SN: 'Africa',
+      GM: 'Africa',
+      GW: 'Africa',
+      GN: 'Africa',
+      SL: 'Africa',
+      LR: 'Africa',
+
       // Oceania
-      'AU': 'Oceania', 'NZ': 'Oceania', 'FJ': 'Oceania', 'PG': 'Oceania',
-      'NC': 'Oceania', 'SB': 'Oceania', 'VU': 'Oceania', 'WS': 'Oceania',
-      'TO': 'Oceania', 'TV': 'Oceania', 'NR': 'Oceania', 'KI': 'Oceania',
-      'MH': 'Oceania', 'FM': 'Oceania', 'PW': 'Oceania',
-      
+      AU: 'Oceania',
+      NZ: 'Oceania',
+      FJ: 'Oceania',
+      PG: 'Oceania',
+      NC: 'Oceania',
+      SB: 'Oceania',
+      VU: 'Oceania',
+      WS: 'Oceania',
+      TO: 'Oceania',
+      TV: 'Oceania',
+      NR: 'Oceania',
+      KI: 'Oceania',
+      MH: 'Oceania',
+      FM: 'Oceania',
+      PW: 'Oceania',
+
       // Antarctica
-      'AQ': 'Antarctica',
+      AQ: 'Antarctica',
     };
 
     return continentMap[countryCode] || 'Unknown';
@@ -2316,24 +2428,30 @@ export class FirewallaClient {
   /**
    * Calculate basic geographic risk score based on country and other factors
    */
-  private calculateRiskScore(countryCode: string, organization?: string): number {
+  private calculateRiskScore(
+    countryCode: string,
+    organization?: string
+  ): number {
     // Basic risk scoring - can be enhanced with threat intelligence
     const highRiskCountries = ['CN', 'RU', 'KP', 'IR'];
     const mediumRiskCountries = ['PK', 'BD', 'IN', 'VN', 'TH'];
-    
+
     let riskScore = 2; // Base score
-    
+
     if (highRiskCountries.includes(countryCode)) {
       riskScore += 6; // High risk
     } else if (mediumRiskCountries.includes(countryCode)) {
       riskScore += 3; // Medium risk
     }
-    
+
     // Cloud providers generally lower risk
-    if (organization && /aws|amazon|google|microsoft|azure|cloudflare/i.test(organization)) {
+    if (
+      organization &&
+      /aws|amazon|google|microsoft|azure|cloudflare/i.test(organization)
+    ) {
       riskScore = Math.max(1, riskScore - 2);
     }
-    
+
     return Math.min(10, riskScore);
   }
 
@@ -2382,7 +2500,7 @@ export class FirewallaClient {
     } catch (error) {
       // Log error but don't throw - geographic enrichment is optional
       logger.debugNamespace('geographic', `Error enriching IP ${ip}:`, {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
       this.geoCache.set(ip, null);
       return null;
@@ -2407,9 +2525,11 @@ export class FirewallaClient {
     }
 
     // Enrich source IP if present, public, and different from destination
-    if (flow.source?.ip && 
-        !this.isPrivateIP(flow.source.ip) && 
-        flow.source.ip !== flow.destination?.ip) {
+    if (
+      flow.source?.ip &&
+      !this.isPrivateIP(flow.source.ip) &&
+      flow.source.ip !== flow.destination?.ip
+    ) {
       const geo = this.getGeographicData(flow.source.ip);
       if (geo) {
         enrichedFlow.source = {

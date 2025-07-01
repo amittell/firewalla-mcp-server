@@ -74,45 +74,73 @@ describe('Geographic Field Mapping', () => {
       test('should map country fields correctly', () => {
         const countryMappings = FIELD_MAPPINGS.flows.country;
         expect(countryMappings).toEqual([
-          'geo.country', 'location.country', 'country', 'region'
+          'destination.geo.country', 
+          'source.geo.country',
+          'geo.country', 
+          'location.country', 
+          'country', 
+          'region'
         ]);
       });
 
       test('should map continent fields correctly', () => {
         const continentMappings = FIELD_MAPPINGS.flows.continent;
         expect(continentMappings).toEqual([
-          'geo.continent', 'location.continent'
+          'destination.geo.continent',
+          'source.geo.continent',
+          'geo.continent', 
+          'location.continent'
         ]);
       });
 
       test('should map ISP and organization fields correctly', () => {
         const ispMappings = FIELD_MAPPINGS.flows.isp;
         expect(ispMappings).toEqual([
-          'geo.isp', 'location.isp', 'isp'
+          'destination.geo.isp',
+          'source.geo.isp',
+          'geo.isp', 
+          'location.isp', 
+          'isp'
         ]);
 
         const orgMappings = FIELD_MAPPINGS.flows.organization;
         expect(orgMappings).toEqual([
-          'geo.organization', 'location.organization', 'org'
+          'destination.geo.organization',
+          'source.geo.organization',
+          'geo.organization', 
+          'location.organization', 
+          'org'
         ]);
       });
 
       test('should map cloud provider and VPN fields correctly', () => {
         const cloudMappings = FIELD_MAPPINGS.flows.is_cloud_provider;
         expect(cloudMappings).toEqual([
-          'geo.isCloud', 'location.isCloud', 'cloud'
+          'destination.geo.is_cloud_provider',
+          'source.geo.is_cloud_provider',
+          'geo.isCloud', 
+          'location.isCloud', 
+          'cloud'
         ]);
 
         const vpnMappings = FIELD_MAPPINGS.flows.is_vpn;
         expect(vpnMappings).toEqual([
-          'geo.isVPN', 'location.isVPN', 'vpn'
+          'destination.geo.is_vpn',
+          'source.geo.is_vpn',
+          'geo.isVPN', 
+          'location.isVPN', 
+          'vpn'
         ]);
       });
 
       test('should map geographic risk score correctly', () => {
         const riskMappings = FIELD_MAPPINGS.flows.geographic_risk_score;
         expect(riskMappings).toEqual([
-          'geo.riskScore', 'location.riskScore', 'geoRisk'
+          'destination.geo.geographic_risk_score',
+          'source.geo.geographic_risk_score',
+          'geo.riskScore', 
+          'location.riskScore', 
+          'geoRisk'
         ]);
       });
     });
@@ -121,18 +149,25 @@ describe('Geographic Field Mapping', () => {
       test('should map country fields for alarms', () => {
         const countryMappings = FIELD_MAPPINGS.alarms.country;
         expect(countryMappings).toEqual([
-          'geo.country', 'location.country', 'country', 'remote.country'
+          'remote.geo.country',
+          'geo.country', 
+          'location.country', 
+          'country', 
+          'remote.country'
         ]);
       });
 
       test('should include remote geographic data paths', () => {
         const cityMappings = FIELD_MAPPINGS.alarms.city;
+        expect(cityMappings).toContain('remote.geo.city');
         expect(cityMappings).toContain('remote.city');
 
         const ispMappings = FIELD_MAPPINGS.alarms.isp;
+        expect(ispMappings).toContain('remote.geo.isp');
         expect(ispMappings).toContain('remote.isp');
 
         const riskMappings = FIELD_MAPPINGS.alarms.geographic_risk_score;
+        expect(riskMappings).toContain('remote.geo.geographic_risk_score');
         expect(riskMappings).toContain('remote.geoRisk');
       });
     });
