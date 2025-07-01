@@ -82,17 +82,25 @@ jobs:
     - name: Build project
       run: npm run build
 
-    # Full comprehensive test suite
+    # Full comprehensive test suite with real Firewalla credentials
     - name: Run all tests with coverage
+      env:
+        FIREWALLA_MSP_TOKEN: ${{ secrets.FIREWALLA_MSP_TOKEN }}
+        FIREWALLA_MSP_ID: ${{ secrets.FIREWALLA_MSP_ID }}
+        FIREWALLA_BOX_ID: ${{ secrets.FIREWALLA_BOX_ID }}
       run: npm run test:ci
 
-    # Integration tests (if they exist)
+    # Integration tests with real API credentials
     - name: Integration tests
+      env:
+        FIREWALLA_MSP_TOKEN: ${{ secrets.FIREWALLA_MSP_TOKEN }}
+        FIREWALLA_MSP_ID: ${{ secrets.FIREWALLA_MSP_ID }}
+        FIREWALLA_BOX_ID: ${{ secrets.FIREWALLA_BOX_ID }}
       run: |
         if npm run | grep -q "test:integration"; then
           npm run test:integration
         else
-          echo "No integration tests defined"
+          echo "Running full test suite includes integration tests"
         fi
 
   # Security scan: Only on main branch (monthly cost impact: ~$0.20)
