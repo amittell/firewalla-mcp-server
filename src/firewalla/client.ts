@@ -41,6 +41,8 @@ import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
 import { optimizeResponse } from '../optimization/index.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
 import { logger } from '../monitoring/logger.js';
+import { DataCacheStrategies, EntityType, CacheStrategy } from '../cache/cache-strategies.js';
+import { InvalidationManager, CacheManagerInterface } from '../cache/invalidation-manager.js';
 
 /**
  * Standard API response wrapper for Firewalla MSP endpoints
@@ -62,12 +64,14 @@ interface APIResponse<T> {
  * Firewalla API Client for MSP Integration
  *
  * Main client class providing authenticated access to Firewalla MSP APIs.
- * Handles authentication, caching, rate limiting, error handling, and response
- * optimization for efficient integration with Claude through the MCP protocol.
+ * Handles authentication, intelligent caching with data-specific strategies,
+ * cache invalidation, rate limiting, error handling, and response optimization 
+ * for efficient integration with Claude through the MCP protocol.
  *
  * Features:
  * - Automatic token-based authentication with the MSP API
- * - Intelligent caching with configurable TTL policies
+ * - Intelligent multi-strategy caching with configurable TTL policies
+ * - Smart cache invalidation based on data change events
  * - Built-in rate limiting and retry mechanisms
  * - Comprehensive error handling with meaningful error messages
  * - Response optimization for MCP protocol constraints
@@ -91,12 +95,15 @@ interface APIResponse<T> {
  * @class
  * @public
  */
-export class FirewallaClient {
+export class FirewallaClient implements CacheManagerInterface {
   /** @private Axios instance configured for Firewalla MSP API access */
   private api: AxiosInstance;
 
   /** @private In-memory cache for API responses with TTL management */
-  private cache: Map<string, { data: unknown; expires: number }>;
+  private cache: Map<string, { data: unknown; expires: number; strategy?: CacheStrategy }>;
+
+  /** @private Cache invalidation manager for smart cache lifecycle */
+  private invalidationManager: InvalidationManager;
 
   /**
    * Creates a new Firewalla API client instance
@@ -106,6 +113,7 @@ export class FirewallaClient {
    */
   constructor(private config: FirewallaConfig) {
     this.cache = new Map();
+    this.invalidationManager = new InvalidationManager();
 
     // Use mspBaseUrl if provided, otherwise construct from mspId
     const baseURL = config.mspBaseUrl || `https://${config.mspId}`;
@@ -248,12 +256,38 @@ export class FirewallaClient {
     return null;
   }
 
-  private setCache<T>(key: string, data: T, ttlSeconds?: number): void {
-    const ttl = ttlSeconds || this.config.cacheTtl;
+  /**
+   * Sets cache data with strategy-specific TTL and metadata
+   * 
+   * @param key - Cache key
+   * @param data - Data to cache
+   * @param strategy - Cache strategy to use (optional)
+   * @param ttlSeconds - Override TTL in seconds (optional)
+   */
+  private setCache<T>(key: string, data: T, strategy?: CacheStrategy, ttlSeconds?: number): void {
+    let ttlMs: number;
+    
+    if (ttlSeconds !== undefined) {
+      // Explicit TTL override in seconds - convert to milliseconds
+      ttlMs = ttlSeconds * 1000;
+    } else if (strategy?.ttl) {
+      // Use strategy TTL (already in milliseconds)
+      ttlMs = strategy.ttl;
+    } else {
+      // Fall back to config TTL (in seconds, convert to milliseconds)
+      ttlMs = this.config.cacheTtl * 1000;
+    }
+    
     this.cache.set(key, {
       data,
-      expires: Date.now() + ttl * 1000,
+      expires: Date.now() + ttlMs,
+      strategy
     });
+    
+    // Log cache set operation for monitoring
+    if (strategy) {
+      logger.debug(`Cache set: ${key} (TTL: ${ttlMs}ms, Strategy: ${strategy.keyPrefix})`);
+    }
   }
 
   private sanitizeInput(input: string | undefined): string {
@@ -4044,5 +4078,93 @@ export class FirewallaClient {
     }
 
     return trimmedValue;
+  }
+
+  // CacheManagerInterface implementation for invalidation manager
+  async delete(key: string): Promise<boolean> {
+    return this.cache.delete(key);
+  }
+
+  async getAllKeys(): Promise<string[]> {
+    return Array.from(this.cache.keys());
+  }
+
+  async clear(): Promise<void> {
+    this.cache.clear();
+  }
+
+  /**
+   * Enhanced cache statistics with strategy information
+   */
+  getDetailedCacheStats(): {
+    size: number;
+    keys: string[];
+    strategySummary: Record<string, number>;
+    hitRate?: number;
+    averageTTL: number;
+  } {
+    const keys = Array.from(this.cache.keys());
+    const strategySummary: Record<string, number> = {};
+    let totalTTL = 0;
+    let activeCacheCount = 0;
+
+    for (const [, entry] of this.cache.entries()) {
+      if (entry.expires > Date.now()) {
+        activeCacheCount++;
+        totalTTL += (entry.expires - Date.now());
+        
+        if (entry.strategy?.keyPrefix) {
+          strategySummary[entry.strategy.keyPrefix] = (strategySummary[entry.strategy.keyPrefix] || 0) + 1;
+        }
+      }
+    }
+
+    return {
+      size: this.cache.size,
+      keys,
+      strategySummary,
+      averageTTL: activeCacheCount > 0 ? totalTTL / activeCacheCount : 0
+    };
+  }
+
+  /**
+   * Trigger cache invalidation for specific events
+   */
+  async invalidateByEvent(event: string, metadata?: any): Promise<number> {
+    return await this.invalidationManager.invalidateByEvent(
+      event as any, // Type assertion for simplicity
+      this,
+      metadata
+    );
+  }
+
+  /**
+   * Trigger cache invalidation for data changes
+   */
+  async invalidateByDataChange(
+    entityType: EntityType,
+    operation: 'create' | 'update' | 'delete',
+    entityId?: string
+  ): Promise<number> {
+    return await this.invalidationManager.invalidateByDataChange(
+      entityType,
+      operation,
+      this,
+      entityId
+    );
+  }
+
+  /**
+   * Get cache invalidation statistics
+   */
+  getInvalidationStats() {
+    return this.invalidationManager.getInvalidationStats();
+  }
+
+  /**
+   * Get cache strategy summary for monitoring
+   */
+  getCacheStrategySummary() {
+    return DataCacheStrategies.getCacheConfigSummary();
   }
 }

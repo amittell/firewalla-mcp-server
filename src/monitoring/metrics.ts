@@ -234,6 +234,49 @@ export class FirewallaMetrics {
     this.collector.setGauge('firewalla_cache_size', size);
   }
 
+  /**
+   * Record advanced cache metrics with strategy information
+   */
+  recordCacheHit(entityType: string, strategyPrefix?: string): void {
+    this.collector.incrementCounter('firewalla_cache_hits_total', {
+      entity_type: entityType,
+      strategy: strategyPrefix || 'default'
+    });
+  }
+
+  recordCacheMiss(entityType: string, strategyPrefix?: string): void {
+    this.collector.incrementCounter('firewalla_cache_misses_total', {
+      entity_type: entityType,
+      strategy: strategyPrefix || 'default'
+    });
+  }
+
+  recordCacheInvalidation(eventType: string, keysInvalidated: number): void {
+    this.collector.incrementCounter('firewalla_cache_invalidations_total', {
+      event_type: eventType
+    });
+    
+    this.collector.observeHistogram('firewalla_cache_invalidation_keys', keysInvalidated, {
+      event_type: eventType
+    });
+  }
+
+  recordCacheStrategyTTL(entityType: string, ttlMs: number): void {
+    this.collector.observeHistogram('firewalla_cache_ttl_ms', ttlMs, {
+      entity_type: entityType
+    });
+  }
+
+  setCacheStrategyStats(entityType: string, activeEntries: number, avgTTL: number): void {
+    this.collector.setGauge('firewalla_cache_strategy_entries', activeEntries, {
+      entity_type: entityType
+    });
+    
+    this.collector.setGauge('firewalla_cache_strategy_avg_ttl_ms', avgTTL, {
+      entity_type: entityType
+    });
+  }
+
   // MCP metrics
   recordMcpRequest(
     type: string,
