@@ -24,6 +24,41 @@ export interface FirewallaConfig {
 }
 
 /**
+ * Geographic data enrichment for IP addresses
+ * @interface GeographicData
+ */
+export interface GeographicData {
+  /** Country name (e.g., "United States") */
+  country: string;
+  /** Two-letter country code (e.g., "US") */
+  country_code: string;
+  /** Continent name (e.g., "North America") */
+  continent: string;
+  /** Region/state name (e.g., "California") */
+  region: string;
+  /** City name (e.g., "Mountain View") */
+  city: string;
+  /** Timezone (e.g., "America/New_York") */
+  timezone: string;
+  /** Autonomous System Number */
+  asn?: number;
+  /** Internet Service Provider name */
+  isp?: string;
+  /** Organization name */
+  organization?: string;
+  /** Hosting provider name */
+  hosting_provider?: string;
+  /** Whether this is a cloud provider IP */
+  is_cloud_provider?: boolean;
+  /** Whether this is a proxy IP */
+  is_proxy?: boolean;
+  /** Whether this is a VPN IP */
+  is_vpn?: boolean;
+  /** Geographic risk score (0-10, higher = more risk) */
+  geographic_risk_score?: number;
+}
+
+/**
  * Alarm types supported by Firewalla API
  * 1: Intrusion Detection - Network intrusion attempts
  * 2: Malware Detection - Malicious software identified
@@ -136,6 +171,8 @@ export interface Alarm {
     id: string;
     name: string;
     ip: string;
+    /** Geographic data for remote IP (enriched) */
+    geo?: GeographicData;
   };
   /** Data transfer details (when type in [2,3,4,16]) */
   transfer?: {
@@ -216,6 +253,8 @@ export interface Flow {
     name: string;
     /** Host IP */
     ip: string;
+    /** Geographic data for source IP (enriched) */
+    geo?: GeographicData;
   };
   /** Destination host information */
   destination?: {
@@ -225,6 +264,8 @@ export interface Flow {
     name: string;
     /** Host IP */
     ip: string;
+    /** Geographic data for destination IP (enriched) */
+    geo?: GeographicData;
   };
   /** Remote IP region (ISO 3166 code) */
   region?: string;
