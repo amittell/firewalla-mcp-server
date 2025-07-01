@@ -38,6 +38,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,json,md}\"",
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist coverage .nyc_output",
+    "cache:demo": "npm run build && node dist/scripts/cache-demo.js",
     "prebuild": "npm run clean",
     "prepublishOnly": "npm run build && npm run test:ci && npm run lint:check",
     "publish:npm": "npm publish",
