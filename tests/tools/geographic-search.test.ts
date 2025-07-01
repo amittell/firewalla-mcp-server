@@ -553,6 +553,7 @@ describe('Geographic Search Tools', () => {
 
     test('should generate flow statistics by country', async () => {
       // Ensure proper mock setup for this test
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(mockStatisticsResult);
       
       const params = {
         entity_type: 'flows' as const,
@@ -602,6 +603,8 @@ describe('Geographic Search Tools', () => {
     });
 
     test('should handle time range filtering', async () => {
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(mockStatisticsResult);
+      
       const params = {
         entity_type: 'flows' as const,
         time_range: {
@@ -626,6 +629,7 @@ describe('Geographic Search Tools', () => {
 
     test('should generate insights from aggregated data', async () => {
       // Ensure proper mock setup for this test
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(mockStatisticsResult);
       
       const params = {
         entity_type: 'flows' as const,
@@ -666,6 +670,7 @@ describe('Geographic Search Tools', () => {
 
     test('should default to reasonable values', async () => {
       // Ensure proper mock setup for this test
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(mockStatisticsResult);
       
       const minimalParams = {
         entity_type: 'flows' as const
@@ -698,6 +703,7 @@ describe('Geographic Search Tools', () => {
         count: 1
       };
 
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(flowData);
 
       const params = {
         query: 'protocol:tcp',
@@ -752,6 +758,7 @@ describe('Geographic Search Tools', () => {
         }
       };
 
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(diverseGeoData);
 
       const result = await searchTools.get_geographic_statistics({
         entity_type: 'flows',
@@ -829,6 +836,7 @@ describe('Geographic Search Tools', () => {
         count: 3
       };
 
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(incompleteGeoData);
 
       const params = {
         limit: 100
@@ -871,6 +879,7 @@ describe('Geographic Search Tools', () => {
         count: 1000
       };
 
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(largeGeoData);
 
       const startTime = Date.now();
       const result = await searchTools.search_flows_by_geography({
@@ -883,6 +892,13 @@ describe('Geographic Search Tools', () => {
     });
 
     test('should validate geographic filter formats', async () => {
+      // Add mock setup for this test
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue({
+        results: [],
+        count: 0,
+        next_cursor: undefined
+      });
+      
       const invalidFilters = {
         geographic_filters: {
           countries: 'not-an-array' as any,
@@ -897,6 +913,36 @@ describe('Geographic Search Tools', () => {
     });
 
     test('should handle concurrent geographic searches', async () => {
+      // Add mock setup for this test
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue({
+        results: [
+          {
+            ts: 1672531200,
+            gid: 'test-box-1',
+            protocol: 'tcp',
+            direction: 'outbound',
+            block: false,
+            download: 512,
+            upload: 512,
+            bytes: 1024,
+            duration: 30,
+            count: 1,
+            device: {
+              id: 'device-1',
+              ip: '192.168.1.1',
+              name: 'Test Device 1'
+            },
+            geo: { 
+              country: 'United States', 
+              countryCode: 'US', 
+              continent: 'North America'
+            }
+          }
+        ],
+        count: 1,
+        next_cursor: undefined
+      });
+      
       const promises = Array.from({ length: 5 }, () =>
         searchTools.search_flows_by_geography({
           geographic_filters: { countries: ['US'] },

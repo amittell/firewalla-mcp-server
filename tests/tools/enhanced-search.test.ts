@@ -150,6 +150,22 @@ describe('Enhanced Search Tools', () => {
       ],
       count: 2
     });
+    
+    // Ensure getDeviceStatus is properly mocked for device queries
+    mockFirewallaClient.getDeviceStatus = jest.fn().mockResolvedValue({
+      results: [
+        {
+          gid: 'device-1',
+          ip: '192.168.1.1',
+          name: 'Test Device',
+          online: false,
+          mac: '00:11:22:33:44:55',
+          mac_vendor: 'Apple',
+          last_seen: 1640995200
+        }
+      ],
+      count: 1
+    });
   });
 
   describe('search_enhanced_cross_reference', () => {
@@ -458,7 +474,7 @@ describe('Enhanced Search Tools', () => {
       mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue({ results: [], count: 0, next_cursor: undefined });
       mockFirewallaClient.getActiveAlarms = jest.fn().mockResolvedValue({ results: [], count: 0, next_cursor: undefined });
       mockFirewallaClient.getNetworkRules = jest.fn().mockResolvedValue({ results: [], count: 0, next_cursor: undefined });
-      mockFirewallaClient.getDeviceStatus = jest.fn().mockResolvedValue({ results: [], count: 0, next_cursor: undefined });
+      mockFirewallaClient.searchDevices = jest.fn().mockResolvedValue({ results: [], count: 0, next_cursor: undefined });
       mockFirewallaClient.getTargetLists = jest.fn().mockResolvedValue({ results: [], count: 0, next_cursor: undefined });
 
       const correlationParams: EnhancedCorrelationParams = {
@@ -481,11 +497,11 @@ describe('Enhanced Search Tools', () => {
 
       expect(result.correlations).toHaveLength(3);
       // Check that the actual methods called by search strategies are invoked
-      expect(mockFirewallaClient.getFlowData).toHaveBeenCalled();
+      // Search strategies use search-specific methods, not basic status methods
       expect(mockFirewallaClient.getFlowData).toHaveBeenCalled();
       expect(mockFirewallaClient.getActiveAlarms).toHaveBeenCalled();
       expect(mockFirewallaClient.getNetworkRules).toHaveBeenCalled();
-      expect(mockFirewallaClient.getDeviceStatus).toHaveBeenCalled();
+      expect(mockFirewallaClient.searchDevices).toHaveBeenCalled(); // devices strategy calls searchDevices, not getDeviceStatus
       // expect(mockFirewallaClient.getTargetLists).toHaveBeenCalled(); // removed target_lists
     });
   });
