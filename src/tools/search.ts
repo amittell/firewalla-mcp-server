@@ -27,6 +27,9 @@ import {
   type EnhancedCorrelationParams,
   type ScoringCorrelationParams,
 } from '../validation/field-mapper.js';
+import { EnhancedQueryValidator } from '../validation/enhanced-query-validator.js';
+import { FieldValidator } from '../validation/field-validator.js';
+import { ErrorFormatter } from '../validation/error-formatter.js';
 
 /**
  * Configuration interface for risk thresholds and performance settings
@@ -443,11 +446,27 @@ export class SearchEngine {
       // Use standardized parameter validation
       this.validateSearchParams(params, entityType, validationConfig);
 
-      // Parse and validate query
+      // Enhanced query validation with detailed error messages
+      const enhancedValidator = new EnhancedQueryValidator();
+      const enhancedValidation = enhancedValidator.validateQuery(
+        params.query,
+        entityType as keyof typeof import('../search/types.js').SEARCH_FIELDS
+      );
+
+      if (!enhancedValidation.isValid) {
+        const errorReport = ErrorFormatter.formatMultipleErrors(enhancedValidation.detailedErrors);
+        const formattedText = ErrorFormatter.formatReportAsText(errorReport);
+        
+        throw new Error(
+          `Enhanced query validation failed:\n${formattedText}`
+        );
+      }
+
+      // Basic sanitization still needed for security
       const queryCheck = QuerySanitizer.sanitizeSearchQuery(params.query);
       if (!queryCheck.isValid) {
         throw new Error(
-          `Query validation failed: ${queryCheck.errors.join(', ')}`
+          `Query security validation failed: ${queryCheck.errors.join(', ')}`
         );
       }
 
@@ -468,9 +487,14 @@ export class SearchEngine {
         entityType as (typeof validEntityTypes)[number]
       );
       if (!validation.isValid || !validation.ast) {
-        throw new Error(
-          `Invalid query syntax: ${validation.errors.join(', ')}`
-        );
+        // Provide enhanced error messages for syntax issues not caught by enhanced validator
+        let enhancedError = `Invalid query syntax: ${validation.errors.join(', ')}`;
+        
+        if (validation.suggestions && validation.suggestions.length > 0) {
+          enhancedError += `\n\nSuggestions:\n${validation.suggestions.map(s => `• ${s}`).join('\n')}`;
+        }
+        
+        throw new Error(enhancedError);
       }
 
       // Set up filter context (entityType already validated above)
@@ -681,7 +705,7 @@ export class SearchEngine {
         );
       }
 
-      // Validate enhanced cross-reference parameters
+      // Validate enhanced cross-reference parameters with detailed error messages
       const validation = validateEnhancedCrossReference(
         params.primary_query,
         params.secondary_queries,
@@ -689,8 +713,30 @@ export class SearchEngine {
       );
 
       if (!validation.isValid) {
+        // Create enhanced correlation error messages
+        const enhancedErrors = validation.errors.map(error => {
+          if (error.includes('correlation field')) {
+            const fieldMatch = error.match(/field '([^']+)'/);
+            if (fieldMatch) {
+              const field = fieldMatch[1];
+              const entityTypes = ['flows', 'alarms', 'rules', 'devices'] as ('flows' | 'alarms' | 'rules' | 'devices')[];
+              const fieldValidation = FieldValidator.validateFieldAcrossTypes(field, entityTypes);
+              
+              if (!fieldValidation.isValid && fieldValidation.suggestions.length > 0) {
+                return `${error}. ${fieldValidation.suggestions[0]}`;
+              }
+            }
+          }
+          
+          if (error.includes('correlation type')) {
+            return `${error}. Valid correlation types are: "AND" (all fields must match), "OR" (any field can match)`;
+          }
+          
+          return error;
+        });
+        
         throw new Error(
-          `Enhanced cross-reference validation failed: ${validation.errors.join(', ')}`
+          `Enhanced cross-reference validation failed:\n${enhancedErrors.map(e => `• ${e}`).join('\n')}`
         );
       }
 

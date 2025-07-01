@@ -248,12 +248,21 @@ export class EnhancedQueryValidator {
     const quickFixes: QuickFix[] = [];
     
     // Match potential field patterns that might be malformed
+    // Updated regex to better handle logical operators
     const fieldPattern = /(\w+)\s*([=:]?)\s*([^)\s]*)/g;
     let match;
+    
+    // Skip validation for logical operators
+    const logicalOperators = ['AND', 'OR', 'NOT'];
     
     while ((match = fieldPattern.exec(query)) !== null) {
       const [, field, operator, value] = match;
       const position = match.index;
+      
+      // Skip logical operators - they have different syntax rules
+      if (logicalOperators.includes(field.toUpperCase())) {
+        continue;
+      }
       
       // Check for missing colon
       if (operator === '' && value !== '') {
@@ -306,7 +315,7 @@ export class EnhancedQueryValidator {
     const errors: DetailedError[] = [];
     const quickFixes: QuickFix[] = [];
     
-    // Check for malformed logical operators
+    // Check for malformed logical operators, but be more lenient about placement
     const logicalPattern = /\b(AND|OR|NOT)\b/gi;
     let match;
     
@@ -314,8 +323,8 @@ export class EnhancedQueryValidator {
       const operator = match[0];
       const position = match.index;
       
-      // Check if operator is at the beginning or end
-      if (position === 0) {
+      // Only flag NOT at the beginning as problematic, AND/OR are often valid at the start
+      if (operator.toUpperCase() === 'NOT' && position === 0) {
         errors.push({
           message: `Logical operator '${operator}' cannot appear at the beginning of the query`,
           position: position,
@@ -324,7 +333,9 @@ export class EnhancedQueryValidator {
         });
       }
       
-      if (position + operator.length === query.length) {
+      // Check if operator is at the very end (after trimming)
+      const trimmedQuery = query.trim();
+      if (position + operator.length === trimmedQuery.length) {
         errors.push({
           message: `Logical operator '${operator}' cannot appear at the end of the query`,
           position: position,
