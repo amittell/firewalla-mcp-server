@@ -117,7 +117,9 @@ export class ResponseStandardizer {
    * @private
    */
   private static determineQueryComplexity(query: string): 'simple' | 'medium' | 'complex' {
-    if (!query) return 'simple';
+    if (!query) {
+      return 'simple';
+    }
     
     const operatorCount = (query.match(/\s+(AND|OR|NOT)\s+/gi) || []).length;
     const wildcardCount = (query.match(/\*/g) || []).length;
