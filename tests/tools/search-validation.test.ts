@@ -151,11 +151,11 @@ describe('Search Tools Parameter Validation', () => {
     test('should validate query injection attempts', async () => {
       const sqlInjection = { query: "'; DROP TABLE flows; --", limit: 10 };
       await expect(searchTools.search_flows(sqlInjection as any))
-        .rejects.toThrow(/Query validation failed|Invalid query/);
+        .rejects.toThrow(/Enhanced query validation failed|Query validation failed|Invalid query/);
 
       const scriptInjection = { query: '<script>alert("xss")</script>', limit: 10 };
       await expect(searchTools.search_flows(scriptInjection as any))
-        .rejects.toThrow(/Query validation failed|Invalid query/);
+        .rejects.toThrow(/Enhanced query validation failed|Query validation failed|Invalid query/);
     });
 
     test('should validate sort_by parameter values', async () => {
@@ -298,7 +298,7 @@ describe('Search Tools Parameter Validation', () => {
     test('should validate device query syntax', async () => {
       const invalidQuery = { query: 'invalid:syntax:here', limit: 10 };
       await expect(searchTools.search_devices(invalidQuery as any))
-        .rejects.toThrow(/query.*syntax|Invalid query/);
+        .rejects.toThrow(/Enhanced query validation failed|query.*syntax|Invalid query/);
     });
 
     test('should accept valid parameters', async () => {
@@ -460,7 +460,7 @@ describe('Search Tools Parameter Validation', () => {
       try {
         await searchTools.search_flows(params as any);
       } catch (error) {
-        expect((error as Error).message).toMatch(/(Query validation failed|too long|Invalid query)/);
+        expect((error as Error).message).toMatch(/(Enhanced query validation failed|Query validation failed|too long|Invalid query)/);
       }
     });
 
@@ -478,7 +478,7 @@ describe('Search Tools Parameter Validation', () => {
         await searchTools.search_flows(params as any);
         expect(mockFirewallaClient.searchFlows).toHaveBeenCalled();
       } catch (error) {
-        expect((error as Error).message).toMatch(/(Query validation failed|Invalid query)/);
+        expect((error as Error).message).toMatch(/(Enhanced query validation failed|Query validation failed|Invalid query)/);
       }
     });
 

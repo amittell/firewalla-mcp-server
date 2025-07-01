@@ -19,10 +19,10 @@ describe('Search Tools Enhanced Error Messages Integration', () => {
     mockClient = new MockedFirewallaClient({} as any) as jest.Mocked<FirewallaClient>;
     
     // Mock the required methods
-    mockClient.getFlows = jest.fn();
-    mockClient.getAlarms = jest.fn();
-    mockClient.getDevices = jest.fn();
-    mockClient.getRules = jest.fn();
+    mockClient.getFlowData = jest.fn();
+    mockClient.getActiveAlarms = jest.fn();
+    mockClient.getDeviceData = jest.fn();
+    mockClient.getNetworkRules = jest.fn();
     mockClient.getTargetLists = jest.fn();
     
     searchTools = createSearchTools(mockClient);
@@ -165,10 +165,9 @@ describe('Search Tools Enhanced Error Messages Integration', () => {
 
   describe('Backward Compatibility', () => {
     test('should still work with valid simple queries', async () => {
-      mockClient.getFlows.mockResolvedValue({
-        data: {
-          flows: [{ protocol: 'tcp', bytes: 1000 }]
-        }
+      mockClient.getFlowData.mockResolvedValue({
+        results: [{ protocol: 'tcp', bytes: 1000 }],
+        count: 1
       });
 
       const result = await searchTools.search_flows({
@@ -181,10 +180,9 @@ describe('Search Tools Enhanced Error Messages Integration', () => {
     });
 
     test('should still work with valid complex queries', async () => {
-      mockClient.getFlows.mockResolvedValue({
-        data: {
-          flows: [{ protocol: 'tcp', bytes: 1000, blocked: false }]
-        }
+      mockClient.getFlowData.mockResolvedValue({
+        results: [{ protocol: 'tcp', bytes: 1000, blocked: false }],
+        count: 1
       });
 
       const result = await searchTools.search_flows({
@@ -233,10 +231,9 @@ describe('Search Tools Enhanced Error Messages Integration', () => {
 
   describe('Performance Impact', () => {
     test('should not significantly impact performance for valid queries', async () => {
-      mockClient.getFlows.mockResolvedValue({
-        data: {
-          flows: [{ protocol: 'tcp' }]
-        }
+      mockClient.getFlowData.mockResolvedValue({
+        results: [{ protocol: 'tcp' }],
+        count: 1
       });
 
       const startTime = Date.now();

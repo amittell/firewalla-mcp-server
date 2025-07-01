@@ -80,7 +80,7 @@ export class ProgressiveValidator {
       title: 'Semantic Analysis',
       description: 'Checks for logical consistency and conflicts',
       weight: 0.15,
-      critical: false
+      critical: true
     },
     performanceOptimization: {
       title: 'Performance Check',
@@ -321,11 +321,18 @@ export class ProgressiveValidator {
   private static findFirstCriticalFailure(
     results: Record<ValidationStep, StepValidationResult>
   ): StepValidationResult | null {
-    const criticalSteps: ValidationStep[] = ['basicSyntax', 'fieldExistence', 'operatorCompatibility'];
+    // Check all steps in order, but only fail on critical ones
+    const orderedSteps: ValidationStep[] = [
+      'basicSyntax', 
+      'fieldExistence', 
+      'operatorCompatibility', 
+      'semanticCorrectness', 
+      'performanceOptimization'
+    ];
     
-    for (const step of criticalSteps) {
+    for (const step of orderedSteps) {
       const result = results[step];
-      if (!result.isValid) {
+      if (!result.isValid && this.STEP_CONFIGS[step].critical) {
         return result;
       }
     }
@@ -480,6 +487,21 @@ export class ProgressiveValidator {
         contradictions.push(`Contradictory condition: ${field} cannot be both true and false`);
       }
     });
+    
+    // Check for mutually exclusive protocol values
+    const protocolPattern = /protocol:(\w+)/g;
+    const protocols: string[] = [];
+    let match;
+    while ((match = protocolPattern.exec(query)) !== null) {
+      protocols.push(match[1].toLowerCase());
+    }
+    
+    if (protocols.length > 1) {
+      const uniqueProtocols = [...new Set(protocols)];
+      if (uniqueProtocols.length > 1) {
+        contradictions.push(`Contradictory condition: protocol cannot be multiple values simultaneously (${uniqueProtocols.join(', ')})`);
+      }
+    }
     
     return contradictions;
   }

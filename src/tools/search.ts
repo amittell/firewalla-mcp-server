@@ -1392,7 +1392,7 @@ export class SearchEngine {
         // Handle continents - take first one
         if (params.geographic_filters.continents?.length) {
           const firstContinent = params.geographic_filters.continents[0];
-          geoConditions.push(`continent:${firstContinent}`);
+          geoConditions.push(`continent:${firstContinent.includes(" ") ? `"${firstContinent}"` : firstContinent}`);
         }
 
         // Handle regions - take first one
@@ -1522,7 +1522,7 @@ export class SearchEngine {
         // Handle continents - take first one
         if (params.geographic_filters.continents?.length) {
           const firstContinent = params.geographic_filters.continents[0];
-          geoConditions.push(`continent:${firstContinent}`);
+          geoConditions.push(`continent:${firstContinent.includes(" ") ? `"${firstContinent}"` : firstContinent}`);
         }
 
         // Handle regions - take first one

@@ -248,19 +248,30 @@ export class EnhancedQueryValidator {
     const quickFixes: QuickFix[] = [];
     
     // Match potential field patterns that might be malformed
-    // Updated regex to better handle logical operators
+    // Updated regex to better handle logical operators and range syntax
     const fieldPattern = /(\w+)\s*([=:]?)\s*([^)\s]*)/g;
     let match;
     
-    // Skip validation for logical operators
+    // Skip validation for logical operators and range keywords
     const logicalOperators = ['AND', 'OR', 'NOT'];
+    const rangeKeywords = ['TO'];
     
     while ((match = fieldPattern.exec(query)) !== null) {
       const [, field, operator, value] = match;
       const position = match.index;
       
-      // Skip logical operators - they have different syntax rules
-      if (logicalOperators.includes(field.toUpperCase())) {
+      // Skip logical operators and range keywords - they have different syntax rules
+      if (logicalOperators.includes(field.toUpperCase()) || rangeKeywords.includes(field.toUpperCase())) {
+        continue;
+      }
+      
+      // Skip if this appears to be part of a range syntax (field:[value TO value])
+      if (this.isPartOfRangeSyntax(query, position)) {
+        continue;
+      }
+      
+      // Skip if this appears to be part of a quoted geographic name
+      if (this.isPartOfQuotedValue(query, position)) {
         continue;
       }
       
@@ -309,6 +320,47 @@ export class EnhancedQueryValidator {
   }
 
   /**
+   * Check if the current position is part of range syntax like [value TO value]
+   */
+  private isPartOfRangeSyntax(query: string, position: number): boolean {
+    // Look for surrounding brackets and TO keyword
+    const rangePattern = /\[[^\]]*TO[^\]]*\]/g;
+    let match;
+    
+    while ((match = rangePattern.exec(query)) !== null) {
+      if (position >= match.index && position <= match.index + match[0].length) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Check if the current position is part of a quoted value
+   */
+  private isPartOfQuotedValue(query: string, position: number): boolean {
+    // Find if we're inside quotes
+    let inQuotes = false;
+    let quoteStart = -1;
+    
+    for (let i = 0; i < position; i++) {
+      const char = query[i];
+      if ((char === '"' || char === "'") && (i === 0 || query[i-1] !== '\\')) {
+        if (!inQuotes) {
+          inQuotes = true;
+          quoteStart = i;
+        } else {
+          inQuotes = false;
+          quoteStart = -1;
+        }
+      }
+    }
+    
+    return inQuotes && quoteStart >= 0;
+  }
+
+  /**
    * Validate operator placement
    */
   private validateOperatorPlacement(query: string): { isValid: boolean; errors: DetailedError[]; quickFixes: QuickFix[] } {
@@ -323,15 +375,8 @@ export class EnhancedQueryValidator {
       const operator = match[0];
       const position = match.index;
       
-      // Only flag NOT at the beginning as problematic, AND/OR are often valid at the start
-      if (operator.toUpperCase() === 'NOT' && position === 0) {
-        errors.push({
-          message: `Logical operator '${operator}' cannot appear at the beginning of the query`,
-          position: position,
-          errorType: 'syntax',
-          suggestion: `Remove '${operator}' from the beginning or add a condition before it`
-        });
-      }
+      // NOT at the beginning is actually valid syntax (e.g., "NOT blocked:true")
+      // Only flag if it's truly malformed (e.g., multiple consecutive operators)
       
       // Check if operator is at the very end (after trimming)
       const trimmedQuery = query.trim();
