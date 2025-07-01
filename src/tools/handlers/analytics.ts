@@ -227,10 +227,10 @@ export class GetStatisticsByRegionHandler extends BaseToolHandler {
       // Process regional statistics with defensive programming
       const regionalStatistics = SafeAccess.safeArrayFilter(
         stats.results,
-        (stat: any) =>
+        (stat: any): stat is any =>
           stat &&
           typeof SafeAccess.getNestedValue(stat, 'value') === 'number' &&
-          SafeAccess.getNestedValue(stat, 'meta')
+          !!SafeAccess.getNestedValue(stat, 'meta')
       )
         .map((stat: any) => ({
           country_code: SafeAccess.getNestedValue(stat, 'meta.code', 'unknown'),
@@ -249,7 +249,7 @@ export class GetStatisticsByRegionHandler extends BaseToolHandler {
       // Get top 5 regions with defensive programming
       const topRegions = SafeAccess.safeArrayFilter(
         stats.results,
-        (stat: any) =>
+        (stat: any): stat is any =>
           stat &&
           typeof SafeAccess.getNestedValue(stat, 'value') === 'number' &&
           SafeAccess.getNestedValue(stat, 'meta')

@@ -53,6 +53,11 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         args?.cursor,
         'cursor'
       );
+      const includeTotalValidation = ParameterValidator.validateBoolean(
+        args?.include_total_count,
+        'include_total_count',
+        false
+      );
 
       const validationResult = ParameterValidator.combineValidationResults([
         queryValidation,
@@ -60,6 +65,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         sortByValidation,
         limitValidation,
         cursorValidation,
+        includeTotalValidation,
       ]);
 
       if (!validationResult.isValid) {
@@ -96,6 +102,32 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         cursorValidation.sanitizedValue as string | undefined
       );
 
+      // Calculate total count if requested
+      let totalCount: number = SafeAccess.getNestedValue(response as any, 'count', 0) as number;
+      let pagesTraversed = 1;
+      
+      if (includeTotalValidation.sanitizedValue === true && response.next_cursor) {
+        // Traverse all pages to get true total count
+        let cursor: string | undefined = response.next_cursor;
+        const pageSize = 100; // Use smaller pages for counting
+        const maxPages = 100; // Safety limit
+        
+        while (cursor && pagesTraversed < maxPages) {
+          const nextPage = await firewalla.getActiveAlarms(
+            sanitizedQuery,
+            undefined,
+            'timestamp:desc',
+            pageSize,
+            cursor
+          );
+          
+          const pageCount = SafeAccess.getNestedValue(nextPage as any, 'count', 0) as number;
+          totalCount += pageCount;
+          cursor = nextPage.next_cursor;
+          pagesTraversed++;
+        }
+      }
+
       return this.createSuccessResponse({
         count: SafeAccess.getNestedValue(response as any, 'count', 0),
         alarms: SafeAccess.safeArrayMap(response.results, (alarm: any) => ({
@@ -117,12 +149,9 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
           ...(alarm.severity && { severity: alarm.severity }),
         })),
         next_cursor: response.next_cursor,
-        total_count: SafeAccess.getNestedValue(
-          response as any,
-          'total_count',
-          0
-        ),
-        has_more: SafeAccess.getNestedValue(response as any, 'has_more', false),
+        total_count: totalCount,
+        pages_traversed: pagesTraversed,
+        has_more: !!response.next_cursor,
       });
     } catch (error: unknown) {
       const errorMessage =

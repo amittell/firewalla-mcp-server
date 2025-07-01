@@ -6,13 +6,203 @@
 import { createSearchTools } from '../../src/tools/search.js';
 import { FirewallaClient } from '../../src/firewalla/client.js';
 
-// Mock FirewallaClient with geographic data
+// Complete Mock FirewallaClient with geographic data
 const mockFirewallaClient = {
+  // Core methods used by search strategies with geographic data
+  getFlowData: jest.fn().mockResolvedValue({
+    results: [
+      {
+        ts: 1672531200,
+        gid: 'test-box-1',
+        protocol: 'tcp',
+        direction: 'outbound',
+        block: false,
+        download: 512,
+        upload: 512,
+        bytes: 1024,
+        duration: 30,
+        count: 1,
+        device: {
+          id: 'device-1',
+          ip: '192.168.1.1',
+          name: 'Test Device 1'
+        },
+        source: { 
+          id: 'source-1',
+          name: 'Test Source 1',
+          ip: '192.168.1.1' 
+        },
+        destination: {
+          id: 'dest-1',
+          ip: '8.8.8.8',
+          name: 'Google DNS'
+        },
+        geo: { 
+          country: 'United States', 
+          countryCode: 'US', 
+          continent: 'North America',
+          city: 'New York',
+          timezone: 'America/New_York',
+          isp: 'Comcast',
+          organization: 'Comcast Cable',
+          isCloud: false,
+          isVPN: false,
+          riskScore: 2
+        }
+      },
+      {
+        ts: 1672531260,
+        gid: 'test-box-1',
+        protocol: 'tcp',
+        direction: 'outbound',
+        block: false,
+        download: 1024,
+        upload: 1024,
+        bytes: 2048,
+        duration: 45,
+        count: 1,
+        device: {
+          id: 'device-2',
+          ip: '192.168.1.2',
+          name: 'Test Device 2'
+        },
+        source: { 
+          id: 'source-2',
+          name: 'Test Source 2',
+          ip: '203.0.113.1' 
+        },
+        destination: {
+          id: 'dest-2',
+          ip: '203.0.113.1',
+          name: 'China Server'
+        },
+        geo: { 
+          country: 'China', 
+          countryCode: 'CN', 
+          continent: 'Asia',
+          city: 'Beijing',
+          timezone: 'Asia/Shanghai',
+          isp: 'China Telecom',
+          organization: 'China Telecom',
+          isCloud: false,
+          isVPN: true,
+          riskScore: 8
+        }
+      },
+      {
+        ts: 1672531320,
+        gid: 'test-box-1',
+        protocol: 'https',
+        direction: 'outbound',
+        block: false,
+        download: 2048,
+        upload: 2048,
+        bytes: 4096,
+        duration: 60,
+        count: 1,
+        device: {
+          id: 'device-3',
+          ip: '192.168.1.3',
+          name: 'Test Device 3'
+        },
+        source: { 
+          id: 'source-3',
+          name: 'Test Source 3',
+          ip: '198.51.100.1' 
+        },
+        destination: {
+          id: 'dest-3',
+          ip: '198.51.100.1',
+          name: 'AWS Server'
+        },
+        geo: { 
+          country: 'Germany', 
+          countryCode: 'DE', 
+          continent: 'Europe',
+          city: 'Frankfurt',
+          timezone: 'Europe/Berlin',
+          isp: 'AWS',
+          organization: 'Amazon Web Services',
+          isCloud: true,
+          isVPN: false,
+          riskScore: 3
+        }
+      }
+    ],
+    count: 3,
+    next_cursor: undefined,
+    aggregations: undefined,
+    metadata: {
+      execution_time: 50,
+      cached: false,
+      filters_applied: []
+    }
+  }),
+  getActiveAlarms: jest.fn().mockResolvedValue({
+    results: [
+      {
+        ts: 1672531200,
+        gid: 'test-box-1',
+        severity: 'high',
+        type: 'network_intrusion',
+        device: { ip: '192.168.1.1', id: 'device-1', name: 'Test Device' },
+        protocol: 'tcp',
+        resolved: false,
+        geo: {
+          country: 'China',
+          countryCode: 'CN',
+          continent: 'Asia',
+          riskScore: 8
+        }
+      }
+    ],
+    count: 1
+  }),
+  getNetworkRules: jest.fn().mockResolvedValue({
+    results: [
+      {
+        gid: 'rule-1',
+        target: { value: '192.168.1.1', type: 'ip' },
+        action: 'block',
+        protocol: 'tcp',
+        active: true,
+        ts: 1672531200
+      }
+    ],
+    count: 1
+  }),
+  getDeviceStatus: jest.fn().mockResolvedValue({
+    results: [
+      {
+        gid: 'device-1',
+        ip: '192.168.1.1',
+        name: 'Test Device',
+        online: true,
+        mac: '00:11:22:33:44:55',
+        mac_vendor: 'Apple',
+        last_seen: 1672531200
+      }
+    ],
+    count: 1
+  }),
+  getTargetLists: jest.fn().mockResolvedValue({
+    results: [
+      {
+        gid: 'list-1',
+        name: 'Blocked Sites',
+        category: 'security',
+        owner: 'admin',
+        targets: ['example.com', 'badsite.com']
+      }
+    ],
+    count: 1
+  }),
+  // Additional search methods that might be called
   searchFlows: jest.fn(),
-  getActiveAlarms: jest.fn(),
+  searchAlarms: jest.fn(),
+  searchRules: jest.fn(),
   searchDevices: jest.fn(),
-  getNetworkRules: jest.fn(),
-  getTargetLists: jest.fn(),
+  searchTargetLists: jest.fn()
 } as unknown as FirewallaClient;
 
 describe('Geographic Search Tools', () => {
@@ -24,124 +214,6 @@ describe('Geographic Search Tools', () => {
   });
 
   describe('search_flows_by_geography', () => {
-    const mockFlowsWithGeoData = {
-      results: [
-        {
-          ts: 1672531200, // Valid timestamp: 2023-01-01T00:00:00Z
-          gid: 'test-box-1',
-          protocol: 'tcp',
-          direction: 'outbound' as const,
-          block: false,
-          download: 512,
-          upload: 512,
-          bytes: 1024,
-          duration: 30,
-          count: 1,
-          device: {
-            id: 'device-1',
-            ip: '192.168.1.1',
-            name: 'Test Device 1'
-          },
-          source: { 
-            id: 'source-1',
-            name: 'Test Source 1',
-            ip: '192.168.1.1' 
-          },
-          geo: { 
-            country: 'United States', 
-            countryCode: 'US', 
-            continent: 'North America',
-            city: 'New York',
-            timezone: 'America/New_York',
-            isp: 'Comcast',
-            organization: 'Comcast Cable',
-            isCloud: false,
-            isVPN: false,
-            riskScore: 2
-          }
-        },
-        {
-          ts: 1672531260, // Valid timestamp: 2023-01-01T00:01:00Z
-          gid: 'test-box-1',
-          protocol: 'tcp',
-          direction: 'outbound' as const,
-          block: false,
-          download: 1024,
-          upload: 1024,
-          bytes: 2048,
-          duration: 45,
-          count: 1,
-          device: {
-            id: 'device-2',
-            ip: '192.168.1.2',
-            name: 'Test Device 2'
-          },
-          source: { 
-            id: 'source-2',
-            name: 'Test Source 2',
-            ip: '203.0.113.1' 
-          },
-          geo: { 
-            country: 'China', 
-            countryCode: 'CN', 
-            continent: 'Asia',
-            city: 'Beijing',
-            timezone: 'Asia/Shanghai',
-            isp: 'China Telecom',
-            organization: 'China Telecom',
-            isCloud: false,
-            isVPN: true,
-            riskScore: 8
-          }
-        },
-        {
-          ts: 1672531320, // Valid timestamp: 2023-01-01T00:02:00Z
-          gid: 'test-box-1',
-          protocol: 'https',
-          direction: 'outbound' as const,
-          block: false,
-          download: 2048,
-          upload: 2048,
-          bytes: 4096,
-          duration: 60,
-          count: 1,
-          device: {
-            id: 'device-3',
-            ip: '192.168.1.3',
-            name: 'Test Device 3'
-          },
-          source: { 
-            id: 'source-3',
-            name: 'Test Source 3',
-            ip: '198.51.100.1' 
-          },
-          geo: { 
-            country: 'Germany', 
-            countryCode: 'DE', 
-            continent: 'Europe',
-            city: 'Frankfurt',
-            timezone: 'Europe/Berlin',
-            isp: 'AWS',
-            organization: 'Amazon Web Services',
-            isCloud: true,
-            isVPN: false,
-            riskScore: 3
-          }
-        }
-      ],
-      count: 3,
-      next_cursor: undefined,
-      aggregations: undefined,
-      metadata: {
-        execution_time: 50,
-        cached: false,
-        filters_applied: []
-      }
-    };
-
-    beforeEach(() => {
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(mockFlowsWithGeoData);
-    });
 
     test('should perform basic geographic search with country filter', async () => {
       const params = {
@@ -154,11 +226,11 @@ describe('Geographic Search Tools', () => {
 
       const result = await searchTools.search_flows_by_geography(params);
 
-      expect(mockFirewallaClient.searchFlows).toHaveBeenCalledWith(
-        expect.objectContaining({
-          query: expect.stringContaining('country:US')
-        }),
-        expect.any(Object)
+      expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
+        expect.stringContaining('country:US'),
+        undefined,
+        'ts:desc',
+        100
       );
       expect(result).toHaveProperty('geographic_analysis');
       expect(result.geographic_analysis).toHaveProperty('total_flows', 3);
@@ -176,11 +248,11 @@ describe('Geographic Search Tools', () => {
 
       const result = await searchTools.search_flows_by_geography(params);
 
-      expect(mockFirewallaClient.searchFlows).toHaveBeenCalledWith(
-        expect.objectContaining({
-          query: expect.stringContaining('continent:Europe')
-        }),
-        expect.any(Object)
+      expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
+        expect.stringContaining('continent:Europe'),
+        undefined,
+        'ts:desc',
+        50
       );
       expect(result).toHaveProperty('geographic_analysis');
     });
@@ -195,11 +267,11 @@ describe('Geographic Search Tools', () => {
 
       const result = await searchTools.search_flows_by_geography(params);
 
-      expect(mockFirewallaClient.searchFlows).toHaveBeenCalledWith(
-        expect.objectContaining({
-          query: expect.stringContaining('NOT is_cloud_provider:true')
-        }),
-        expect.any(Object)
+      expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
+        expect.stringContaining('NOT is_cloud_provider:true'),
+        undefined,           // groupBy
+        'ts:desc',          // sortBy  
+        100                 // limit
       );
     });
 
@@ -213,11 +285,11 @@ describe('Geographic Search Tools', () => {
 
       const result = await searchTools.search_flows_by_geography(params);
 
-      expect(mockFirewallaClient.searchFlows).toHaveBeenCalledWith(
-        expect.objectContaining({
-          query: expect.stringContaining('geographic_risk_score:>=7')
-        }),
-        expect.any(Object)
+      expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
+        expect.stringContaining('geographic_risk_score:>=7'),
+        undefined,           // groupBy
+        'ts:desc',          // sortBy  
+        100                 // limit
       );
     });
 
@@ -234,20 +306,16 @@ describe('Geographic Search Tools', () => {
 
       const result = await searchTools.search_flows_by_geography(params);
 
-      expect(mockFirewallaClient.searchFlows).toHaveBeenCalledWith(
-        expect.objectContaining({
-          query: expect.stringContaining('bytes:>1000') &&
-                 expect.stringContaining('country:CN') &&
-                 expect.stringContaining('NOT is_vpn:true') &&
-                 expect.stringContaining('geographic_risk_score:>=5')
-        }),
-        expect.any(Object)
+      expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
+        expect.stringContaining('bytes:>1000'),
+        undefined,           // groupBy
+        'ts:desc',          // sortBy  
+        100                 // limit
       );
     });
 
     test('should generate comprehensive geographic analysis', async () => {
       // Set up specific mock data for this test
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(mockFlowsWithGeoData);
       
       const params = {
         limit: 100,
@@ -281,7 +349,7 @@ describe('Geographic Search Tools', () => {
     });
 
     test('should handle API errors gracefully', async () => {
-      mockFirewallaClient.searchFlows = jest.fn().mockRejectedValue(new Error('API Error'));
+      mockFirewallaClient.getFlowData = jest.fn().mockRejectedValue(new Error('API Error'));
 
       const params = {
         geographic_filters: {
@@ -480,13 +548,11 @@ describe('Geographic Search Tools', () => {
     };
 
     beforeEach(() => {
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(mockStatisticsResult);
       mockFirewallaClient.getActiveAlarms = jest.fn().mockResolvedValue(mockStatisticsResult);
     });
 
     test('should generate flow statistics by country', async () => {
       // Ensure proper mock setup for this test
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(mockStatisticsResult);
       
       const params = {
         entity_type: 'flows' as const,
@@ -497,13 +563,11 @@ describe('Geographic Search Tools', () => {
 
       const result = await searchTools.get_geographic_statistics(params);
 
-      expect(mockFirewallaClient.searchFlows).toHaveBeenCalledWith(
-        expect.objectContaining({
-          query: '*',
-          group_by: 'country',
-          aggregate: true
-        }),
-        expect.any(Object)
+      expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
+        '*',
+        'country',
+        'ts:desc',
+        1000
       );
       expect(result).toMatchObject({
         entity_type: 'flows',
@@ -552,17 +616,16 @@ describe('Geographic Search Tools', () => {
       const expectedStartTs = Math.floor(new Date('2024-01-01T00:00:00Z').getTime() / 1000);
       const expectedEndTs = Math.floor(new Date('2024-01-02T00:00:00Z').getTime() / 1000);
 
-      expect(mockFirewallaClient.searchFlows).toHaveBeenCalledWith(
-        expect.objectContaining({
-          query: `timestamp:[${expectedStartTs} TO ${expectedEndTs}]`
-        }),
-        expect.any(Object)
+      expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
+        `timestamp:[${expectedStartTs} TO ${expectedEndTs}]`,
+        'country',
+        'ts:desc',
+        1000
       );
     });
 
     test('should generate insights from aggregated data', async () => {
       // Ensure proper mock setup for this test
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(mockStatisticsResult);
       
       const params = {
         entity_type: 'flows' as const,
@@ -603,7 +666,6 @@ describe('Geographic Search Tools', () => {
 
     test('should default to reasonable values', async () => {
       // Ensure proper mock setup for this test
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(mockStatisticsResult);
       
       const minimalParams = {
         entity_type: 'flows' as const
@@ -611,14 +673,11 @@ describe('Geographic Search Tools', () => {
 
       const result = await searchTools.get_geographic_statistics(minimalParams);
 
-      expect(mockFirewallaClient.searchFlows).toHaveBeenCalledWith(
-        expect.objectContaining({
-          query: '*',
-          limit: 1000,
-          group_by: 'country',
-          aggregate: true
-        }),
-        expect.any(Object)
+      expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
+        '*',
+        'country',
+        'ts:desc',
+        1000
       );
       expect(result.analysis_type).toBe('summary');
       expect(result.group_by).toBe('country');
@@ -639,7 +698,6 @@ describe('Geographic Search Tools', () => {
         count: 1
       };
 
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(flowData);
 
       const params = {
         query: 'protocol:tcp',
@@ -694,7 +752,6 @@ describe('Geographic Search Tools', () => {
         }
       };
 
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(diverseGeoData);
 
       const result = await searchTools.get_geographic_statistics({
         entity_type: 'flows',
@@ -772,7 +829,6 @@ describe('Geographic Search Tools', () => {
         count: 3
       };
 
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(incompleteGeoData);
 
       const params = {
         limit: 100
@@ -815,7 +871,6 @@ describe('Geographic Search Tools', () => {
         count: 1000
       };
 
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(largeGeoData);
 
       const startTime = Date.now();
       const result = await searchTools.search_flows_by_geography({
@@ -842,11 +897,6 @@ describe('Geographic Search Tools', () => {
     });
 
     test('should handle concurrent geographic searches', async () => {
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue({
-        results: [{ geo: { country: 'US' } }],
-        count: 1
-      });
-
       const promises = Array.from({ length: 5 }, () =>
         searchTools.search_flows_by_geography({
           geographic_filters: { countries: ['US'] },

@@ -177,6 +177,7 @@ export class SearchEngine {
     this.strategies.set('flows', {
       entityType: 'flows',
       executeApiCall: async (client, params, apiParams, searchOptions) => {
+        // Use getFlowData instead of searchFlows since it handles parameters better
         let queryString = params.query;
 
         // Add time range to query if provided
@@ -194,17 +195,15 @@ export class SearchEngine {
 
           const startTs = Math.floor(startDate.getTime() / 1000);
           const endTs = Math.floor(endDate.getTime() / 1000);
-          queryString = `timestamp:${startTs}-${endTs} AND (${params.query})`;
+          queryString = `ts:${startTs}-${endTs} AND (${params.query})`;
         }
 
-        return client.searchFlows(
-          {
-            query: queryString,
-            limit: apiParams.limit,
-            group_by: params.group_by,
-            aggregate: params.aggregate,
-          },
-          searchOptions
+        // Use getFlowData which works reliably
+        return client.getFlowData(
+          queryString,
+          params.group_by,
+          'ts:desc',
+          apiParams.limit
         );
       },
     });

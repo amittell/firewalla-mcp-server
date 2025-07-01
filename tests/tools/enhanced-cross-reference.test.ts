@@ -11,6 +11,7 @@ import { getTestThresholds } from '../config/test-thresholds.js';
 // Mock FirewallaClient with enhanced data
 const mockFirewallaClient = {
   searchFlows: jest.fn(),
+  getFlowData: jest.fn(),
   getActiveAlarms: jest.fn(),
   searchDevices: jest.fn(),
   getNetworkRules: jest.fn(),
@@ -89,6 +90,7 @@ describe('Enhanced Cross-Reference Search Tools', () => {
       };
 
       mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(enhancedMockFlowsData);
+      mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(enhancedMockFlowsData);
       mockFirewallaClient.getActiveAlarms = jest.fn().mockResolvedValue(enhancedMockAlarmsData);
     });
 

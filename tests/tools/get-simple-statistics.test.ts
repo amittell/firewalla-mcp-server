@@ -12,6 +12,11 @@ const mockFirewallaClient = {
   getBoxes: jest.fn(),
   getActiveAlarms: jest.fn(),
   getNetworkRules: jest.fn(),
+  getFlowData: jest.fn().mockResolvedValue({
+    results: [],
+    count: 0,
+    next_cursor: undefined,
+  }),
 } as unknown as jest.Mocked<FirewallaClient>;
 
 describe('GetSimpleStatisticsHandler', () => {

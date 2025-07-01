@@ -22,7 +22,7 @@
  * @since 2024-01-01
  */
 
-import dotenv from 'dotenv';
+import * as dotenv from 'dotenv';
 import type { FirewallaConfig } from '../types';
 import { getRequiredEnvVar, getOptionalEnvInt } from '../utils/env.js';
 

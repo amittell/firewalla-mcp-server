@@ -132,7 +132,7 @@ export const FIELD_MAPPINGS: Record<EntityType, Record<string, string[]>> = {
     'timestamp': ['ts', 'timestamp'],
     'device_id': ['device.id', 'device.gid'],
     'type': ['type'],
-    'severity': ['severity'],
+    'severity': ['type', 'severity'],
     'status': ['status'],
     'message': ['message'],
     'gid': ['gid'],

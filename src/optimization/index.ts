@@ -111,7 +111,7 @@ export interface OptimizationConfig {
  * Default optimization configuration
  */
 export const DEFAULT_OPTIMIZATION_CONFIG: OptimizationConfig = {
-  maxResponseSize: 25000, // 25K characters for MCP token limit
+  maxResponseSize: 100000, // 100K characters for larger datasets (increased from 25K)
   autoTruncate: true,
   truncationStrategy: 'summary',
   summaryMode: {
@@ -207,11 +207,20 @@ export function summarizeObject(
     // Handle nested objects
     if (typeof value === 'object' && value !== null) {
       if (Array.isArray(value)) {
-        // Truncate arrays and summarize items
+        // Truncate arrays and summarize items (except main results arrays)
+        const isMainResultsArray =
+          key === 'results' ||
+          key === 'alarms' ||
+          key === 'flows' ||
+          key === 'devices';
+        const maxArrayItems = isMainResultsArray
+          ? value.length
+          : Math.min(5, value.length);
+
         summarized[key] = value
-          .slice(0, Math.min(5, value.length))
+          .slice(0, maxArrayItems)
           .map(item => summarizeObject(item as OptimizableObject, config));
-        if (value.length > 5) {
+        if (!isMainResultsArray && value.length > 5) {
           summarized[`${key}_truncated`] = `... ${value.length - 5} more items`;
         }
       } else {

@@ -7,14 +7,108 @@ import { createSearchTools } from '../../src/tools/search.js';
 import { FirewallaClient } from '../../src/firewalla/client.js';
 import { EnhancedCorrelationParams } from '../../src/validation/field-mapper.js';
 
-// Mock FirewallaClient with extended methods
+// Complete Mock FirewallaClient with all required methods
 const mockFirewallaClient = {
+  // Core methods used by search strategies
+  getFlowData: jest.fn().mockResolvedValue({
+    results: [
+      {
+        ts: 1640995200,
+        gid: 'test-box-1', 
+        protocol: 'tcp',
+        direction: 'outbound',
+        block: false,
+        download: 512,
+        upload: 512,
+        bytes: 1024,
+        source: { ip: '192.168.1.1', id: 'source-1' },
+        destination: { ip: '8.8.8.8', id: 'dest-1' },
+        device: { ip: '192.168.1.1', id: 'device-1', name: 'Test Device' }
+      },
+      {
+        ts: 1640995260,
+        gid: 'test-box-1',
+        protocol: 'udp',
+        direction: 'inbound',
+        block: false,
+        download: 1024,
+        upload: 256,
+        bytes: 1280,
+        source: { ip: '192.168.1.2', id: 'source-2' },
+        destination: { ip: '8.8.4.4', id: 'dest-2' },
+        device: { ip: '192.168.1.2', id: 'device-2', name: 'Test Device 2' }
+      }
+    ],
+    count: 2
+  }),
+  getActiveAlarms: jest.fn().mockResolvedValue({
+    results: [
+      {
+        ts: 1640995210,
+        gid: 'test-box-1',
+        severity: 'high',
+        type: 'network_intrusion',
+        device: { ip: '192.168.1.1', id: 'device-1', name: 'Test Device' },
+        protocol: 'tcp',
+        resolved: false
+      },
+      {
+        ts: 1640995270,
+        gid: 'test-box-1',
+        severity: 'medium',
+        type: 'suspicious_activity',
+        device: { ip: '192.168.1.3', id: 'device-3', name: 'Test Device 3' },
+        protocol: 'http',
+        resolved: false
+      }
+    ],
+    count: 2
+  }),
+  getNetworkRules: jest.fn().mockResolvedValue({
+    results: [
+      {
+        gid: 'rule-1',
+        target: { value: '192.168.1.1', type: 'ip' },
+        action: 'block',
+        protocol: 'tcp',
+        active: true,
+        ts: 1640995200
+      }
+    ],
+    count: 1
+  }),
+  getDeviceStatus: jest.fn().mockResolvedValue({
+    results: [
+      {
+        gid: 'device-1',
+        ip: '192.168.1.1',
+        name: 'Test Device',
+        online: true,
+        mac: '00:11:22:33:44:55',
+        mac_vendor: 'Apple',
+        last_seen: 1640995200
+      }
+    ],
+    count: 1
+  }),
+  getTargetLists: jest.fn().mockResolvedValue({
+    results: [
+      {
+        gid: 'list-1',
+        name: 'Blocked Sites',
+        category: 'security',
+        owner: 'admin',
+        targets: ['example.com', 'badsite.com']
+      }
+    ],
+    count: 1
+  }),
+  // Additional search methods that might be called
   searchFlows: jest.fn(),
-  getActiveAlarms: jest.fn(),
-  getNetworkRules: jest.fn(),
+  searchAlarms: jest.fn(),
+  searchRules: jest.fn(),
   searchDevices: jest.fn(),
-  getDeviceStatus: jest.fn(),
-  getTargetLists: jest.fn(),
+  searchTargetLists: jest.fn()
 } as unknown as FirewallaClient;
 
 describe('Enhanced Search Tools', () => {
@@ -23,29 +117,42 @@ describe('Enhanced Search Tools', () => {
   beforeEach(() => {
     searchTools = createSearchTools(mockFirewallaClient);
     jest.clearAllMocks();
+    
+    // Reset all mocks to their default successful behavior
+    mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue({
+      results: [
+        {
+          ts: 1640995200,
+          gid: 'test-box-1', 
+          protocol: 'tcp',
+          direction: 'outbound',
+          block: false,
+          download: 512,
+          upload: 512,
+          bytes: 1024,
+          source: { ip: '192.168.1.1', id: 'source-1' },
+          destination: { ip: '8.8.8.8', id: 'dest-1' },
+          device: { ip: '192.168.1.1', id: 'device-1', name: 'Test Device' }
+        },
+        {
+          ts: 1640995260,
+          gid: 'test-box-1',
+          protocol: 'udp',
+          direction: 'inbound',
+          block: false,
+          download: 1024,
+          upload: 256,
+          bytes: 1280,
+          source: { ip: '192.168.1.2', id: 'source-2' },
+          destination: { ip: '8.8.4.4', id: 'dest-2' },
+          device: { ip: '192.168.1.2', id: 'device-2', name: 'Test Device 2' }
+        }
+      ],
+      count: 2
+    });
   });
 
   describe('search_enhanced_cross_reference', () => {
-    const mockFlowResults = {
-      results: [
-        { source: { ip: '192.168.1.1' }, protocol: 'tcp', ts: 1640995200, bytes: 1024 },
-        { source: { ip: '192.168.1.2' }, protocol: 'udp', ts: 1640995260, bytes: 2048 }
-      ],
-      count: 2
-    };
-
-    const mockAlarmResults = {
-      results: [
-        { device: { ip: '192.168.1.1' }, protocol: 'tcp', severity: 'high', ts: 1640995210 },
-        { device: { ip: '192.168.1.3' }, protocol: 'http', severity: 'medium', ts: 1640995270 }
-      ],
-      count: 2
-    };
-
-    beforeEach(() => {
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue(mockFlowResults);
-      mockFirewallaClient.getActiveAlarms = jest.fn().mockResolvedValue(mockAlarmResults);
-    });
 
     test('should perform enhanced cross-reference with multi-field correlation', async () => {
       const correlationParams: EnhancedCorrelationParams = {
@@ -206,7 +313,8 @@ describe('Enhanced Search Tools', () => {
     });
 
     test('should handle API call failures gracefully', async () => {
-      mockFirewallaClient.searchFlows = jest.fn().mockRejectedValue(new Error('API Error'));
+      // Mock the actual method that gets called (getFlowData, not searchFlows)
+      mockFirewallaClient.getFlowData = jest.fn().mockRejectedValue(new Error('API Error'));
 
       const correlationParams: EnhancedCorrelationParams = {
         correlationFields: ['source_ip'],
@@ -372,10 +480,11 @@ describe('Enhanced Search Tools', () => {
       const result = await searchTools.search_enhanced_cross_reference(params);
 
       expect(result.correlations).toHaveLength(3);
-      expect(mockFirewallaClient.searchFlows).toHaveBeenCalled();
+      // Check that the actual methods called by search strategies are invoked
+      expect(mockFirewallaClient.getFlowData).toHaveBeenCalled();
       expect(mockFirewallaClient.getActiveAlarms).toHaveBeenCalled();
       expect(mockFirewallaClient.getNetworkRules).toHaveBeenCalled();
-      expect(mockFirewallaClient.searchDevices).toHaveBeenCalled();
+      expect(mockFirewallaClient.getDeviceStatus).toHaveBeenCalled();
       // expect(mockFirewallaClient.getTargetLists).toHaveBeenCalled(); // removed target_lists
     });
   });

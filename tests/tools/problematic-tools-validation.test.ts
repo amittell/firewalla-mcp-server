@@ -24,6 +24,13 @@ describe('Problematic MCP Tools Validation', () => {
     jest.clearAllMocks();
     mockFirewalla = new MockedFirewallaClient({} as any) as jest.Mocked<FirewallaClient>;
     
+    // Add missing mock methods
+    mockFirewalla.getFlowData = jest.fn().mockResolvedValue({
+      results: [],
+      count: 0,
+      next_cursor: undefined,
+    });
+    
     // Initialize handlers
     getBandwidthUsageHandler = new GetBandwidthUsageHandler();
     getFlowTrendsHandler = new GetFlowTrendsHandler();

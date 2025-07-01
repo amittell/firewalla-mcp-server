@@ -116,7 +116,8 @@ export class FirewallaMCPServer {
         tools: [
           {
             name: 'get_active_alarms',
-            description: 'Retrieve current security alerts and alarms',
+            description:
+              'Retrieve current security alerts and alarms from Firewalla firewall',
             inputSchema: {
               type: 'object',
               properties: {
@@ -147,13 +148,18 @@ export class FirewallaMCPServer {
                   type: 'string',
                   description: 'Pagination cursor from previous response',
                 },
+                include_total_count: {
+                  type: 'boolean',
+                  description: 'Calculate true total count by traversing all pages (slower)',
+                },
               },
               required: ['limit'],
             },
           },
           {
             name: 'get_flow_data',
-            description: 'Query network traffic flows with pagination',
+            description:
+              'Query network traffic flows from Firewalla firewall with pagination',
             inputSchema: {
               type: 'object',
               properties: {
@@ -181,7 +187,8 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_device_status',
-            description: 'Check online/offline status of devices',
+            description:
+              'Check online/offline status of devices on Firewalla network',
             inputSchema: {
               type: 'object',
               properties: {
@@ -209,7 +216,8 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_offline_devices',
-            description: 'Get all offline devices with last seen timestamps',
+            description:
+              'Get all offline devices on Firewalla network with last seen timestamps',
             inputSchema: {
               type: 'object',
               properties: {
@@ -229,7 +237,8 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_bandwidth_usage',
-            description: 'Get top bandwidth consuming devices',
+            description:
+              'Get top bandwidth consuming devices on Firewalla network',
             inputSchema: {
               type: 'object',
               properties: {
@@ -299,7 +308,8 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_target_lists',
-            description: 'Access security target lists (CloudFlare, CrowdSec)',
+            description:
+              'Access Firewalla security target lists (CloudFlare, CrowdSec)',
             inputSchema: {
               type: 'object',
               properties: {
@@ -308,7 +318,14 @@ export class FirewallaMCPServer {
                   enum: ['cloudflare', 'crowdsec', 'all'],
                   description: 'Type of target list to retrieve',
                 },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of target lists to return',
+                  minimum: 1,
+                  maximum: 10000,
+                },
               },
+              required: ['limit'],
             },
           },
           {
@@ -327,7 +344,8 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_specific_alarm',
-            description: 'Get detailed information for a specific alarm',
+            description:
+              'Get detailed information for a specific Firewalla alarm',
             inputSchema: {
               type: 'object',
               properties: {
@@ -341,7 +359,7 @@ export class FirewallaMCPServer {
           },
           {
             name: 'delete_alarm',
-            description: 'Delete/dismiss a specific alarm',
+            description: 'Delete/dismiss a specific Firewalla alarm',
             inputSchema: {
               type: 'object',
               properties: {
@@ -368,7 +386,8 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_simple_statistics',
-            description: 'Get basic statistics about boxes, alarms, and rules',
+            description:
+              'Get basic Firewalla statistics about boxes, alarms, and rules',
             inputSchema: {
               type: 'object',
               properties: {},
@@ -376,7 +395,8 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_statistics_by_region',
-            description: 'Get flow statistics grouped by country/region',
+            description:
+              'Get Firewalla flow statistics grouped by country/region',
             inputSchema: {
               type: 'object',
               properties: {},
@@ -393,7 +413,7 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_flow_trends',
-            description: 'Get historical flow data trends over time',
+            description: 'Get historical Firewalla flow data trends over time',
             inputSchema: {
               type: 'object',
               properties: {
@@ -414,7 +434,7 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_alarm_trends',
-            description: 'Get historical alarm data trends over time',
+            description: 'Get historical Firewalla alarm data trends over time',
             inputSchema: {
               type: 'object',
               properties: {
@@ -428,7 +448,8 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_rule_trends',
-            description: 'Get historical rule activity trends over time',
+            description:
+              'Get historical Firewalla rule activity trends over time',
             inputSchema: {
               type: 'object',
               properties: {
@@ -442,14 +463,15 @@ export class FirewallaMCPServer {
           },
           {
             name: 'search_flows',
-            description: 'Advanced flow searching with complex query syntax',
+            description:
+              'Advanced Firewalla flow searching with complex query syntax',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using advanced syntax (e.g., "severity:high AND source_ip:192.168.*")',
+                    'Search query using advanced syntax (e.g., "protocol:tcp AND device_ip:192.168.*", "blocked:true AND bytes:>1000000")',
                 },
                 limit: {
                   type: 'number',
@@ -498,14 +520,14 @@ export class FirewallaMCPServer {
           {
             name: 'search_alarms',
             description:
-              'Advanced alarm searching with severity, time, and IP filters',
+              'Advanced Firewalla alarm searching with severity, time, and IP filters',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
                   description:
-                    'Search query (e.g., "severity:>=high AND source_ip:192.168.*")',
+                    'Search query (e.g., "severity:high AND status:1", "type:1 AND device_ip:192.168.*")',
                 },
                 limit: {
                   type: 'number',
@@ -543,7 +565,7 @@ export class FirewallaMCPServer {
           {
             name: 'search_rules',
             description:
-              'Advanced rule searching with target, action, and status filters',
+              'Advanced Firewalla rule searching with target, action, and status filters',
             inputSchema: {
               type: 'object',
               properties: {
@@ -595,7 +617,7 @@ export class FirewallaMCPServer {
           {
             name: 'search_devices',
             description:
-              'Advanced device searching with network, status, and usage filters',
+              'Advanced Firewalla device searching with network, status, and usage filters',
             inputSchema: {
               type: 'object',
               properties: {
@@ -646,7 +668,7 @@ export class FirewallaMCPServer {
           {
             name: 'search_target_lists',
             description:
-              'Advanced target list searching with category and ownership filters',
+              'Advanced Firewalla target list searching with category and ownership filters',
             inputSchema: {
               type: 'object',
               properties: {
@@ -692,7 +714,7 @@ export class FirewallaMCPServer {
           {
             name: 'search_cross_reference',
             description:
-              'Multi-entity searches with correlation across different data types',
+              'Multi-entity Firewalla searches with correlation across different data types',
             inputSchema: {
               type: 'object',
               properties: {
@@ -709,7 +731,7 @@ export class FirewallaMCPServer {
                 correlation_field: {
                   type: 'string',
                   description:
-                    'Field to use for correlation (e.g., "source_ip", "destination_ip")',
+                    'Field to use for correlation (e.g., "source_ip", "destination_ip", "device_ip", "protocol")',
                 },
                 limit: {
                   type: 'number',
@@ -729,7 +751,7 @@ export class FirewallaMCPServer {
           {
             name: 'get_network_rules_summary',
             description:
-              'Get overview statistics and counts of network rules by category',
+              'Get overview statistics and counts of Firewalla network rules by category',
             inputSchema: {
               type: 'object',
               properties: {
@@ -748,7 +770,7 @@ export class FirewallaMCPServer {
           {
             name: 'get_most_active_rules',
             description:
-              'Get rules with highest hit counts for traffic analysis',
+              'Get Firewalla rules with highest hit counts for traffic analysis',
             inputSchema: {
               type: 'object',
               properties: {
@@ -773,7 +795,8 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_recent_rules',
-            description: 'Get recently created or modified firewall rules',
+            description:
+              'Get recently created or modified Firewalla firewall rules',
             inputSchema: {
               type: 'object',
               properties: {
@@ -801,6 +824,323 @@ export class FirewallaMCPServer {
                 },
               },
               required: ['limit'],
+            },
+          },
+          {
+            name: 'search_enhanced_cross_reference',
+            description:
+              'Advanced Firewalla multi-field correlation with temporal windows and network scoping',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                primary_query: {
+                  type: 'string',
+                  description: 'Primary search query for correlation analysis',
+                },
+                secondary_queries: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description:
+                    'Secondary queries to correlate with primary results',
+                },
+                correlation_params: {
+                  type: 'object',
+                  properties: {
+                    correlationFields: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description:
+                        'Fields to use for correlation (max 5 for performance)',
+                      maxItems: 5,
+                    },
+                    correlationType: {
+                      type: 'string',
+                      enum: ['AND', 'OR'],
+                      description: 'Correlation logic type',
+                    },
+                    temporalWindow: {
+                      type: 'object',
+                      properties: {
+                        windowSize: {
+                          type: 'number',
+                          minimum: 1,
+                          description: 'Temporal window size',
+                        },
+                        windowUnit: {
+                          type: 'string',
+                          enum: ['seconds', 'minutes', 'hours', 'days'],
+                          description: 'Temporal window unit',
+                        },
+                      },
+                      description: 'Optional temporal window filtering',
+                    },
+                    networkScope: {
+                      type: 'object',
+                      properties: {
+                        includeSubnets: {
+                          type: 'boolean',
+                          description: 'Include subnet matching',
+                        },
+                        includePorts: {
+                          type: 'boolean',
+                          description: 'Include port matching',
+                        },
+                      },
+                      description: 'Network scope options',
+                    },
+                    deviceScope: {
+                      type: 'object',
+                      properties: {
+                        includeVendor: {
+                          type: 'boolean',
+                          description: 'Include vendor matching',
+                        },
+                        includeGroup: {
+                          type: 'boolean',
+                          description: 'Include group matching',
+                        },
+                      },
+                      description: 'Device scope options',
+                    },
+                  },
+                  required: ['correlationFields', 'correlationType'],
+                  description: 'Enhanced correlation parameters',
+                },
+                limit: {
+                  type: 'number',
+                  minimum: 1,
+                  maximum: 10000,
+                  description: 'Maximum results per query',
+                },
+              },
+              required: [
+                'primary_query',
+                'secondary_queries',
+                'correlation_params',
+                'limit',
+              ],
+            },
+          },
+          {
+            name: 'get_correlation_suggestions',
+            description:
+              'Get intelligent field combination recommendations for Firewalla cross-reference searches',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                primary_query: {
+                  type: 'string',
+                  description:
+                    'Primary search query to analyze for correlation suggestions',
+                },
+                secondary_queries: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description:
+                    'Secondary queries to analyze for correlation patterns',
+                },
+              },
+              required: ['primary_query', 'secondary_queries'],
+            },
+          },
+          {
+            name: 'search_flows_by_geography',
+            description:
+              'Advanced Firewalla geographic flow search with location-based filtering and analysis',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description:
+                    'Optional flow search query using advanced syntax',
+                },
+                geographic_filters: {
+                  type: 'object',
+                  properties: {
+                    countries: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by specific countries',
+                    },
+                    continents: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by continents',
+                    },
+                    regions: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by geographic regions',
+                    },
+                    cities: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by specific cities',
+                    },
+                    asns: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by ASN numbers',
+                    },
+                    hosting_providers: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by hosting providers',
+                    },
+                    exclude_cloud: {
+                      type: 'boolean',
+                      description: 'Exclude cloud provider traffic',
+                    },
+                    exclude_vpn: {
+                      type: 'boolean',
+                      description: 'Exclude VPN/proxy traffic',
+                    },
+                    min_risk_score: {
+                      type: 'number',
+                      minimum: 0,
+                      maximum: 1,
+                      description: 'Minimum geographic risk score',
+                    },
+                  },
+                  description: 'Geographic filtering options',
+                },
+                limit: {
+                  type: 'number',
+                  minimum: 1,
+                  maximum: 10000,
+                  description: 'Maximum number of flows to return',
+                },
+                sort_by: {
+                  type: 'string',
+                  description: 'Sort flows by field',
+                },
+                sort_order: {
+                  type: 'string',
+                  enum: ['asc', 'desc'],
+                  description: 'Sort order',
+                },
+                group_by: {
+                  type: 'string',
+                  description: 'Group results by field',
+                },
+                aggregate: {
+                  type: 'boolean',
+                  description: 'Include aggregation statistics',
+                },
+              },
+              required: ['limit'],
+            },
+          },
+          {
+            name: 'search_alarms_by_geography',
+            description:
+              'Firewalla geographic alarm search with location-based threat analysis',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description:
+                    'Optional alarm search query using advanced syntax',
+                },
+                geographic_filters: {
+                  type: 'object',
+                  properties: {
+                    countries: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by specific countries',
+                    },
+                    continents: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by continents',
+                    },
+                    regions: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by geographic regions',
+                    },
+                    high_risk_countries: {
+                      type: 'boolean',
+                      description: 'Include only high-risk countries',
+                    },
+                    exclude_known_providers: {
+                      type: 'boolean',
+                      description: 'Exclude known cloud/hosting providers',
+                    },
+                    threat_analysis: {
+                      type: 'boolean',
+                      description:
+                        'Enable detailed threat intelligence analysis',
+                    },
+                  },
+                  description:
+                    'Geographic filtering options for threat analysis',
+                },
+                limit: {
+                  type: 'number',
+                  minimum: 1,
+                  maximum: 10000,
+                  description: 'Maximum number of alarms to return',
+                },
+                sort_by: {
+                  type: 'string',
+                  description: 'Sort alarms by field',
+                },
+                group_by: {
+                  type: 'string',
+                  description: 'Group results by field',
+                },
+              },
+              required: ['limit'],
+            },
+          },
+          {
+            name: 'get_geographic_statistics',
+            description:
+              'Comprehensive Firewalla geographic statistics and analytics for flows and alarms',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                entity_type: {
+                  type: 'string',
+                  enum: ['flows', 'alarms'],
+                  description: 'Type of entity to analyze',
+                },
+                time_range: {
+                  type: 'object',
+                  properties: {
+                    start: {
+                      type: 'string',
+                      description: 'Start time (ISO 8601 format)',
+                    },
+                    end: {
+                      type: 'string',
+                      description: 'End time (ISO 8601 format)',
+                    },
+                  },
+                  description: 'Optional time range for analysis',
+                },
+                analysis_type: {
+                  type: 'string',
+                  enum: ['summary', 'detailed', 'threat_intelligence'],
+                  description: 'Type of geographic analysis to perform',
+                },
+                group_by: {
+                  type: 'string',
+                  enum: ['country', 'continent', 'region', 'asn', 'provider'],
+                  description: 'How to group the geographic statistics',
+                },
+                limit: {
+                  type: 'number',
+                  minimum: 1,
+                  maximum: 1000,
+                  description: 'Maximum number of statistics entries to return',
+                },
+              },
+              required: ['entity_type'],
             },
           },
         ],

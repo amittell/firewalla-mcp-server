@@ -1311,7 +1311,7 @@ export class FirewallaClient {
 
       const response = await this.request<any>(
         'GET',
-        `/alarms/${validatedAlarmId}`
+        `/v2/alarms/${this.config.boxId}/${validatedAlarmId}`
       );
 
       // Enhanced null/undefined checks for response
@@ -1448,9 +1448,7 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('alarms')
-  async deleteAlarm(
-    alarmId: string
-  ): Promise<{ count: number; results: any[]; next_cursor?: string }> {
+  async deleteAlarm(alarmId: string): Promise<any> {
     try {
       // Enhanced input validation and sanitization
       const validatedAlarmId = this.sanitizeInput(alarmId);
@@ -1475,7 +1473,7 @@ export class FirewallaClient {
         status?: string;
       }>(
         'DELETE',
-        `/alarms/${this.config.boxId}/${validatedAlarmId}`,
+        `/v2/alarms/${this.config.boxId}/${validatedAlarmId}`,
         undefined,
         false
       );
@@ -1513,11 +1511,7 @@ export class FirewallaClient {
         }),
       };
 
-      return {
-        count: 1,
-        results: [result],
-        next_cursor: undefined,
-      };
+      return result;
     } catch (error) {
       logger.error(
         'Error in deleteAlarm:',
@@ -1629,9 +1623,8 @@ export class FirewallaClient {
       const regionStats = new Map<string, number>();
 
       flows.results.forEach(flow => {
-        if (flow?.region) {
-          regionStats.set(flow.region, (regionStats.get(flow.region) || 0) + 1);
-        }
+        const region = flow?.region || 'unknown';
+        regionStats.set(region, (regionStats.get(region) || 0) + 1);
       });
 
       // Convert to Statistics format
@@ -2243,6 +2236,11 @@ export class FirewallaClient {
     }
     if (searchQuery.aggregate) {
       params.aggregate = true;
+    }
+
+    // Add box parameter for filtering
+    if (this.config.boxId) {
+      params.box = this.config.boxId;
     }
 
     // Add time range if specified
@@ -3965,7 +3963,7 @@ export class FirewallaClient {
         message: string;
       }>(
         'POST',
-        `/rules/${validatedRuleId}/pause`,
+        `/v2/rules/${validatedRuleId}/pause`,
         { duration: validatedDuration },
         false
       );
@@ -3981,9 +3979,7 @@ export class FirewallaClient {
         'Error in pauseRule:',
         error instanceof Error ? error : new Error(String(error))
       );
-      throw new Error(
-        `Failed to pause rule: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw new Error(error instanceof Error ? error.message : 'Unknown error');
     }
   }
 
@@ -4004,7 +4000,7 @@ export class FirewallaClient {
       const response = await this.request<{
         success: boolean;
         message: string;
-      }>('POST', `/rules/${validatedRuleId}/resume`, {}, false);
+      }>('POST', `/v2/rules/${validatedRuleId}/resume`, {}, false);
 
       return {
         success: response?.success ?? true, // Default to true if API doesn't return success field
@@ -4016,9 +4012,7 @@ export class FirewallaClient {
         'Error in resumeRule:',
         error instanceof Error ? error : new Error(String(error))
       );
-      throw new Error(
-        `Failed to resume rule: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw new Error(error instanceof Error ? error.message : 'Unknown error');
     }
   }
 

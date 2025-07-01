@@ -6,13 +6,101 @@
 import { createSearchTools } from '../../src/tools/search.js';
 import { FirewallaClient } from '../../src/firewalla/client.js';
 
-// Mock FirewallaClient
+// Complete Mock FirewallaClient with all required methods
 const mockFirewallaClient = {
-  searchFlows: jest.fn(),
-  getActiveAlarms: jest.fn(),
-  getNetworkRules: jest.fn(),
-  getDeviceStatus: jest.fn(),
-  getTargetLists: jest.fn(),
+  // Core methods used by search strategies
+  getFlowData: jest.fn().mockResolvedValue({
+    results: [
+      {
+        ts: 1640995200,
+        gid: 'test-box-1', 
+        protocol: 'tcp',
+        direction: 'outbound',
+        block: false,
+        download: 512,
+        upload: 512,
+        bytes: 1024,
+        source: { ip: '192.168.1.1', id: 'source-1' },
+        destination: { ip: '8.8.8.8', id: 'dest-1' },
+        device: { ip: '192.168.1.1', id: 'device-1', name: 'Test Device' }
+      }
+    ],
+    count: 1
+  }),
+  getActiveAlarms: jest.fn().mockResolvedValue({
+    results: [
+      {
+        ts: 1640995200,
+        gid: 'test-box-1',
+        severity: 'high',
+        type: 'network_intrusion',
+        device: { ip: '192.168.1.1', id: 'device-1', name: 'Test Device' },
+        protocol: 'tcp',
+        resolved: false
+      }
+    ],
+    count: 1
+  }),
+  getNetworkRules: jest.fn().mockResolvedValue({
+    results: [
+      {
+        gid: 'rule-1',
+        target: { value: '192.168.1.1', type: 'ip' },
+        action: 'block',
+        protocol: 'tcp',
+        active: true,
+        ts: 1640995200
+      }
+    ],
+    count: 1
+  }),
+  getDeviceStatus: jest.fn().mockResolvedValue({
+    results: [
+      {
+        gid: 'device-1',
+        ip: '192.168.1.1',
+        name: 'Test Device',
+        online: true,
+        mac: '00:11:22:33:44:55',
+        mac_vendor: 'Apple',
+        last_seen: 1640995200
+      }
+    ],
+    count: 1
+  }),
+  getTargetLists: jest.fn().mockResolvedValue({
+    results: [
+      {
+        gid: 'list-1',
+        name: 'Blocked Sites',
+        category: 'security',
+        owner: 'admin',
+        targets: ['example.com', 'badsite.com']
+      }
+    ],
+    count: 1
+  }),
+  // Additional search methods that might be called
+  searchFlows: jest.fn().mockResolvedValue({
+    results: [],
+    count: 0
+  }),
+  searchAlarms: jest.fn().mockResolvedValue({
+    results: [],
+    count: 0
+  }),
+  searchRules: jest.fn().mockResolvedValue({
+    results: [],
+    count: 0
+  }),
+  searchDevices: jest.fn().mockResolvedValue({
+    results: [],
+    count: 0
+  }),
+  searchTargetLists: jest.fn().mockResolvedValue({
+    results: [],
+    count: 0
+  })
 } as unknown as FirewallaClient;
 
 describe('Search Tools Parameter Validation', () => {
@@ -117,7 +205,7 @@ describe('Search Tools Parameter Validation', () => {
       
       const result = await searchTools.search_flows(validParams as any);
       expect(result).toBeDefined();
-      expect(mockFirewallaClient.searchFlows).toHaveBeenCalled();
+      expect(mockFirewallaClient.getFlowData).toHaveBeenCalled();
     });
   });
 
