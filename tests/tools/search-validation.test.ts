@@ -298,7 +298,7 @@ describe('Search Tools Parameter Validation', () => {
     test('should validate device query syntax', async () => {
       const invalidQuery = { query: 'invalid:syntax:here', limit: 10 };
       await expect(searchTools.search_devices(invalidQuery as any))
-        .rejects.toThrow(/query.*syntax|Invalid query/);
+        .rejects.toThrow(/Invalid field.*devices|Query validation failed/);
     });
 
     test('should accept valid parameters', async () => {

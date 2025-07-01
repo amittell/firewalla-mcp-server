@@ -25,7 +25,7 @@ interface EntityValidationConfig {
  */
 const ENTITY_VALIDATION_CONFIGS: Record<EntityType, EntityValidationConfig> = {
   flows: {
-    numericFields: ['bytes', 'download', 'upload', 'ts', 'timestamp', 'duration', 'port', 'session_duration', 'frequency_score'],
+    numericFields: ['bytes', 'download', 'upload', 'ts', 'timestamp', 'duration', 'port', 'session_duration', 'frequency_score', 'geographic_risk_score'],
     dateFields: ['ts', 'timestamp', 'time_window'],
     booleanFields: ['block', 'blocked', 'is_cloud_provider', 'is_proxy', 'is_vpn'],
     deprecatedFields: ['srcIP', 'dstIP'], // Legacy field names
