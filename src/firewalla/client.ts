@@ -4131,7 +4131,7 @@ export class FirewallaClient implements CacheManagerInterface {
    * Trigger cache invalidation for specific events
    */
   async invalidateByEvent(event: string, metadata?: any): Promise<number> {
-    return await this.invalidationManager.invalidateByEvent(
+    return this.invalidationManager.invalidateByEvent(
       event as any, // Type assertion for simplicity
       this,
       metadata
@@ -4146,7 +4146,7 @@ export class FirewallaClient implements CacheManagerInterface {
     operation: 'create' | 'update' | 'delete',
     entityId?: string
   ): Promise<number> {
-    return await this.invalidationManager.invalidateByDataChange(
+    return this.invalidationManager.invalidateByDataChange(
       entityType,
       operation,
       this,

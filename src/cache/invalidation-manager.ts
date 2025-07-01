@@ -11,7 +11,7 @@
  */
 
 import { logger } from '../monitoring/logger.js';
-import { EntityType, DataCacheStrategies } from './cache-strategies.js';
+import { DataCacheStrategies, type EntityType } from './cache-strategies.js';
 
 /**
  * Cache invalidation event types
@@ -149,13 +149,13 @@ export class InvalidationManager {
     if (pattern.includes('*')) {
       // Pattern-based invalidation
       const matchingKeys = await this.findMatchingKeys(pattern, cacheManager);
-      await Promise.all(matchingKeys.map(key => cacheManager.delete(key)));
+      await Promise.all(matchingKeys.map(async (key) => cacheManager.delete(key)));
       return matchingKeys.length;
-    } else {
-      // Direct key invalidation
-      const deleted = await cacheManager.delete(pattern);
-      return deleted ? 1 : 0;
     }
+    
+    // Direct key invalidation
+    const deleted = await cacheManager.delete(pattern);
+    return deleted ? 1 : 0;
   }
 
   /**
@@ -223,6 +223,18 @@ export class InvalidationManager {
         break;
 
       case 'boxes':
+        patterns.push(`${prefix}:*`);
+        break;
+
+      case 'search':
+        patterns.push(`${prefix}:*`);
+        break;
+
+      case 'statistics':
+        patterns.push(`${prefix}:*`);
+        break;
+
+      case 'trends':
         patterns.push(`${prefix}:*`);
         break;
 
@@ -333,7 +345,7 @@ export class InvalidationManager {
  * Interface for cache managers to work with invalidation
  */
 export interface CacheManagerInterface {
-  delete(key: string): Promise<boolean>;
-  getAllKeys(): Promise<string[]>;
-  clear(): Promise<void>;
+  delete: (key: string) => Promise<boolean>;
+  getAllKeys: () => Promise<string[]>;
+  clear: () => Promise<void>;
 }
