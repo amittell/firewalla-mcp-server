@@ -118,7 +118,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
 
 export class GetBandwidthUsageHandler extends BaseToolHandler {
   name = 'get_bandwidth_usage';
-  description = 'Get top bandwidth consuming devices';
+  description = 'Get top bandwidth consuming devices (specify limit parameter)';
   category = 'network' as const;
 
   async execute(

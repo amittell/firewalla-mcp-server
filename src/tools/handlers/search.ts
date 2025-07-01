@@ -596,40 +596,35 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
       });
 
       return this.createSuccessResponse({
-        primary_query: SafeAccess.getNestedValue(result, 'primary_query', ''),
-        secondary_queries: SafeAccess.getNestedValue(
-          result,
-          'secondary_queries',
-          []
+        primary_query: SafeAccess.getNestedValue(result, 'primary.query', ''),
+        secondary_queries: SafeAccess.safeArrayMap(
+          SafeAccess.getNestedValue(result, 'correlations', []),
+          (corr: any) => SafeAccess.getNestedValue(corr, 'query', '')
         ),
         correlation_fields: SafeAccess.getNestedValue(
           result,
-          'correlation_fields',
+          'correlation_summary.correlation_fields',
           []
         ),
         correlation_type: SafeAccess.getNestedValue(
           result,
-          'correlation_type',
+          'correlation_summary.correlation_type',
           'AND'
         ),
-        primary_results: SafeAccess.getNestedValue(
-          result,
-          'primary_results',
-          0
-        ),
+        primary_results: SafeAccess.getNestedValue(result, 'primary.count', 0),
         correlated_results: SafeAccess.getNestedValue(
           result,
-          'correlated_results',
+          'correlation_summary.total_correlated_count',
           0
         ),
         correlation_stats: SafeAccess.getNestedValue(
           result,
-          'correlation_stats',
+          'correlation_summary',
           {}
         ),
         temporal_filter_applied: SafeAccess.getNestedValue(
           result,
-          'temporal_filter_applied',
+          'correlation_summary.temporal_window_applied',
           false
         ),
         execution_time_ms: SafeAccess.getNestedValue(
@@ -637,20 +632,44 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
           'execution_time_ms',
           0
         ),
-        results: SafeAccess.safeArrayMap(result.results, (item: any) => ({
-          entity_type: SafeAccess.getNestedValue(
-            item,
-            'entity_type',
-            'unknown'
-          ),
-          correlation_strength: SafeAccess.getNestedValue(
-            item,
-            'correlation_strength',
-            0
-          ),
-          matched_fields: SafeAccess.getNestedValue(item, 'matched_fields', []),
-          data: SafeAccess.getNestedValue(item, 'data', {}),
-        })),
+        correlation_params: SafeAccess.getNestedValue(
+          result,
+          'correlation_params',
+          {}
+        ),
+        results: SafeAccess.safeArrayMap(
+          SafeAccess.getNestedValue(result, 'correlations', []),
+          (correlation: any) => ({
+            entity_type: SafeAccess.getNestedValue(
+              correlation,
+              'entity_type',
+              'unknown'
+            ),
+            query: SafeAccess.getNestedValue(correlation, 'query', ''),
+            count: SafeAccess.getNestedValue(correlation, 'count', 0),
+            correlation_stats: SafeAccess.getNestedValue(
+              correlation,
+              'correlation_stats',
+              {}
+            ),
+            correlation_results: SafeAccess.safeArrayMap(
+              SafeAccess.getNestedValue(correlation, 'results', []),
+              (item: any) => ({
+                correlation_strength: SafeAccess.getNestedValue(
+                  item,
+                  'correlation_strength',
+                  0
+                ),
+                matched_fields: SafeAccess.getNestedValue(
+                  item,
+                  'matched_fields',
+                  []
+                ),
+                data: SafeAccess.getNestedValue(item, 'data', item),
+              })
+            ),
+          })
+        ),
       });
     } catch (error: unknown) {
       const errorMessage =

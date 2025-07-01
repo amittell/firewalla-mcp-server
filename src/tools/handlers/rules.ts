@@ -406,7 +406,7 @@ export class GetTargetListsHandler extends BaseToolHandler {
 export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
   name = 'get_network_rules_summary';
   description =
-    'Get overview statistics and counts of network rules by category';
+    'Get overview statistics and counts of network rules by category (requires limit parameter)';
   category = 'rule' as const;
 
   async execute(
@@ -415,6 +415,16 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
   ): Promise<ToolResponse> {
     try {
       // Parameter validation
+      const limitValidation = ParameterValidator.validateNumber(
+        args?.limit,
+        'limit',
+        {
+          required: true,
+          min: 1,
+          max: 10000,
+          integer: true,
+        }
+      );
       const ruleTypeValidation = ParameterValidator.validateEnum(
         args?.rule_type,
         'rule_type',
@@ -429,6 +439,7 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
       );
 
       const validationResult = ParameterValidator.combineValidationResults([
+        limitValidation,
         ruleTypeValidation,
         activeOnlyValidation,
       ]);
@@ -443,10 +454,11 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
         );
       }
 
+      const limit = limitValidation.sanitizedValue! as number;
       const ruleType = ruleTypeValidation.sanitizedValue!;
       const activeOnly = activeOnlyValidation.sanitizedValue!;
 
-      // Statistical Analysis Buffer Strategy: Fixed limit for rule analysis
+      // Statistical Analysis Buffer Strategy: User-controlled limit for rule analysis
       //
       // Problem: Rule summary analysis requires processing potentially thousands
       // of rules to generate meaningful statistics. Without limits, this could:
@@ -454,19 +466,17 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
       // - Cause slow API responses
       // - Risk timeout failures on resource-constrained systems
       //
-      // Solution: Use a fixed 5000 rule limit for statistical analysis.
+      // Solution: Use user-specified limit (validated 1-10000) for statistical analysis.
       // This provides:
-      // - Statistically significant sample size for most networks
-      // - Predictable memory usage (approximately 5000 * rule_object_size)
-      // - Consistent response times regardless of total rule count
+      // - User control over memory usage and response time
+      // - Predictable memory usage based on user's choice
+      // - Consistent with other rule tools' validation patterns
       //
-      // Rationale: 5000 rules represents a substantial enterprise-level rule set
-      // and provides sufficient data for accurate breakdown statistics, hit rates,
-      // and categorization analysis while maintaining performance.
-      const analysisLimit = 5000; // Fixed buffer for statistical analysis
+      // The limit is validated to ensure reasonable bounds (1-10000) which allows
+      // both lightweight queries and comprehensive enterprise-level analysis.
       const allRulesResponse = await firewalla.getNetworkRules(
         undefined,
-        analysisLimit
+        limit
       );
       const allRules = SafeAccess.getNestedValue(
         allRulesResponse,
@@ -580,6 +590,7 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
 
       return this.createSuccessResponse({
         total_rules: allRules.length,
+        limit_applied: limit,
         summary_timestamp: getCurrentTimestamp(),
         breakdown: {
           by_action: rulesByAction,

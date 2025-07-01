@@ -484,7 +484,7 @@ describe('FirewallaClient', () => {
   describe('pauseRule', () => {
     it('should pause a firewall rule', async () => {
       const mockResponse = { success: true, message: 'Rule paused successfully' };
-      const mockAxiosInstance = mockedAxios.create();
+      const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       mockAxiosInstance.post = jest.fn().mockResolvedValue({
         data: { success: true, message: 'Rule paused successfully' },
       });
@@ -492,10 +492,107 @@ describe('FirewallaClient', () => {
       const result = await client.pauseRule('rule-123', 120);
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-        `/v2/rules/rule-123/pause`,
+        `/v2/boxes/test-box-id/rules/rule-123/pause`,
         { duration: 120 }
       );
       expect(result).toEqual({ success: true, message: 'Rule rule-123 paused for 120 minutes' });
+    });
+
+    it('should handle 404 error and fallback to generic endpoint', async () => {
+      const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
+      
+      // Mock the axios.isAxiosError function to return true for our test error
+      jest.spyOn(axios, 'isAxiosError').mockReturnValue(true);
+      
+      // First call (box-specific) fails with 404
+      const error404 = new Error('Request failed with status code 404');
+      (error404 as any).response = { status: 404 };
+      (error404 as any).config = { url: '/v2/boxes/test-box-id/rules/rule-123/pause' };
+      (error404 as any).isAxiosError = true;
+      
+      mockAxiosInstance.post = jest.fn()
+        .mockRejectedValueOnce(error404)
+        .mockResolvedValueOnce({
+          data: { success: true, message: 'Rule paused successfully' }
+        });
+
+      const result = await client.pauseRule('rule-123', 60);
+
+      // Should try box-specific endpoint first, then fallback to generic
+      expect(mockAxiosInstance.post).toHaveBeenCalledTimes(2);
+      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(1,
+        `/v2/boxes/test-box-id/rules/rule-123/pause`,
+        { duration: 60 }
+      );
+      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(2,
+        `/v2/rules/rule-123/pause`,
+        { duration: 60 }
+      );
+      expect(result).toEqual({ success: true, message: 'Rule rule-123 paused for 60 minutes' });
+    });
+  });
+
+  describe('deleteAlarm', () => {
+    it('should handle empty response format (successful deletion)', async () => {
+      const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
+      mockAxiosInstance.delete = jest.fn().mockResolvedValue({
+        data: null, // Empty response body for successful deletion
+        status: 200
+      });
+
+      const result = await client.deleteAlarm('alarm-123');
+
+      expect(mockAxiosInstance.delete).toHaveBeenCalledWith(
+        `/v2/alarms/test-box-id/alarm-123`,
+        { params: undefined }
+      );
+      expect(result).toMatchObject({
+        id: 'alarm-123',
+        success: true,
+        message: 'Alarm alarm-123 deleted successfully'
+      });
+      expect(result).toHaveProperty('timestamp');
+    });
+
+    it('should handle string response format', async () => {
+      const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
+      mockAxiosInstance.delete = jest.fn().mockResolvedValue({
+        data: 'Alarm deleted successfully',
+        status: 200
+      });
+
+      const result = await client.deleteAlarm('alarm-456');
+
+      expect(result).toMatchObject({
+        id: 'alarm-456',
+        success: true,
+        message: 'Alarm deleted successfully'
+      });
+      expect(result).toHaveProperty('timestamp');
+    });
+
+    it('should handle complex object response format', async () => {
+      const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
+      mockAxiosInstance.delete = jest.fn().mockResolvedValue({
+        data: {
+          success: true,
+          data: {
+            deleted: true,
+            message: 'Alarm successfully removed from system'
+          }
+        },
+        status: 200
+      });
+
+      const result = await client.deleteAlarm('alarm-789');
+
+      expect(result).toMatchObject({
+        id: 'alarm-789',
+        success: true,
+        message: 'Alarm successfully removed from system'
+      });
+      expect(result).toHaveProperty('timestamp');
+      expect(result).toHaveProperty('deleted', true);
     });
   });
 

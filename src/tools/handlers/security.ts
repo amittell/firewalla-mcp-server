@@ -18,7 +18,8 @@ import {
 
 export class GetActiveAlarmsHandler extends BaseToolHandler {
   name = 'get_active_alarms';
-  description = 'Retrieve active security alarms';
+  description =
+    'Retrieve active security alarms with optional severity filtering';
   category = 'security' as const;
 
   async execute(
@@ -58,6 +59,12 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         'include_total_count',
         false
       );
+      const severityValidation = ParameterValidator.validateEnum(
+        args?.severity,
+        'severity',
+        ['low', 'medium', 'high', 'critical'],
+        false // not required
+      );
 
       const validationResult = ParameterValidator.combineValidationResults([
         queryValidation,
@@ -66,6 +73,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         limitValidation,
         cursorValidation,
         includeTotalValidation,
+        severityValidation,
       ]);
 
       if (!validationResult.isValid) {
@@ -78,8 +86,23 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         );
       }
 
-      // Sanitize query if provided
+      // Build query string combining provided query and severity filter
       let sanitizedQuery = queryValidation.sanitizedValue as string | undefined;
+      const severityValue = severityValidation.sanitizedValue as
+        | string
+        | undefined;
+
+      // Add severity filter to query if provided
+      if (severityValue) {
+        const severityQuery = `severity:${severityValue}`;
+        if (sanitizedQuery) {
+          sanitizedQuery = `(${sanitizedQuery}) AND ${severityQuery}`;
+        } else {
+          sanitizedQuery = severityQuery;
+        }
+      }
+
+      // Sanitize final query if we have one
       if (sanitizedQuery) {
         const queryCheck = QuerySanitizer.sanitizeSearchQuery(sanitizedQuery);
         if (!queryCheck.isValid) {

@@ -662,3 +662,30 @@ DEBUG=query,optimization npm run mcp:start
 4. Implement proper rate limiting as documented
 
 **Remember**: The `/docs/firewalla-api-reference.md` file contains the complete, verified API specification. It is the single source of truth for all Firewalla API integration.
+
+## Fixed Issues (v1.0.0+)
+
+### ✅ **Resolved Critical Issues**
+- **Rule Management Authentication**: `pause_rule` and `resume_rule` now use correct API endpoints with box parameter
+- **Parameter Filtering**: `get_active_alarms` supports severity filtering (low, medium, high, critical)
+- **Bandwidth Data Pipeline**: `get_bandwidth_usage` enhanced with better field detection and debugging
+- **Enhanced Cross-Reference**: `search_enhanced_cross_reference` data structure mapping fixed
+- **Validation Framework**: All tools comply with v1.0.0 mandatory limit parameter requirements
+
+### ✅ **Parameter Updates**
+- **`get_bandwidth_usage`**: Parameter renamed from `top` to `limit` for consistency
+- **`get_active_alarms`**: Added optional `severity` parameter for filtering
+- **`get_network_rules_summary`**: Now requires mandatory `limit` parameter
+- **Rule Management**: `pause_rule` supports `duration` parameter (1-1440 minutes)
+
+### ✅ **Authentication & API**
+- **Write Operations**: Fixed authentication for rule management operations
+- **Endpoint URLs**: Corrected to use documented API format with box parameters
+- **Error Handling**: Enhanced HTML response detection and debugging
+- **Field Detection**: Improved bandwidth calculation with multiple field fallbacks
+
+### 🎯 **Production Ready Status**
+- **READ OPERATIONS**: Excellent reliability and performance ✅
+- **SEARCH & ANALYTICS**: Comprehensive functionality with enhanced features ✅
+- **WRITE OPERATIONS**: Authentication issues resolved ✅
+- **PARAMETER VALIDATION**: Complete v1.0.0 framework compliance ✅

@@ -756,6 +756,13 @@ export class FirewallaMCPServer {
             inputSchema: {
               type: 'object',
               properties: {
+                limit: {
+                  type: 'number',
+                  description:
+                    'Maximum number of rules to analyze for summary statistics',
+                  minimum: 1,
+                  maximum: 10000,
+                },
                 rule_type: {
                   type: 'string',
                   description: 'Filter by rule type',
@@ -766,6 +773,7 @@ export class FirewallaMCPServer {
                     'Only include active rules in summary (default: true)',
                 },
               },
+              required: ['limit'],
             },
           },
           {

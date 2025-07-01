@@ -9,11 +9,8 @@ import type { FilterContext } from '../search/filters/base.js';
 import type { SearchParams, SearchResult } from '../search/types.js';
 import type { SearchOptions } from '../types.js';
 import type { FirewallaClient } from '../firewalla/client.js';
-import {
-  ParameterValidator,
-  SafeAccess,
-  QuerySanitizer,
-} from '../validation/error-handler.js';
+import { ParameterValidator, SafeAccess } from '../validation/error-handler.js';
+import { EnhancedQueryValidator } from '../validation/enhanced-query-validator.js';
 import {
   validateCrossReference,
   validateEnhancedCrossReference,
@@ -24,6 +21,9 @@ import {
   performEnhancedMultiFieldCorrelation,
   getSupportedCorrelationCombinations,
   getFieldValue,
+  FIELD_MAPPINGS,
+  type EntityType,
+  type CorrelationFieldName,
   type EnhancedCorrelationParams,
   type ScoringCorrelationParams,
 } from '../validation/field-mapper.js';
@@ -443,13 +443,38 @@ export class SearchEngine {
       // Use standardized parameter validation
       this.validateSearchParams(params, entityType, validationConfig);
 
-      // Parse and validate query
-      const queryCheck = QuerySanitizer.sanitizeSearchQuery(params.query);
-      if (!queryCheck.isValid) {
-        throw new Error(
-          `Query validation failed: ${queryCheck.errors.join(', ')}`
-        );
+      // Enhanced query validation with syntax, semantic, and field validation
+      const enhancedValidation = EnhancedQueryValidator.validateQuery(
+        params.query,
+        entityType as EntityType
+      );
+      if (!enhancedValidation.isValid) {
+        const errorDetails = [
+          ...enhancedValidation.errors,
+          ...(enhancedValidation.fieldIssues?.map(
+            issue =>
+              `Field '${issue.field}': ${issue.issue}${issue.suggestion ? ` - ${issue.suggestion}` : ''}`
+          ) || []),
+        ];
+
+        let errorMessage = `Query validation failed: ${errorDetails.join(', ')}`;
+
+        if (enhancedValidation.suggestions?.length) {
+          errorMessage += ` | Suggestions: ${enhancedValidation.suggestions.join(', ')}`;
+        }
+
+        if (enhancedValidation.correctedQuery) {
+          errorMessage += ` | Try: "${enhancedValidation.correctedQuery}"`;
+        }
+
+        throw new Error(errorMessage);
       }
+
+      // Use corrected query if available
+      const finalQuery =
+        enhancedValidation.correctedQuery ||
+        (enhancedValidation.sanitizedValue as string) ||
+        params.query;
 
       // Validate entityType before parsing
       const validEntityTypes = [
@@ -464,7 +489,7 @@ export class SearchEngine {
       }
 
       const validation = queryParser.parse(
-        queryCheck.sanitizedValue as string,
+        finalQuery,
         entityType as (typeof validEntityTypes)[number]
       );
       if (!validation.isValid || !validation.ast) {
@@ -548,7 +573,7 @@ export class SearchEngine {
         count: response.count || results.length,
         limit: params.limit || 100,
         offset: params.offset || 0,
-        query: (queryCheck?.sanitizedValue as string) || params.query,
+        query: finalQuery,
         execution_time_ms: Date.now() - startTime,
         aggregations,
       };
@@ -1228,56 +1253,165 @@ export class SearchEngine {
   }
 
   /**
-   * Get suggested correlation field combinations for given queries
+   * Get suggested correlation field combinations for given queries with enhanced validation
    */
   async getCorrelationSuggestions(params: {
     primary_query: string;
     secondary_queries: string[];
   }): Promise<any> {
+    const startTime = Date.now();
+
     try {
-      // Determine entity types from queries
-      const primaryType = suggestEntityType(params.primary_query);
-      const secondaryTypes = params.secondary_queries.map(q =>
-        suggestEntityType(q)
+      // Validate input parameters
+      const primaryValidation = ParameterValidator.validateRequiredString(
+        params.primary_query,
+        'primary_query'
       );
-      const allTypes = [primaryType, ...secondaryTypes].filter(
-        Boolean
-      ) as any[];
+      if (!primaryValidation.isValid) {
+        throw new Error(
+          `Primary query validation failed: ${primaryValidation.errors.join(', ')}`
+        );
+      }
 
-      // Get supported correlation combinations
-      const combinations = getSupportedCorrelationCombinations(allTypes);
+      if (
+        !Array.isArray(params.secondary_queries) ||
+        params.secondary_queries.length === 0
+      ) {
+        throw new Error('At least one secondary query is required');
+      }
 
-      // Categorize combinations by type and complexity
+      // Validate each secondary query
+      for (let i = 0; i < params.secondary_queries.length; i++) {
+        const secondaryValidation = ParameterValidator.validateRequiredString(
+          params.secondary_queries[i],
+          `secondary_queries[${i}]`
+        );
+        if (!secondaryValidation.isValid) {
+          throw new Error(
+            `Secondary query ${i} validation failed: ${secondaryValidation.errors.join(', ')}`
+          );
+        }
+      }
+
+      // Parse and validate queries to determine entity types more accurately
+      const primaryType =
+        this.determineEntityTypeFromQuery(params.primary_query) || 'flows';
+      const secondaryTypes = params.secondary_queries.map(q => {
+        const type = this.determineEntityTypeFromQuery(q);
+        if (!type) {
+          // Could not determine entity type for secondary query, defaulting to 'alarms'
+          return 'alarms';
+        }
+        return type;
+      });
+
+      const allTypes = [primaryType, ...secondaryTypes] as EntityType[];
+
+      // Validate entity type combinations
+      const uniqueTypes = [...new Set(allTypes)];
+      if (uniqueTypes.length === 1) {
+        // All queries appear to target the same entity type. Cross-reference may not be meaningful.
+      }
+
+      // Get validated field combinations using enhanced validation
+      const fieldValidationResult =
+        EnhancedQueryValidator.validateCorrelationFields(
+          [
+            'source_ip',
+            'destination_ip',
+            'device_ip',
+            'protocol',
+            'timestamp',
+            'country',
+            'asn',
+          ] as CorrelationFieldName[],
+          primaryType,
+          secondaryTypes
+        );
+
+      // Get supported correlation combinations with better filtering
+      const combinations = getSupportedCorrelationCombinations(uniqueTypes);
+      const validCombinations = combinations.filter(combo =>
+        combo.every(field =>
+          fieldValidationResult.compatibleFields?.includes(
+            field as CorrelationFieldName
+          )
+        )
+      );
+
+      // Enhanced categorization with confidence scoring
       const suggestions = {
-        single_field: combinations.filter(combo => combo.length === 1),
-        dual_field: combinations.filter(combo => combo.length === 2),
-        multi_field: combinations.filter(combo => combo.length >= 3),
-        recommended: [
-          // Network-focused correlations
-          ['source_ip', 'destination_ip'],
-          ['device_ip', 'protocol'],
+        primary_entity_type: primaryType,
+        secondary_entity_types: secondaryTypes,
+
+        // Compatibility analysis
+        compatibility_analysis: {
+          compatible_fields_count:
+            fieldValidationResult.compatibleFields?.length || 0,
+          incompatible_fields: fieldValidationResult.errors || [],
+          compatibility_suggestions: fieldValidationResult.suggestions || [],
+        },
+
+        // Field combinations by complexity
+        single_field: validCombinations.filter(combo => combo.length === 1),
+        dual_field: validCombinations.filter(combo => combo.length === 2),
+        multi_field: validCombinations.filter(combo => combo.length >= 3),
+
+        // Context-aware recommendations based on entity types
+        recommended_by_context: this.generateContextualRecommendations(
+          primaryType,
+          secondaryTypes
+        ),
+
+        // High-confidence recommendations
+        high_confidence: [
+          // Network identity correlations (highest confidence)
+          ['source_ip', 'device_ip'],
+          ['device_ip', 'destination_ip'],
+          // Protocol and network behavior
+          ['protocol', 'source_ip'],
+          ['protocol', 'device_ip'],
           // Temporal correlations
-          ['timestamp', 'device_id'],
-          // Security correlations
-          ['source_ip', 'threat_level'],
-          ['device_ip', 'geo_location'],
+          ['timestamp', 'device_ip'],
+          // Geographic correlations
+          ['country', 'source_ip'],
+          ['asn', 'source_ip'],
         ].filter(combo =>
-          combinations.some(
+          validCombinations.some(
             c => c.length === combo.length && combo.every(f => c.includes(f))
           )
         ),
-        entity_types: {
-          primary: primaryType,
-          secondary: secondaryTypes,
+
+        // Medium-confidence recommendations
+        medium_confidence: [
+          // Application-level correlations
+          ['application', 'device_ip'],
+          ['user_agent', 'source_ip'],
+          // Security-focused correlations
+          ['threat_level', 'source_ip'],
+          ['geographic_risk_score', 'country'],
+          // Behavioral correlations
+          ['session_duration', 'device_ip'],
+          ['frequency_score', 'source_ip'],
+        ].filter(combo =>
+          validCombinations.some(
+            c => c.length === combo.length && combo.every(f => c.includes(f))
+          )
+        ),
+
+        // All compatible fields for manual selection
+        all_compatible_fields: fieldValidationResult.compatibleFields || [],
+
+        // Field usage statistics for the discovered entity types
+        field_usage_stats: this.generateFieldUsageStats(uniqueTypes),
+
+        // Validation warnings and errors
+        validation_issues: {
+          errors: fieldValidationResult.errors || [],
+          warnings: fieldValidationResult.suggestions || [],
         },
-        supported_fields: combinations.reduce((acc: string[], combo) => {
-          combo.forEach(field => {
-            if (!acc.includes(field)) {
-              acc.push(field);
-            }
-          });
-          return acc;
-        }, []),
+
+        execution_time_ms: Date.now() - startTime,
       };
 
       return suggestions;
@@ -1286,6 +1420,142 @@ export class SearchEngine {
         `Correlation suggestions failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
+  }
+
+  /**
+   * Determine entity type from query content with improved heuristics
+   */
+  private determineEntityTypeFromQuery(query: string): EntityType | null {
+    const lowerQuery = query.toLowerCase();
+
+    // Flow-specific indicators
+    if (
+      lowerQuery.includes('bytes') ||
+      lowerQuery.includes('download') ||
+      lowerQuery.includes('upload') ||
+      lowerQuery.includes('protocol:') ||
+      lowerQuery.includes('direction:') ||
+      lowerQuery.includes('blocked:')
+    ) {
+      return 'flows';
+    }
+
+    // Alarm-specific indicators
+    if (
+      lowerQuery.includes('severity:') ||
+      lowerQuery.includes('type:') ||
+      lowerQuery.includes('resolved:') ||
+      lowerQuery.includes('alarm') ||
+      lowerQuery.includes('alert')
+    ) {
+      return 'alarms';
+    }
+
+    // Rule-specific indicators
+    if (
+      lowerQuery.includes('action:') ||
+      lowerQuery.includes('target:') ||
+      lowerQuery.includes('rule') ||
+      lowerQuery.includes('policy') ||
+      lowerQuery.includes('active:')
+    ) {
+      return 'rules';
+    }
+
+    // Device-specific indicators
+    if (
+      lowerQuery.includes('online:') ||
+      lowerQuery.includes('mac:') ||
+      lowerQuery.includes('device') ||
+      lowerQuery.includes('mac_vendor:') ||
+      lowerQuery.includes('last_seen:')
+    ) {
+      return 'devices';
+    }
+
+    // Target list indicators
+    if (
+      lowerQuery.includes('category:') ||
+      lowerQuery.includes('owner:') ||
+      lowerQuery.includes('target_count:')
+    ) {
+      return 'target_lists';
+    }
+
+    return null;
+  }
+
+  /**
+   * Generate contextual recommendations based on entity type combinations
+   */
+  private generateContextualRecommendations(
+    primaryType: EntityType,
+    secondaryTypes: EntityType[]
+  ): any {
+    const recommendations: any = {};
+
+    if (primaryType === 'flows') {
+      if (secondaryTypes.includes('alarms')) {
+        recommendations.flows_to_alarms = {
+          description: 'Correlate network flows with security alarms',
+          recommended_fields: [
+            'source_ip',
+            'device_ip',
+            'protocol',
+            'timestamp',
+          ],
+          use_cases: [
+            'Incident investigation',
+            'Threat hunting',
+            'Security analysis',
+          ],
+        };
+      }
+      if (secondaryTypes.includes('devices')) {
+        recommendations.flows_to_devices = {
+          description: 'Correlate network flows with device information',
+          recommended_fields: ['device_ip', 'mac', 'device_id'],
+          use_cases: ['Device behavior analysis', 'Network usage tracking'],
+        };
+      }
+    }
+
+    if (primaryType === 'alarms' && secondaryTypes.includes('flows')) {
+      recommendations.alarms_to_flows = {
+        description: 'Correlate security alarms with network activity',
+        recommended_fields: ['source_ip', 'timestamp', 'protocol'],
+        use_cases: ['Attack pattern analysis', 'Impact assessment'],
+      };
+    }
+
+    return recommendations;
+  }
+
+  /**
+   * Generate field usage statistics for entity types
+   */
+  private generateFieldUsageStats(entityTypes: EntityType[]): any {
+    const stats: any = {};
+
+    for (const entityType of entityTypes) {
+      const mappings = FIELD_MAPPINGS[entityType];
+      const fieldCount = Object.keys(mappings).length;
+
+      stats[entityType] = {
+        total_fields: fieldCount,
+        common_fields: Object.keys(mappings).filter(field =>
+          ['source_ip', 'device_ip', 'timestamp', 'protocol'].includes(field)
+        ).length,
+        geographic_fields: Object.keys(mappings).filter(field =>
+          ['country', 'region', 'city', 'asn'].includes(field)
+        ).length,
+        network_fields: Object.keys(mappings).filter(field =>
+          ['source_ip', 'destination_ip', 'protocol', 'port'].includes(field)
+        ).length,
+      };
+    }
+
+    return stats;
   }
 
   /**

@@ -257,24 +257,74 @@ Retrieve list of firewall rules.
 ```
 
 #### Pause Rule
-Pause an active firewall rule.
+Temporarily disable an active firewall rule for a specified duration.
 
 **Endpoint**: `POST https://{msp_domain}/v2/rules/{id}/pause`
 
 **Path Parameters**:
 - `id` (string, required): Rule ID
 
-**Response (200 Success)**: Confirmation of successful pause
+**Request Body**:
+```json
+{
+  "duration": 60,
+  "box": "box_gid_here"
+}
+```
+
+**Parameters**:
+- `duration` (number, optional): Duration in minutes to pause the rule (default: 60, range: 1-1440)
+- `box` (string, required): Box GID for context
+
+**Response (200 Success)**:
+```json
+{
+  "success": true,
+  "message": "Rule rule_123 paused for 60 minutes"
+}
+```
+
+**Example Request**:
+```bash
+curl -X POST "https://yourdomain.firewalla.net/v2/rules/rule_123/pause" \
+  -H "Authorization: Token your_token_here" \
+  -H "Content-Type: application/json" \
+  -d '{"duration": 30, "box": "box_gid_here"}'
+```
 
 #### Resume Rule
-Resume a paused firewall rule.
+Resume a previously paused firewall rule, restoring it to active state.
 
 **Endpoint**: `POST https://{msp_domain}/v2/rules/{id}/resume`
 
 **Path Parameters**:
 - `id` (string, required): Rule ID
 
-**Response (200 Success)**: Confirmation of successful resume
+**Request Body**:
+```json
+{
+  "box": "box_gid_here"
+}
+```
+
+**Parameters**:
+- `box` (string, required): Box GID for context
+
+**Response (200 Success)**:
+```json
+{
+  "success": true,
+  "message": "Rule rule_123 resumed successfully"
+}
+```
+
+**Example Request**:
+```bash
+curl -X POST "https://yourdomain.firewalla.net/v2/rules/rule_123/resume" \
+  -H "Authorization: Token your_token_here" \
+  -H "Content-Type: application/json" \
+  -d '{"box": "box_gid_here"}'
+```
 
 ### Statistics
 
