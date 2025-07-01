@@ -115,7 +115,7 @@ export class FirewallaClient {
     this.geoCache = new GeographicCache({
       maxSize: 10000,
       ttlMs: 3600000, // 1 hour cache for geographic data
-      enableStats: process.env.NODE_ENV === 'development',
+      enableStats: process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test',
     });
 
     // Use mspBaseUrl if provided, otherwise construct from mspId

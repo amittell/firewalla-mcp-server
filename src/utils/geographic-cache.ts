@@ -3,7 +3,7 @@
  * Provides efficient caching with LRU eviction and TTL management
  */
 
-import { GeographicData } from '../types.js';
+import type { GeographicData } from '../types.js';
 
 export interface GeographicCacheEntry {
   data: GeographicData | null;
@@ -38,7 +38,7 @@ export class GeographicCache {
     this.config = {
       maxSize: config.maxSize || 10000,
       ttlMs: config.ttlMs || 3600000, // 1 hour default
-      enableStats: config.enableStats || process.env.NODE_ENV === 'development',
+      enableStats: config.enableStats || process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test',
     };
   }
 
