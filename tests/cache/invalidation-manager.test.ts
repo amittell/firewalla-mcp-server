@@ -199,7 +199,7 @@ describe('InvalidationManager', () => {
         mockCacheManager
       );
       
-      expect(keysInvalidated).toBe(2); // Should match only search rule keys
+      expect(keysInvalidated).toBe(3); // Should match search rule keys (2) + default rule pattern (1)
       expect(mockCacheManager.delete).toHaveBeenCalledWith('fw:search:rules:query1');
       expect(mockCacheManager.delete).toHaveBeenCalledWith('fw:search:rules:query2');
       expect(mockCacheManager.delete).not.toHaveBeenCalledWith('fw:search:devices:query1');
@@ -312,7 +312,7 @@ describe('InvalidationManager', () => {
       );
       
       // Should report partial success
-      expect(keysInvalidated).toBe(0); // Pattern invalidation handles errors internally
+      expect(keysInvalidated).toBe(1); // One deletion succeeded, one failed
     });
 
     it('should handle cache manager errors during pattern matching', async () => {

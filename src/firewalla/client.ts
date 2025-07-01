@@ -278,9 +278,11 @@ export class FirewallaClient implements CacheManagerInterface {
       ttlMs = this.config.cacheTtl * 1000;
     }
     
+    // Store the current time to ensure consistency between multiple time measurements
+    const now = Date.now();
     this.cache.set(key, {
       data,
-      expires: Date.now() + ttlMs,
+      expires: now + ttlMs,
       strategy
     });
     
@@ -4098,20 +4100,26 @@ export class FirewallaClient implements CacheManagerInterface {
    */
   getDetailedCacheStats(): {
     size: number;
-    keys: string[];
+    allKeys: string[];
+    activeKeys: string[];
     strategySummary: Record<string, number>;
     hitRate?: number;
     averageTTL: number;
   } {
-    const keys = Array.from(this.cache.keys());
+    const allKeys = Array.from(this.cache.keys());
+    const activeKeys: string[] = [];
     const strategySummary: Record<string, number> = {};
     let totalTTL = 0;
     let activeCacheCount = 0;
+    
+    // Capture timestamp once before the loop to ensure consistent TTL calculations
+    const currentTimestamp = Date.now();
 
-    for (const [, entry] of this.cache.entries()) {
-      if (entry.expires > Date.now()) {
+    for (const [key, entry] of this.cache.entries()) {
+      if (entry.expires > currentTimestamp) {
         activeCacheCount++;
-        totalTTL += (entry.expires - Date.now());
+        activeKeys.push(key);
+        totalTTL += (entry.expires - currentTimestamp);
         
         if (entry.strategy?.keyPrefix) {
           strategySummary[entry.strategy.keyPrefix] = (strategySummary[entry.strategy.keyPrefix] || 0) + 1;
@@ -4121,7 +4129,8 @@ export class FirewallaClient implements CacheManagerInterface {
 
     return {
       size: this.cache.size,
-      keys,
+      allKeys, // All keys including expired entries
+      activeKeys, // Only non-expired active cache entries
       strategySummary,
       averageTTL: activeCacheCount > 0 ? totalTTL / activeCacheCount : 0
     };

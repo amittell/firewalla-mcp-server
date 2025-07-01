@@ -55,10 +55,12 @@ describe('FirewallaClient Enhanced Caching', () => {
       const stats = client.getDetailedCacheStats();
       
       expect(stats).toHaveProperty('size');
-      expect(stats).toHaveProperty('keys');
+      expect(stats).toHaveProperty('allKeys');
+      expect(stats).toHaveProperty('activeKeys');
       expect(stats).toHaveProperty('strategySummary');
       expect(stats).toHaveProperty('averageTTL');
-      expect(Array.isArray(stats.keys)).toBe(true);
+      expect(Array.isArray(stats.allKeys)).toBe(true);
+      expect(Array.isArray(stats.activeKeys)).toBe(true);
       expect(typeof stats.strategySummary).toBe('object');
     });
 

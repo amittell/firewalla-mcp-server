@@ -39,6 +39,12 @@ export type EntityType = 'alarms' | 'flows' | 'devices' | 'rules' | 'target_list
 
 /**
  * Data-specific cache strategies optimized for Firewalla API patterns
+ * 
+ * Note: The keyGenerator functions in static strategy methods use 'this' to access
+ * the class's utility methods (like hashQuery). This is valid within the context
+ * of the strategy functions as they are bound to the class when called. All key
+ * generation logic consistently uses this pattern across strategies to ensure
+ * uniform cache key formats and maintain compatibility with future enhancements.
  */
 export class DataCacheStrategies {
   /**
