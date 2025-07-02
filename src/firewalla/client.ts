@@ -36,11 +36,18 @@ import {
   Trend,
   SimpleStats,
   Statistics,
+  GeographicData,
 } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
 import { optimizeResponse } from '../optimization/index.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
 import { logger } from '../monitoring/logger.js';
+import { GeographicCache, type GeographicCacheStats } from '../utils/geographic-cache.js';
+import {
+  getGeographicDataForIP,
+  enrichObjectWithGeo,
+  normalizeIP,
+} from '../utils/geographic-utils.js';
 
 /**
  * Standard API response wrapper for Firewalla MSP endpoints
@@ -98,6 +105,9 @@ export class FirewallaClient {
   /** @private In-memory cache for API responses with TTL management */
   private cache: Map<string, { data: unknown; expires: number }>;
 
+  /** @private Geographic cache for IP geolocation lookups */
+  private geoCache: GeographicCache;
+
   /**
    * Creates a new Firewalla API client instance
    *
@@ -106,6 +116,11 @@ export class FirewallaClient {
    */
   constructor(private config: FirewallaConfig) {
     this.cache = new Map();
+    this.geoCache = new GeographicCache({
+      maxSize: 10000,
+      ttlMs: 3600000, // 1 hour cache for geographic data
+      enableStats: process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test',
+    });
 
     // Use mspBaseUrl if provided, otherwise construct from mspId
     const baseURL = config.mspBaseUrl || `https://${config.mspId}`;
@@ -490,7 +505,7 @@ export class FirewallaClient {
 
     return {
       count: response.count || alarms.length,
-      results: alarms,
+      results: alarms.map(alarm => this.enrichAlarmWithGeographicData(alarm)),
       next_cursor: response.next_cursor,
     };
   }
@@ -609,7 +624,7 @@ export class FirewallaClient {
 
     return {
       count: response.count || flows.length,
-      results: flows,
+      results: flows.map(flow => this.enrichWithGeographicData(flow)),
       next_cursor: response.next_cursor,
     };
   }
@@ -810,6 +825,21 @@ export class FirewallaClient {
     return device;
   };
 
+  /**
+   * Get top bandwidth consuming devices on the network
+   *
+   * @param period - Time period for analysis ('1h', '24h', '7d', '30d')
+   * @param top - Maximum number of devices to return (default: 10, max: 500)
+   * @returns Promise resolving to bandwidth usage data with device details
+   * @throws {Error} If period is invalid or API request fails
+   * @example
+   * ```typescript
+   * const usage = await client.getBandwidthUsage('24h', 50);
+   * usage.results.forEach(device => {
+   *   console.log(`${device.name}: ${device.total_bytes} bytes`);
+   * });
+   * ```
+   */
   @optimizeResponse('bandwidth')
   async getBandwidthUsage(
     period: string,
@@ -873,17 +903,47 @@ export class FirewallaClient {
       // Process and aggregate bandwidth by device
       const deviceBandwidth = new Map<string, BandwidthUsage>();
 
-      (response.results || []).forEach((flow: any) => {
-        const deviceId = flow.device?.id || flow.deviceId || 'unknown';
-        const deviceName =
-          flow.device?.name || flow.deviceName || 'Unknown Device';
-        const deviceIp = flow.device?.ip || flow.localIP || 'unknown';
-        const upload = Number(flow.upload || 0);
-        const download = Number(flow.download || 0);
+      logger.debug(
+        `Processing ${response.results?.length || 0} flows for bandwidth calculation`
+      );
 
-        if (deviceId === 'unknown' || (upload === 0 && download === 0)) {
+      (response.results || []).forEach((flow: any) => {
+        // Enhanced device ID detection with more fallbacks
+        const deviceId =
+          flow.device?.id ||
+          flow.deviceId ||
+          flow.source?.id ||
+          flow.localIP ||
+          flow.device?.ip ||
+          'unknown';
+        const deviceName =
+          flow.device?.name ||
+          flow.deviceName ||
+          flow.device?.dns ||
+          'Unknown Device';
+        const deviceIp =
+          flow.device?.ip || flow.localIP || flow.source?.ip || 'unknown';
+
+        // Enhanced bandwidth field detection
+        const upload = Number(
+          flow.upload || flow.uploadBytes || flow.tx || flow.bytes_sent || 0
+        );
+        const download = Number(
+          flow.download ||
+            flow.downloadBytes ||
+            flow.rx ||
+            flow.bytes_received ||
+            0
+        );
+
+        // More permissive filtering - only skip if BOTH device is unknown AND no traffic
+        if (deviceId === 'unknown' && upload === 0 && download === 0) {
           return;
         }
+
+        logger.debug(
+          `Flow: deviceId=${deviceId}, upload=${upload}, download=${download}`
+        );
 
         if (deviceBandwidth.has(deviceId)) {
           const existing = deviceBandwidth.get(deviceId)!;
@@ -905,10 +965,17 @@ export class FirewallaClient {
       });
 
       // Convert to array and sort by total bandwidth
-      const results = Array.from(deviceBandwidth.values())
+      const allDevices = Array.from(deviceBandwidth.values());
+      logger.debug(`Total unique devices found: ${allDevices.length}`);
+
+      const results = allDevices
         .filter(device => device.total_bytes > 0)
         .sort((a, b) => b.total_bytes - a.total_bytes)
         .slice(0, validatedTop);
+
+      logger.debug(
+        `Final results after filtering and limiting: ${results.length}`
+      );
 
       return {
         count: results.length,
@@ -1478,37 +1545,45 @@ export class FirewallaClient {
         false
       );
 
-      // Enhanced response validation
-      if (!response || typeof response !== 'object') {
-        throw new Error('Invalid response format from API');
-      }
+      // Handle various response formats - API may return empty body, status text, or object
+      let isSuccess = true; // Default to success for 200 responses
+      let responseMessage = `Alarm ${validatedAlarmId} deleted successfully`;
 
-      // More comprehensive success determination
-      const isSuccess = Boolean(
-        response.success ||
-          response.deleted ||
-          (response.status &&
-            ['deleted', 'removed', 'success', 'ok'].includes(
-              response.status.toLowerCase()
-            ))
-      );
+      if (response && typeof response === 'object') {
+        // Complex response object - check multiple success indicators
+        isSuccess = Boolean(
+          response.success ||
+            response.deleted ||
+            (response.status &&
+              ['deleted', 'removed', 'success', 'ok'].includes(
+                response.status.toLowerCase()
+              ))
+        );
+        if ('message' in response && response.message) {
+          responseMessage = response.message;
+        }
+      } else if (typeof response === 'string') {
+        // String response - check for success keywords
+        isSuccess = /success|deleted|removed|ok/i.test(response);
+        responseMessage = response;
+      }
+      // For null/undefined response with 200 status, assume success
 
       // Enhanced response object construction
       const result = {
         id: validatedAlarmId,
         success: isSuccess,
-        message: this.extractValidString(
-          response.message,
-          isSuccess
-            ? `Alarm ${validatedAlarmId} deleted successfully`
-            : `Failed to delete alarm ${validatedAlarmId}`
-        ),
+        message: responseMessage,
         timestamp: getCurrentTimestamp(),
-        // Add additional fields if available
-        ...(response.status && { status: response.status }),
-        ...(typeof response.deleted === 'boolean' && {
-          deleted: response.deleted,
-        }),
+        // Add additional fields if available from object responses
+        ...(response &&
+          typeof response === 'object' &&
+          response.status && { status: response.status }),
+        ...(response &&
+          typeof response === 'object' &&
+          typeof response.deleted === 'boolean' && {
+            deleted: response.deleted,
+          }),
       };
 
       return result;
@@ -2203,6 +2278,93 @@ export class FirewallaClient {
       size: this.cache.size,
       keys: Array.from(this.cache.keys()),
     };
+  }
+
+  /**
+   * Get geographic cache statistics
+   */
+  getGeographicCacheStats(): GeographicCacheStats {
+    return this.geoCache.getStats();
+  }
+
+  /**
+   * Clear geographic cache
+   */
+  clearGeographicCache(): void {
+    this.geoCache.clear();
+  }
+
+  /**
+   * Get geographic data for an IP address with caching
+   * @param ip - IP address to geolocate
+   * @returns GeographicData object or null if lookup fails or IP is private
+   */
+  private getGeographicData(ip: string): GeographicData | null {
+    const normalizedIP = normalizeIP(ip);
+    if (!normalizedIP) {
+      return null;
+    }
+
+    // Check cache first
+    const cached = this.geoCache.get(normalizedIP);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    // Get fresh data and cache it
+    const geoData = getGeographicDataForIP(normalizedIP);
+    this.geoCache.set(normalizedIP, geoData);
+    return geoData;
+  }
+
+  /**
+   * Enrich flow object with geographic data for source and destination IPs
+   * @param flow - Flow object to enrich
+   * @returns Enriched flow object with geographic data
+   */
+  private enrichWithGeographicData(flow: any): any {
+    let enriched = { ...flow };
+
+    // Enrich destination IP
+    if (flow.destination?.ip) {
+      enriched = enrichObjectWithGeo(
+        enriched,
+        'destination.ip',
+        'destination.geo',
+        this.getGeographicData.bind(this)
+      );
+    }
+
+    // Enrich source IP (if different from destination)
+    if (flow.source?.ip && 
+        flow.source.ip !== flow.destination?.ip) {
+      enriched = enrichObjectWithGeo(
+        enriched,
+        'source.ip',
+        'source.geo',
+        this.getGeographicData.bind(this)
+      );
+    }
+
+    return enriched;
+  }
+
+  /**
+   * Enrich alarm object with geographic data for remote IP
+   * @param alarm - Alarm object to enrich  
+   * @returns Enriched alarm object with geographic data
+   */
+  private enrichAlarmWithGeographicData(alarm: any): any {
+    if (!alarm.remote?.ip) {
+      return alarm;
+    }
+
+    return enrichObjectWithGeo(
+      alarm,
+      'remote.ip',
+      'remote.geo',
+      this.getGeographicData.bind(this)
+    );
   }
 
   // Advanced Search Methods
@@ -3003,14 +3165,65 @@ export class FirewallaClient {
               return false;
             }
 
-            // Simple search logic for common device fields
+            // Device field extraction
             const name = device.name?.toLowerCase() || '';
             const mac = device.mac?.toLowerCase() || '';
             const ip = device.ip?.toLowerCase() || '';
             const macVendor = device.macVendor?.toLowerCase() || '';
             const id = device.id?.toLowerCase() || '';
+            const isOnline = Boolean(
+              device.online || device.isOnline || device.connected
+            );
 
-            // Handle specific search patterns like "mac_vendor:Apple"
+            // Handle AND/OR logic in queries
+            const andParts = query.split(' and ');
+
+            // Check if this is an AND query
+            if (andParts.length > 1) {
+              return andParts.every(part => {
+                const trimmedPart = part.trim();
+
+                if (trimmedPart.includes('mac_vendor:')) {
+                  const vendor = trimmedPart
+                    .split('mac_vendor:')[1]
+                    ?.split(' ')[0]
+                    ?.toLowerCase();
+                  return macVendor.includes(vendor || '');
+                }
+                if (trimmedPart.includes('name:')) {
+                  const nameSearch = trimmedPart
+                    .split('name:')[1]
+                    ?.split(' ')[0]
+                    ?.toLowerCase()
+                    .replace(/\*/g, '');
+                  return name.includes(nameSearch || '');
+                }
+                if (trimmedPart.includes('online:')) {
+                  const onlineValue = trimmedPart
+                    .split('online:')[1]
+                    ?.split(' ')[0]
+                    ?.toLowerCase();
+
+                  if (onlineValue === 'true') {
+                    return isOnline;
+                  } else if (onlineValue === 'false') {
+                    return !isOnline;
+                  }
+                  return true; // Unknown online value, let it pass
+                }
+
+                // Fallback for AND parts: search in all text fields
+                return (
+                  name.includes(trimmedPart) ||
+                  mac.includes(trimmedPart) ||
+                  ip.includes(trimmedPart) ||
+                  macVendor.includes(trimmedPart) ||
+                  id.includes(trimmedPart)
+                );
+              });
+            }
+
+            // Handle single field patterns (original logic)
             if (query.includes('mac_vendor:')) {
               const vendor = query
                 .split('mac_vendor:')[1]
@@ -3025,6 +3238,19 @@ export class FirewallaClient {
                 ?.toLowerCase()
                 .replace(/\*/g, '');
               return name.includes(nameSearch || '');
+            }
+            if (query.includes('online:')) {
+              const onlineValue = query
+                .split('online:')[1]
+                ?.split(' ')[0]
+                ?.toLowerCase();
+
+              if (onlineValue === 'true') {
+                return isOnline;
+              } else if (onlineValue === 'false') {
+                return !isOnline;
+              }
+              // If neither true nor false, fall through to other filters
             }
 
             // Fallback: search in all text fields
@@ -3942,7 +4168,17 @@ export class FirewallaClient {
   }
 
   /**
-   * Pause a firewall rule temporarily
+   * Temporarily disable a specific firewall rule for a specified duration
+   *
+   * @param ruleId - The unique identifier of the rule to pause
+   * @param durationMinutes - Duration in minutes to pause the rule (default: 60, max: 1440)
+   * @returns Promise resolving to operation result with success status and message
+   * @throws {Error} If rule ID is invalid or API request fails
+   * @example
+   * ```typescript
+   * const result = await client.pauseRule('rule-123', 30);
+   * console.log(result.message); // "Rule paused successfully"
+   * ```
    */
   @optimizeResponse('rules')
   async pauseRule(
@@ -3958,15 +4194,16 @@ export class FirewallaClient {
 
       const validatedDuration = Math.max(1, Math.min(durationMinutes, 1440)); // 1 minute to 24 hours
 
+      // Use documented API endpoint with box parameter (like other operations)
+      const params = {
+        duration: validatedDuration,
+        box: this.config.boxId, // Include box context like read operations
+      };
+
       const response = await this.request<{
         success: boolean;
         message: string;
-      }>(
-        'POST',
-        `/v2/rules/${validatedRuleId}/pause`,
-        { duration: validatedDuration },
-        false
-      );
+      }>('POST', `/v2/rules/${validatedRuleId}/pause`, params, false);
 
       return {
         success: response?.success ?? true, // Default to true if API doesn't return success field
@@ -3984,7 +4221,16 @@ export class FirewallaClient {
   }
 
   /**
-   * Resume a paused firewall rule
+   * Resume a previously paused firewall rule, restoring it to active state
+   *
+   * @param ruleId - The unique identifier of the rule to resume
+   * @returns Promise resolving to operation result with success status and message
+   * @throws {Error} If rule ID is invalid or rule is not paused
+   * @example
+   * ```typescript
+   * const result = await client.resumeRule('rule-123');
+   * console.log(result.message); // "Rule resumed successfully"
+   * ```
    */
   @optimizeResponse('rules')
   async resumeRule(
@@ -3997,10 +4243,15 @@ export class FirewallaClient {
         throw new Error('Invalid rule ID provided');
       }
 
+      // Use documented API endpoint with box parameter (like other operations)
+      const params = {
+        box: this.config.boxId, // Include box context like read operations
+      };
+
       const response = await this.request<{
         success: boolean;
         message: string;
-      }>('POST', `/v2/rules/${validatedRuleId}/resume`, {}, false);
+      }>('POST', `/v2/rules/${validatedRuleId}/resume`, params, false);
 
       return {
         success: response?.success ?? true, // Default to true if API doesn't return success field

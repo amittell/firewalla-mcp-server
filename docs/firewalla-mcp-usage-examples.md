@@ -97,20 +97,29 @@ Temporarily disable a firewall rule.
 
 ```json
 {
-  "rule_id": "rule_abc123"
+  "rule_id": "rule_abc123",
+  "duration": 60
 }
 ```
 
 **Real-world scenarios:**
 ```json
-// Temporarily allow access for troubleshooting
+// Temporarily allow access for troubleshooting (30 minutes)
 {
-  "rule_id": "social_media_block"
+  "rule_id": "social_media_block",
+  "duration": 30
 }
 
-// Pause gaming restrictions for special occasion
+// Pause gaming restrictions for special occasion (2 hours)
 {
-  "rule_id": "gaming_time_limit"
+  "rule_id": "gaming_time_limit",
+  "duration": 120
+}
+
+// Quick 5-minute rule disable for testing
+{
+  "rule_id": "test_rule",
+  "duration": 5
 }
 ```
 
@@ -368,36 +377,39 @@ Get detailed network flow information.
 ---
 
 #### get_bandwidth_usage
-Get bandwidth usage statistics by device.
+Get top bandwidth consuming devices on the network.
 
 ```json
 {
-  "time_range": {
-    "start": "2024-01-01T00:00:00Z",
-    "end": "2024-01-01T23:59:59Z"
-  },
-  "limit": 50
+  "period": "24h",
+  "limit": 20
 }
 ```
 
 **Real-world scenarios:**
 ```json
-// Find top bandwidth consumers this week
+// Find top 10 bandwidth consumers in last hour
 {
-  "time_range": {
-    "start": "2024-01-01T00:00:00Z",
-    "end": "2024-01-07T23:59:59Z"
-  },
-  "limit": 20
+  "period": "1h",
+  "limit": 10
 }
 
-// Daily usage analysis for specific device troubleshooting
+// Weekly bandwidth analysis (top 50 devices)
 {
-  "time_range": {
-    "start": "2024-01-01T00:00:00Z",
-    "end": "2024-01-01T23:59:59Z"
-  },
-  "limit": 10
+  "period": "7d",
+  "limit": 50
+}
+
+// Monthly bandwidth report (top 100 devices)
+{
+  "period": "30d",
+  "limit": 100
+}
+
+// Quick daily overview
+{
+  "period": "24h",
+  "limit": 25
 }
 ```
 
@@ -506,7 +518,7 @@ Get comprehensive device information and status.
 ### Security Tools
 
 #### get_active_alarms
-Get current security alarms and alerts.
+Get current security alarms and alerts with optional severity filtering.
 
 ```json
 {
@@ -521,9 +533,27 @@ Get current security alarms and alerts.
   "limit": 50
 }
 
-// Comprehensive threat analysis
+// Get only high-severity alarms
 {
-  "limit": 200
+  "limit": 100,
+  "severity": "high"
+}
+
+// Critical security incidents only
+{
+  "limit": 50,
+  "severity": "critical"
+}
+
+// Low-priority alarms for routine monitoring
+{
+  "limit": 200,
+  "severity": "low"
+}
+
+// Comprehensive threat analysis (all severities)
+{
+  "limit": 500
 }
 ```
 

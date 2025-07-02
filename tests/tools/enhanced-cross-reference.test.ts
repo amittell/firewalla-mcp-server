@@ -289,13 +289,14 @@ describe('Enhanced Cross-Reference Search Tools', () => {
 
       const result = await searchTools.get_correlation_suggestions(params);
 
-      expect(result).toHaveProperty('entity_types');
+      expect(result).toHaveProperty('primary_entity_type');
+      expect(result).toHaveProperty('secondary_entity_types');
       expect(result).toHaveProperty('single_field');
       expect(Array.isArray(result.single_field)).toBe(true);
       expect(result).toHaveProperty('dual_field');
       expect(Array.isArray(result.dual_field)).toBe(true);
-      expect(result).toHaveProperty('recommended');
-      expect(Array.isArray(result.recommended)).toBe(true);
+      expect(result).toHaveProperty('high_confidence');
+      expect(Array.isArray(result.high_confidence)).toBe(true);
     });
 
     test('should provide common correlation patterns', async () => {
@@ -306,10 +307,10 @@ describe('Enhanced Cross-Reference Search Tools', () => {
 
       const result = await searchTools.get_correlation_suggestions(params);
 
-      expect(result).toHaveProperty('recommended');
-      expect(Array.isArray(result.recommended)).toBe(true);
-      expect(result).toHaveProperty('supported_fields');
-      expect(Array.isArray(result.supported_fields)).toBe(true);
+      expect(result).toHaveProperty('high_confidence');
+      expect(Array.isArray(result.high_confidence)).toBe(true);
+      expect(result).toHaveProperty('all_compatible_fields');
+      expect(Array.isArray(result.all_compatible_fields)).toBe(true);
     });
 
     test('should provide entity type detection', async () => {
@@ -320,9 +321,10 @@ describe('Enhanced Cross-Reference Search Tools', () => {
 
       const result = await searchTools.get_correlation_suggestions(params);
 
-      expect(result).toHaveProperty('entity_types');
-      expect(result.entity_types).toHaveProperty('primary');
-      expect(result.entity_types).toHaveProperty('secondary');
+      expect(result).toHaveProperty('primary_entity_type');
+      expect(result).toHaveProperty('secondary_entity_types');
+      expect(result.primary_entity_type).toBe('flows');
+      expect(Array.isArray(result.secondary_entity_types)).toBe(true);
     });
 
     test('should handle single secondary query', async () => {
@@ -333,8 +335,8 @@ describe('Enhanced Cross-Reference Search Tools', () => {
 
       const result = await searchTools.get_correlation_suggestions(params);
 
-      expect(result.entity_types.secondary).toHaveLength(1);
-      expect(result.supported_fields).toBeDefined();
+      expect(result.secondary_entity_types).toHaveLength(1);
+      expect(result.all_compatible_fields).toBeDefined();
     });
 
     test('should handle multiple secondary queries', async () => {
@@ -345,7 +347,7 @@ describe('Enhanced Cross-Reference Search Tools', () => {
 
       const result = await searchTools.get_correlation_suggestions(params);
 
-      expect(result.entity_types.secondary).toHaveLength(3);
+      expect(result.secondary_entity_types).toHaveLength(3);
       expect(result.multi_field.length).toBeGreaterThanOrEqual(0);
     });
   });

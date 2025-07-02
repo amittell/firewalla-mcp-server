@@ -10,12 +10,18 @@ import type {
   Device,
   NetworkRule,
   TargetList,
+  SearchMetadata,
 } from '../../types.js';
 import { SafeAccess } from '../../validation/error-handler.js';
 import { createSearchTools } from '../search.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
 import type { SearchParams } from '../../search/types.js';
 import type { ScoringCorrelationParams } from '../../validation/field-mapper.js';
+import {
+  ResponseStandardizer,
+  BackwardCompatibilityLayer,
+} from '../../utils/response-standardizer.js';
+import { shouldUseLegacyFormat } from '../../config/response-config.js';
 
 // Base search interface to reduce duplication
 export interface BaseSearchArgs extends ToolArgs {
@@ -130,6 +136,8 @@ export class SearchFlowsHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     const searchArgs = args as SearchFlowsArgs;
+    const startTime = Date.now();
+
     try {
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
@@ -144,61 +152,82 @@ export class SearchFlowsHandler extends BaseToolHandler {
         time_range: searchArgs.time_range,
       };
       const result = await searchTools.search_flows(searchParams);
+      const executionTime = Date.now() - startTime;
 
-      return this.createSuccessResponse({
-        count: SafeAccess.safeArrayAccess(
-          (result as any).results,
-          arr => arr.length,
-          0
-        ),
-        query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
-        execution_time_ms: SafeAccess.getNestedValue(
+      // Process flow data
+      const processedFlows = SafeAccess.safeArrayMap(
+        (result as any).results,
+        (flow: Flow) => ({
+          timestamp: unixToISOStringOrNow(flow.ts),
+          source_ip: SafeAccess.getNestedValue(
+            flow as any,
+            'source.ip',
+            'unknown'
+          ),
+          destination_ip: SafeAccess.getNestedValue(
+            flow as any,
+            'destination.ip',
+            'unknown'
+          ),
+          protocol: SafeAccess.getNestedValue(
+            flow as any,
+            'protocol',
+            'unknown'
+          ),
+          // bytes field is calculated as total traffic: download + upload
+          bytes:
+            (SafeAccess.getNestedValue(flow as any, 'download', 0) as number) +
+            (SafeAccess.getNestedValue(flow as any, 'upload', 0) as number),
+          blocked: SafeAccess.getNestedValue(flow as any, 'block', false),
+          direction: SafeAccess.getNestedValue(
+            flow as any,
+            'direction',
+            'unknown'
+          ),
+          device: SafeAccess.getNestedValue(flow as any, 'device', {}),
+        })
+      );
+
+      // Create metadata for standardized response
+      const metadata: SearchMetadata = {
+        query: SafeAccess.getNestedValue(
+          result as any,
+          'query',
+          searchArgs.query || ''
+        ) as string,
+        entityType: 'flows',
+        executionTime: SafeAccess.getNestedValue(
           result as any,
           'execution_time_ms',
-          0
-        ),
-        flows: SafeAccess.safeArrayMap(
-          (result as any).results,
-          (flow: Flow) => ({
-            timestamp: unixToISOStringOrNow(flow.ts),
-            source_ip: SafeAccess.getNestedValue(
-              flow as any,
-              'source.ip',
-              'unknown'
-            ),
-            destination_ip: SafeAccess.getNestedValue(
-              flow as any,
-              'destination.ip',
-              'unknown'
-            ),
-            protocol: SafeAccess.getNestedValue(
-              flow as any,
-              'protocol',
-              'unknown'
-            ),
-            // bytes field is calculated as total traffic: download + upload
-            bytes:
-              (SafeAccess.getNestedValue(
-                flow as any,
-                'download',
-                0
-              ) as number) +
-              (SafeAccess.getNestedValue(flow as any, 'upload', 0) as number),
-            blocked: SafeAccess.getNestedValue(flow as any, 'block', false),
-            direction: SafeAccess.getNestedValue(
-              flow as any,
-              'direction',
-              'unknown'
-            ),
-            device: SafeAccess.getNestedValue(flow as any, 'device', {}),
-          })
-        ),
+          executionTime
+        ) as number,
+        cached: false, // TODO: Detect from result if available
+        cursor: (result as any).next_cursor,
+        hasMore: !!(result as any).next_cursor,
+        limit: searchArgs.limit,
         aggregations: SafeAccess.getNestedValue(
           result as any,
           'aggregations',
           null
-        ),
-      });
+        ) as Record<string, any> | undefined,
+      };
+
+      // Create standardized response
+      const standardResponse = ResponseStandardizer.toSearchResponse(
+        processedFlows,
+        metadata
+      );
+
+      // Apply backward compatibility if needed
+      if (shouldUseLegacyFormat(this.name)) {
+        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
+          standardResponse,
+          this.name
+        );
+        return this.createSuccessResponse(legacyResponse);
+      }
+
+      return this.createSuccessResponse(standardResponse);
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
@@ -219,6 +248,8 @@ export class SearchAlarmsHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     const searchArgs = args as SearchAlarmsArgs;
+    const startTime = Date.now();
+
     try {
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
@@ -233,57 +264,78 @@ export class SearchAlarmsHandler extends BaseToolHandler {
         time_range: searchArgs.time_range,
       };
       const result = await searchTools.search_alarms(searchParams);
+      const executionTime = Date.now() - startTime;
 
-      return this.createSuccessResponse({
-        count: SafeAccess.safeArrayAccess(
-          (result as any).results,
-          arr => arr.length,
-          0
-        ),
-        query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
-        execution_time_ms: SafeAccess.getNestedValue(
+      // Process alarm data
+      const processedAlarms = SafeAccess.safeArrayMap(
+        (result as any).results,
+        (alarm: Alarm) => ({
+          timestamp: unixToISOStringOrNow(alarm.ts),
+          type: SafeAccess.getNestedValue(alarm as any, 'type', 'unknown'),
+          message: SafeAccess.getNestedValue(
+            alarm as any,
+            'message',
+            'No message'
+          ),
+          direction: SafeAccess.getNestedValue(
+            alarm as any,
+            'direction',
+            'unknown'
+          ),
+          protocol: SafeAccess.getNestedValue(
+            alarm as any,
+            'protocol',
+            'unknown'
+          ),
+          status: SafeAccess.getNestedValue(alarm as any, 'status', 'unknown'),
+          severity: SafeAccess.getNestedValue(
+            alarm as any,
+            'severity',
+            'unknown'
+          ),
+        })
+      );
+
+      // Create metadata for standardized response
+      const metadata: SearchMetadata = {
+        query: SafeAccess.getNestedValue(
+          result as any,
+          'query',
+          searchArgs.query || ''
+        ) as string,
+        entityType: 'alarms',
+        executionTime: SafeAccess.getNestedValue(
           result as any,
           'execution_time_ms',
-          0
-        ),
-        alarms: SafeAccess.safeArrayMap(
-          (result as any).results,
-          (alarm: Alarm) => ({
-            timestamp: unixToISOStringOrNow(alarm.ts),
-            type: SafeAccess.getNestedValue(alarm as any, 'type', 'unknown'),
-            message: SafeAccess.getNestedValue(
-              alarm as any,
-              'message',
-              'No message'
-            ),
-            direction: SafeAccess.getNestedValue(
-              alarm as any,
-              'direction',
-              'unknown'
-            ),
-            protocol: SafeAccess.getNestedValue(
-              alarm as any,
-              'protocol',
-              'unknown'
-            ),
-            status: SafeAccess.getNestedValue(
-              alarm as any,
-              'status',
-              'unknown'
-            ),
-            severity: SafeAccess.getNestedValue(
-              alarm as any,
-              'severity',
-              'unknown'
-            ),
-          })
-        ),
+          executionTime
+        ) as number,
+        cached: false,
+        cursor: (result as any).next_cursor,
+        hasMore: !!(result as any).next_cursor,
+        limit: searchArgs.limit,
         aggregations: SafeAccess.getNestedValue(
           result as any,
           'aggregations',
           null
-        ),
-      });
+        ) as Record<string, any> | undefined,
+      };
+
+      // Create standardized response
+      const standardResponse = ResponseStandardizer.toSearchResponse(
+        processedAlarms,
+        metadata
+      );
+
+      // Apply backward compatibility if needed
+      if (shouldUseLegacyFormat(this.name)) {
+        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
+          standardResponse,
+          this.name
+        );
+        return this.createSuccessResponse(legacyResponse);
+      }
+
+      return this.createSuccessResponse(standardResponse);
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
@@ -305,6 +357,8 @@ export class SearchRulesHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     const searchArgs = args as SearchRulesArgs;
+    const startTime = Date.now();
+
     try {
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
@@ -318,49 +372,74 @@ export class SearchRulesHandler extends BaseToolHandler {
         aggregate: searchArgs.aggregate,
       };
       const result = await searchTools.search_rules(searchParams);
+      const executionTime = Date.now() - startTime;
 
-      return this.createSuccessResponse({
-        count: SafeAccess.safeArrayAccess(
-          (result as any).results,
-          arr => arr.length,
-          0
-        ),
-        query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
-        execution_time_ms: SafeAccess.getNestedValue(
+      // Process rule data
+      const processedRules = SafeAccess.safeArrayMap(
+        (result as any).results,
+        (rule: NetworkRule) => ({
+          id: SafeAccess.getNestedValue(rule as any, 'id', 'unknown'),
+          action: SafeAccess.getNestedValue(rule as any, 'action', 'unknown'),
+          target_type: SafeAccess.getNestedValue(
+            rule as any,
+            'target.type',
+            'unknown'
+          ),
+          target_value: SafeAccess.getNestedValue(
+            rule as any,
+            'target.value',
+            'unknown'
+          ),
+          direction: SafeAccess.getNestedValue(
+            rule as any,
+            'direction',
+            'unknown'
+          ),
+          status: SafeAccess.getNestedValue(rule as any, 'status', 'unknown'),
+          hit_count: SafeAccess.getNestedValue(rule as any, 'hit.count', 0),
+        })
+      );
+
+      // Create metadata for standardized response
+      const metadata: SearchMetadata = {
+        query: SafeAccess.getNestedValue(
+          result as any,
+          'query',
+          searchArgs.query || ''
+        ) as string,
+        entityType: 'rules',
+        executionTime: SafeAccess.getNestedValue(
           result as any,
           'execution_time_ms',
-          0
-        ),
-        rules: SafeAccess.safeArrayMap(
-          (result as any).results,
-          (rule: NetworkRule) => ({
-            id: SafeAccess.getNestedValue(rule as any, 'id', 'unknown'),
-            action: SafeAccess.getNestedValue(rule as any, 'action', 'unknown'),
-            target_type: SafeAccess.getNestedValue(
-              rule as any,
-              'target.type',
-              'unknown'
-            ),
-            target_value: SafeAccess.getNestedValue(
-              rule as any,
-              'target.value',
-              'unknown'
-            ),
-            direction: SafeAccess.getNestedValue(
-              rule as any,
-              'direction',
-              'unknown'
-            ),
-            status: SafeAccess.getNestedValue(rule as any, 'status', 'unknown'),
-            hit_count: SafeAccess.getNestedValue(rule as any, 'hit.count', 0),
-          })
-        ),
+          executionTime
+        ) as number,
+        cached: false,
+        cursor: (result as any).next_cursor,
+        hasMore: !!(result as any).next_cursor,
+        limit: searchArgs.limit,
         aggregations: SafeAccess.getNestedValue(
           result as any,
           'aggregations',
           null
-        ),
-      });
+        ) as Record<string, any> | undefined,
+      };
+
+      // Create standardized response
+      const standardResponse = ResponseStandardizer.toSearchResponse(
+        processedRules,
+        metadata
+      );
+
+      // Apply backward compatibility if needed
+      if (shouldUseLegacyFormat(this.name)) {
+        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
+          standardResponse,
+          this.name
+        );
+        return this.createSuccessResponse(legacyResponse);
+      }
+
+      return this.createSuccessResponse(standardResponse);
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
@@ -596,40 +675,35 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
       });
 
       return this.createSuccessResponse({
-        primary_query: SafeAccess.getNestedValue(result, 'primary_query', ''),
-        secondary_queries: SafeAccess.getNestedValue(
-          result,
-          'secondary_queries',
-          []
+        primary_query: SafeAccess.getNestedValue(result, 'primary.query', ''),
+        secondary_queries: SafeAccess.safeArrayMap(
+          SafeAccess.getNestedValue(result, 'correlations', []),
+          (corr: any) => SafeAccess.getNestedValue(corr, 'query', '')
         ),
         correlation_fields: SafeAccess.getNestedValue(
           result,
-          'correlation_fields',
+          'correlation_summary.correlation_fields',
           []
         ),
         correlation_type: SafeAccess.getNestedValue(
           result,
-          'correlation_type',
+          'correlation_summary.correlation_type',
           'AND'
         ),
-        primary_results: SafeAccess.getNestedValue(
-          result,
-          'primary_results',
-          0
-        ),
+        primary_results: SafeAccess.getNestedValue(result, 'primary.count', 0),
         correlated_results: SafeAccess.getNestedValue(
           result,
-          'correlated_results',
+          'correlation_summary.total_correlated_count',
           0
         ),
         correlation_stats: SafeAccess.getNestedValue(
           result,
-          'correlation_stats',
+          'correlation_summary',
           {}
         ),
         temporal_filter_applied: SafeAccess.getNestedValue(
           result,
-          'temporal_filter_applied',
+          'correlation_summary.temporal_window_applied',
           false
         ),
         execution_time_ms: SafeAccess.getNestedValue(
@@ -637,20 +711,44 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
           'execution_time_ms',
           0
         ),
-        results: SafeAccess.safeArrayMap(result.results, (item: any) => ({
-          entity_type: SafeAccess.getNestedValue(
-            item,
-            'entity_type',
-            'unknown'
-          ),
-          correlation_strength: SafeAccess.getNestedValue(
-            item,
-            'correlation_strength',
-            0
-          ),
-          matched_fields: SafeAccess.getNestedValue(item, 'matched_fields', []),
-          data: SafeAccess.getNestedValue(item, 'data', {}),
-        })),
+        correlation_params: SafeAccess.getNestedValue(
+          result,
+          'correlation_params',
+          {}
+        ),
+        results: SafeAccess.safeArrayMap(
+          SafeAccess.getNestedValue(result, 'correlations', []),
+          (correlation: any) => ({
+            entity_type: SafeAccess.getNestedValue(
+              correlation,
+              'entity_type',
+              'unknown'
+            ),
+            query: SafeAccess.getNestedValue(correlation, 'query', ''),
+            count: SafeAccess.getNestedValue(correlation, 'count', 0),
+            correlation_stats: SafeAccess.getNestedValue(
+              correlation,
+              'correlation_stats',
+              {}
+            ),
+            correlation_results: SafeAccess.safeArrayMap(
+              SafeAccess.getNestedValue(correlation, 'results', []),
+              (item: any) => ({
+                correlation_strength: SafeAccess.getNestedValue(
+                  item,
+                  'correlation_strength',
+                  0
+                ),
+                matched_fields: SafeAccess.getNestedValue(
+                  item,
+                  'matched_fields',
+                  []
+                ),
+                data: SafeAccess.getNestedValue(item, 'data', item),
+              })
+            ),
+          })
+        ),
       });
     } catch (error: unknown) {
       const errorMessage =

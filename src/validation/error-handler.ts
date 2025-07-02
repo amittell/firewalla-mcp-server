@@ -547,7 +547,7 @@ export class SafeAccess {
  */
 export class QuerySanitizer {
   /**
-   * Sanitize search query to prevent injection attacks
+   * Sanitize search query to prevent injection attacks and validate basic structure
    */
   static sanitizeSearchQuery(query: string): ValidationResult {
     if (!query || typeof query !== 'string') {
@@ -565,17 +565,43 @@ export class QuerySanitizer {
       };
     }
 
-    // Check for potentially dangerous patterns
+    // Enhanced dangerous patterns detection
     const dangerousPatterns = [
+      // SQL injection patterns
       /;\s*(drop|delete|truncate|update|insert|alter|create|exec|execute)\s+/i,
-      /\b(union\s+select|select\s+.*\s+from|insert\s+into)\b/i,  // SQL injection patterns
+      /\b(union\s+select|select\s+.*\s+from|insert\s+into)\b/i,
       /--\s*$|\/\*.*\*\//,  // SQL comments
-      /\$\{.*\}/,  // Template literals
+      /\b(or|and)\s+1\s*=\s*1\b/i,  // Common SQL injection
+      /\b(or|and)\s+.*\s*=\s*.*\s*(--|#)/i,  // SQL comment injection
+      
+      // Script injection patterns
       /<script.*?>.*?<\/script>/i,  // Script tags
+      /<iframe.*?>.*?<\/iframe>/i,  // Iframe tags
       /javascript:/i,  // JavaScript protocol
+      /data:text\/html/i,  // Data URLs
       /eval\s*\(/i,  // eval function
+      /setTimeout\s*\(/i,  // setTimeout function
+      /setInterval\s*\(/i,  // setInterval function
+      /Function\s*\(/i,  // Function constructor
       /expression\s*\(/i,  // CSS expression
-      /\b(onload|onerror|onclick|onmouseover)\s*=/i,  // Event handlers
+      
+      // Event handlers and DOM manipulation
+      /\b(onload|onerror|onclick|onmouseover|onmouseout|onfocus|onblur)\s*=/i,
+      /document\.(write|writeln|createElement)/i,
+      /window\.(location|open)/i,
+      
+      // Template injection patterns
+      /\$\{.*\}/,  // Template literals
+      /\{\{.*\}\}/,  // Handlebars/Angular templates
+      /<%.*%>/,  // JSP/ASP templates
+      
+      // File system and system commands
+      /\b(cat|ls|pwd|rm|mv|cp|chmod|chown|kill|ps|top|wget|curl)\s+/i,
+      /\.\.\/|\.\.\\|\/etc\/|\/var\/|\/tmp\/|c:\\|%systemroot%/i,
+      
+      // Network and protocol exploitation
+      /file:\/\/|ftp:\/\/|ldap:\/\/|gopher:\/\/|dict:\/\//i,
+      /\b(ping|traceroute|nslookup|dig|netstat|ifconfig)\s+/i
     ];
 
     for (const pattern of dangerousPatterns) {
@@ -587,18 +613,94 @@ export class QuerySanitizer {
       }
     }
 
-    // Basic length validation
+    // Basic structure validation for search queries
+    const structuralIssues = [];
+    
+    // Check for unmatched parentheses
+    const openParens = (trimmedQuery.match(/\(/g) || []).length;
+    const closeParens = (trimmedQuery.match(/\)/g) || []).length;
+    if (openParens !== closeParens) {
+      structuralIssues.push('Unmatched parentheses in query');
+    }
+
+    // Check for unmatched brackets
+    const openBrackets = (trimmedQuery.match(/\[/g) || []).length;
+    const closeBrackets = (trimmedQuery.match(/\]/g) || []).length;
+    if (openBrackets !== closeBrackets) {
+      structuralIssues.push('Unmatched brackets in query');
+    }
+
+    // Check for unmatched quotes
+    const singleQuotes = (trimmedQuery.match(/'/g) || []).length;
+    const doubleQuotes = (trimmedQuery.match(/"/g) || []).length;
+    if (singleQuotes % 2 !== 0) {
+      structuralIssues.push('Unmatched single quotes in query');
+    }
+    if (doubleQuotes % 2 !== 0) {
+      structuralIssues.push('Unmatched double quotes in query');
+    }
+
+    // Check for suspicious character sequences
+    // eslint-disable-next-line no-control-regex
+    if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(trimmedQuery)) {
+      structuralIssues.push('Query contains control characters');
+    }
+
+    // Check for excessive nesting
+    const maxNestingDepth = 10;
+    let currentDepth = 0;
+    let maxDepth = 0;
+    for (const char of trimmedQuery) {
+      if (char === '(' || char === '[') {
+        currentDepth++;
+        maxDepth = Math.max(maxDepth, currentDepth);
+      } else if (char === ')' || char === ']') {
+        currentDepth--;
+      }
+    }
+    if (maxDepth > maxNestingDepth) {
+      structuralIssues.push(`Query nesting too deep (maximum ${maxNestingDepth} levels)`);
+    }
+
+    // Enhanced length validation with context
     if (trimmedQuery.length > 2000) {
+      structuralIssues.push('Query is too long (maximum 2000 characters)');
+    } else if (trimmedQuery.length > 1000) {
+      // Warning for very long queries - consider breaking it into smaller parts
+    }
+
+    // Check for potential ReDoS (Regular Expression Denial of Service) patterns
+    const redosPatterns = [
+      /(\(.*\+.*\){3,})/,  // Nested quantifiers
+      /(\*.*\+|\+.*\*)/,   // Alternating quantifiers
+      /(\{.*,.*\}.*\{.*,.*\})/  // Multiple range quantifiers
+    ];
+    
+    for (const pattern of redosPatterns) {
+      if (pattern.test(trimmedQuery)) {
+        structuralIssues.push('Query contains potentially problematic regex patterns');
+        break;
+      }
+    }
+
+    if (structuralIssues.length > 0) {
       return {
         isValid: false,
-        errors: ['Query is too long (maximum 2000 characters)']
+        errors: structuralIssues
       };
     }
+
+    // Normalize common patterns for better parsing
+    const normalizedQuery = trimmedQuery
+      .replace(/\s+/g, ' ')  // Normalize whitespace
+      .replace(/\s*:\s*/g, ':')  // Remove spaces around colons
+      .replace(/\s*(>=|<=|!=|>|<)\s*/g, '$1')  // Remove spaces around operators
+      .replace(/\s+(AND|OR|NOT)\s+/gi, ' $1 ');  // Normalize logical operators
 
     return {
       isValid: true,
       errors: [],
-      sanitizedValue: trimmedQuery
+      sanitizedValue: normalizedQuery
     };
   }
 

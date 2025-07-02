@@ -484,7 +484,7 @@ describe('FirewallaClient', () => {
   describe('pauseRule', () => {
     it('should pause a firewall rule', async () => {
       const mockResponse = { success: true, message: 'Rule paused successfully' };
-      const mockAxiosInstance = mockedAxios.create();
+      const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
       mockAxiosInstance.post = jest.fn().mockResolvedValue({
         data: { success: true, message: 'Rule paused successfully' },
       });
@@ -493,9 +493,89 @@ describe('FirewallaClient', () => {
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith(
         `/v2/rules/rule-123/pause`,
-        { duration: 120 }
+        { duration: 120, box: 'test-box-id' }
       );
       expect(result).toEqual({ success: true, message: 'Rule rule-123 paused for 120 minutes' });
+    });
+
+    it('should handle API errors gracefully', async () => {
+      const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
+      
+      // Mock API error for pause endpoint
+      const apiError = new Error('Resource not found: /v2/rules/rule-123/pause does not exist');
+      mockAxiosInstance.post = jest.fn().mockRejectedValue(apiError);
+
+      // Should throw error when API endpoint doesn't exist
+      await expect(client.pauseRule('rule-123', 60)).rejects.toThrow();
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+        `/v2/rules/rule-123/pause`,
+        { duration: 60, box: 'test-box-id' }
+      );
+    });
+  });
+
+  describe('deleteAlarm', () => {
+    it('should handle empty response format (successful deletion)', async () => {
+      const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
+      mockAxiosInstance.delete = jest.fn().mockResolvedValue({
+        data: null, // Empty response body for successful deletion
+        status: 200
+      });
+
+      const result = await client.deleteAlarm('alarm-123');
+
+      expect(mockAxiosInstance.delete).toHaveBeenCalledWith(
+        `/v2/alarms/test-box-id/alarm-123`,
+        { params: undefined }
+      );
+      expect(result).toMatchObject({
+        id: 'alarm-123',
+        success: true,
+        message: 'Alarm alarm-123 deleted successfully'
+      });
+      expect(result).toHaveProperty('timestamp');
+    });
+
+    it('should handle string response format', async () => {
+      const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
+      mockAxiosInstance.delete = jest.fn().mockResolvedValue({
+        data: 'Alarm deleted successfully',
+        status: 200
+      });
+
+      const result = await client.deleteAlarm('alarm-456');
+
+      expect(result).toMatchObject({
+        id: 'alarm-456',
+        success: true,
+        message: 'Alarm deleted successfully'
+      });
+      expect(result).toHaveProperty('timestamp');
+    });
+
+    it('should handle complex object response format', async () => {
+      const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
+      mockAxiosInstance.delete = jest.fn().mockResolvedValue({
+        data: {
+          success: true,
+          data: {
+            deleted: true,
+            message: 'Alarm successfully removed from system'
+          }
+        },
+        status: 200
+      });
+
+      const result = await client.deleteAlarm('alarm-789');
+
+      expect(result).toMatchObject({
+        id: 'alarm-789',
+        success: true,
+        message: 'Alarm successfully removed from system'
+      });
+      expect(result).toHaveProperty('timestamp');
+      expect(result).toHaveProperty('deleted', true);
     });
   });
 
