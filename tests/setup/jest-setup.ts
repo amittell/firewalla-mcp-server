@@ -3,6 +3,8 @@
  */
 
 import { getTestConfig, shouldSkipTest, isMockingEnabled } from '../config/test-config.js';
+// Import performance monitoring utilities
+import { toMeetPerformanceThresholds } from '../utils/performance-monitor.js';
 
 // Set up test environment variables
 process.env.FIREWALLA_MSP_TOKEN = process.env.FIREWALLA_MSP_TOKEN || 'test-token';
@@ -109,6 +111,7 @@ declare global {
       toCompleteWithinTimeout(timeout?: number): R;
       toHaveValidCorrelationScore(): R;
       toBeWithinPerformanceThreshold(threshold?: number): R;
+      toMeetPerformanceThresholds(thresholds: any): R;
     }
   }
 }
@@ -179,6 +182,9 @@ expect.extend({
       pass: true,
     };
   },
+  
+  // Add performance monitoring matcher
+  toMeetPerformanceThresholds,
 });
 
 // Test skipping utilities
