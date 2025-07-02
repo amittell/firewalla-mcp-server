@@ -27,6 +27,8 @@ import {
   type EnhancedCorrelationParams,
   type ScoringCorrelationParams,
 } from '../validation/field-mapper.js';
+import { FieldValidator } from '../validation/field-validator.js';
+import { ErrorFormatter } from '../validation/error-formatter.js';
 
 /**
  * Configuration interface for risk thresholds and performance settings
@@ -443,31 +445,52 @@ export class SearchEngine {
       // Use standardized parameter validation
       this.validateSearchParams(params, entityType, validationConfig);
 
-      // Enhanced query validation with syntax, semantic, and field validation
+      // Enhanced query validation with detailed error messages and comprehensive checks
       const enhancedValidation = EnhancedQueryValidator.validateQuery(
         params.query,
         entityType as EntityType
       );
+
       if (!enhancedValidation.isValid) {
-        const errorDetails = [
-          ...enhancedValidation.errors,
-          ...(enhancedValidation.fieldIssues?.map(
-            issue =>
-              `Field '${issue.field}': ${issue.issue}${issue.suggestion ? ` - ${issue.suggestion}` : ''}`
-          ) || []),
-        ];
+        // Try instance method for detailed position tracking if static method fails
+        const enhancedValidator = new EnhancedQueryValidator();
+        const detailedValidation = enhancedValidator.validateQuery(
+          params.query,
+          entityType as EntityType
+        );
 
-        let errorMessage = `Query validation failed: ${errorDetails.join(', ')}`;
+        // Use detailed errors if available, otherwise use standard errors
+        if (detailedValidation.detailedErrors?.length) {
+          const errorReport = ErrorFormatter.formatMultipleErrors(
+            detailedValidation.detailedErrors
+          );
+          const formattedText = ErrorFormatter.formatReportAsText(errorReport);
 
-        if (enhancedValidation.suggestions?.length) {
-          errorMessage += ` | Suggestions: ${enhancedValidation.suggestions.join(', ')}`;
+          throw new Error(
+            `Enhanced query validation failed:\n${formattedText}`
+          );
+        } else {
+          // Fallback to standard enhanced validation format
+          const errorDetails = [
+            ...enhancedValidation.errors,
+            ...(enhancedValidation.fieldIssues?.map(
+              issue =>
+                `Field '${issue.field}': ${issue.issue}${issue.suggestion ? ` - ${issue.suggestion}` : ''}`
+            ) || []),
+          ];
+
+          let errorMessage = `Query validation failed: ${errorDetails.join(', ')}`;
+
+          if (enhancedValidation.suggestions?.length) {
+            errorMessage += ` | Suggestions: ${enhancedValidation.suggestions.join(', ')}`;
+          }
+
+          if (enhancedValidation.correctedQuery) {
+            errorMessage += ` | Try: "${enhancedValidation.correctedQuery}"`;
+          }
+
+          throw new Error(errorMessage);
         }
-
-        if (enhancedValidation.correctedQuery) {
-          errorMessage += ` | Try: "${enhancedValidation.correctedQuery}"`;
-        }
-
-        throw new Error(errorMessage);
       }
 
       // Use corrected query if available
@@ -493,9 +516,14 @@ export class SearchEngine {
         entityType as (typeof validEntityTypes)[number]
       );
       if (!validation.isValid || !validation.ast) {
-        throw new Error(
-          `Invalid query syntax: ${validation.errors.join(', ')}`
-        );
+        // Provide enhanced error messages for syntax issues not caught by enhanced validator
+        let enhancedError = `Invalid query syntax: ${validation.errors.join(', ')}`;
+
+        if (validation.suggestions && validation.suggestions.length > 0) {
+          enhancedError += `\n\nSuggestions:\n${validation.suggestions.map(s => `• ${s}`).join('\n')}`;
+        }
+
+        throw new Error(enhancedError);
       }
 
       // Set up filter context (entityType already validated above)
@@ -706,7 +734,7 @@ export class SearchEngine {
         );
       }
 
-      // Validate enhanced cross-reference parameters
+      // Validate enhanced cross-reference parameters with detailed error messages
       const validation = validateEnhancedCrossReference(
         params.primary_query,
         params.secondary_queries,
@@ -714,8 +742,41 @@ export class SearchEngine {
       );
 
       if (!validation.isValid) {
+        // Create enhanced correlation error messages
+        const enhancedErrors = validation.errors.map(error => {
+          if (error.includes('correlation field')) {
+            const fieldMatch = error.match(/field '([^']+)'/);
+            if (fieldMatch) {
+              const field = fieldMatch[1];
+              const entityTypes = [
+                'flows',
+                'alarms',
+                'rules',
+                'devices',
+              ] as Array<'flows' | 'alarms' | 'rules' | 'devices'>;
+              const fieldValidation = FieldValidator.validateFieldAcrossTypes(
+                field,
+                entityTypes
+              );
+
+              if (
+                !fieldValidation.isValid &&
+                fieldValidation.suggestions.length > 0
+              ) {
+                return `${error}. ${fieldValidation.suggestions[0]}`;
+              }
+            }
+          }
+
+          if (error.includes('correlation type')) {
+            return `${error}. Valid correlation types are: "AND" (all fields must match), "OR" (any field can match)`;
+          }
+
+          return error;
+        });
+
         throw new Error(
-          `Enhanced cross-reference validation failed: ${validation.errors.join(', ')}`
+          `Enhanced cross-reference validation failed:\n${enhancedErrors.map(e => `• ${e}`).join('\n')}`
         );
       }
 
@@ -1616,7 +1677,9 @@ export class SearchEngine {
         // Handle continents - take first one
         if (params.geographic_filters.continents?.length) {
           const firstContinent = params.geographic_filters.continents[0];
-          geoConditions.push(`continent:${firstContinent}`);
+          geoConditions.push(
+            `continent:${firstContinent.includes(' ') ? `"${firstContinent}"` : firstContinent}`
+          );
         }
 
         // Handle regions - take first one
@@ -1746,7 +1809,9 @@ export class SearchEngine {
         // Handle continents - take first one
         if (params.geographic_filters.continents?.length) {
           const firstContinent = params.geographic_filters.continents[0];
-          geoConditions.push(`continent:${firstContinent}`);
+          geoConditions.push(
+            `continent:${firstContinent.includes(' ') ? `"${firstContinent}"` : firstContinent}`
+          );
         }
 
         // Handle regions - take first one
