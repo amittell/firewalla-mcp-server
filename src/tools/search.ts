@@ -461,9 +461,11 @@ export class SearchEngine {
 
         // Use detailed errors if available, otherwise use standard errors
         if (detailedValidation.detailedErrors?.length) {
-          const errorReport = ErrorFormatter.formatMultipleErrors(detailedValidation.detailedErrors);
+          const errorReport = ErrorFormatter.formatMultipleErrors(
+            detailedValidation.detailedErrors
+          );
           const formattedText = ErrorFormatter.formatReportAsText(errorReport);
-          
+
           throw new Error(
             `Enhanced query validation failed:\n${formattedText}`
           );
@@ -516,11 +518,11 @@ export class SearchEngine {
       if (!validation.isValid || !validation.ast) {
         // Provide enhanced error messages for syntax issues not caught by enhanced validator
         let enhancedError = `Invalid query syntax: ${validation.errors.join(', ')}`;
-        
+
         if (validation.suggestions && validation.suggestions.length > 0) {
           enhancedError += `\n\nSuggestions:\n${validation.suggestions.map(s => `• ${s}`).join('\n')}`;
         }
-        
+
         throw new Error(enhancedError);
       }
 
@@ -746,22 +748,33 @@ export class SearchEngine {
             const fieldMatch = error.match(/field '([^']+)'/);
             if (fieldMatch) {
               const field = fieldMatch[1];
-              const entityTypes = ['flows', 'alarms', 'rules', 'devices'] as Array<'flows' | 'alarms' | 'rules' | 'devices'>;
-              const fieldValidation = FieldValidator.validateFieldAcrossTypes(field, entityTypes);
-              
-              if (!fieldValidation.isValid && fieldValidation.suggestions.length > 0) {
+              const entityTypes = [
+                'flows',
+                'alarms',
+                'rules',
+                'devices',
+              ] as Array<'flows' | 'alarms' | 'rules' | 'devices'>;
+              const fieldValidation = FieldValidator.validateFieldAcrossTypes(
+                field,
+                entityTypes
+              );
+
+              if (
+                !fieldValidation.isValid &&
+                fieldValidation.suggestions.length > 0
+              ) {
                 return `${error}. ${fieldValidation.suggestions[0]}`;
               }
             }
           }
-          
+
           if (error.includes('correlation type')) {
             return `${error}. Valid correlation types are: "AND" (all fields must match), "OR" (any field can match)`;
           }
-          
+
           return error;
         });
-        
+
         throw new Error(
           `Enhanced cross-reference validation failed:\n${enhancedErrors.map(e => `• ${e}`).join('\n')}`
         );
@@ -1664,7 +1677,9 @@ export class SearchEngine {
         // Handle continents - take first one
         if (params.geographic_filters.continents?.length) {
           const firstContinent = params.geographic_filters.continents[0];
-          geoConditions.push(`continent:${firstContinent.includes(" ") ? `"${firstContinent}"` : firstContinent}`);
+          geoConditions.push(
+            `continent:${firstContinent.includes(' ') ? `"${firstContinent}"` : firstContinent}`
+          );
         }
 
         // Handle regions - take first one
@@ -1794,7 +1809,9 @@ export class SearchEngine {
         // Handle continents - take first one
         if (params.geographic_filters.continents?.length) {
           const firstContinent = params.geographic_filters.continents[0];
-          geoConditions.push(`continent:${firstContinent.includes(" ") ? `"${firstContinent}"` : firstContinent}`);
+          geoConditions.push(
+            `continent:${firstContinent.includes(' ') ? `"${firstContinent}"` : firstContinent}`
+          );
         }
 
         // Handle regions - take first one

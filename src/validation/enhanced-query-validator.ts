@@ -179,7 +179,7 @@ export class EnhancedQueryValidator {
         suggestion: 'Provide a valid search query string'
       });
       
-      return this.buildResult(false, errors, [], quickFixes);
+      return this.buildResult(false, errors, quickFixes);
     }
 
     const trimmedQuery = query.trim();
@@ -190,17 +190,28 @@ export class EnhancedQueryValidator {
         suggestion: 'Enter a search query like "protocol:tcp" or "severity:high"'
       });
       
-      return this.buildResult(false, errors, [], quickFixes);
+      return this.buildResult(false, errors, quickFixes);
     }
 
     try {
-      // If entity type provided, use static method for full validation
+      // If entity type provided, use static method for full validation then add position tracking
       if (entityType) {
-        const result = EnhancedQueryValidator.validateQuery(query, entityType);
+        const staticResult = EnhancedQueryValidator.validateQuery(query, entityType);
+        
+        // If static validation failed, add position tracking details
+        if (!staticResult.isValid) {
+          const parseResult = this.parseWithPositionTracking(trimmedQuery);
+          return {
+            ...staticResult,
+            detailedErrors: parseResult.errors,
+            quickFixes: parseResult.quickFixes
+          };
+        }
+        
         return {
-          ...result,
-          detailedErrors: result.detailedErrors || [],
-          quickFixes: result.quickFixes || []
+          ...staticResult,
+          detailedErrors: staticResult.detailedErrors || [],
+          quickFixes: staticResult.quickFixes || []
         };
       }
 
@@ -225,7 +236,7 @@ export class EnhancedQueryValidator {
       }
     }
 
-    return this.buildResult(errors.length === 0, errors, [], quickFixes);
+    return this.buildResult(errors.length === 0, errors, quickFixes);
   }
 
   /**
@@ -624,13 +635,11 @@ export class EnhancedQueryValidator {
   private buildResult(
     isValid: boolean, 
     detailedErrors: DetailedError[], 
-    warnings: string[], 
     quickFixes: QuickFix[]
   ): SemanticValidationResult & { detailedErrors: DetailedError[]; quickFixes: QuickFix[] } {
     return {
       isValid,
       errors: detailedErrors.map(e => e.message),
-      warnings,
       suggestions: detailedErrors.map(e => e.suggestion).filter(Boolean) as string[],
       detailedErrors,
       quickFixes

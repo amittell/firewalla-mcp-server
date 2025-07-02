@@ -42,7 +42,10 @@ import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
 import { optimizeResponse } from '../optimization/index.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
 import { logger } from '../monitoring/logger.js';
-import { GeographicCache, type GeographicCacheStats } from '../utils/geographic-cache.js';
+import {
+  GeographicCache,
+  type GeographicCacheStats,
+} from '../utils/geographic-cache.js';
 import {
   getGeographicDataForIP,
   enrichObjectWithGeo,
@@ -119,7 +122,9 @@ export class FirewallaClient {
     this.geoCache = new GeographicCache({
       maxSize: 10000,
       ttlMs: 3600000, // 1 hour cache for geographic data
-      enableStats: process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test',
+      enableStats:
+        process.env.NODE_ENV === 'development' ||
+        process.env.NODE_ENV === 'test',
     });
 
     // Use mspBaseUrl if provided, otherwise construct from mspId
@@ -2336,8 +2341,7 @@ export class FirewallaClient {
     }
 
     // Enrich source IP (if different from destination)
-    if (flow.source?.ip && 
-        flow.source.ip !== flow.destination?.ip) {
+    if (flow.source?.ip && flow.source.ip !== flow.destination?.ip) {
       enriched = enrichObjectWithGeo(
         enriched,
         'source.ip',
@@ -2351,7 +2355,7 @@ export class FirewallaClient {
 
   /**
    * Enrich alarm object with geographic data for remote IP
-   * @param alarm - Alarm object to enrich  
+   * @param alarm - Alarm object to enrich
    * @returns Enriched alarm object with geographic data
    */
   private enrichAlarmWithGeographicData(alarm: any): any {

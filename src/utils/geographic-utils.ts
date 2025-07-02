@@ -26,7 +26,9 @@ export function isPrivateIP(ip: string): boolean {
  * @returns Continent name or "Unknown" if not found
  */
 export function mapContinent(countryCode: string): string {
-  return COUNTRY_TO_CONTINENT[countryCode] || DEFAULT_GEOGRAPHIC_VALUES.CONTINENT;
+  return (
+    COUNTRY_TO_CONTINENT[countryCode] || DEFAULT_GEOGRAPHIC_VALUES.CONTINENT
+  );
 }
 
 /**
@@ -35,7 +37,10 @@ export function mapContinent(countryCode: string): string {
  * @returns Risk score from 1 (low) to 10 (high)
  */
 export function calculateRiskScore(countryCode: string): number {
-  return COUNTRY_RISK_SCORES[countryCode] || DEFAULT_GEOGRAPHIC_VALUES.DEFAULT_RISK_SCORE;
+  return (
+    COUNTRY_RISK_SCORES[countryCode] ||
+    DEFAULT_GEOGRAPHIC_VALUES.DEFAULT_RISK_SCORE
+  );
 }
 
 /**
@@ -85,7 +90,7 @@ export function enrichObjectWithGeo<T extends Record<string, any>>(
   getGeoData: (ip: string) => GeographicData | null
 ): T {
   const enriched = { ...obj };
-  
+
   const ip = getNestedValue(enriched, ipPath);
   if (typeof ip === 'string' && !isPrivateIP(ip)) {
     const geoData = getGeoData(ip);
@@ -93,7 +98,7 @@ export function enrichObjectWithGeo<T extends Record<string, any>>(
       setNestedValue(enriched, geoPath, geoData);
     }
   }
-  
+
   return enriched;
 }
 
@@ -119,14 +124,14 @@ function setNestedValue(obj: any, path: string, value: any): void {
   if (!lastKey) {
     return;
   }
-  
+
   const target = keys.reduce((current, key) => {
     if (!current[key] || typeof current[key] !== 'object') {
       current[key] = {};
     }
     return current[key];
   }, obj);
-  
+
   target[lastKey] = value;
 }
 
@@ -136,7 +141,8 @@ function setNestedValue(obj: any, path: string, value: any): void {
  * @returns true if valid, false otherwise
  */
 export function isValidIP(ip: string): boolean {
-  const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  const ipv4Regex =
+    /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
   const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
   return ipv4Regex.test(ip) || ipv6Regex.test(ip);
 }
@@ -150,11 +156,11 @@ export function normalizeIP(ip: string): string | null {
   if (!ip || typeof ip !== 'string') {
     return null;
   }
-  
+
   const trimmed = ip.trim();
   if (!isValidIP(trimmed)) {
     return null;
   }
-  
+
   return trimmed;
 }
