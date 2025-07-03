@@ -14,6 +14,16 @@ import {
   unixToISOStringOrNow,
   getCurrentTimestamp,
 } from '../../utils/timestamp.js';
+import {
+  normalizeUnknownFields,
+  sanitizeFieldValue,
+  batchNormalize,
+} from '../../utils/data-normalizer.js';
+import {
+  validateResponseStructure,
+  normalizeTimestamps,
+  createValidationSchema,
+} from '../../utils/data-validator.js';
 
 export class GetActiveAlarmsHandler extends BaseToolHandler {
   name = 'get_active_alarms';
@@ -149,30 +159,73 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         }
       }
 
+      // Validate response structure
+      const alarmValidationSchema = createValidationSchema('alarms');
+      const alarmValidationResult = validateResponseStructure(
+        response,
+        alarmValidationSchema
+      );
+
+      if (!alarmValidationResult.isValid) {
+        // Log validation warnings for debugging
+        console.warn(
+          'Alarm response validation failed:',
+          alarmValidationResult.errors
+        );
+      }
+
+      // Normalize alarm data for consistency
+      const alarmResults = SafeAccess.safeArrayAccess(
+        response.results,
+        (arr: any[]) => arr,
+        []
+      ) as any[];
+      const normalizedAlarms = batchNormalize(alarmResults, {
+        type: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        status: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        message: (v: any) =>
+          sanitizeFieldValue(v, 'No message available').value,
+        direction: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        protocol: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        severity: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        device: (v: any) => (v ? normalizeUnknownFields(v) : null),
+        remote: (v: any) => (v ? normalizeUnknownFields(v) : null),
+      });
+
       return this.createSuccessResponse({
         count: SafeAccess.getNestedValue(response as any, 'count', 0),
-        alarms: SafeAccess.safeArrayMap(response.results, (alarm: any) => ({
-          aid: SafeAccess.getNestedValue(alarm, 'aid', 0),
-          timestamp: unixToISOStringOrNow(alarm.ts),
-          type: SafeAccess.getNestedValue(alarm, 'type', 'unknown'),
-          status: SafeAccess.getNestedValue(alarm, 'status', 'unknown'),
-          message: SafeAccess.getNestedValue(alarm, 'message', 'No message'),
-          direction: SafeAccess.getNestedValue(alarm, 'direction', 'unknown'),
-          protocol: SafeAccess.getNestedValue(alarm, 'protocol', 'unknown'),
-          gid: SafeAccess.getNestedValue(alarm, 'gid', 'unknown'),
-          // Include conditional properties if present
-          ...(alarm.device && { device: alarm.device }),
-          ...(alarm.remote && { remote: alarm.remote }),
-          ...(alarm.src && { src: alarm.src }),
-          ...(alarm.dst && { dst: alarm.dst }),
-          ...(alarm.port && { port: alarm.port }),
-          ...(alarm.dport && { dport: alarm.dport }),
-          ...(alarm.severity && { severity: alarm.severity }),
-        })),
+        alarms: SafeAccess.safeArrayMap(normalizedAlarms, (alarm: any) => {
+          // Apply timestamp normalization to each alarm
+          const timestampNormalized = normalizeTimestamps(alarm);
+          const finalAlarm = timestampNormalized.data;
+
+          return {
+            aid: SafeAccess.getNestedValue(finalAlarm, 'aid', 0),
+            timestamp: unixToISOStringOrNow(finalAlarm.ts),
+            type: finalAlarm.type, // Already normalized
+            status: finalAlarm.status, // Already normalized
+            message: finalAlarm.message, // Already normalized
+            direction: finalAlarm.direction, // Already normalized
+            protocol: finalAlarm.protocol, // Already normalized
+            gid: SafeAccess.getNestedValue(finalAlarm, 'gid', 'unknown'),
+            severity: finalAlarm.severity, // Already normalized
+            // Include conditional properties if present (now normalized)
+            ...(finalAlarm.device && { device: finalAlarm.device }),
+            ...(finalAlarm.remote && { remote: finalAlarm.remote }),
+            ...(finalAlarm.src && { src: finalAlarm.src }),
+            ...(finalAlarm.dst && { dst: finalAlarm.dst }),
+            ...(finalAlarm.port && { port: finalAlarm.port }),
+            ...(finalAlarm.dport && { dport: finalAlarm.dport }),
+          };
+        }),
         next_cursor: response.next_cursor,
         total_count: totalCount,
         pages_traversed: pagesTraversed,
         has_more: !!response.next_cursor,
+        validation_warnings:
+          alarmValidationResult.warnings.length > 0
+            ? alarmValidationResult.warnings
+            : undefined,
       });
     } catch (error: unknown) {
       const errorMessage =

@@ -232,7 +232,61 @@ export class PauseRuleHandler extends BaseToolHandler {
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(`Failed to pause rule: ${errorMessage}`);
+
+      // Provide enhanced error context based on common failure scenarios
+      let errorType = ErrorType.API_ERROR;
+      const suggestions: string[] = [];
+      const context: Record<string, any> = {
+        rule_id: args?.rule_id,
+        duration: args?.duration || 60,
+        operation: 'pause_rule',
+      };
+
+      // Analyze error message for specific guidance
+      if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+        errorType = ErrorType.API_ERROR;
+        suggestions.push(
+          'Verify the rule_id exists by searching rules first: search_rules query:"id:your_rule_id"',
+          'Check if the rule was recently deleted or modified',
+          'Ensure you have permission to access this rule'
+        );
+      } else if (
+        errorMessage.includes('permission') ||
+        errorMessage.includes('401') ||
+        errorMessage.includes('403')
+      ) {
+        errorType = ErrorType.AUTHENTICATION_ERROR;
+        suggestions.push(
+          'Verify your Firewalla MSP API credentials are valid',
+          'Check if your API token has rule management permissions',
+          'Ensure the rule belongs to a box you have access to'
+        );
+      } else if (
+        errorMessage.includes('already paused') ||
+        errorMessage.includes('inactive')
+      ) {
+        errorType = ErrorType.API_ERROR;
+        suggestions.push(
+          'Rule may already be paused - check rule status first',
+          'Use resume_rule if the rule needs to be reactivated',
+          'Check rule status with get_network_rules to verify current state'
+        );
+      } else {
+        suggestions.push(
+          'Verify network connectivity to Firewalla API',
+          'Check if the Firewalla box is online and accessible',
+          'Try with a different rule_id to test functionality',
+          'See the Error Handling Guide: /docs/error-handling-guide.md'
+        );
+      }
+
+      return createErrorResponse(
+        this.name,
+        `Failed to pause rule: ${errorMessage}`,
+        errorType,
+        context,
+        suggestions
+      );
     }
   }
 }

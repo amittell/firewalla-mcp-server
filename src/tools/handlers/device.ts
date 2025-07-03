@@ -11,6 +11,16 @@ import {
   ErrorType,
 } from '../../validation/error-handler.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
+import {
+  normalizeUnknownFields,
+  sanitizeFieldValue,
+  batchNormalize,
+} from '../../utils/data-normalizer.js';
+import {
+  validateResponseStructure,
+  normalizeTimestamps,
+  createValidationSchema,
+} from '../../utils/data-validator.js';
 
 export class GetDeviceStatusHandler extends BaseToolHandler {
   name = 'get_device_status';
@@ -56,21 +66,45 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
         cursor
       );
 
-      // Optimize device counting to avoid dual array iteration
-      const deviceCounts = SafeAccess.safeArrayAccess(
+      // Validate response structure
+      const validationSchema = createValidationSchema('devices');
+      const validationResult = validateResponseStructure(
+        devicesResponse,
+        validationSchema
+      );
+
+      if (!validationResult.isValid) {
+        // Log validation warnings for debugging
+        console.warn(
+          'Device response validation failed:',
+          validationResult.errors
+        );
+      }
+
+      // Normalize device data for consistency
+      const deviceResults = SafeAccess.safeArrayAccess(
         devicesResponse.results,
-        (devices: any[]) =>
-          devices.reduce(
-            (acc: { online: number; offline: number }, d: any) => {
-              if (d.online) {
-                acc.online++;
-              } else {
-                acc.offline++;
-              }
-              return acc;
-            },
-            { online: 0, offline: 0 }
-          ),
+        (arr: any[]) => arr,
+        []
+      ) as any[];
+      const normalizedDevices = batchNormalize(deviceResults, {
+        name: (v: any) => sanitizeFieldValue(v, 'Unknown Device').value,
+        ip: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        macVendor: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        network: (v: any) => (v ? normalizeUnknownFields(v) : null),
+        group: (v: any) => (v ? normalizeUnknownFields(v) : null),
+      });
+
+      // Optimize device counting to avoid dual array iteration
+      const deviceCounts = normalizedDevices.reduce(
+        (acc: { online: number; offline: number }, d: any) => {
+          if (d.online) {
+            acc.online++;
+          } else {
+            acc.offline++;
+          }
+          return acc;
+        },
         { online: 0, offline: 0 }
       );
 
@@ -94,33 +128,40 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
           'has_more',
           false
         ),
-        devices: SafeAccess.safeArrayMap(
-          devicesResponse.results,
-          (device: any) => ({
-            id: SafeAccess.getNestedValue(device, 'id', 'unknown'),
-            gid: SafeAccess.getNestedValue(device, 'gid', 'unknown'),
-            name: SafeAccess.getNestedValue(device, 'name', 'Unknown Device'),
-            ip: SafeAccess.getNestedValue(device, 'ip', 'unknown'),
-            macVendor: SafeAccess.getNestedValue(
-              device,
-              'macVendor',
-              'unknown'
-            ),
-            online: SafeAccess.getNestedValue(device, 'online', false),
+        devices: normalizedDevices.map((device: any) => {
+          // Apply timestamp normalization to device data
+          const timestampNormalized = normalizeTimestamps(device);
+          const finalDevice = timestampNormalized.data;
+
+          return {
+            id: SafeAccess.getNestedValue(finalDevice, 'id', 'unknown'),
+            gid: SafeAccess.getNestedValue(finalDevice, 'gid', 'unknown'),
+            name: finalDevice.name, // Already normalized
+            ip: finalDevice.ip, // Already normalized
+            macVendor: finalDevice.macVendor, // Already normalized
+            online: SafeAccess.getNestedValue(finalDevice, 'online', false),
             lastSeen: unixToISOStringOrNow(
-              SafeAccess.getNestedValue(device, 'lastSeen', 0) as number
+              SafeAccess.getNestedValue(finalDevice, 'lastSeen', 0) as number
             ),
-            ipReserved: SafeAccess.getNestedValue(device, 'ipReserved', false),
-            network: SafeAccess.getNestedValue(device, 'network', null),
-            group: SafeAccess.getNestedValue(device, 'group', null),
+            ipReserved: SafeAccess.getNestedValue(
+              finalDevice,
+              'ipReserved',
+              false
+            ),
+            network: finalDevice.network, // Already normalized
+            group: finalDevice.group, // Already normalized
             totalDownload: SafeAccess.getNestedValue(
-              device,
+              finalDevice,
               'totalDownload',
               0
             ),
-            totalUpload: SafeAccess.getNestedValue(device, 'totalUpload', 0),
-          })
-        ),
+            totalUpload: SafeAccess.getNestedValue(
+              finalDevice,
+              'totalUpload',
+              0
+            ),
+          };
+        }),
         next_cursor: SafeAccess.getNestedValue(
           devicesResponse,
           'next_cursor',

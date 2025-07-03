@@ -51,6 +51,17 @@ import {
   enrichObjectWithGeo,
   normalizeIP,
 } from '../utils/geographic-utils.js';
+import {
+  normalizeUnknownFields,
+  sanitizeFieldValue,
+  ensureConsistentGeoData,
+  batchNormalize,
+} from '../utils/data-normalizer.js';
+import {
+  validateResponseStructure,
+  normalizeTimestamps,
+  createValidationSchema,
+} from '../utils/data-validator.js';
 
 /**
  * Standard API response wrapper for Firewalla MSP endpoints
@@ -392,6 +403,10 @@ export class FirewallaClient {
               errorMessage =
                 'Server error: Firewalla API is experiencing issues';
               break;
+            case 502:
+              errorMessage =
+                'Bad Gateway: Unable to connect to Firewalla API server or invalid resource ID';
+              break;
             case 503:
               errorMessage =
                 'Service unavailable: Firewalla API is temporarily down';
@@ -484,19 +499,42 @@ export class FirewallaClient {
       next_cursor?: string;
     }>('GET', endpoint, params);
 
-    // API returns {count, results[], next_cursor} format
-    const alarms = (
-      Array.isArray(response.results) ? response.results : []
-    ).map(
+    // Validate response structure
+    const validationSchema = createValidationSchema('alarms');
+    const validationResult = validateResponseStructure(
+      response,
+      validationSchema
+    );
+
+    if (!validationResult.isValid) {
+      logger.warn('Alarm response validation failed:', {
+        errors: validationResult.errors,
+      });
+    }
+
+    // Normalize and process alarm data
+    const rawAlarms = Array.isArray(response.results) ? response.results : [];
+
+    // Apply data normalization to the raw alarm data
+    const normalizedAlarms = batchNormalize(rawAlarms, {
+      message: v => sanitizeFieldValue(v, 'Unknown alarm').value,
+      direction: v => sanitizeFieldValue(v, 'inbound').value,
+      protocol: v => sanitizeFieldValue(v, 'tcp').value,
+      device: v => (v ? normalizeUnknownFields(v) : undefined),
+      remote: v => (v ? normalizeUnknownFields(v) : undefined),
+    });
+
+    // Map normalized data to Alarm objects
+    const alarms = normalizedAlarms.map(
       (item: any): Alarm => ({
         ts: item.ts || Math.floor(Date.now() / 1000),
         gid: item.gid || this.config.boxId,
         aid: item.aid || 0,
         type: item.type || 1,
         status: item.status || 1,
-        message: item.message || 'Unknown alarm',
-        direction: item.direction || 'inbound',
-        protocol: item.protocol || 'tcp',
+        message: item.message,
+        direction: item.direction,
+        protocol: item.protocol,
         // Conditional properties based on alarm type
         ...(item.device && { device: item.device }),
         ...(item.remote && { remote: item.remote }),
@@ -508,9 +546,23 @@ export class FirewallaClient {
       })
     );
 
+    // Normalize timestamps in the alarm objects
+    const timestampNormalizedAlarms = alarms.map(alarm => {
+      const result = normalizeTimestamps(alarm);
+      if (result.warnings.length > 0) {
+        logger.warn(
+          `Timestamp normalization warnings for alarm ${alarm.aid}:`,
+          { warnings: result.warnings }
+        );
+      }
+      return result.data;
+    });
+
     return {
-      count: response.count || alarms.length,
-      results: alarms.map(alarm => this.enrichAlarmWithGeographicData(alarm)),
+      count: response.count || timestampNormalizedAlarms.length,
+      results: timestampNormalizedAlarms.map(alarm =>
+        this.enrichAlarmWithGeographicData(alarm)
+      ),
       next_cursor: response.next_cursor,
     };
   }
@@ -2363,12 +2415,21 @@ export class FirewallaClient {
       return alarm;
     }
 
-    return enrichObjectWithGeo(
+    const enrichedAlarm = enrichObjectWithGeo(
       alarm,
       'remote.ip',
       'remote.geo',
       this.getGeographicData.bind(this)
     );
+
+    // Ensure consistent geographic data formatting
+    if (enrichedAlarm.remote?.geo) {
+      enrichedAlarm.remote.geo = ensureConsistentGeoData(
+        enrichedAlarm.remote.geo
+      );
+    }
+
+    return enrichedAlarm;
   }
 
   // Advanced Search Methods

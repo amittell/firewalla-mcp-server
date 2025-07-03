@@ -12,10 +12,43 @@ import {
 } from '../../validation/error-handler.js';
 import { unixToISOString } from '../../utils/timestamp.js';
 import { logger } from '../../monitoring/logger.js';
+import {
+  normalizeUnknownFields,
+  sanitizeFieldValue,
+  batchNormalize,
+} from '../../utils/data-normalizer.js';
+import { normalizeTimestamps } from '../../utils/data-validator.js';
 
 export class GetBoxesHandler extends BaseToolHandler {
   name = 'get_boxes';
-  description = 'List all managed Firewalla boxes';
+  description = `List all managed Firewalla boxes with comprehensive status and configuration details.
+
+Retrieve information about all Firewalla devices in your network including their status, configuration, and monitoring capabilities.
+
+RESPONSE DATA:
+- Box identification: GID, name, model, and version information
+- Status monitoring: Online/offline status and last seen timestamps
+- Network configuration: Public IP, location, and network settings
+- Device statistics: Connected device count, active rules, and alarm counts
+- License information: Subscription status and feature availability
+
+OPTIONAL FILTERING:
+- group_id parameter to filter boxes by specific groups
+- Automatic data normalization for consistent field formats
+- Timestamp conversion to ISO format for standardized time handling
+
+DATA NORMALIZATION:
+- Unknown values standardized across all fields
+- Box names sanitized to handle null/empty values
+- Location data normalized for consistent geographic information
+- Public IP validation and formatting
+
+TROUBLESHOOTING:
+- If no boxes returned, verify MSP API credentials and permissions
+- Check network connectivity if boxes show as offline
+- Ensure box GIDs are correctly configured in environment variables
+
+See the Box Management guide for configuration details.`;
   category = 'analytics' as const;
 
   async execute(
@@ -43,28 +76,46 @@ export class GetBoxesHandler extends BaseToolHandler {
 
       const boxesResponse = await firewalla.getBoxes(groupId as string);
 
+      // Normalize box data for consistency
+      const boxResults = SafeAccess.safeArrayAccess(
+        boxesResponse.results,
+        (arr: any[]) => arr,
+        []
+      ) as any[];
+      const normalizedBoxes = batchNormalize(boxResults, {
+        name: (v: any) => sanitizeFieldValue(v, 'Unknown Box').value,
+        model: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        mode: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        version: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        publicIP: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        group: (v: any) => (v ? normalizeUnknownFields(v) : null),
+        location: (v: any) => (v ? normalizeUnknownFields(v) : null),
+      });
+
       return this.createSuccessResponse({
-        total_boxes: SafeAccess.safeArrayAccess(
-          boxesResponse.results,
-          arr => arr.length,
-          0
-        ),
-        boxes: SafeAccess.safeArrayMap(boxesResponse.results, (box: any) => ({
-          gid: SafeAccess.getNestedValue(box, 'gid', 'unknown'),
-          name: SafeAccess.getNestedValue(box, 'name', 'Unknown Box'),
-          model: SafeAccess.getNestedValue(box, 'model', 'unknown'),
-          mode: SafeAccess.getNestedValue(box, 'mode', 'unknown'),
-          version: SafeAccess.getNestedValue(box, 'version', 'unknown'),
-          online: SafeAccess.getNestedValue(box, 'online', false),
-          last_seen: SafeAccess.getNestedValue(box, 'lastSeen', 0),
-          license: SafeAccess.getNestedValue(box, 'license', null),
-          public_ip: SafeAccess.getNestedValue(box, 'publicIP', 'unknown'),
-          group: SafeAccess.getNestedValue(box, 'group', null),
-          location: SafeAccess.getNestedValue(box, 'location', null),
-          device_count: SafeAccess.getNestedValue(box, 'deviceCount', 0),
-          rule_count: SafeAccess.getNestedValue(box, 'ruleCount', 0),
-          alarm_count: SafeAccess.getNestedValue(box, 'alarmCount', 0),
-        })),
+        total_boxes: normalizedBoxes.length,
+        boxes: normalizedBoxes.map((box: any) => {
+          // Apply timestamp normalization
+          const timestampNormalized = normalizeTimestamps(box);
+          const finalBox = timestampNormalized.data;
+
+          return {
+            gid: SafeAccess.getNestedValue(finalBox, 'gid', 'unknown'),
+            name: finalBox.name, // Already normalized
+            model: finalBox.model, // Already normalized
+            mode: finalBox.mode, // Already normalized
+            version: finalBox.version, // Already normalized
+            online: SafeAccess.getNestedValue(finalBox, 'online', false),
+            last_seen: SafeAccess.getNestedValue(finalBox, 'lastSeen', 0),
+            license: SafeAccess.getNestedValue(finalBox, 'license', null),
+            public_ip: finalBox.publicIP || finalBox.public_ip || 'unknown', // Standardized field name
+            group: finalBox.group, // Already normalized
+            location: finalBox.location, // Already normalized
+            device_count: SafeAccess.getNestedValue(finalBox, 'deviceCount', 0),
+            rule_count: SafeAccess.getNestedValue(finalBox, 'ruleCount', 0),
+            alarm_count: SafeAccess.getNestedValue(finalBox, 'alarmCount', 0),
+          };
+        }),
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -76,7 +127,42 @@ export class GetBoxesHandler extends BaseToolHandler {
 
 export class GetSimpleStatisticsHandler extends BaseToolHandler {
   name = 'get_simple_statistics';
-  description = 'Get basic statistics about boxes, alarms, and rules';
+  description = `Get comprehensive network statistics with health monitoring and status analysis.
+
+Provides an overview of your entire Firewalla network infrastructure including box status, security metrics, and system health indicators.
+
+STATISTICS PROVIDED:
+- Box availability: Online/offline counts and availability percentage
+- Security monitoring: Total alarms and active threats
+- Policy management: Total rules and enforcement status
+- Health assessment: Overall system health score (0-100)
+- Status summary: Operational status and active monitoring indicators
+
+HEALTH SCORE CALCULATION:
+- Base score: 100 points
+- Offline box penalty: Up to -40 points based on offline ratio
+- Alarm penalty: Up to -30 points for high alarm counts
+- Rule bonus: Up to +10 points for active rule management
+- Final range: 0-100 with higher scores indicating better health
+
+USE CASES:
+- Dashboard overview: Quick system status assessment
+- Health monitoring: Automated health check integration
+- Capacity planning: Understanding current infrastructure load
+- Troubleshooting: Identifying system-wide issues
+
+PERFORMANCE NOTES:
+- Statistics cached for 1 hour for optimal performance
+- Real-time calculation of derived metrics
+- Defensive programming prevents division by zero errors
+- Null-safe operations throughout calculation pipeline
+
+ERROR HANDLING:
+- Returns default values if API data unavailable
+- Graceful degradation with partial data
+- Detailed error context for troubleshooting
+
+This tool provides the foundation for network health monitoring and dashboard displays.`;
   category = 'analytics' as const;
 
   async execute(

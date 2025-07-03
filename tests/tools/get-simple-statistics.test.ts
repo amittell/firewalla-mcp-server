@@ -30,7 +30,8 @@ describe('GetSimpleStatisticsHandler', () => {
   describe('tool metadata', () => {
     test('should have correct tool properties', () => {
       expect(handler.name).toBe('get_simple_statistics');
-      expect(handler.description).toBe('Get basic statistics about boxes, alarms, and rules');
+      expect(handler.description).toContain('Get comprehensive network statistics');
+      expect(handler.description).toContain('health monitoring');
       expect(handler.category).toBe('analytics');
     });
   });

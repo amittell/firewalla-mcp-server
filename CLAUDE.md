@@ -730,6 +730,37 @@ DEBUG=query,optimization npm run mcp:start
 
 **Remember**: The `/docs/firewalla-api-reference.md` file contains the complete, verified API specification. It is the single source of truth for all Firewalla API integration.
 
+## Enhanced Documentation (v2.0.0)
+
+The following comprehensive guides are available for developers and users:
+
+### Core Documentation
+- **API Reference**: `/docs/firewalla-api-reference.md` - Complete API specification with endpoints, data models, and examples
+- **Query Syntax Guide**: `/docs/query-syntax-guide.md` - Comprehensive query syntax documentation with examples and best practices
+- **Error Handling Guide**: `/docs/error-handling-guide.md` - Error patterns, troubleshooting, and recovery strategies
+- **Data Audit Report**: `/docs/data-audit-report.md` - Field consistency analysis and normalization recommendations
+
+### Advanced Features
+- **Pagination Guide**: `/docs/pagination-guide.md` - Cursor-based pagination patterns and performance optimization
+- **Rate Limiting Guide**: `/docs/rate-limiting-guide.md` - API rate limits, throttling strategies, and performance tuning
+
+### Integration in Tools
+All MCP tools now include:
+- **Practical Query Examples**: Real-world usage patterns with performance tips
+- **Enhanced Error Context**: Detailed error messages with recovery suggestions and documentation links
+- **Data Normalization**: Consistent field handling with standardized unknown value processing
+- **Field Consistency**: Standardized snake_case naming and null handling patterns
+- **Response Validation**: Automatic structure validation with detailed error reporting
+
+### Usage in Development
+Reference these guides when:
+- Writing new tools or handlers
+- Debugging API integration issues
+- Implementing search functionality
+- Handling errors and edge cases
+- Optimizing query performance
+- Ensuring data consistency
+
 ## Fixed Issues (v1.0.0+)
 
 ### ✅ **Resolved Critical Issues**

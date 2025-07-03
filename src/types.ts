@@ -1010,3 +1010,91 @@ export interface ResponseTransformConfig {
   /** Metadata fields to include in legacy format */
   legacyMetadataFields?: string[];
 }
+
+/**
+ * Data Validation and Normalization Types
+ * Re-exported from data validation utilities for convenience
+ */
+
+/**
+ * Result of data structure validation
+ */
+export interface ValidationResult {
+  /** Whether the validation passed */
+  isValid: boolean;
+  /** Array of error messages if validation failed */
+  errors: string[];
+  /** Array of warning messages for non-critical issues */
+  warnings: string[];
+  /** Suggestions for fixing validation errors */
+  suggestions: string[];
+  /** Additional metadata about the validation */
+  metadata?: {
+    /** Number of fields validated */
+    fieldsValidated: number;
+    /** Number of missing required fields */
+    missingFields: number;
+    /** Number of type mismatches found */
+    typeMismatches: number;
+    /** Validation execution time in milliseconds */
+    validationTime: number;
+  };
+}
+
+/**
+ * Result of type checking validation
+ */
+export interface TypeValidationResult {
+  /** Whether all type checks passed */
+  isValid: boolean;
+  /** Array of fields that failed type validation */
+  invalidFields: Array<{
+    /** Field name that failed validation */
+    field: string;
+    /** Expected type */
+    expectedType: string;
+    /** Actual type found */
+    actualType: string;
+    /** Current value */
+    actualValue: any;
+    /** Suggestion for fixing the type issue */
+    suggestion: string;
+  }>;
+  /** Summary of type validation results */
+  summary: {
+    /** Total fields checked */
+    totalFields: number;
+    /** Fields that passed validation */
+    validFields: number;
+    /** Fields that failed validation */
+    invalidFields: number;
+    /** Fields with convertible types */
+    convertibleFields: number;
+  };
+}
+
+/**
+ * Configuration for data normalization behavior
+ */
+export interface NormalizationConfig {
+  /** Default value to use when normalizing unknown fields */
+  defaultUnknownValue: string;
+  /** Whether to preserve null values or convert them */
+  preserveNull: boolean;
+  /** Whether to convert empty strings to null */
+  emptyStringToNull: boolean;
+  /** Whether to trim whitespace from string values */
+  trimStrings: boolean;
+}
+
+/**
+ * Result of field value sanitization
+ */
+export interface SanitizationResult {
+  /** The sanitized value */
+  value: any;
+  /** Whether the value was modified during sanitization */
+  wasModified: boolean;
+  /** Description of what was modified, if any */
+  modifications: string[];
+}

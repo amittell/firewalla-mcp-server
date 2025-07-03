@@ -128,8 +128,24 @@ export interface GetGeographicStatisticsArgs extends ToolArgs {
 
 export class SearchFlowsHandler extends BaseToolHandler {
   name = 'search_flows';
-  description =
-    'Advanced flow searching with direct API calls and enhanced reliability';
+  description = `Advanced network flow searching with powerful query syntax and enhanced reliability.
+  
+Search through network traffic flows using complex queries with logical operators, wildcards, and field-specific filters.
+
+QUERY EXAMPLES:
+- Basic field queries: "protocol:tcp", "blocked:true", "source_ip:192.168.1.100"
+- Logical operators: "protocol:tcp AND blocked:false", "severity:high OR severity:critical"
+- Wildcards: "source_ip:192.168.*", "destination_domain:*.facebook.com"
+- Ranges: "bytes:[1000 TO 50000]", "timestamp:>=2024-01-01"
+- Complex queries: "(protocol:tcp OR protocol:udp) AND source_ip:192.168.* NOT blocked:true"
+
+PERFORMANCE TIPS:
+- Use specific time ranges for better performance: {"time_range": {"start": "2024-01-01T00:00:00Z", "end": "2024-01-02T00:00:00Z"}}
+- Limit results with reasonable values (100-1000) for faster responses
+- Use cursor for pagination with large datasets
+- Group by fields like "source_ip" or "protocol" for aggregated insights
+
+See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.md`;
   category = 'search' as const;
 
   async execute(
@@ -241,8 +257,30 @@ export class SearchFlowsHandler extends BaseToolHandler {
 
 export class SearchAlarmsHandler extends BaseToolHandler {
   name = 'search_alarms';
-  description =
-    'Advanced alarm searching with direct API calls and enhanced reliability';
+  description = `Security alarm searching with powerful filtering and enhanced reliability.
+
+Search through security alerts and alarms using flexible query syntax to identify threats and suspicious activities.
+
+QUERY EXAMPLES:
+- Severity filtering: "severity:high", "severity:>=medium", "severity:critical"
+- IP-based searches: "source_ip:192.168.1.100", "destination_ip:10.0.*"
+- Type filtering: "type:intrusion_detection", "type:malware", "type:dns_anomaly"
+- Status queries: "resolved:false", "acknowledged:true"
+- Time-based: "timestamp:>=2024-01-01", "last_24_hours:true"
+- Complex combinations: "severity:high AND source_ip:192.168.* NOT resolved:true"
+
+COMMON USE CASES:
+- Active threats: "severity:>=high AND resolved:false"
+- Geographic threats: "country:China AND severity:medium"
+- Malware detection: "type:malware OR type:trojan OR type:virus"
+- Network intrusions: "type:intrusion AND source_ip:external"
+
+ERROR RECOVERY:
+- If no results, try broader time ranges or lower severity filters
+- Check field names against the API documentation
+- Use wildcards (*) for partial matches when exact queries fail
+
+See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`;
   category = 'search' as const;
 
   async execute(
@@ -350,8 +388,34 @@ export class SearchAlarmsHandler extends BaseToolHandler {
 
 export class SearchRulesHandler extends BaseToolHandler {
   name = 'search_rules';
-  description =
-    'Advanced rule searching with target, action, and status filters';
+  description = `Firewall rule searching with comprehensive filtering for actions, targets, and status.
+
+Search through firewall rules to manage policies, troubleshoot blocking issues, and analyze rule effectiveness.
+
+QUERY EXAMPLES:
+- Action filtering: "action:block", "action:allow", "action:timelimit"
+- Target searches: "target_value:*.facebook.com", "target_type:domain", "target_value:192.168.*"
+- Status queries: "enabled:true", "paused:false", "active:true"
+- Direction: "direction:inbound", "direction:outbound", "direction:bidirection"
+- Combined filters: "action:block AND target_value:*.social.* AND enabled:true"
+
+RULE MANAGEMENT EXAMPLES:
+- Social media blocks: "action:block AND (target_value:*.facebook.com OR target_value:*.twitter.com)"
+- Gaming restrictions: "action:timelimit AND target_category:gaming"
+- Security rules: "action:block AND target_type:malware_domain"
+- Active blocking rules: "action:block AND enabled:true AND paused:false"
+
+TROUBLESHOOTING:
+- Find conflicting rules: "target_value:example.com" (then check different actions)
+- Identify inactive rules: "enabled:false OR paused:true"
+- Review recent changes: "modified:>=yesterday"
+
+PERFORMANCE NOTES:
+- Rules are cached for 10 minutes for optimal performance
+- Use specific target_value searches for fastest results
+- Group by action or target_type for rule analysis
+
+For rule management operations, see pause_rule and resume_rule tools.`;
   category = 'search' as const;
 
   async execute(
@@ -454,8 +518,40 @@ export class SearchRulesHandler extends BaseToolHandler {
 
 export class SearchDevicesHandler extends BaseToolHandler {
   name = 'search_devices';
-  description =
-    'Advanced device searching with network, status, and usage filters';
+  description = `Network device searching with comprehensive filtering for status, usage patterns, and network properties.
+
+Search through network devices to monitor connectivity, identify issues, and analyze usage patterns.
+
+QUERY EXAMPLES:
+- Status filtering: "online:true", "online:false", "last_seen:>=yesterday"
+- Device identification: "mac_vendor:Apple", "name:*iPhone*", "ip:192.168.1.*"
+- Network properties: "network_id:main", "dhcp:true", "static_ip:true"
+- Usage patterns: "bandwidth_usage:>1000000", "active_connections:>10"
+- Device types: "device_type:smartphone", "os_type:iOS", "manufacturer:Samsung"
+
+NETWORK MONITORING:
+- Offline devices: "online:false AND last_seen:>=24h" (recently offline)
+- Heavy bandwidth users: "bandwidth_usage:>5000000 AND online:true"
+- Unknown devices: "name:unknown OR mac_vendor:unknown"
+- Mobile devices: "device_type:smartphone OR device_type:tablet"
+- IoT devices: "device_category:IoT OR manufacturer:smart_*"
+
+TROUBLESHOOTING:
+- Connection issues: "online:false AND dhcp_errors:>0"
+- Security concerns: "new_device:true AND trust_level:low"
+- Performance problems: "packet_loss:>5 OR latency:>100"
+
+PAGINATION:
+- Use cursor-based pagination for large device lists
+- Supports up to 10,000 devices per query
+- Include offline devices with include_offline:true
+
+FIELD CONSISTENCY:
+- Device names normalized to remove unknown/null inconsistencies
+- IP addresses validated and standardized
+- Timestamps converted to ISO format for consistency
+
+See the Data Normalization Guide for field details.`;
   category = 'search' as const;
 
   async execute(
@@ -527,8 +623,43 @@ export class SearchDevicesHandler extends BaseToolHandler {
 
 export class SearchTargetListsHandler extends BaseToolHandler {
   name = 'search_target_lists';
-  description =
-    'Advanced target list searching with category and ownership filters';
+  description = `Target list searching with comprehensive filtering for categories, ownership, and content analysis.
+
+Search through Firewalla target lists including domains, IPs, and security categories for policy management and analysis.
+
+QUERY EXAMPLES:
+- Category filtering: "category:ad", "category:social_media", "category:malware"
+- Ownership: "owner:global", "owner:custom", "owner:user_defined"
+- Content type: "type:domain", "type:ip", "type:url_pattern"
+- Size filtering: "target_count:>100", "active_targets:>50"
+- Status queries: "enabled:true", "updated:>=2024-01-01"
+
+TARGET LIST MANAGEMENT:
+- Ad blocking lists: "category:ad AND enabled:true"
+- Security lists: "category:malware OR category:phishing OR category:threat"
+- Social media controls: "category:social_media AND owner:custom"
+- Custom domain lists: "owner:user_defined AND type:domain"
+- Large lists analysis: "target_count:>1000 AND category:security"
+
+CONTENT ANALYSIS:
+- Popular categories: group_by:"category" for category distribution
+- List effectiveness: "hit_count:>0 AND enabled:true"
+- Maintenance needed: "updated:<=30d AND enabled:true"
+- Unused lists: "hit_count:0 AND enabled:true"
+
+PERFORMANCE CONSIDERATIONS:
+- Target lists cached for 10 minutes for optimal performance
+- Use specific category filters for faster searches
+- Large lists (>10,000 targets) may have slower response times
+- Aggregate queries provide faster overview statistics
+
+FIELD NORMALIZATION:
+- Categories standardized to lowercase with consistent naming
+- Target counts validated as non-negative numbers
+- Timestamps normalized to ISO format
+- Unknown values replaced with "unknown" for consistency
+
+See the Target List Management guide for configuration details.`;
   category = 'search' as const;
 
   async execute(

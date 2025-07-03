@@ -72,13 +72,49 @@ export class GetFlowDataHandler extends BaseToolHandler {
         const endDate = new Date(endTime);
 
         if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-          throw new Error(
-            'Invalid time range format - must be valid ISO 8601 dates'
+          return createErrorResponse(
+            this.name,
+            'Invalid time range format',
+            ErrorType.VALIDATION_ERROR,
+            {
+              details: 'Time range parameters must be valid ISO 8601 dates',
+              received: { start_time: startTimeArg, end_time: endTime },
+              examples: {
+                valid_format: '2024-01-01T00:00:00Z',
+                relative_format: 'Use current time minus desired duration',
+              },
+            },
+            [
+              'Ensure start_time and end_time are valid ISO 8601 date strings',
+              'Example: "2024-01-01T00:00:00Z" for UTC time',
+              'Check that timezone offset is included if using local time',
+              'See the Query Syntax Guide for time range examples: /docs/query-syntax-guide.md',
+            ]
           );
         }
 
         if (startDate >= endDate) {
-          throw new Error('Start time must be before end time');
+          return createErrorResponse(
+            this.name,
+            'Invalid time range order',
+            ErrorType.VALIDATION_ERROR,
+            {
+              details: 'Start time must be before end time',
+              received: {
+                start_time: startTimeArg,
+                end_time: endTime,
+                parsed_start: startDate.toISOString(),
+                parsed_end: endDate.toISOString(),
+              },
+              time_difference: `Start is ${Math.abs(startDate.getTime() - endDate.getTime()) / 1000} seconds after end`,
+            },
+            [
+              'Ensure start_time is chronologically before end_time',
+              'Check timezone handling - times may be in different zones',
+              'Verify date format includes correct year/month/day values',
+              'For recent data, try: start_time: "2024-01-01T00:00:00Z", end_time: "2024-01-02T00:00:00Z"',
+            ]
+          );
         }
 
         const startTs = Math.floor(startDate.getTime() / 1000);
