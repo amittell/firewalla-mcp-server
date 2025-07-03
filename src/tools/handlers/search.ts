@@ -128,7 +128,8 @@ export interface GetGeographicStatisticsArgs extends ToolArgs {
 
 export class SearchFlowsHandler extends BaseToolHandler {
   name = 'search_flows';
-  description = 'Advanced flow searching with direct API calls and enhanced reliability';
+  description =
+    'Advanced flow searching with direct API calls and enhanced reliability';
   category = 'search' as const;
 
   async execute(
@@ -240,7 +241,8 @@ export class SearchFlowsHandler extends BaseToolHandler {
 
 export class SearchAlarmsHandler extends BaseToolHandler {
   name = 'search_alarms';
-  description = 'Advanced alarm searching with direct API calls and enhanced reliability';
+  description =
+    'Advanced alarm searching with direct API calls and enhanced reliability';
   category = 'search' as const;
 
   async execute(

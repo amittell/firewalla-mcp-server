@@ -632,24 +632,39 @@ export class SearchEngine {
 
     try {
       // Basic parameter validation with security checks
-      if (!params.query || typeof params.query !== 'string' || !params.query.trim()) {
-        throw new Error('query parameter is required and must be a non-empty string');
+      if (
+        !params.query ||
+        typeof params.query !== 'string' ||
+        !params.query.trim()
+      ) {
+        throw new Error(
+          'query parameter is required and must be a non-empty string'
+        );
       }
-      
+
       // Basic security check for dangerous patterns
       const dangerousPatterns = [
         /DROP\s+TABLE/i,
         /<script/i,
         /javascript:/i,
-        /data:text\/html/i
+        /data:text\/html/i,
       ];
-      
+
       if (dangerousPatterns.some(pattern => pattern.test(params.query))) {
-        throw new Error('Query validation failed: Query contains potentially dangerous content');
+        throw new Error(
+          'Query validation failed: Query contains potentially dangerous content'
+        );
       }
-      
-      if (!params.limit || typeof params.limit !== 'number' || params.limit < 1 || params.limit > 1000) {
-        throw new Error('limit parameter is required and must be between 1 and 1000');
+
+      if (
+        !params.limit ||
+        typeof params.limit !== 'number' ||
+        params.limit < 1 ||
+        params.limit > 1000
+      ) {
+        throw new Error(
+          'limit parameter is required and must be between 1 and 1000'
+        );
       }
 
       // Build query string with time range if provided
@@ -657,15 +672,17 @@ export class SearchEngine {
       if (params.time_range?.start && params.time_range?.end) {
         const startDate = new Date(params.time_range.start);
         const endDate = new Date(params.time_range.end);
-        
+
         if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-          throw new Error('Parameter validation failed: time_range must contain valid ISO 8601 dates');
+          throw new Error(
+            'Parameter validation failed: time_range must contain valid ISO 8601 dates'
+          );
         }
-        
+
         if (startDate >= endDate) {
           throw new Error('time_range.start must be before time_range.end');
         }
-        
+
         const startTs = Math.floor(startDate.getTime() / 1000);
         const endTs = Math.floor(endDate.getTime() / 1000);
         queryString = `ts:${startTs}-${endTs} AND (${params.query})`;
@@ -701,7 +718,9 @@ export class SearchEngine {
         next_cursor: response.next_cursor,
       };
     } catch (error) {
-      throw new Error(`search_flows failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `search_flows failed: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -715,24 +734,39 @@ export class SearchEngine {
 
     try {
       // Basic parameter validation with security checks
-      if (!params.query || typeof params.query !== 'string' || !params.query.trim()) {
-        throw new Error('query parameter is required and must be a non-empty string');
+      if (
+        !params.query ||
+        typeof params.query !== 'string' ||
+        !params.query.trim()
+      ) {
+        throw new Error(
+          'query parameter is required and must be a non-empty string'
+        );
       }
-      
+
       // Basic security check for dangerous patterns
       const dangerousPatterns = [
         /DROP\s+TABLE/i,
         /<script/i,
         /javascript:/i,
-        /data:text\/html/i
+        /data:text\/html/i,
       ];
-      
+
       if (dangerousPatterns.some(pattern => pattern.test(params.query))) {
-        throw new Error('Enhanced query validation failed: Query contains potentially dangerous content');
+        throw new Error(
+          'Enhanced query validation failed: Query contains potentially dangerous content'
+        );
       }
-      
-      if (!params.limit || typeof params.limit !== 'number' || params.limit < 1 || params.limit > 5000) {
-        throw new Error('limit parameter is required and must be between 1 and 5000');
+
+      if (
+        !params.limit ||
+        typeof params.limit !== 'number' ||
+        params.limit < 1 ||
+        params.limit > 5000
+      ) {
+        throw new Error(
+          'limit parameter is required and must be between 1 and 5000'
+        );
       }
 
       // Call API directly without complex validation/parsing
@@ -765,7 +799,9 @@ export class SearchEngine {
         next_cursor: response.next_cursor,
       };
     } catch (error) {
-      throw new Error(`search_alarms failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `search_alarms failed: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -1797,9 +1833,13 @@ export class SearchEngine {
         // Handle countries - support multiple countries with OR logic
         if (params.geographic_filters.countries?.length) {
           if (params.geographic_filters.countries.length === 1) {
-            geoConditions.push(`country:${params.geographic_filters.countries[0]}`);
+            geoConditions.push(
+              `country:${params.geographic_filters.countries[0]}`
+            );
           } else {
-            const countryQueries = params.geographic_filters.countries.map(country => `country:${country}`);
+            const countryQueries = params.geographic_filters.countries.map(
+              country => `country:${country}`
+            );
             geoConditions.push(`(${countryQueries.join(' OR ')})`);
           }
         }
@@ -1812,8 +1852,9 @@ export class SearchEngine {
               `continent:${continent.includes(' ') ? `"${continent}"` : continent}`
             );
           } else {
-            const continentQueries = params.geographic_filters.continents.map(continent => 
-              `continent:${continent.includes(' ') ? `"${continent}"` : continent}`
+            const continentQueries = params.geographic_filters.continents.map(
+              continent =>
+                `continent:${continent.includes(' ') ? `"${continent}"` : continent}`
             );
             geoConditions.push(`(${continentQueries.join(' OR ')})`);
           }
@@ -1822,9 +1863,13 @@ export class SearchEngine {
         // Handle regions - support multiple regions with OR logic
         if (params.geographic_filters.regions?.length) {
           if (params.geographic_filters.regions.length === 1) {
-            geoConditions.push(`region:${params.geographic_filters.regions[0]}`);
+            geoConditions.push(
+              `region:${params.geographic_filters.regions[0]}`
+            );
           } else {
-            const regionQueries = params.geographic_filters.regions.map(region => `region:${region}`);
+            const regionQueries = params.geographic_filters.regions.map(
+              region => `region:${region}`
+            );
             geoConditions.push(`(${regionQueries.join(' OR ')})`);
           }
         }
@@ -1834,7 +1879,9 @@ export class SearchEngine {
           if (params.geographic_filters.cities.length === 1) {
             geoConditions.push(`city:${params.geographic_filters.cities[0]}`);
           } else {
-            const cityQueries = params.geographic_filters.cities.map(city => `city:${city}`);
+            const cityQueries = params.geographic_filters.cities.map(
+              city => `city:${city}`
+            );
             geoConditions.push(`(${cityQueries.join(' OR ')})`);
           }
         }
@@ -1844,7 +1891,9 @@ export class SearchEngine {
           if (params.geographic_filters.asns.length === 1) {
             geoConditions.push(`asn:${params.geographic_filters.asns[0]}`);
           } else {
-            const asnQueries = params.geographic_filters.asns.map(asn => `asn:${asn}`);
+            const asnQueries = params.geographic_filters.asns.map(
+              asn => `asn:${asn}`
+            );
             geoConditions.push(`(${asnQueries.join(' OR ')})`);
           }
         }
@@ -1852,9 +1901,14 @@ export class SearchEngine {
         // Handle hosting providers - support multiple providers with OR logic
         if (params.geographic_filters.hosting_providers?.length) {
           if (params.geographic_filters.hosting_providers.length === 1) {
-            geoConditions.push(`hosting_provider:${params.geographic_filters.hosting_providers[0]}`);
+            geoConditions.push(
+              `hosting_provider:${params.geographic_filters.hosting_providers[0]}`
+            );
           } else {
-            const providerQueries = params.geographic_filters.hosting_providers.map(provider => `hosting_provider:${provider}`);
+            const providerQueries =
+              params.geographic_filters.hosting_providers.map(
+                provider => `hosting_provider:${provider}`
+              );
             geoConditions.push(`(${providerQueries.join(' OR ')})`);
           }
         }

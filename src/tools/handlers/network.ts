@@ -70,15 +70,17 @@ export class GetFlowDataHandler extends BaseToolHandler {
         // Validate time range
         const startDate = new Date(startTimeArg);
         const endDate = new Date(endTime);
-        
+
         if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-          throw new Error('Invalid time range format - must be valid ISO 8601 dates');
+          throw new Error(
+            'Invalid time range format - must be valid ISO 8601 dates'
+          );
         }
-        
+
         if (startDate >= endDate) {
           throw new Error('Start time must be before end time');
         }
-        
+
         const startTs = Math.floor(startDate.getTime() / 1000);
         const endTs = Math.floor(endDate.getTime() / 1000);
         const timeQuery = `ts:${startTs}-${endTs}`;
@@ -226,49 +228,42 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
       // Ensure we have results and validate count vs requested limit
       const results = usageResponse.results || [];
       const requestedLimit = limitValidation.sanitizedValue as number;
-      
-      // Note: if we get fewer results than requested, this may be due to 
+
+      // Note: if we get fewer results than requested, this may be due to
       // insufficient data rather than an error
 
       return this.createSuccessResponse({
         period: periodValidation.sanitizedValue,
         top_devices: results.length,
         requested_limit: requestedLimit,
-        bandwidth_usage: SafeAccess.safeArrayMap(
-          results,
-          (item: any) => ({
-            device_id: SafeAccess.getNestedValue(item, 'device_id', 'unknown'),
-            device_name: SafeAccess.getNestedValue(
-              item,
-              'device_name',
-              'Unknown Device'
-            ),
-            ip: SafeAccess.getNestedValue(item, 'ip', 'unknown'),
-            bytes_uploaded: SafeAccess.getNestedValue(
-              item,
-              'bytes_uploaded',
-              0
-            ),
-            bytes_downloaded: SafeAccess.getNestedValue(
-              item,
-              'bytes_downloaded',
-              0
-            ),
-            total_bytes: SafeAccess.getNestedValue(item, 'total_bytes', 0),
-            total_mb:
-              Math.round(
-                ((SafeAccess.getNestedValue(item, 'total_bytes', 0) as number) /
-                  (1024 * 1024)) *
-                  100
-              ) / 100,
-            total_gb:
-              Math.round(
-                ((SafeAccess.getNestedValue(item, 'total_bytes', 0) as number) /
-                  (1024 * 1024 * 1024)) *
-                  100
-              ) / 100,
-          })
-        ),
+        bandwidth_usage: SafeAccess.safeArrayMap(results, (item: any) => ({
+          device_id: SafeAccess.getNestedValue(item, 'device_id', 'unknown'),
+          device_name: SafeAccess.getNestedValue(
+            item,
+            'device_name',
+            'Unknown Device'
+          ),
+          ip: SafeAccess.getNestedValue(item, 'ip', 'unknown'),
+          bytes_uploaded: SafeAccess.getNestedValue(item, 'bytes_uploaded', 0),
+          bytes_downloaded: SafeAccess.getNestedValue(
+            item,
+            'bytes_downloaded',
+            0
+          ),
+          total_bytes: SafeAccess.getNestedValue(item, 'total_bytes', 0),
+          total_mb:
+            Math.round(
+              ((SafeAccess.getNestedValue(item, 'total_bytes', 0) as number) /
+                (1024 * 1024)) *
+                100
+            ) / 100,
+          total_gb:
+            Math.round(
+              ((SafeAccess.getNestedValue(item, 'total_bytes', 0) as number) /
+                (1024 * 1024 * 1024)) *
+                100
+            ) / 100,
+        })),
       });
     } catch (error: unknown) {
       const errorMessage =
