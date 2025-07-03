@@ -72,17 +72,19 @@ exec(testCommand, { cwd: path.resolve(__dirname, '..') }, (error, stdout, stderr
   console.log('  ');
   console.log('  beforeAll(async () => {');
   console.log('    // SINGLE API CALL - shared across all tests');
-  console.log('    const cache = await TestDataCacheManager.loadSharedTestData(client);');
+  console.log('    const cache = await loadSharedTestData(client); // Module function');
   console.log('    sharedData = cache.devices;');
   console.log('  });');
   console.log('  ');
   console.log('  it("test scenario 1", () => {');
   console.log('    // Use cached data - NO additional API call');
-  console.log('    const filtered = TestDataUtils.filterDevices(sharedData, criteria);');
+  console.log('    const filtered = filterDevices(sharedData, criteria); // Module function');
   console.log('    expect(filtered).toHaveLength(expected);');
   console.log('  });');
   console.log('});');
   console.log('```');
+  console.log('\n📝 NOTE: Updated to use new module function API instead of static classes');
+  console.log('  Functions like loadSharedTestData() and filterDevices() are now direct exports');
   
   console.log('\n🏆 OPTIMIZATION SUCCESS:');
   console.log('  This approach can be applied to other test suites for similar benefits:');
@@ -92,4 +94,16 @@ exec(testCommand, { cwd: path.resolve(__dirname, '..') }, (error, stdout, stderr
   
   console.log('\n🚀 Ready for production use!');
   console.log('  Use OPTIMIZE_TESTS=true to enable optimized patterns in CI/CD');
+  console.log('\n📊 Performance Summary:');
+  if (foundMetrics > 0) {
+    console.log(`  ✓ Successfully parsed ${foundMetrics}/3 metrics`);
+    if (apiCalls !== 'N/A' && apiCalls < 5) {
+      console.log('  ✓ Excellent API efficiency (< 5 calls)');
+    }
+    if (testTime !== 'N/A' && testTime < 5000) {
+      console.log('  ✓ Fast execution time (< 5 seconds)');
+    }
+  } else {
+    console.log('  ⚠️ Metrics parsing needs improvement');
+  }
 });

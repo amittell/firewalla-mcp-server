@@ -60,240 +60,254 @@ export interface PerformanceThresholds {
 }
 
 /**
- * Performance monitor for tracking API calls and test execution
+ * Module-scoped variables for performance monitoring
+ */
+let calls: ApiCallMetrics[] = [];
+let testStartTime = 0;
+let isMonitoring = false;
+
+/**
+ * Start monitoring API calls
+ */
+export function startMonitoring(): void {
+  isMonitoring = true;
+  testStartTime = Date.now();
+  calls = [];
+  console.log('📊 API Performance monitoring started');
+}
+
+/**
+ * Stop monitoring and return results
+ */
+export function stopMonitoring(): TestPerformanceMetrics {
+  isMonitoring = false;
+  const metrics = calculateMetrics();
+  console.log('📊 API Performance monitoring stopped');
+  console.log(`📈 Total API calls: ${metrics.totalApiCalls}`);
+  console.log(`⏱️ Total test time: ${metrics.totalExecutionTime}ms`);
+  console.log(`⚡ Average call time: ${metrics.averageCallTime.toFixed(2)}ms`);
+  
+  return metrics;
+}
+
+/**
+ * Record an API call
+ */
+export function recordApiCall(
+  endpoint: string,
+  method: string,
+  duration: number,
+  success: boolean,
+  error?: string
+): void {
+  if (!isMonitoring) return;
+
+  const call: ApiCallMetrics = {
+    endpoint,
+    method,
+    duration,
+    timestamp: Date.now(),
+    success,
+    error
+  };
+
+  calls.push(call);
+
+  // Log slow calls immediately
+  if (duration > config.slowCallThreshold) {
+    console.warn(`🐌 Slow API call detected: ${method} ${endpoint} took ${duration}ms`);
+  }
+}
+
+/**
+ * Get current API call count
+ */
+export function getCurrentCallCount(): number {
+  return calls.length;
+}
+
+/**
+ * Calculate performance metrics (optimized)
+ */
+export function calculateMetrics(): TestPerformanceMetrics {
+  const totalApiCalls = calls.length;
+  const totalExecutionTime = Date.now() - testStartTime;
+  
+  // Single pass through calls for efficiency
+  let errorCount = 0;
+  let totalDuration = 0;
+  let successfulCallCount = 0;
+  let slowestCall: ApiCallMetrics | null = null;
+  let fastestCall: ApiCallMetrics | null = null;
+  let minDuration = Infinity;
+  let maxDuration = -Infinity;
+  
+  const endpointSet = new Set<string>();
+  const callsByEndpoint: Record<string, number> = {};
+  
+  for (const call of calls) {
+    // Track endpoints
+    endpointSet.add(call.endpoint);
+    callsByEndpoint[call.endpoint] = (callsByEndpoint[call.endpoint] || 0) + 1;
+    
+    if (call.success) {
+      successfulCallCount++;
+      totalDuration += call.duration;
+      
+      // Track fastest/slowest calls
+      if (call.duration < minDuration) {
+        minDuration = call.duration;
+        fastestCall = call;
+      }
+      if (call.duration > maxDuration) {
+        maxDuration = call.duration;
+        slowestCall = call;
+      }
+    } else {
+      errorCount++;
+    }
+  }
+
+  const averageCallTime = successfulCallCount > 0 
+    ? totalDuration / successfulCallCount
+    : 0;
+
+  return {
+    totalApiCalls,
+    totalExecutionTime,
+    averageCallTime,
+    slowestCall,
+    fastestCall,
+    errorCount,
+    uniqueEndpoints: Array.from(endpointSet),
+    callsByEndpoint
+  };
+}
+
+/**
+ * Check if performance meets thresholds
+ */
+export function checkThresholds(thresholds: PerformanceThresholds): {
+  passed: boolean;
+  violations: string[];
+  metrics: TestPerformanceMetrics;
+} {
+  const metrics = calculateMetrics();
+  const violations: string[] = [];
+
+  if (metrics.totalApiCalls > thresholds.maxApiCalls) {
+    violations.push(`Too many API calls: ${metrics.totalApiCalls} > ${thresholds.maxApiCalls}`);
+  }
+
+  if (metrics.totalExecutionTime > thresholds.maxTestDuration) {
+    violations.push(`Test duration too long: ${metrics.totalExecutionTime}ms > ${thresholds.maxTestDuration}ms`);
+  }
+
+  if (metrics.averageCallTime > thresholds.maxAvgCallTime) {
+    violations.push(`Average call time too slow: ${metrics.averageCallTime.toFixed(2)}ms > ${thresholds.maxAvgCallTime}ms`);
+  }
+
+  const slowCalls = calls.filter(c => c.duration > config.slowCallThreshold).length;
+  if (slowCalls > thresholds.maxSlowCalls) {
+    violations.push(`Too many slow calls: ${slowCalls} > ${thresholds.maxSlowCalls}`);
+  }
+
+  return {
+    passed: violations.length === 0,
+    violations,
+    metrics
+  };
+}
+
+/**
+ * Generate detailed performance report
+ */
+export function generateReport(): string {
+  const metrics = calculateMetrics();
+  
+  let report = '\n📊 API Performance Report\n';
+  report += '========================\n\n';
+  
+  report += `🔢 Total API Calls: ${metrics.totalApiCalls}\n`;
+  report += `⏱️ Total Test Time: ${metrics.totalExecutionTime}ms\n`;
+  report += `⚡ Average Call Time: ${metrics.averageCallTime.toFixed(2)}ms\n`;
+  report += `❌ Error Count: ${metrics.errorCount}\n\n`;
+
+  if (metrics.slowestCall) {
+    report += `🐌 Slowest Call: ${metrics.slowestCall.method} ${metrics.slowestCall.endpoint} (${metrics.slowestCall.duration}ms)\n`;
+  }
+
+  if (metrics.fastestCall) {
+    report += `⚡ Fastest Call: ${metrics.fastestCall.method} ${metrics.fastestCall.endpoint} (${metrics.fastestCall.duration}ms)\n\n`;
+  }
+
+  report += `🎯 Unique Endpoints: ${metrics.uniqueEndpoints.length}\n`;
+  
+  report += '\n📈 Calls by Endpoint:\n';
+  Object.entries(metrics.callsByEndpoint)
+    .sort(([,a], [,b]) => b - a)
+    .forEach(([endpoint, count]) => {
+      report += `  • ${endpoint}: ${count} calls\n`;
+    });
+
+  // Performance insights
+  report += '\n💡 Performance Insights:\n';
+  
+  if (metrics.totalApiCalls > config.insights.highApiCallCount) {
+    report += '  ⚠️ High API call count - consider optimizing with shared data\n';
+  }
+  
+  if (metrics.averageCallTime > config.insights.slowAverageTime) {
+    report += '  ⚠️ Slow average response time - check network or API performance\n';
+  }
+  
+  const duplicateEndpoints = Object.entries(metrics.callsByEndpoint)
+    .filter(([, count]) => count > config.insights.duplicateCallThreshold);
+  
+  if (duplicateEndpoints.length > 0) {
+    report += '  ⚠️ Detected potential optimization opportunities:\n';
+    duplicateEndpoints.forEach(([endpoint, count]) => {
+      report += `    • ${endpoint}: ${count} calls (consider caching)\n`;
+    });
+  }
+
+  if (metrics.errorCount === 0 && metrics.totalApiCalls < config.insights.highApiCallCount && metrics.averageCallTime < config.insights.slowAverageTime) {
+    report += '  ✅ Excellent performance - well optimized test suite!\n';
+  }
+
+  return report;
+}
+
+/**
+ * Reset monitoring state
+ */
+export function resetMonitoring(): void {
+  calls = [];
+  testStartTime = 0;
+  isMonitoring = false;
+}
+
+/**
+ * Get all recorded calls (for debugging)
+ */
+export function getAllCalls(): ApiCallMetrics[] {
+  return [...calls];
+}
+
+/**
+ * Legacy class interface for backward compatibility
+ * @deprecated Use module functions directly
  */
 export class ApiPerformanceMonitor {
-  private static calls: ApiCallMetrics[] = [];
-  private static testStartTime = 0;
-  private static isMonitoring = false;
-
-  /**
-   * Start monitoring API calls
-   */
-  static startMonitoring(): void {
-    this.isMonitoring = true;
-    this.testStartTime = Date.now();
-    this.calls = [];
-    console.log('📊 API Performance monitoring started');
-  }
-
-  /**
-   * Stop monitoring and return results
-   */
-  static stopMonitoring(): TestPerformanceMetrics {
-    this.isMonitoring = false;
-    const metrics = this.calculateMetrics();
-    console.log('📊 API Performance monitoring stopped');
-    console.log(`📈 Total API calls: ${metrics.totalApiCalls}`);
-    console.log(`⏱️ Total test time: ${metrics.totalExecutionTime}ms`);
-    console.log(`⚡ Average call time: ${metrics.averageCallTime.toFixed(2)}ms`);
-    
-    return metrics;
-  }
-
-  /**
-   * Record an API call
-   */
-  static recordApiCall(
-    endpoint: string,
-    method: string,
-    duration: number,
-    success: boolean,
-    error?: string
-  ): void {
-    if (!this.isMonitoring) return;
-
-    const call: ApiCallMetrics = {
-      endpoint,
-      method,
-      duration,
-      timestamp: Date.now(),
-      success,
-      error
-    };
-
-    this.calls.push(call);
-
-    // Log slow calls immediately
-    if (duration > config.slowCallThreshold) {
-      console.warn(`🐌 Slow API call detected: ${method} ${endpoint} took ${duration}ms`);
-    }
-  }
-
-  /**
-   * Get current API call count
-   */
-  static getCurrentCallCount(): number {
-    return this.calls.length;
-  }
-
-  /**
-   * Calculate performance metrics (optimized)
-   */
-  static calculateMetrics(): TestPerformanceMetrics {
-    const totalApiCalls = this.calls.length;
-    const totalExecutionTime = Date.now() - this.testStartTime;
-    
-    // Single pass through calls for efficiency
-    let errorCount = 0;
-    let totalDuration = 0;
-    let successfulCallCount = 0;
-    let slowestCall: ApiCallMetrics | null = null;
-    let fastestCall: ApiCallMetrics | null = null;
-    let minDuration = Infinity;
-    let maxDuration = -Infinity;
-    
-    const endpointSet = new Set<string>();
-    const callsByEndpoint: Record<string, number> = {};
-    
-    for (const call of this.calls) {
-      // Track endpoints
-      endpointSet.add(call.endpoint);
-      callsByEndpoint[call.endpoint] = (callsByEndpoint[call.endpoint] || 0) + 1;
-      
-      if (call.success) {
-        successfulCallCount++;
-        totalDuration += call.duration;
-        
-        // Track fastest/slowest calls
-        if (call.duration < minDuration) {
-          minDuration = call.duration;
-          fastestCall = call;
-        }
-        if (call.duration > maxDuration) {
-          maxDuration = call.duration;
-          slowestCall = call;
-        }
-      } else {
-        errorCount++;
-      }
-    }
-
-    const averageCallTime = successfulCallCount > 0 
-      ? totalDuration / successfulCallCount
-      : 0;
-
-    return {
-      totalApiCalls,
-      totalExecutionTime,
-      averageCallTime,
-      slowestCall,
-      fastestCall,
-      errorCount,
-      uniqueEndpoints: Array.from(endpointSet),
-      callsByEndpoint
-    };
-  }
-
-  /**
-   * Check if performance meets thresholds
-   */
-  static checkThresholds(thresholds: PerformanceThresholds): {
-    passed: boolean;
-    violations: string[];
-    metrics: TestPerformanceMetrics;
-  } {
-    const metrics = this.calculateMetrics();
-    const violations: string[] = [];
-
-    if (metrics.totalApiCalls > thresholds.maxApiCalls) {
-      violations.push(`Too many API calls: ${metrics.totalApiCalls} > ${thresholds.maxApiCalls}`);
-    }
-
-    if (metrics.totalExecutionTime > thresholds.maxTestDuration) {
-      violations.push(`Test duration too long: ${metrics.totalExecutionTime}ms > ${thresholds.maxTestDuration}ms`);
-    }
-
-    if (metrics.averageCallTime > thresholds.maxAvgCallTime) {
-      violations.push(`Average call time too slow: ${metrics.averageCallTime.toFixed(2)}ms > ${thresholds.maxAvgCallTime}ms`);
-    }
-
-    const slowCalls = this.calls.filter(c => c.duration > config.slowCallThreshold).length;
-    if (slowCalls > thresholds.maxSlowCalls) {
-      violations.push(`Too many slow calls: ${slowCalls} > ${thresholds.maxSlowCalls}`);
-    }
-
-    return {
-      passed: violations.length === 0,
-      violations,
-      metrics
-    };
-  }
-
-  /**
-   * Generate detailed performance report
-   */
-  static generateReport(): string {
-    const metrics = this.calculateMetrics();
-    
-    let report = '\n📊 API Performance Report\n';
-    report += '========================\n\n';
-    
-    report += `🔢 Total API Calls: ${metrics.totalApiCalls}\n`;
-    report += `⏱️ Total Test Time: ${metrics.totalExecutionTime}ms\n`;
-    report += `⚡ Average Call Time: ${metrics.averageCallTime.toFixed(2)}ms\n`;
-    report += `❌ Error Count: ${metrics.errorCount}\n\n`;
-
-    if (metrics.slowestCall) {
-      report += `🐌 Slowest Call: ${metrics.slowestCall.method} ${metrics.slowestCall.endpoint} (${metrics.slowestCall.duration}ms)\n`;
-    }
-
-    if (metrics.fastestCall) {
-      report += `⚡ Fastest Call: ${metrics.fastestCall.method} ${metrics.fastestCall.endpoint} (${metrics.fastestCall.duration}ms)\n\n`;
-    }
-
-    report += `🎯 Unique Endpoints: ${metrics.uniqueEndpoints.length}\n`;
-    
-    report += '\n📈 Calls by Endpoint:\n';
-    Object.entries(metrics.callsByEndpoint)
-      .sort(([,a], [,b]) => b - a)
-      .forEach(([endpoint, count]) => {
-        report += `  • ${endpoint}: ${count} calls\n`;
-      });
-
-    // Performance insights
-    report += '\n💡 Performance Insights:\n';
-    
-    if (metrics.totalApiCalls > config.insights.highApiCallCount) {
-      report += '  ⚠️ High API call count - consider optimizing with shared data\n';
-    }
-    
-    if (metrics.averageCallTime > config.insights.slowAverageTime) {
-      report += '  ⚠️ Slow average response time - check network or API performance\n';
-    }
-    
-    const duplicateEndpoints = Object.entries(metrics.callsByEndpoint)
-      .filter(([, count]) => count > config.insights.duplicateCallThreshold);
-    
-    if (duplicateEndpoints.length > 0) {
-      report += '  ⚠️ Detected potential optimization opportunities:\n';
-      duplicateEndpoints.forEach(([endpoint, count]) => {
-        report += `    • ${endpoint}: ${count} calls (consider caching)\n`;
-      });
-    }
-
-    if (metrics.errorCount === 0 && metrics.totalApiCalls < config.insights.highApiCallCount && metrics.averageCallTime < config.insights.slowAverageTime) {
-      report += '  ✅ Excellent performance - well optimized test suite!\n';
-    }
-
-    return report;
-  }
-
-  /**
-   * Reset monitoring state
-   */
-  static reset(): void {
-    this.calls = [];
-    this.testStartTime = 0;
-    this.isMonitoring = false;
-  }
-
-  /**
-   * Get all recorded calls (for debugging)
-   */
-  static getAllCalls(): ApiCallMetrics[] {
-    return [...this.calls];
-  }
+  static startMonitoring = startMonitoring;
+  static stopMonitoring = stopMonitoring;
+  static recordApiCall = recordApiCall;
+  static getCurrentCallCount = getCurrentCallCount;
+  static calculateMetrics = calculateMetrics;
+  static checkThresholds = checkThresholds;
+  static generateReport = generateReport;
+  static reset = resetMonitoring;
+  static getAllCalls = getAllCalls;
 }
 
 /**
@@ -316,7 +330,7 @@ export function trackPerformance(target: any, propertyName: string, descriptor: 
       throw err;
     } finally {
       const duration = Date.now() - startTime;
-      ApiPerformanceMonitor.recordApiCall(
+      recordApiCall(
         propertyName,
         'TEST',
         duration,
