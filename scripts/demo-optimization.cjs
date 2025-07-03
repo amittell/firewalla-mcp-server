@@ -24,14 +24,20 @@ console.log('  ✅ Cached data reused for filtering and analysis');
 console.log('  ✅ Minimal API rate limit consumption');
 console.log('  ✅ Faster test execution with maintained coverage\n');
 
-console.log('🔍 Running optimized test suite demonstration...\n');
-
 const testCommand = 'npm test -- tests/firewalla/client-device-optimized.test.ts --verbose';
+
+console.log('🔍 Running optimized test suite demonstration...');
+console.log('⏳ Executing:', testCommand);
+console.log('');
 
 exec(testCommand, { cwd: path.resolve(__dirname, '..') }, (error, stdout, stderr) => {
   if (error) {
     console.error('❌ Test execution failed:', error.message);
-    return;
+    console.error('📋 Command attempted:', testCommand);
+    if (stderr) {
+      console.error('⚠️ Error output:', stderr);
+    }
+    process.exit(1);
   }
 
   // Extract key metrics from the output
@@ -87,5 +93,3 @@ exec(testCommand, { cwd: path.resolve(__dirname, '..') }, (error, stdout, stderr
   console.log('\n🚀 Ready for production use!');
   console.log('  Use OPTIMIZE_TESTS=true to enable optimized patterns in CI/CD');
 });
-
-console.log('⏳ Running test suite...');

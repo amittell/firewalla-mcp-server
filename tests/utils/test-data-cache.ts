@@ -7,14 +7,41 @@
 
 import { FirewallaClient } from '../../src/firewalla/client';
 
+// Context-specific cache TTLs per coding guidelines
+const CACHE_TTL = {
+  devices: 2 * 60 * 1000,     // 2 minutes - devices/bandwidth
+  alarms: 30 * 1000,          // 30 seconds - alarms/flows
+  flows: 30 * 1000,           // 30 seconds - alarms/flows
+  rules: 10 * 60 * 1000,      // 10 minutes - rules
+  statistics: 60 * 60 * 1000  // 1 hour - statistics
+} as const;
+
+// Delta cache entry for time-series data
+export interface DeltaCacheEntry<T = any> {
+  data: T[];
+  lastUpdateTimestamp: number;
+  earliestDataTimestamp: number;
+  totalItems: number;
+  cacheHitCount: number;
+  deltaFetchCount: number;
+}
+
+// Simple cache entry for relatively static data
+export interface SimpleCacheEntry<T = any> {
+  data: T | T[];
+  loadedAt: number;
+  hitCount: number;
+}
+
 export interface TestDataCache {
-  devices?: any[];
-  alarms?: any[];
-  flows?: any[];
-  rules?: any[];
-  statistics?: any;
-  loadedAt?: number;
-  apiCallCount?: number;
+  // Time-series data with delta caching support
+  alarms?: DeltaCacheEntry;
+  flows?: DeltaCacheEntry;
+  
+  // Simple TTL-based data
+  devices?: SimpleCacheEntry;
+  rules?: SimpleCacheEntry;
+  statistics?: SimpleCacheEntry;
 }
 
 export interface SharedTestDataOptions {
@@ -28,6 +55,11 @@ export interface SharedTestDataOptions {
     alarms?: number;
     flows?: number;
     rules?: number;
+  };
+  // Time range for time-series data (alarms, flows)
+  timeRange?: {
+    startTime?: string;  // ISO 8601 format
+    endTime?: string;    // ISO 8601 format
   };
 }
 
@@ -63,7 +95,7 @@ export class TestDataCacheManager {
   }
 
   /**
-   * Load shared test data once for the entire test suite
+   * Load shared test data with smart delta caching for time-series data
    */
   static async loadSharedTestData(
     client: FirewallaClient,
@@ -77,7 +109,8 @@ export class TestDataCacheManager {
       includeFlows = true,
       includeRules = true,
       includeStatistics = false,
-      limits = {}
+      limits = {},
+      timeRange
     } = options;
 
     const {
@@ -87,73 +120,193 @@ export class TestDataCacheManager {
       rules: ruleLimit = 50
     } = limits;
 
-    // Check if data is already cached and fresh (within 5 minutes)
-    if (this.cache.loadedAt && Date.now() - this.cache.loadedAt < 300000) {
-      return this.cache;
-    }
-
-    console.log('🔄 Loading shared test data...');
+    console.log('🔄 Loading shared test data with smart caching...');
     
     try {
       const loadPromises: Promise<any>[] = [];
+      let strategiesUsed: string[] = [];
       
+      // Handle devices with simple TTL caching
       if (includeDevices) {
-        loadPromises.push(
-          this.trackApiCall(() => client.getDeviceStatus(undefined, true, deviceLimit))
-            .then(result => {
-              this.cache.devices = result.results;
-              console.log(`📱 Loaded ${result.results.length} devices for shared testing`);
-            })
-        );
+        if (this.isSimpleCacheFresh(this.cache.devices, CACHE_TTL.devices)) {
+          this.cache.devices!.hitCount++;
+          console.log('📱 Using cached devices data');
+          strategiesUsed.push('devices:cache');
+        } else {
+          loadPromises.push(
+            this.trackApiCall(() => client.getDeviceStatus(undefined, true, deviceLimit))
+              .then(result => {
+                this.cache.devices = {
+                  data: result.results,
+                  loadedAt: Date.now(),
+                  hitCount: 0
+                };
+                console.log(`📱 Loaded ${result.results.length} devices for shared testing`);
+                strategiesUsed.push('devices:fresh');
+              })
+          );
+        }
       }
 
+      // Handle alarms with smart delta caching
       if (includeAlarms) {
-        loadPromises.push(
-          this.trackApiCall(() => client.getActiveAlarms(undefined, undefined, undefined, alarmLimit))
-            .then(result => {
-              this.cache.alarms = result.results;
-              console.log(`⚠️ Loaded ${result.results.length} alarms for shared testing`);
-            })
+        const alarmStrategy = this.resolveTimeSeriesQuery(
+          this.cache.alarms,
+          timeRange?.startTime,
+          timeRange?.endTime
         );
+        
+        strategiesUsed.push(`alarms:${alarmStrategy.cacheStrategy}`);
+        
+        if (alarmStrategy.needsDelta) {
+          const startTime = alarmStrategy.deltaStartTime || timeRange?.startTime;
+          const endTime = timeRange?.endTime;
+          
+          loadPromises.push(
+            this.trackApiCall(() => client.getActiveAlarms(undefined, undefined, undefined, alarmLimit))
+              .then(result => {
+                const newData = result.results;
+                
+                if (alarmStrategy.useCache && this.cache.alarms) {
+                  // Merge with existing cache
+                  const mergedData = this.mergeTimeSeriesData(
+                    this.cache.alarms.data,
+                    newData,
+                    timeRange?.startTime,
+                    timeRange?.endTime
+                  );
+                  
+                  this.cache.alarms = {
+                    ...this.cache.alarms,
+                    data: mergedData,
+                    lastUpdateTimestamp: Date.now(),
+                    totalItems: mergedData.length,
+                    deltaFetchCount: (this.cache.alarms.deltaFetchCount || 0) + 1
+                  };
+                  console.log(`⚠️ Merged ${newData.length} new alarms with ${this.cache.alarms.data.length - newData.length} cached alarms`);
+                } else {
+                  // Fresh load
+                  this.cache.alarms = {
+                    data: newData,
+                    lastUpdateTimestamp: Date.now(),
+                    earliestDataTimestamp: newData.length > 0 ? Math.min(...newData.map((a: any) => a.timestamp || a.ts || Date.now())) : Date.now(),
+                    totalItems: newData.length,
+                    cacheHitCount: 0,
+                    deltaFetchCount: 0
+                  };
+                  console.log(`⚠️ Loaded ${newData.length} alarms for shared testing`);
+                }
+              })
+          );
+        } else if (alarmStrategy.useCache) {
+          console.log(`⚠️ Using cached alarms data (${this.cache.alarms!.data.length} items)`);
+        }
       }
 
+      // Handle flows with smart delta caching  
       if (includeFlows) {
-        loadPromises.push(
-          this.trackApiCall(() => client.getFlowData(undefined, undefined, undefined, flowLimit))
-            .then(result => {
-              this.cache.flows = result.results;
-              console.log(`🌐 Loaded ${result.results.length} flows for shared testing`);
-            })
+        const flowStrategy = this.resolveTimeSeriesQuery(
+          this.cache.flows,
+          timeRange?.startTime,
+          timeRange?.endTime
         );
+        
+        strategiesUsed.push(`flows:${flowStrategy.cacheStrategy}`);
+        
+        if (flowStrategy.needsDelta) {
+          const startTime = flowStrategy.deltaStartTime || timeRange?.startTime;
+          const endTime = timeRange?.endTime;
+          
+          loadPromises.push(
+            this.trackApiCall(() => client.getFlowData(startTime, endTime, undefined, flowLimit))
+              .then(result => {
+                const newData = result.results;
+                
+                if (flowStrategy.useCache && this.cache.flows) {
+                  // Merge with existing cache
+                  const mergedData = this.mergeTimeSeriesData(
+                    this.cache.flows.data,
+                    newData,
+                    timeRange?.startTime,
+                    timeRange?.endTime
+                  );
+                  
+                  this.cache.flows = {
+                    ...this.cache.flows,
+                    data: mergedData,
+                    lastUpdateTimestamp: Date.now(),
+                    totalItems: mergedData.length,
+                    deltaFetchCount: (this.cache.flows.deltaFetchCount || 0) + 1
+                  };
+                  console.log(`🌐 Merged ${newData.length} new flows with ${this.cache.flows.data.length - newData.length} cached flows`);
+                } else {
+                  // Fresh load
+                  this.cache.flows = {
+                    data: newData,
+                    lastUpdateTimestamp: Date.now(),
+                    earliestDataTimestamp: newData.length > 0 ? Math.min(...newData.map((f: any) => f.timestamp || f.ts || Date.now())) : Date.now(),
+                    totalItems: newData.length,
+                    cacheHitCount: 0,
+                    deltaFetchCount: 0
+                  };
+                  console.log(`🌐 Loaded ${newData.length} flows for shared testing`);
+                }
+              })
+          );
+        } else if (flowStrategy.useCache) {
+          console.log(`🌐 Using cached flows data (${this.cache.flows!.data.length} items)`);
+        }
       }
 
+      // Handle rules with simple TTL caching
       if (includeRules) {
-        loadPromises.push(
-          this.trackApiCall(() => client.getNetworkRules(ruleLimit))
-            .then(result => {
-              this.cache.rules = result.results;
-              console.log(`📋 Loaded ${result.results.length} rules for shared testing`);
-            })
-        );
+        if (this.isSimpleCacheFresh(this.cache.rules, CACHE_TTL.rules)) {
+          this.cache.rules!.hitCount++;
+          console.log('📋 Using cached rules data');
+          strategiesUsed.push('rules:cache');
+        } else {
+          loadPromises.push(
+            this.trackApiCall(() => client.getNetworkRules(ruleLimit))
+              .then(result => {
+                this.cache.rules = {
+                  data: result.results,
+                  loadedAt: Date.now(),
+                  hitCount: 0
+                };
+                console.log(`📋 Loaded ${result.results.length} rules for shared testing`);
+                strategiesUsed.push('rules:fresh');
+              })
+          );
+        }
       }
 
+      // Handle statistics with simple TTL caching
       if (includeStatistics) {
-        loadPromises.push(
-          this.trackApiCall(() => client.getStatisticsByBox())
-            .then(result => {
-              this.cache.statistics = result.results[0];
-              console.log(`📊 Loaded statistics for shared testing`);
-            })
-        );
+        if (this.isSimpleCacheFresh(this.cache.statistics, CACHE_TTL.statistics)) {
+          this.cache.statistics!.hitCount++;
+          console.log('📊 Using cached statistics data');
+          strategiesUsed.push('statistics:cache');
+        } else {
+          loadPromises.push(
+            this.trackApiCall(() => client.getStatisticsByBox())
+              .then(result => {
+                this.cache.statistics = {
+                  data: result.results[0],
+                  loadedAt: Date.now(),
+                  hitCount: 0
+                };
+                console.log(`📊 Loaded statistics for shared testing`);
+                strategiesUsed.push('statistics:fresh');
+              })
+          );
+        }
       }
 
       await Promise.all(loadPromises);
       
-      this.cache.loadedAt = Date.now();
-      this.cache.apiCallCount = this.apiCallCount;
-      
       const loadTime = Date.now() - this.loadStartTime;
-      console.log(`✅ Shared test data loaded in ${loadTime}ms with ${this.apiCallCount} API calls`);
+      console.log(`✅ Smart cached data loaded in ${loadTime}ms with ${this.apiCallCount} API calls`);
+      console.log(`📈 Cache strategies: ${strategiesUsed.join(', ')}`);
       
       return this.cache;
       
@@ -167,7 +320,11 @@ export class TestDataCacheManager {
    * Get cached data by type
    */
   static getCachedData<T = any>(type: keyof TestDataCache): T[] | T | undefined {
-    return this.cache[type] as T[] | T | undefined;
+    const cacheEntry = this.cache[type];
+    if (!cacheEntry) return undefined;
+    
+    // All cache entries now have a 'data' property
+    return cacheEntry.data as T[] | T;
   }
 
   /**
@@ -178,20 +335,70 @@ export class TestDataCacheManager {
   }
 
   /**
-   * Get performance metrics
+   * Get cache performance metrics and analytics
    */
-  static getPerformanceMetrics(): {
-    apiCallCount: number;
-    loadTime: number;
-    cacheAge: number;
-    hasCachedData: boolean;
-  } {
-    return {
+  static getCacheAnalytics() {
+    const stats = {
       apiCallCount: this.apiCallCount,
-      loadTime: this.cache.loadedAt ? this.cache.loadedAt - this.loadStartTime : 0,
-      cacheAge: this.cache.loadedAt ? Date.now() - this.cache.loadedAt : 0,
-      hasCachedData: Object.keys(this.cache).length > 0
+      loadTime: Date.now() - this.loadStartTime,
+      hasCachedData: Object.keys(this.cache).length > 0,
+      cacheStrategies: {} as Record<string, any>
     };
+    
+    // Delta cache analytics (time-series data)
+    if (this.cache.alarms) {
+      stats.cacheStrategies.alarms = {
+        type: 'delta',
+        totalItems: this.cache.alarms.totalItems,
+        cacheHits: this.cache.alarms.cacheHitCount,
+        deltaFetches: this.cache.alarms.deltaFetchCount,
+        lastUpdate: new Date(this.cache.alarms.lastUpdateTimestamp).toISOString(),
+        efficiency: this.cache.alarms.cacheHitCount / (this.cache.alarms.cacheHitCount + this.cache.alarms.deltaFetchCount) || 0
+      };
+    }
+    
+    if (this.cache.flows) {
+      stats.cacheStrategies.flows = {
+        type: 'delta',
+        totalItems: this.cache.flows.totalItems,
+        cacheHits: this.cache.flows.cacheHitCount,
+        deltaFetches: this.cache.flows.deltaFetchCount,
+        lastUpdate: new Date(this.cache.flows.lastUpdateTimestamp).toISOString(),
+        efficiency: this.cache.flows.cacheHitCount / (this.cache.flows.cacheHitCount + this.cache.flows.deltaFetchCount) || 0
+      };
+    }
+    
+    // Simple cache analytics (semi-static data)
+    if (this.cache.devices) {
+      stats.cacheStrategies.devices = {
+        type: 'simple',
+        totalItems: Array.isArray(this.cache.devices.data) ? this.cache.devices.data.length : 0,
+        cacheHits: this.cache.devices.hitCount,
+        lastUpdate: new Date(this.cache.devices.loadedAt).toISOString(),
+        age: Date.now() - this.cache.devices.loadedAt
+      };
+    }
+    
+    if (this.cache.rules) {
+      stats.cacheStrategies.rules = {
+        type: 'simple',
+        totalItems: Array.isArray(this.cache.rules.data) ? this.cache.rules.data.length : 0,
+        cacheHits: this.cache.rules.hitCount,
+        lastUpdate: new Date(this.cache.rules.loadedAt).toISOString(),
+        age: Date.now() - this.cache.rules.loadedAt
+      };
+    }
+    
+    if (this.cache.statistics) {
+      stats.cacheStrategies.statistics = {
+        type: 'simple',
+        cacheHits: this.cache.statistics.hitCount,
+        lastUpdate: new Date(this.cache.statistics.loadedAt).toISOString(),
+        age: Date.now() - this.cache.statistics.loadedAt
+      };
+    }
+    
+    return stats;
   }
 
   /**
@@ -200,6 +407,118 @@ export class TestDataCacheManager {
   private static async trackApiCall<T>(apiCall: () => Promise<T>): Promise<T> {
     this.incrementApiCall();
     return await apiCall();
+  }
+
+  /**
+   * Print cache status summary for debugging
+   */
+  static printCacheStatus(): void {
+    const analytics = this.getCacheAnalytics();
+    
+    console.log('\n🔍 Smart Cache Status:');
+    console.log(`API Calls Made: ${analytics.apiCallCount}`);
+    console.log(`Load Time: ${analytics.loadTime}ms`);
+    
+    Object.entries(analytics.cacheStrategies).forEach(([type, stats]) => {
+      if (stats.type === 'delta') {
+        console.log(`📊 ${type}: Delta cache - ${stats.totalItems} items, ${stats.cacheHits} hits, ${stats.deltaFetches} deltas (${(stats.efficiency * 100).toFixed(1)}% efficient)`);
+      } else {
+        console.log(`📊 ${type}: Simple cache - ${stats.totalItems || 'N/A'} items, ${stats.cacheHits} hits, age: ${Math.round(stats.age / 1000)}s`);
+      }
+    });
+    console.log('');
+  }
+
+  /**
+   * Smart cache resolution for time-series data (alarms, flows)
+   */
+  private static resolveTimeSeriesQuery(
+    cacheEntry: DeltaCacheEntry | undefined,
+    queryStartTime?: string,
+    queryEndTime?: string
+  ): {
+    useCache: boolean;
+    needsDelta: boolean;
+    deltaStartTime?: string;
+    cacheStrategy: 'cache_only' | 'delta_only' | 'cache_plus_delta';
+  } {
+    const now = Date.now();
+    const queryStart = queryStartTime ? new Date(queryStartTime).getTime() : now - (24 * 60 * 60 * 1000); // Default: last 24h
+    const queryEnd = queryEndTime ? new Date(queryEndTime).getTime() : now;
+
+    // No cached data - fetch fresh
+    if (!cacheEntry || cacheEntry.data.length === 0) {
+      return { useCache: false, needsDelta: true, cacheStrategy: 'delta_only' };
+    }
+
+    const cacheLastUpdate = cacheEntry.lastUpdateTimestamp;
+    
+    // Query is entirely historical (before last cache update)
+    if (queryEnd <= cacheLastUpdate) {
+      cacheEntry.cacheHitCount++;
+      return { useCache: true, needsDelta: false, cacheStrategy: 'cache_only' };
+    }
+    
+    // Query is entirely after cache (fetch fresh only)  
+    if (queryStart > cacheLastUpdate) {
+      return { useCache: false, needsDelta: true, cacheStrategy: 'delta_only' };
+    }
+    
+    // Query spans cached + new data (hybrid approach)
+    cacheEntry.cacheHitCount++;
+    cacheEntry.deltaFetchCount++;
+    return { 
+      useCache: true, 
+      needsDelta: true, 
+      deltaStartTime: new Date(cacheLastUpdate).toISOString(),
+      cacheStrategy: 'cache_plus_delta' 
+    };
+  }
+
+  /**
+   * Check if simple cache entry is fresh
+   */
+  private static isSimpleCacheFresh(
+    cacheEntry: SimpleCacheEntry | undefined,
+    ttl: number
+  ): boolean {
+    if (!cacheEntry) return false;
+    return (Date.now() - cacheEntry.loadedAt) < ttl;
+  }
+
+  /**
+   * Merge cached data with delta data for time-series
+   */
+  private static mergeTimeSeriesData<T extends { timestamp?: number; ts?: number }>(
+    cachedData: T[],
+    deltaData: T[],
+    queryStartTime?: string,
+    queryEndTime?: string
+  ): T[] {
+    const queryStart = queryStartTime ? new Date(queryStartTime).getTime() : 0;
+    const queryEnd = queryEndTime ? new Date(queryEndTime).getTime() : Date.now();
+
+    // Filter cached data to query range
+    const relevantCachedData = cachedData.filter(item => {
+      const itemTime = (item.timestamp || item.ts || 0) * 1000; // Convert to ms if needed
+      return itemTime >= queryStart && itemTime <= queryEnd;
+    });
+
+    // Combine and deduplicate by timestamp or id
+    const combined = [...relevantCachedData, ...deltaData];
+    const seen = new Set<string>();
+    
+    return combined.filter(item => {
+      // Use timestamp or id for deduplication
+      const key = (item as any).id || (item.timestamp || item.ts || Math.random()).toString();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((a, b) => {
+      const aTime = (a.timestamp || a.ts || 0);
+      const bTime = (b.timestamp || b.ts || 0);
+      return bTime - aTime; // Most recent first
+    });
   }
 }
 
@@ -274,35 +593,69 @@ export class TestDataUtils {
   }
 
   /**
-   * Infer device type from device name and vendor
+   * Infer device type from device name and vendor (enhanced patterns)
    */
   private static inferDeviceType(device: any): string {
     const name = (device.name || '').toLowerCase();
     const vendor = (device.macVendor || '').toLowerCase();
     
-    // Mobile devices
-    if (name.includes('iphone') || name.includes('android') || name.includes('phone') || 
-        name.includes('mobile') || vendor.includes('samsung') && name.includes('phone')) {
+    // Mobile devices - enhanced patterns
+    if (name.includes('iphone') || name.includes('ipad') || name.includes('android') || 
+        name.includes('phone') || name.includes('mobile') || name.includes('samsung galaxy') ||
+        name.includes('pixel') || name.includes('oneplus') || name.includes('xiaomi') ||
+        (vendor.includes('samsung') && (name.includes('phone') || name.includes('tablet'))) ||
+        (vendor.includes('apple') && (name.includes('iphone') || name.includes('ipad')))) {
       return 'mobile';
     }
     
-    // Computers
+    // Computers - enhanced patterns
     if (name.includes('macbook') || name.includes('laptop') || name.includes('computer') ||
-        name.includes('pc') || name.includes('desktop') || vendor.includes('apple') && 
-        (name.includes('macbook') || name.includes('imac'))) {
+        name.includes('pc') || name.includes('desktop') || name.includes('imac') ||
+        name.includes('surface') || name.includes('thinkpad') || name.includes('dell') ||
+        name.includes('hp') || name.includes('asus') || name.includes('lenovo') ||
+        (vendor.includes('apple') && (name.includes('macbook') || name.includes('imac'))) ||
+        vendor.includes('dell') || vendor.includes('lenovo') || vendor.includes('hp inc')) {
       return 'computer';
     }
     
-    // Entertainment devices
+    // Gaming devices
+    if (name.includes('xbox') || name.includes('playstation') || name.includes('ps4') ||
+        name.includes('ps5') || name.includes('nintendo') || name.includes('switch') ||
+        name.includes('steam deck') || vendor.includes('microsoft') && name.includes('xbox')) {
+      return 'gaming';
+    }
+    
+    // Entertainment devices - enhanced patterns
     if (name.includes('tv') || name.includes('smart tv') || name.includes('roku') ||
-        name.includes('chromecast') || name.includes('apple tv')) {
+        name.includes('chromecast') || name.includes('apple tv') || name.includes('fire tv') ||
+        name.includes('netflix') || name.includes('hulu') || name.includes('shield') ||
+        vendor.includes('roku') || vendor.includes('google') && name.includes('chromecast')) {
       return 'entertainment';
     }
     
-    // Smart home devices
-    if (name.includes('alexa') || name.includes('echo') || name.includes('google') ||
-        name.includes('nest') || name.includes('smart') || vendor.includes('amazon')) {
+    // Smart home devices - enhanced patterns
+    if (name.includes('alexa') || name.includes('echo') || name.includes('google home') ||
+        name.includes('nest') || name.includes('smart') || name.includes('ring') ||
+        name.includes('philips hue') || name.includes('wemo') || name.includes('tp-link') ||
+        name.includes('thermostat') || name.includes('camera') || name.includes('doorbell') ||
+        vendor.includes('amazon') || vendor.includes('google') && name.includes('nest') ||
+        vendor.includes('philips') || vendor.includes('tp-link')) {
       return 'smart_home';
+    }
+    
+    // Network infrastructure
+    if (name.includes('router') || name.includes('modem') || name.includes('access point') ||
+        name.includes('switch') || name.includes('bridge') || name.includes('extender') ||
+        vendor.includes('cisco') || vendor.includes('netgear') || vendor.includes('linksys') ||
+        vendor.includes('ubiquiti') || vendor.includes('tp-link') && name.includes('router')) {
+      return 'network';
+    }
+    
+    // IoT and sensors
+    if (name.includes('sensor') || name.includes('monitor') || name.includes('tracker') ||
+        name.includes('scale') || name.includes('fitness') || name.includes('watch') ||
+        name.includes('band') || name.includes('fitbit') || vendor.includes('fitbit')) {
+      return 'iot';
     }
     
     return 'unknown';
@@ -326,7 +679,7 @@ export class OptimizedTestRunner {
    * Check if test optimization is enabled
    */
   static isOptimizationEnabled(): boolean {
-    return process.env.OPTIMIZE_TESTS === 'true' || process.env.NODE_ENV === 'test';
+    return process.env.OPTIMIZE_TESTS === 'true';
   }
 
   /**

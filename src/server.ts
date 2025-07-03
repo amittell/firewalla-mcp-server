@@ -117,7 +117,7 @@ export class FirewallaMCPServer {
           {
             name: 'get_active_alarms',
             description:
-              'Retrieve current security alerts and alarms from Firewalla firewall',
+              'Retrieve current security alerts and alarms from Firewalla firewall. Uses smart delta caching for time-series data - efficiently combines cached historical data with fresh recent data based on query time range.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -160,7 +160,7 @@ export class FirewallaMCPServer {
           {
             name: 'get_flow_data',
             description:
-              'Query network traffic flows from Firewalla firewall with pagination',
+              'Query network traffic flows from Firewalla firewall with pagination. Uses smart delta caching for time-series data - automatically uses cached data for historical queries and fetches only new data for recent time periods.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -189,7 +189,7 @@ export class FirewallaMCPServer {
           {
             name: 'get_device_status',
             description:
-              'Check online/offline status of devices on Firewalla network',
+              'Check online/offline status of devices on Firewalla network. Uses smart TTL caching (2 min) for device data optimization.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -260,7 +260,8 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_network_rules',
-            description: 'Retrieve firewall rules and conditions',
+            description:
+              'Retrieve firewall rules and conditions. Uses smart TTL caching (10 min) for rule data optimization.',
             inputSchema: {
               type: 'object',
               properties: {

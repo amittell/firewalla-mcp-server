@@ -217,11 +217,15 @@ search_cross_reference primary_query:"source_ip:suspicious_ip" secondary_queries
 - Field-specific optimizations (wildcards to exact matches)
 - Cost-based query reordering
 
-#### Intelligent Caching
-- Query-aware caching with automatic invalidation
-- Context-specific TTL (alarms: 30s, flows: 2m, rules: 10m)
-- LRU eviction with complexity scoring
-- Cache statistics and performance metrics
+#### Smart Delta-Based Caching
+- **Time-Series Data (Alarms, Flows)**: Delta caching with timestamp-aware query resolution
+  - Historical queries: Use cache only (0 API calls)
+  - Recent queries: Fetch fresh data only
+  - Mixed queries: Merge cached historical + fresh recent data
+- **Semi-Static Data (Devices, Rules, Statistics)**: Simple TTL caching
+  - Devices: 2 min TTL, Rules: 10 min TTL, Statistics: 1 hr TTL
+- **Query Strategy Auto-Detection**: `cache_only`, `delta_only`, or `cache_plus_delta`
+- **Cache Analytics**: Built-in efficiency metrics and debugging tools
 
 #### Result Aggregation
 - Group by any field: `group_by:"protocol"`
@@ -466,6 +470,41 @@ npm run mcp:start
 # "correlate Chrome browser flows with security alarms using fuzzy matching"
 ```
 
+### Smart Caching Usage Examples
+
+#### Time-Range Based Query Optimization
+
+```typescript
+// Example 1: Historical query (cache_only strategy)
+// Query: "show me alarms from last week"
+// → Uses cached data only, 0 API calls, instant response
+
+// Example 2: Recent query (delta_only strategy)  
+// Query: "show me alarms from last 10 minutes"
+// → Fetches fresh data only, 1 API call
+
+// Example 3: Mixed query (cache_plus_delta strategy)
+// Query: "show me alarms from last 24 hours"
+// → Combines cached historical data + fresh recent data, 1 API call
+
+// Test cache efficiency
+TestDataCacheManager.printCacheStatus();
+// Output: Cache strategies, hit rates, API usage
+```
+
+#### Cache Analytics Integration
+
+```bash
+# Monitor cache performance in real-time
+DEBUG=cache,performance npm run mcp:start
+
+# View cache efficiency metrics
+# - Delta cache hit rates
+# - API call reduction percentages  
+# - Query strategy distribution
+# - Cache freshness indicators
+```
+
 ## API Reference Documentation
 
 **📖 COMPREHENSIVE API REFERENCE**: `/docs/firewalla-api-reference.md`
@@ -620,11 +659,13 @@ npm run test:null-safety
 
 ### Performance Monitoring (v1.0.0)
 
-##### Cache System:
-- Alarms/Flows: 30s TTL (real-time data)
-- Devices/Bandwidth: 2m TTL (medium frequency)
-- Rules: 10m TTL (stable data)
-- Statistics: 1h TTL (static data)
+##### Smart Cache System:
+- **Time-Series Data**: Delta caching with query-aware resolution
+  - Alarms/Flows: Timestamp-based cache merging for optimal API usage
+  - Automatic strategy selection: cache_only, delta_only, cache_plus_delta
+- **Semi-Static Data**: Simple TTL caching  
+  - Devices: 2 min TTL, Rules: 10 min TTL, Statistics: 1 hr TTL
+- **Cache Analytics**: Hit rates, delta fetch counts, efficiency metrics
 
 ##### Monitoring Commands:
 ```bash

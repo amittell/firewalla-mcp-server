@@ -10,6 +10,7 @@ A Model Context Protocol (MCP) server that enables Claude to access and analyze 
 - **Rule Management**: View and temporarily pause firewall rules  
 - **Target Lists**: Access CloudFlare and CrowdSec security intelligence
 - **Advanced Search**: Complex query syntax with filters, logical operators, and correlations  
+- **Smart Caching**: Delta-based caching for time-series data with intelligent query optimization  
 
 ## Architecture
 
@@ -517,11 +518,14 @@ DEBUG=firewalla:* npm run mcp:start
 DEBUG=cache,performance,api npm run mcp:start
 ```
 
-**Multi-Tier Caching System:**
-- Real-time data (alarms/flows): 30s TTL
-- Medium-frequency data (devices): 2m TTL  
-- Stable data (rules): 10m TTL
-- Static data (statistics): 1h TTL
+**Smart Delta-Based Caching System:**
+- **Time-Series Data (Alarms/Flows)**: Delta caching with timestamp-aware query resolution
+  - Historical queries → `cache_only` strategy (0 API calls)
+  - Recent queries → `delta_only` strategy (1 API call)  
+  - Mixed queries → `cache_plus_delta` strategy (merge cached + fresh)
+- **Semi-Static Data**: Simple TTL caching
+  - Devices: 2m TTL, Rules: 10m TTL, Statistics: 1h TTL
+- **Automatic Strategy Selection**: Intelligent query-aware cache optimization
 
 **Performance Metrics:**
 - Response time tracking with P95/P99 percentiles
