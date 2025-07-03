@@ -1,8 +1,23 @@
 /**
- * Test Data Cache - Utilities for sharing test data across test cases
+ * Test Data Cache - Modern module-based utilities for sharing test data across test cases
  * 
  * Enables optimization by loading data once and reusing across multiple tests,
- * reducing API calls while maintaining test isolation.
+ * reducing API calls while maintaining test isolation. Uses clean module functions
+ * instead of static classes for better maintainability.
+ * 
+ * Key Functions:
+ * - loadSharedTestData() - Smart caching with delta/TTL strategies
+ * - filterDevices/Alarms/Flows() - Data filtering utilities  
+ * - getCachedData() - Access cached data by type
+ * - isOptimizationEnabled() - Conditional test execution
+ * 
+ * @example
+ * ```typescript
+ * import { loadSharedTestData, filterDevices } from './test-data-cache.js';
+ * 
+ * const cache = await loadSharedTestData(client, { includeDevices: true });
+ * const devices = filterDevices(cache.devices, { online: true });
+ * ```
  */
 
 import { FirewallaClient } from '../../src/firewalla/client';
@@ -520,20 +535,6 @@ export function mergeTimeSeriesData<T extends { timestamp?: number; ts?: number 
   });
 }
 
-/**
- * Legacy class interface for backward compatibility
- * @deprecated Use module functions directly
- */
-export class TestDataCacheManager {
-  static reset = resetCache;
-  static getApiCallCount = getApiCallCount;
-  static incrementApiCall = incrementApiCall;
-  static loadSharedTestData = loadSharedTestData;
-  static getCachedData = getCachedData;
-  static hasData = hasData;
-  static getCacheAnalytics = getCacheAnalytics;
-  static printCacheStatus = printCacheStatus;
-}
 
 /**
  * Filter devices by various criteria
@@ -696,17 +697,6 @@ export function getDeviceStatusCounts(devices: any[]): { online: number; offline
   return { online, offline, total: devices.length };
 }
 
-/**
- * Legacy class interface for backward compatibility
- * @deprecated Use module functions directly
- */
-export class TestDataUtils {
-  static filterDevices = filterDevices;
-  static filterAlarms = filterAlarms;
-  static filterFlows = filterFlows;
-  static getDeviceTypeStats = getDeviceTypeStats;
-  static getDeviceStatusCounts = getDeviceStatusCounts;
-}
 
 /**
  * Check if test optimization is enabled
@@ -744,13 +734,4 @@ export function describeIndividual(description: string, suiteFn: () => void): vo
   }
 }
 
-/**
- * Legacy class interface for backward compatibility
- * @deprecated Use module functions directly
- */
-export class OptimizedTestRunner {
-  static isOptimizationEnabled = isOptimizationEnabled;
-  static shouldUseRealApi = shouldUseRealApi;
-  static describeOptimized = describeOptimized;
-  static describeIndividual = describeIndividual;
-}
+// Clean module-based API - no legacy class interface needed

@@ -1,8 +1,23 @@
 /**
  * API Call Performance Monitor for Test Optimization
  * 
- * Tracks API calls, execution times, and provides performance metrics
- * to measure the effectiveness of test optimization strategies.
+ * Module-based API for tracking API calls, execution times, and performance metrics.
+ * Provides comprehensive monitoring to measure test optimization effectiveness.
+ * 
+ * Key Functions:
+ * - startMonitoring() / stopMonitoring() - Control monitoring lifecycle
+ * - recordApiCall() - Track individual API call performance  
+ * - calculateMetrics() - Generate performance analytics
+ * - generateReport() - Create detailed performance reports
+ * 
+ * @example
+ * ```typescript
+ * import { startMonitoring, stopMonitoring, recordApiCall } from './performance-monitor.js';
+ * 
+ * startMonitoring();
+ * // ... run tests ...
+ * const metrics = stopMonitoring();
+ * ```
  */
 
 // Performance configuration constants
@@ -294,21 +309,6 @@ export function getAllCalls(): ApiCallMetrics[] {
   return [...calls];
 }
 
-/**
- * Legacy class interface for backward compatibility
- * @deprecated Use module functions directly
- */
-export class ApiPerformanceMonitor {
-  static startMonitoring = startMonitoring;
-  static stopMonitoring = stopMonitoring;
-  static recordApiCall = recordApiCall;
-  static getCurrentCallCount = getCurrentCallCount;
-  static calculateMetrics = calculateMetrics;
-  static checkThresholds = checkThresholds;
-  static generateReport = generateReport;
-  static reset = resetMonitoring;
-  static getAllCalls = getAllCalls;
-}
 
 /**
  * Performance tracking decorator for test methods

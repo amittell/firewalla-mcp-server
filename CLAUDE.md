@@ -488,7 +488,7 @@ npm run mcp:start
 // → Combines cached historical data + fresh recent data, 1 API call
 
 // Test cache efficiency
-TestDataCacheManager.printCacheStatus();
+printCacheStatus();
 // Output: Cache strategies, hit rates, API usage
 ```
 
