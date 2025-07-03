@@ -378,10 +378,28 @@ firewalla-mcp-server/
 │   ├── resources/          # MCP resource implementations
 │   └── prompts/            # MCP prompt implementations
 ├── tests/                  # Test files
-├── CLAUDE.md              # Claude development guide
+├── docs/
+│   └── firewalla-api-reference.md  # Complete API documentation
+├── CLAUDE.md              # Comprehensive development guide
 ├── SPEC.md                # Technical specifications
 └── README.md              # This file
 ```
+
+## Documentation
+
+The project uses a streamlined documentation structure:
+
+- **`README.md`** (this file) - Project overview, quick start, and basic usage
+- **`CLAUDE.md`** - Comprehensive development guide including:
+  - Search functionality and improvements
+  - Geographic features and multi-value support
+  - Advanced correlation and field mapping
+  - Implementation patterns and troubleshooting
+  - Complete tool examples and testing procedures
+- **`docs/firewalla-api-reference.md`** - Complete Firewalla MSP API v2 documentation
+- **`SPEC.md`** - Technical specifications and architecture details
+
+For development work, start with `CLAUDE.md` which contains all essential commands, patterns, and advanced features.
 
 ## Security
 

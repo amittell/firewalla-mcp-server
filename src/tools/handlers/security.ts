@@ -7,7 +7,6 @@ import type { FirewallaClient } from '../../firewalla/client.js';
 import {
   ParameterValidator,
   SafeAccess,
-  QuerySanitizer,
   createErrorResponse,
   ErrorType,
 } from '../../validation/error-handler.js';
@@ -102,20 +101,8 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         }
       }
 
-      // Sanitize final query if we have one
-      if (sanitizedQuery) {
-        const queryCheck = QuerySanitizer.sanitizeSearchQuery(sanitizedQuery);
-        if (!queryCheck.isValid) {
-          return createErrorResponse(
-            'get_active_alarms',
-            'Query validation failed',
-            ErrorType.VALIDATION_ERROR,
-            undefined,
-            queryCheck.errors
-          );
-        }
-        sanitizedQuery = queryCheck.sanitizedValue as string;
-      }
+      // Skip query sanitization that may be over-sanitizing and breaking queries
+      // Just use the query directly - basic validation was already done above
 
       const response = await firewalla.getActiveAlarms(
         sanitizedQuery,

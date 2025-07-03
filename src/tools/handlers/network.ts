@@ -67,10 +67,22 @@ export class GetFlowDataHandler extends BaseToolHandler {
       let finalQuery = query;
 
       if (startTimeArg && endTime) {
-        const startTs = Math.floor(new Date(startTimeArg).getTime() / 1000);
-        const endTs = Math.floor(new Date(endTime).getTime() / 1000);
+        // Validate time range
+        const startDate = new Date(startTimeArg);
+        const endDate = new Date(endTime);
+        
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+          throw new Error('Invalid time range format - must be valid ISO 8601 dates');
+        }
+        
+        if (startDate >= endDate) {
+          throw new Error('Start time must be before end time');
+        }
+        
+        const startTs = Math.floor(startDate.getTime() / 1000);
+        const endTs = Math.floor(endDate.getTime() / 1000);
         const timeQuery = `ts:${startTs}-${endTs}`;
-        finalQuery = query ? `${query} AND ${timeQuery}` : timeQuery;
+        finalQuery = query ? `(${query}) AND ${timeQuery}` : timeQuery;
       }
 
       const response = await firewalla.getFlowData(
@@ -211,15 +223,19 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
         limitValidation.sanitizedValue as number
       );
 
+      // Ensure we have results and validate count vs requested limit
+      const results = usageResponse.results || [];
+      const requestedLimit = limitValidation.sanitizedValue as number;
+      
+      // Note: if we get fewer results than requested, this may be due to 
+      // insufficient data rather than an error
+
       return this.createSuccessResponse({
         period: periodValidation.sanitizedValue,
-        top_devices: SafeAccess.safeArrayAccess(
-          usageResponse.results,
-          arr => arr.length,
-          0
-        ),
+        top_devices: results.length,
+        requested_limit: requestedLimit,
         bandwidth_usage: SafeAccess.safeArrayMap(
-          usageResponse.results,
+          results,
           (item: any) => ({
             device_id: SafeAccess.getNestedValue(item, 'device_id', 'unknown'),
             device_name: SafeAccess.getNestedValue(

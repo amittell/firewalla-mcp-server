@@ -623,26 +623,150 @@ export class SearchEngine {
   }
 
   /**
-   * Execute a search query for flows
+   * Execute a search query for flows using simplified implementation with direct API calls.
+   * Performs basic validation and uses getFlowData API directly for improved reliability.
+   * Supports time range filtering and proper limit enforcement.
    */
   async searchFlows(params: SearchParams): Promise<SearchResult> {
-    return this.executeSearch(params, 'flows', {
-      requireQuery: true,
-      requireLimit: true,
-      supportsTimeRange: true,
-      maxLimit: 1000,
-    });
+    const startTime = Date.now();
+
+    try {
+      // Basic parameter validation with security checks
+      if (!params.query || typeof params.query !== 'string' || !params.query.trim()) {
+        throw new Error('query parameter is required and must be a non-empty string');
+      }
+      
+      // Basic security check for dangerous patterns
+      const dangerousPatterns = [
+        /DROP\s+TABLE/i,
+        /<script/i,
+        /javascript:/i,
+        /data:text\/html/i
+      ];
+      
+      if (dangerousPatterns.some(pattern => pattern.test(params.query))) {
+        throw new Error('Query validation failed: Query contains potentially dangerous content');
+      }
+      
+      if (!params.limit || typeof params.limit !== 'number' || params.limit < 1 || params.limit > 1000) {
+        throw new Error('limit parameter is required and must be between 1 and 1000');
+      }
+
+      // Build query string with time range if provided
+      let queryString = params.query;
+      if (params.time_range?.start && params.time_range?.end) {
+        const startDate = new Date(params.time_range.start);
+        const endDate = new Date(params.time_range.end);
+        
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+          throw new Error('Parameter validation failed: time_range must contain valid ISO 8601 dates');
+        }
+        
+        if (startDate >= endDate) {
+          throw new Error('time_range.start must be before time_range.end');
+        }
+        
+        const startTs = Math.floor(startDate.getTime() / 1000);
+        const endTs = Math.floor(endDate.getTime() / 1000);
+        queryString = `ts:${startTs}-${endTs} AND (${params.query})`;
+      }
+
+      // Call API directly without complex validation/parsing
+      const response = await this.firewalla.getFlowData(
+        queryString,
+        params.group_by,
+        params.sort_by || 'ts:desc',
+        params.limit,
+        params.cursor
+      );
+
+      // Apply client-side offset if needed (for backward compatibility)
+      let results = response.results || [];
+      if (params.offset && !params.cursor) {
+        results = results.slice(params.offset);
+      }
+
+      // Apply client-side limit enforcement to ensure exact limit compliance
+      if (results.length > params.limit) {
+        results = results.slice(0, params.limit);
+      }
+
+      return {
+        results,
+        count: results.length,
+        limit: params.limit,
+        offset: params.offset || 0,
+        query: queryString,
+        execution_time_ms: Date.now() - startTime,
+        next_cursor: response.next_cursor,
+      };
+    } catch (error) {
+      throw new Error(`search_flows failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
-   * Execute a search query for alarms
+   * Execute a search query for alarms using simplified implementation with direct API calls.
+   * Performs basic validation and uses getActiveAlarms API directly for improved reliability.
+   * Supports query filtering and proper limit enforcement.
    */
   async searchAlarms(params: SearchParams): Promise<SearchResult> {
-    return this.executeSearch(params, 'alarms', {
-      requireQuery: true,
-      requireLimit: true,
-      maxLimit: 5000,
-    });
+    const startTime = Date.now();
+
+    try {
+      // Basic parameter validation with security checks
+      if (!params.query || typeof params.query !== 'string' || !params.query.trim()) {
+        throw new Error('query parameter is required and must be a non-empty string');
+      }
+      
+      // Basic security check for dangerous patterns
+      const dangerousPatterns = [
+        /DROP\s+TABLE/i,
+        /<script/i,
+        /javascript:/i,
+        /data:text\/html/i
+      ];
+      
+      if (dangerousPatterns.some(pattern => pattern.test(params.query))) {
+        throw new Error('Enhanced query validation failed: Query contains potentially dangerous content');
+      }
+      
+      if (!params.limit || typeof params.limit !== 'number' || params.limit < 1 || params.limit > 5000) {
+        throw new Error('limit parameter is required and must be between 1 and 5000');
+      }
+
+      // Call API directly without complex validation/parsing
+      const response = await this.firewalla.getActiveAlarms(
+        params.query,
+        params.group_by,
+        params.sort_by || 'timestamp:desc',
+        params.limit,
+        params.cursor
+      );
+
+      // Apply client-side offset if needed (for backward compatibility)
+      let results = response.results || [];
+      if (params.offset && !params.cursor) {
+        results = results.slice(params.offset);
+      }
+
+      // Apply client-side limit enforcement to ensure exact limit compliance
+      if (results.length > params.limit) {
+        results = results.slice(0, params.limit);
+      }
+
+      return {
+        results,
+        count: results.length,
+        limit: params.limit,
+        offset: params.offset || 0,
+        query: params.query,
+        execution_time_ms: Date.now() - startTime,
+        next_cursor: response.next_cursor,
+      };
+    } catch (error) {
+      throw new Error(`search_alarms failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
@@ -1620,7 +1744,9 @@ export class SearchEngine {
   }
 
   /**
-   * Advanced geographic search for flows with location-based filtering and analysis
+   * Advanced geographic search for flows with location-based filtering and analysis.
+   * Supports multiple values for each geographic filter (countries, continents, regions, etc.)
+   * using OR logic. Enhanced from previous single-value limitation.
    */
   async searchFlowsByGeography(params: {
     query?: string;
@@ -1668,42 +1794,69 @@ export class SearchEngine {
       if (params.geographic_filters) {
         const geoConditions: string[] = [];
 
-        // Handle countries - take first one to avoid OR parsing issues
+        // Handle countries - support multiple countries with OR logic
         if (params.geographic_filters.countries?.length) {
-          const firstCountry = params.geographic_filters.countries[0];
-          geoConditions.push(`country:${firstCountry}`);
+          if (params.geographic_filters.countries.length === 1) {
+            geoConditions.push(`country:${params.geographic_filters.countries[0]}`);
+          } else {
+            const countryQueries = params.geographic_filters.countries.map(country => `country:${country}`);
+            geoConditions.push(`(${countryQueries.join(' OR ')})`);
+          }
         }
 
-        // Handle continents - take first one
+        // Handle continents - support multiple continents with OR logic
         if (params.geographic_filters.continents?.length) {
-          const firstContinent = params.geographic_filters.continents[0];
-          geoConditions.push(
-            `continent:${firstContinent.includes(' ') ? `"${firstContinent}"` : firstContinent}`
-          );
+          if (params.geographic_filters.continents.length === 1) {
+            const continent = params.geographic_filters.continents[0];
+            geoConditions.push(
+              `continent:${continent.includes(' ') ? `"${continent}"` : continent}`
+            );
+          } else {
+            const continentQueries = params.geographic_filters.continents.map(continent => 
+              `continent:${continent.includes(' ') ? `"${continent}"` : continent}`
+            );
+            geoConditions.push(`(${continentQueries.join(' OR ')})`);
+          }
         }
 
-        // Handle regions - take first one
+        // Handle regions - support multiple regions with OR logic
         if (params.geographic_filters.regions?.length) {
-          const firstRegion = params.geographic_filters.regions[0];
-          geoConditions.push(`region:${firstRegion}`);
+          if (params.geographic_filters.regions.length === 1) {
+            geoConditions.push(`region:${params.geographic_filters.regions[0]}`);
+          } else {
+            const regionQueries = params.geographic_filters.regions.map(region => `region:${region}`);
+            geoConditions.push(`(${regionQueries.join(' OR ')})`);
+          }
         }
 
-        // Handle cities - take first one
+        // Handle cities - support multiple cities with OR logic
         if (params.geographic_filters.cities?.length) {
-          const firstCity = params.geographic_filters.cities[0];
-          geoConditions.push(`city:${firstCity}`);
+          if (params.geographic_filters.cities.length === 1) {
+            geoConditions.push(`city:${params.geographic_filters.cities[0]}`);
+          } else {
+            const cityQueries = params.geographic_filters.cities.map(city => `city:${city}`);
+            geoConditions.push(`(${cityQueries.join(' OR ')})`);
+          }
         }
 
-        // Handle ASNs - take first one
+        // Handle ASNs - support multiple ASNs with OR logic
         if (params.geographic_filters.asns?.length) {
-          const firstAsn = params.geographic_filters.asns[0];
-          geoConditions.push(`asn:${firstAsn}`);
+          if (params.geographic_filters.asns.length === 1) {
+            geoConditions.push(`asn:${params.geographic_filters.asns[0]}`);
+          } else {
+            const asnQueries = params.geographic_filters.asns.map(asn => `asn:${asn}`);
+            geoConditions.push(`(${asnQueries.join(' OR ')})`);
+          }
         }
 
-        // Handle hosting providers - take first one
+        // Handle hosting providers - support multiple providers with OR logic
         if (params.geographic_filters.hosting_providers?.length) {
-          const firstProvider = params.geographic_filters.hosting_providers[0];
-          geoConditions.push(`hosting_provider:${firstProvider}`);
+          if (params.geographic_filters.hosting_providers.length === 1) {
+            geoConditions.push(`hosting_provider:${params.geographic_filters.hosting_providers[0]}`);
+          } else {
+            const providerQueries = params.geographic_filters.hosting_providers.map(provider => `hosting_provider:${provider}`);
+            geoConditions.push(`(${providerQueries.join(' OR ')})`);
+          }
         }
 
         if (params.geographic_filters.exclude_cloud) {
