@@ -694,6 +694,9 @@ export class QuerySanitizer {
     const normalizedQuery = trimmedQuery
       .replace(/\s+/g, ' ')  // Normalize whitespace
       .replace(/\s*:\s*/g, ':')  // Remove spaces around colons
+      .replace(/\s*>\s*=\s*/g, '>=')  // Handle spaced '>='
+      .replace(/\s*<\s*=\s*/g, '<=')  // Handle spaced '<='
+      .replace(/\s*!\s*=\s*/g, '!=')  // Handle spaced '!='
       .replace(/\s*(>=|<=|!=|>|<)\s*/g, '$1')  // Remove spaces around operators
       .replace(/\s+(AND|OR|NOT)\s+/gi, ' $1 ');  // Normalize logical operators
 

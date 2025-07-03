@@ -632,7 +632,7 @@ function canConvertType(value: any, expectedType: string): boolean {
     case 'boolean':
       return (
         typeof value === 'string' &&
-        ['true', 'false', '1', '0'].includes(value.toLowerCase())
+        ['true', 'false', '1', '0', 'yes', 'no'].includes(value.toLowerCase())
       );
     case 'string':
       return true; // Most values can be converted to string
@@ -653,9 +653,15 @@ function isTimestampValue(value: any): boolean {
   // Unix timestamp (10 or 13 digits)
   if (
     typeof value === 'number' &&
+    !isNaN(value) &&
     ((value >= 1000000000 && value <= 9999999999) || // 10 digits (seconds)
       (value >= 1000000000000 && value <= 9999999999999)) // 13 digits (milliseconds)
   ) {
+    return true;
+  }
+
+  // Check for invalid numeric values that might be intended as timestamps
+  if (typeof value === 'number' && isNaN(value)) {
     return true;
   }
 
