@@ -142,7 +142,7 @@ export class FirewallaMCPServer {
                   type: 'number',
                   description: 'Results per page (use cursor for more)',
                   minimum: 1,
-                  maximum: 10000,
+                  maximum: 1000,
                 },
                 cursor: {
                   type: 'string',
@@ -761,7 +761,7 @@ export class FirewallaMCPServer {
                   description:
                     'Maximum number of rules to analyze for summary statistics',
                   minimum: 1,
-                  maximum: 10000,
+                  maximum: 2000,
                 },
                 rule_type: {
                   type: 'string',
