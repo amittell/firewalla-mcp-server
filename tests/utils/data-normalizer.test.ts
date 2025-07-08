@@ -152,6 +152,7 @@ describe('Data Normalizer', () => {
         region: 'unknown',
         city: 'unknown',
         timezone: 'unknown',
+        data_quality: 'missing',
       });
     });
 

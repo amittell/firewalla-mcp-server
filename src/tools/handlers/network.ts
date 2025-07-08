@@ -7,7 +7,6 @@ import type { FirewallaClient } from '../../firewalla/client.js';
 import {
   ParameterValidator,
   SafeAccess,
-  createErrorResponse,
   ErrorType,
 } from '../../validation/error-handler.js';
 import {
@@ -15,11 +14,29 @@ import {
   safeUnixToISOString,
 } from '../../utils/timestamp.js';
 import {
+  normalizeUnknownFields,
+  sanitizeFieldValue,
+  batchNormalize,
+  sanitizeByteCount,
+} from '../../utils/data-normalizer.js';
+import {
   ResponseStandardizer,
   BackwardCompatibilityLayer,
 } from '../../utils/response-standardizer.js';
 import { shouldUseLegacyFormat } from '../../config/response-config.js';
 import type { PaginationMetadata } from '../../types.js';
+import { getLimitValidationConfig } from '../../config/limits.js';
+import {
+  withToolTimeout,
+  TimeoutError,
+  createTimeoutErrorResponse,
+} from '../../utils/timeout-manager.js';
+import {
+  StreamingManager,
+  shouldUseStreaming,
+  createStreamingResponse,
+  type StreamingOperation,
+} from '../../utils/streaming-manager.js';
 
 export class GetFlowDataHandler extends BaseToolHandler {
   name = 'get_flow_data';
@@ -27,9 +44,17 @@ export class GetFlowDataHandler extends BaseToolHandler {
   category = 'network' as const;
 
   async execute(
-    args: ToolArgs,
+    rawArgs: unknown,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
+    // Early parameter sanitization to prevent null/undefined errors
+    const sanitizationResult = this.sanitizeParameters(rawArgs);
+    
+    if ('errorResponse' in sanitizationResult) {
+      return sanitizationResult.errorResponse;
+    }
+    
+    const args = sanitizationResult.sanitizedArgs;
     const startTime = Date.now();
 
     try {
@@ -39,15 +64,12 @@ export class GetFlowDataHandler extends BaseToolHandler {
         'limit',
         {
           required: true,
-          min: 1,
-          max: 1000,
-          integer: true,
+          ...getLimitValidationConfig(this.name),
         }
       );
 
       if (!limitValidation.isValid) {
-        return createErrorResponse(
-          this.name,
+        return this.createErrorResponse(
           'Parameter validation failed',
           ErrorType.VALIDATION_ERROR,
           undefined,
@@ -61,41 +83,82 @@ export class GetFlowDataHandler extends BaseToolHandler {
       const limit = limitValidation.sanitizedValue! as number;
       const cursor = args?.cursor;
 
-      // Build query for time range if provided
+      // Check if streaming is requested or should be automatically enabled
+      const enableStreaming =
+        Boolean(args?.stream) || shouldUseStreaming(this.name, limit);
+      const streamingSessionId = args?.streaming_session_id as
+        | string
+        | undefined;
+
+      // Validate individual date parameters before building query
       const startTimeArg = args?.start_time as string | undefined;
       const endTime = args?.end_time as string | undefined;
       let finalQuery = query;
 
+      // Validate start_time if provided
+      if (startTimeArg !== undefined) {
+        const startTimeValidation = ParameterValidator.validateDateFormat(
+          startTimeArg,
+          'start_time',
+          false
+        );
+        if (!startTimeValidation.isValid) {
+          return this.createErrorResponse(
+            'Invalid start_time format',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: startTimeArg,
+              documentation: 'See /docs/query-syntax-guide.md for time range examples',
+            },
+            startTimeValidation.errors
+          );
+        }
+      }
+
+      // Validate end_time if provided
+      if (endTime !== undefined) {
+        const endTimeValidation = ParameterValidator.validateDateFormat(
+          endTime,
+          'end_time',
+          false
+        );
+        if (!endTimeValidation.isValid) {
+          return this.createErrorResponse(
+            'Invalid end_time format',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: endTime,
+              documentation: 'See /docs/query-syntax-guide.md for time range examples',
+            },
+            endTimeValidation.errors
+          );
+        }
+      }
+
+      // Validate cursor format if provided
+      if (cursor !== undefined) {
+        const cursorValidation = ParameterValidator.validateCursor(cursor, 'cursor');
+        if (!cursorValidation.isValid) {
+          return this.createErrorResponse(
+            'Invalid cursor format',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: cursor,
+              documentation: 'Cursors should be obtained from previous response next_cursor field',
+            },
+            cursorValidation.errors
+          );
+        }
+      }
+
+      // Build time range query if both dates are provided and valid
       if (startTimeArg && endTime) {
-        // Validate time range
         const startDate = new Date(startTimeArg);
         const endDate = new Date(endTime);
 
-        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-          return createErrorResponse(
-            this.name,
-            'Invalid time range format',
-            ErrorType.VALIDATION_ERROR,
-            {
-              details: 'Time range parameters must be valid ISO 8601 dates',
-              received: { start_time: startTimeArg, end_time: endTime },
-              examples: {
-                valid_format: '2024-01-01T00:00:00Z',
-                relative_format: 'Use current time minus desired duration',
-              },
-            },
-            [
-              'Ensure start_time and end_time are valid ISO 8601 date strings',
-              'Example: "2024-01-01T00:00:00Z" for UTC time',
-              'Check that timezone offset is included if using local time',
-              'See the Query Syntax Guide for time range examples: /docs/query-syntax-guide.md',
-            ]
-          );
-        }
-
+        // Validate time range order (dates are already validated for format above)
         if (startDate >= endDate) {
-          return createErrorResponse(
-            this.name,
+          return this.createErrorResponse(
             'Invalid time range order',
             ErrorType.VALIDATION_ERROR,
             {
@@ -123,12 +186,107 @@ export class GetFlowDataHandler extends BaseToolHandler {
         finalQuery = query ? `(${query}) AND ${timeQuery}` : timeQuery;
       }
 
-      const response = await firewalla.getFlowData(
-        finalQuery,
-        groupBy,
-        sortBy,
-        limit,
-        cursor
+      // Handle streaming mode if enabled
+      if (enableStreaming) {
+        const streamingManager = StreamingManager.forTool(this.name);
+
+        // Define the streaming operation
+        const streamingOperation: StreamingOperation = async params => {
+          const response = await withToolTimeout(
+            async () =>
+              firewalla.getFlowData(
+                finalQuery,
+                groupBy,
+                sortBy,
+                params.limit || 100,
+                params.cursor
+              ),
+            this.name
+          );
+
+          // Process flows for this chunk
+          const processedFlows = SafeAccess.safeArrayMap(
+            response.results,
+            (flow: any) => ({
+              timestamp: unixToISOStringOrNow(flow.ts),
+              source_ip: SafeAccess.getNestedValue(
+                flow,
+                'source.ip',
+                SafeAccess.getNestedValue(flow, 'device.ip', 'unknown')
+              ),
+              destination_ip: SafeAccess.getNestedValue(
+                flow,
+                'destination.ip',
+                'unknown'
+              ),
+              protocol: SafeAccess.getNestedValue(flow, 'protocol', 'unknown'),
+              bytes:
+                (SafeAccess.getNestedValue(flow, 'download', 0) as number) +
+                (SafeAccess.getNestedValue(flow, 'upload', 0) as number),
+              download: SafeAccess.getNestedValue(flow, 'download', 0),
+              upload: SafeAccess.getNestedValue(flow, 'upload', 0),
+              packets: SafeAccess.getNestedValue(flow, 'count', 0),
+              duration: SafeAccess.getNestedValue(flow, 'duration', 0),
+              direction: SafeAccess.getNestedValue(
+                flow,
+                'direction',
+                'unknown'
+              ),
+              blocked: SafeAccess.getNestedValue(flow, 'block', false),
+              block_type: SafeAccess.getNestedValue(flow, 'blockType', null),
+              device: SafeAccess.getNestedValue(flow, 'device', {}),
+              source: SafeAccess.getNestedValue(flow, 'source', {}),
+              destination: SafeAccess.getNestedValue(flow, 'destination', {}),
+              region: SafeAccess.getNestedValue(flow, 'region', null),
+              category: SafeAccess.getNestedValue(flow, 'category', null),
+            })
+          );
+
+          return {
+            data: processedFlows,
+            hasMore: !!response.next_cursor,
+            nextCursor: response.next_cursor,
+            total: (response as any).total_count,
+          };
+        };
+
+        if (streamingSessionId) {
+          // Continue existing streaming session
+          const chunk = await streamingManager.continueStreaming(
+            streamingSessionId,
+            streamingOperation
+          );
+
+          if (!chunk) {
+            return this.createErrorResponse(
+              'Failed to continue streaming session',
+              ErrorType.API_ERROR
+            );
+          }
+
+          return createStreamingResponse(chunk);
+        }
+        // Start new streaming session
+        const { firstChunk } = await streamingManager.startStreaming(
+          this.name,
+          streamingOperation,
+          {
+            query: finalQuery,
+            groupBy,
+            sortBy,
+            limit,
+            start_time: startTimeArg,
+            end_time: endTime,
+          }
+        );
+
+        return createStreamingResponse(firstChunk);
+      }
+
+      const response = await withToolTimeout(
+        async () =>
+          firewalla.getFlowData(finalQuery, groupBy, sortBy, limit, cursor),
+        this.name
       );
       const executionTime = Date.now() - startTime;
 
@@ -204,10 +362,21 @@ export class GetFlowDataHandler extends BaseToolHandler {
 
       return this.createSuccessResponse(standardResponse);
     } catch (error: unknown) {
+      // Handle timeout errors specifically
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000 // Default timeout from timeout-manager
+        );
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
-        `Failed to get flow data: ${errorMessage}`
+        `Failed to get flow data: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { originalError: errorMessage }
       );
     }
   }
@@ -235,9 +404,7 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
         'limit',
         {
           required: true,
-          min: 1,
-          max: 500,
-          integer: true,
+          ...getLimitValidationConfig(this.name),
         }
       );
 
@@ -247,8 +414,7 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
       ]);
 
       if (!validationResult.isValid) {
-        return createErrorResponse(
-          this.name,
+        return this.createErrorResponse(
           'Parameter validation failed',
           ErrorType.VALIDATION_ERROR,
           undefined,
@@ -256,9 +422,13 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
         );
       }
 
-      const usageResponse = await firewalla.getBandwidthUsage(
-        periodValidation.sanitizedValue as string,
-        limitValidation.sanitizedValue as number
+      const usageResponse = await withToolTimeout(
+        async () =>
+          firewalla.getBandwidthUsage(
+            periodValidation.sanitizedValue as string,
+            limitValidation.sanitizedValue as number
+          ),
+        this.name
       );
 
       // Ensure we have results and validate count vs requested limit
@@ -302,10 +472,21 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
         })),
       });
     } catch (error: unknown) {
+      // Handle timeout errors specifically
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000 // Default timeout from timeout-manager
+        );
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
-        `Failed to get bandwidth usage: ${errorMessage}`
+        `Failed to get bandwidth usage: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { originalError: errorMessage }
       );
     }
   }
@@ -321,15 +502,13 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      // Parameter validation
+      // Parameter validation with standardized limits
       const limitValidation = ParameterValidator.validateNumber(
         args?.limit,
         'limit',
         {
           required: true,
-          min: 1,
-          max: 1000,
-          integer: true,
+          ...getLimitValidationConfig(this.name),
         }
       );
       const sortValidation = ParameterValidator.validateBoolean(
@@ -344,8 +523,7 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
       ]);
 
       if (!validationResult.isValid) {
-        return createErrorResponse(
-          this.name,
+        return this.createErrorResponse(
           'Parameter validation failed',
           ErrorType.VALIDATION_ERROR,
           undefined,
@@ -354,7 +532,7 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
       }
 
       const limit = limitValidation.sanitizedValue! as number;
-      const sortByLastSeen = sortValidation.sanitizedValue!;
+      const sortByLastSeen = sortValidation.sanitizedValue ?? true;
 
       // Buffer Strategy: Fetch extra devices to account for post-processing filtering
       //
@@ -369,16 +547,31 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
       // The multiplier of 3 is empirically chosen based on typical online/offline
       // ratios in network environments (usually 60-80% devices are online).
       const fetchLimit = Math.min(limit * 3, 1000); // 3x buffer with 1000 cap for API limits
-      const allDevicesResponse = await firewalla.getDeviceStatus(
-        undefined,
-        undefined,
-        fetchLimit
+      const allDevicesResponse = await withToolTimeout(
+        async () => firewalla.getDeviceStatus(undefined, undefined, fetchLimit),
+        this.name
       );
 
-      // Filter to only offline devices
-      let offlineDevices = SafeAccess.safeArrayFilter(
+      // Normalize device data for consistency first
+      const deviceResults = SafeAccess.safeArrayAccess(
         allDevicesResponse.results,
-        (device: any) => !SafeAccess.getNestedValue(device, 'online', false)
+        (arr: any[]) => arr,
+        []
+      ) as any[];
+
+      const normalizedDevices = batchNormalize(deviceResults, {
+        name: (v: any) => sanitizeFieldValue(v, 'Unknown Device').value,
+        ip: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        macVendor: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        network: (v: any) => (v ? normalizeUnknownFields(v) : null),
+        group: (v: any) => (v ? normalizeUnknownFields(v) : null),
+        online: (v: any) => Boolean(v), // Ensure consistent boolean handling
+      });
+
+      // Filter to only offline devices with consistent boolean checking
+      let offlineDevices = SafeAccess.safeArrayFilter(
+        normalizedDevices,
+        (device: any) => device.online === false
       );
 
       // Sort by last seen timestamp if requested
@@ -401,28 +594,44 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
           limitedOfflineDevices,
           (device: any) => ({
             id: SafeAccess.getNestedValue(device, 'id', 'unknown'),
-            name: SafeAccess.getNestedValue(device, 'name', 'Unknown Device'),
-            ip: SafeAccess.getNestedValue(device, 'ip', 'unknown'),
-            macVendor: SafeAccess.getNestedValue(
-              device,
-              'macVendor',
-              'unknown'
-            ),
+            gid: SafeAccess.getNestedValue(device, 'gid', 'unknown'),
+            name: device.name, // Already normalized
+            ip: device.ip, // Already normalized
+            macVendor: device.macVendor, // Already normalized
+            online: device.online, // Already normalized to false for offline devices
             lastSeen: SafeAccess.getNestedValue(device, 'lastSeen', 0),
             lastSeenFormatted: safeUnixToISOString(
               SafeAccess.getNestedValue(device, 'lastSeen', 0) as number,
               'Never'
             ),
-            network: SafeAccess.getNestedValue(device, 'network', null),
-            group: SafeAccess.getNestedValue(device, 'group', null),
+            ipReserved: SafeAccess.getNestedValue(device, 'ipReserved', false),
+            network: device.network, // Already normalized
+            group: device.group, // Already normalized
+            totalDownload: sanitizeByteCount(
+              SafeAccess.getNestedValue(device, 'totalDownload', 0)
+            ),
+            totalUpload: sanitizeByteCount(
+              SafeAccess.getNestedValue(device, 'totalUpload', 0)
+            ),
           })
         ),
       });
     } catch (error: unknown) {
+      // Handle timeout errors specifically
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000 // Default timeout from timeout-manager
+        );
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
-        `Failed to get offline devices: ${errorMessage}`
+        `Failed to get offline devices: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { originalError: errorMessage }
       );
     }
   }

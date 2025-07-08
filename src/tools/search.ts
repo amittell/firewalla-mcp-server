@@ -17,7 +17,6 @@ import {
   suggestEntityType,
   extractCorrelationValues,
   filterByCorrelation,
-  performMultiFieldCorrelation,
   performEnhancedMultiFieldCorrelation,
   getSupportedCorrelationCombinations,
   getFieldValue,
@@ -29,6 +28,7 @@ import {
 } from '../validation/field-mapper.js';
 import { FieldValidator } from '../validation/field-validator.js';
 import { ErrorFormatter } from '../validation/error-formatter.js';
+import { validateCountryCodes } from '../utils/geographic-utils.js';
 
 /**
  * Configuration interface for risk thresholds and performance settings
@@ -633,12 +633,14 @@ export class SearchEngine {
     try {
       // Basic parameter validation with security checks
       if (
+        !params ||
+        typeof params !== 'object' ||
         !params.query ||
         typeof params.query !== 'string' ||
         !params.query.trim()
       ) {
         throw new Error(
-          'query parameter is required and must be a non-empty string'
+          'Parameters object with query property is required and query must be a non-empty string'
         );
       }
 
@@ -735,12 +737,14 @@ export class SearchEngine {
     try {
       // Basic parameter validation with security checks
       if (
+        !params ||
+        typeof params !== 'object' ||
         !params.query ||
         typeof params.query !== 'string' ||
         !params.query.trim()
       ) {
         throw new Error(
-          'query parameter is required and must be a non-empty string'
+          'Parameters object with query property is required and query must be a non-empty string'
         );
       }
 
@@ -894,6 +898,14 @@ export class SearchEngine {
         );
       }
 
+      // Validate correlation field count before other validations
+      if (params.correlation_params.correlationFields && params.correlation_params.correlationFields.length > 5) {
+        const excessFields = params.correlation_params.correlationFields.slice(5);
+        throw new Error(
+          `Enhanced cross-reference validation failed: Maximum 5 correlation fields allowed, but ${params.correlation_params.correlationFields.length} provided. Please remove these fields: ${excessFields.join(', ')}`
+        );
+      }
+
       // Validate enhanced cross-reference parameters with detailed error messages
       const validation = validateEnhancedCrossReference(
         params.primary_query,
@@ -976,20 +988,41 @@ export class SearchEngine {
           limit
         );
 
-        // Perform multi-field correlation
-        const correlationResult = performMultiFieldCorrelation(
+        // Perform enhanced multi-field correlation with scoring enabled
+        const enhancedParams: ScoringCorrelationParams = {
+          ...params.correlation_params,
+          enableScoring: true,
+          enableFuzzyMatching: true,
+          minimumScore: 0.3, // Default minimum score threshold
+        };
+
+        const correlationResult = performEnhancedMultiFieldCorrelation(
           primaryResult.results,
           secondaryResult.results,
           primaryType,
           secondaryType,
-          params.correlation_params
+          enhancedParams
         );
+
+        // Map correlation results to include scoring information
+        const mappedResults = correlationResult.scoredResults 
+          ? correlationResult.scoredResults.map((scoredItem: any) => ({
+              correlation_strength: scoredItem.score || 0,
+              matched_fields: scoredItem.matchedFields || [],
+              data: scoredItem.entity,
+            }))
+          : correlationResult.correlatedResults.map((item: any) => ({
+              correlation_strength: 0,
+              matched_fields: [],
+              data: item,
+            }));
 
         correlatedResults.correlations.push({
           query: secondaryQuery,
-          results: correlationResult.correlatedResults,
+          results: mappedResults,
           count: correlationResult.correlatedResults.length,
           correlation_stats: correlationResult.correlationStats,
+          enhanced_stats: correlationResult.enhancedStats,
           entity_type: secondaryType,
         });
       }
@@ -1030,168 +1063,6 @@ export class SearchEngine {
   }
 
   /**
-   * Enhanced cross-reference search with scoring and fuzzy matching capabilities
-   */
-  async enhancedScoredCrossReferenceSearch(params: {
-    primary_query: string;
-    secondary_queries: string[];
-    correlation_params: ScoringCorrelationParams;
-    limit?: number;
-  }): Promise<any> {
-    const startTime = Date.now();
-
-    try {
-      // Validate limit parameter
-      const limit = params.limit || 1000;
-      const limitValidation = ParameterValidator.validateNumber(
-        limit,
-        'limit',
-        {
-          min: 1,
-          max: 5000,
-          integer: true,
-        }
-      );
-
-      if (!limitValidation.isValid) {
-        throw new Error(
-          `Parameter validation failed: ${limitValidation.errors.join(', ')}`
-        );
-      }
-
-      // Validate enhanced correlation parameters
-      const validation = validateEnhancedCrossReference(
-        params.primary_query,
-        params.secondary_queries,
-        params.correlation_params
-      );
-
-      if (!validation.isValid) {
-        throw new Error(
-          `Enhanced correlation validation failed: ${validation.errors.join(', ')}`
-        );
-      }
-
-      // Execute primary query
-      const primaryType = suggestEntityType(params.primary_query) || 'flows';
-      const primaryResult = await this.executeSearchByType(
-        primaryType,
-        params.primary_query,
-        limit
-      );
-
-      const correlatedResults: any = {
-        primary: {
-          query: params.primary_query,
-          results: primaryResult.results,
-          count: primaryResult.count,
-          entity_type: primaryType,
-        },
-        correlations: [],
-      };
-
-      // Execute secondary queries and perform enhanced correlation
-      for (let i = 0; i < params.secondary_queries.length; i++) {
-        const secondaryQuery = params.secondary_queries[i];
-        const secondaryType = suggestEntityType(secondaryQuery) || 'alarms';
-
-        // Execute secondary query
-        const secondaryResult = await this.executeSearchByType(
-          secondaryType,
-          secondaryQuery,
-          limit
-        );
-
-        // Perform enhanced multi-field correlation with scoring
-        const enhancedResult = performEnhancedMultiFieldCorrelation(
-          primaryResult.results,
-          secondaryResult.results,
-          primaryType,
-          secondaryType,
-          params.correlation_params
-        );
-
-        correlatedResults.correlations.push({
-          query: secondaryQuery,
-          results: enhancedResult.correlatedResults,
-          count: enhancedResult.correlatedResults.length,
-          correlation_stats: enhancedResult.correlationStats,
-          enhanced_stats: enhancedResult.enhancedStats,
-          scored_results: enhancedResult.scoredResults,
-          entity_type: secondaryType,
-          scoring_enabled: params.correlation_params.enableScoring,
-          fuzzy_matching_enabled: params.correlation_params.enableFuzzyMatching,
-        });
-      }
-
-      // Calculate enhanced correlation summary
-      const totalCorrelated = correlatedResults.correlations.reduce(
-        (sum: number, c: any) => sum + c.count,
-        0
-      );
-      const avgCorrelationRate =
-        correlatedResults.correlations.length > 0
-          ? Math.round(
-              correlatedResults.correlations.reduce(
-                (sum: number, c: any) =>
-                  sum + c.correlation_stats.correlationRate,
-                0
-              ) / correlatedResults.correlations.length
-            )
-          : 0;
-
-      // Calculate enhanced metrics
-      const enhancedMetrics = correlatedResults.correlations
-        .filter((c: any) => c.enhanced_stats)
-        .map((c: any) => c.enhanced_stats);
-
-      const avgScore =
-        enhancedMetrics.length > 0
-          ? enhancedMetrics.reduce(
-              (sum: number, stats: any) => sum + stats.averageScore,
-              0
-            ) / enhancedMetrics.length
-          : 0;
-
-      const scoreDistribution =
-        enhancedMetrics.length > 0
-          ? enhancedMetrics.reduce(
-              (acc: any, stats: any) => ({
-                high: acc.high + stats.scoreDistribution.high,
-                medium: acc.medium + stats.scoreDistribution.medium,
-                low: acc.low + stats.scoreDistribution.low,
-              }),
-              { high: 0, medium: 0, low: 0 }
-            )
-          : { high: 0, medium: 0, low: 0 };
-
-      return {
-        ...correlatedResults,
-        execution_time_ms: Date.now() - startTime,
-        correlation_summary: {
-          primary_count: primaryResult.count,
-          total_correlated_count: totalCorrelated,
-          average_correlation_rate: avgCorrelationRate,
-          correlation_fields: params.correlation_params.correlationFields,
-          correlation_type: params.correlation_params.correlationType,
-          temporal_window_applied: !!params.correlation_params.temporalWindow,
-          // Enhanced scoring metrics
-          scoring_enabled: params.correlation_params.enableScoring,
-          fuzzy_matching_enabled: params.correlation_params.enableFuzzyMatching,
-          average_correlation_score: Math.round(avgScore * 1000) / 1000,
-          score_distribution: scoreDistribution,
-          minimum_score_threshold:
-            params.correlation_params.minimumScore || 0.3,
-        },
-      };
-    } catch (error) {
-      throw new Error(
-        `Enhanced scored cross-reference search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
-  }
-
-  /**
    * Cross-reference search across multiple entity types with improved field mapping
    */
   async crossReferenceSearch(params: {
@@ -1219,6 +1090,17 @@ export class SearchEngine {
         throw new Error(
           `Parameter validation failed: ${limitValidation.errors.join(', ')}`
         );
+      }
+
+      // Validate correlation field count for regular cross-reference (single field only)
+      if (typeof params.correlation_field === 'string' && params.correlation_field.includes(',')) {
+        const fields = params.correlation_field.split(',').map(f => f.trim());
+        if (fields.length > 5) {
+          const excessFields = fields.slice(5);
+          throw new Error(
+            `Cross-reference validation failed: Maximum 5 correlation fields allowed, but ${fields.length} provided. Please remove these fields: ${excessFields.join(', ')}`
+          );
+        }
       }
 
       // Validate cross-reference parameters
@@ -1494,11 +1376,12 @@ export class SearchEngine {
         );
       }
 
-      if (
-        !Array.isArray(params.secondary_queries) ||
-        params.secondary_queries.length === 0
-      ) {
-        throw new Error('At least one secondary query is required');
+      if (!Array.isArray(params.secondary_queries)) {
+        throw new Error('secondary_queries must be an array');
+      }
+
+      if (params.secondary_queries.length === 0) {
+        throw new Error('secondary_queries array cannot be empty - at least one secondary query is required');
       }
 
       // Validate each secondary query
@@ -1780,9 +1663,73 @@ export class SearchEngine {
   }
 
   /**
+   * Build geographic query string from filters
+   */
+  private buildGeographicQuery(filters: {
+    countries?: string[];
+    continents?: string[];
+    regions?: string[];
+    cities?: string[];
+    asns?: string[];
+    hosting_providers?: string[];
+    exclude_cloud?: boolean;
+    exclude_vpn?: boolean;
+    min_risk_score?: number;
+  }): string {
+    const queryParts: string[] = [];
+
+    // Build OR queries for array filters
+    if (filters.countries && filters.countries.length > 0) {
+      const countryQueries = filters.countries.map(country => `country:${country}`);
+      queryParts.push(countryQueries.length === 1 ? countryQueries[0] : `(${countryQueries.join(' OR ')})`);
+    }
+
+    if (filters.continents && filters.continents.length > 0) {
+      const continentQueries = filters.continents.map(continent => `continent:${continent}`);
+      queryParts.push(continentQueries.length === 1 ? continentQueries[0] : `(${continentQueries.join(' OR ')})`);
+    }
+
+    if (filters.regions && filters.regions.length > 0) {
+      const regionQueries = filters.regions.map(region => `region:"${region}"`);
+      queryParts.push(regionQueries.length === 1 ? regionQueries[0] : `(${regionQueries.join(' OR ')})`);
+    }
+
+    if (filters.cities && filters.cities.length > 0) {
+      const cityQueries = filters.cities.map(city => `city:"${city}"`);
+      queryParts.push(cityQueries.length === 1 ? cityQueries[0] : `(${cityQueries.join(' OR ')})`);
+    }
+
+    if (filters.asns && filters.asns.length > 0) {
+      const asnQueries = filters.asns.map(asn => `asn:${asn}`);
+      queryParts.push(asnQueries.length === 1 ? asnQueries[0] : `(${asnQueries.join(' OR ')})`);
+    }
+
+    if (filters.hosting_providers && filters.hosting_providers.length > 0) {
+      const providerQueries = filters.hosting_providers.map(provider => `hosting_provider:${provider}`);
+      queryParts.push(providerQueries.length === 1 ? providerQueries[0] : `(${providerQueries.join(' OR ')})`);
+    }
+
+    // Boolean filters
+    if (filters.exclude_cloud) {
+      queryParts.push('NOT is_cloud_provider:true');
+    }
+
+    if (filters.exclude_vpn) {
+      queryParts.push('NOT is_vpn:true');
+    }
+
+    // Numeric filters
+    if (filters.min_risk_score !== undefined) {
+      queryParts.push(`geographic_risk_score:>=${filters.min_risk_score}`);
+    }
+
+    return queryParts.join(' AND ');
+  }
+
+  /**
    * Advanced geographic search for flows with location-based filtering and analysis.
    * Supports multiple values for each geographic filter (countries, continents, regions, etc.)
-   * using OR logic. Enhanced from previous single-value limitation.
+   * using OR logic. Builds proper query strings for the Firewalla API.
    */
   async searchFlowsByGeography(params: {
     query?: string;
@@ -1824,121 +1771,45 @@ export class SearchEngine {
         );
       }
 
-      // Build geographic query - simplified approach to avoid parsing issues
-      let geographicQuery = params.query || '';
+      // Validate geographic_filters parameter - fix null handling
+      if (params.geographic_filters !== undefined && 
+          (params.geographic_filters === null || typeof params.geographic_filters !== 'object')) {
+        throw new Error(
+          'geographic_filters must be an object if provided'
+        );
+      }
 
-      if (params.geographic_filters) {
-        const geoConditions: string[] = [];
-
-        // Handle countries - support multiple countries with OR logic
-        if (params.geographic_filters.countries?.length) {
-          if (params.geographic_filters.countries.length === 1) {
-            geoConditions.push(
-              `country:${params.geographic_filters.countries[0]}`
-            );
-          } else {
-            const countryQueries = params.geographic_filters.countries.map(
-              country => `country:${country}`
-            );
-            geoConditions.push(`(${countryQueries.join(' OR ')})`);
-          }
-        }
-
-        // Handle continents - support multiple continents with OR logic
-        if (params.geographic_filters.continents?.length) {
-          if (params.geographic_filters.continents.length === 1) {
-            const continent = params.geographic_filters.continents[0];
-            geoConditions.push(
-              `continent:${continent.includes(' ') ? `"${continent}"` : continent}`
-            );
-          } else {
-            const continentQueries = params.geographic_filters.continents.map(
-              continent =>
-                `continent:${continent.includes(' ') ? `"${continent}"` : continent}`
-            );
-            geoConditions.push(`(${continentQueries.join(' OR ')})`);
-          }
-        }
-
-        // Handle regions - support multiple regions with OR logic
-        if (params.geographic_filters.regions?.length) {
-          if (params.geographic_filters.regions.length === 1) {
-            geoConditions.push(
-              `region:${params.geographic_filters.regions[0]}`
-            );
-          } else {
-            const regionQueries = params.geographic_filters.regions.map(
-              region => `region:${region}`
-            );
-            geoConditions.push(`(${regionQueries.join(' OR ')})`);
-          }
-        }
-
-        // Handle cities - support multiple cities with OR logic
-        if (params.geographic_filters.cities?.length) {
-          if (params.geographic_filters.cities.length === 1) {
-            geoConditions.push(`city:${params.geographic_filters.cities[0]}`);
-          } else {
-            const cityQueries = params.geographic_filters.cities.map(
-              city => `city:${city}`
-            );
-            geoConditions.push(`(${cityQueries.join(' OR ')})`);
-          }
-        }
-
-        // Handle ASNs - support multiple ASNs with OR logic
-        if (params.geographic_filters.asns?.length) {
-          if (params.geographic_filters.asns.length === 1) {
-            geoConditions.push(`asn:${params.geographic_filters.asns[0]}`);
-          } else {
-            const asnQueries = params.geographic_filters.asns.map(
-              asn => `asn:${asn}`
-            );
-            geoConditions.push(`(${asnQueries.join(' OR ')})`);
-          }
-        }
-
-        // Handle hosting providers - support multiple providers with OR logic
-        if (params.geographic_filters.hosting_providers?.length) {
-          if (params.geographic_filters.hosting_providers.length === 1) {
-            geoConditions.push(
-              `hosting_provider:${params.geographic_filters.hosting_providers[0]}`
-            );
-          } else {
-            const providerQueries =
-              params.geographic_filters.hosting_providers.map(
-                provider => `hosting_provider:${provider}`
-              );
-            geoConditions.push(`(${providerQueries.join(' OR ')})`);
-          }
-        }
-
-        if (params.geographic_filters.exclude_cloud) {
-          geoConditions.push('NOT is_cloud_provider:true');
-        }
-
-        if (params.geographic_filters.exclude_vpn) {
-          geoConditions.push('NOT is_vpn:true');
-        }
-
-        if (params.geographic_filters.min_risk_score !== undefined) {
-          geoConditions.push(
-            `geographic_risk_score:>=${params.geographic_filters.min_risk_score}`
+      // Validate country codes if provided
+      if (params.geographic_filters?.countries?.length) {
+        const countryValidation = validateCountryCodes(params.geographic_filters.countries);
+        if (!countryValidation.isValid) {
+          throw new Error(
+            `Country code validation failed: ${countryValidation.errors.join(', ')}`
           );
         }
+        // Update with validated codes
+        params.geographic_filters.countries = countryValidation.validCodes;
+      }
 
-        if (geoConditions.length > 0) {
-          const geoQueryString = geoConditions.join(' AND ');
-          geographicQuery =
-            !geographicQuery || geographicQuery.trim() === ''
-              ? geoQueryString
-              : `${geographicQuery} AND ${geoQueryString}`;
+      // Build complete query with geographic filters
+      let finalQuery = params.query || '*';
+      
+      if (params.geographic_filters && 
+          typeof params.geographic_filters === 'object' &&
+          params.geographic_filters !== null) {
+        const geographicQuery = this.buildGeographicQuery(params.geographic_filters);
+        if (geographicQuery) {
+          if (finalQuery === '*') {
+            finalQuery = geographicQuery;
+          } else {
+            finalQuery = `${finalQuery} AND ${geographicQuery}`;
+          }
         }
       }
 
-      // Execute search with geographic query
+      // Execute search with combined query
       const searchParams = {
-        query: geographicQuery || '*',
+        query: finalQuery,
         limit: params.limit,
         sort_by: params.sort_by,
         sort_order: params.sort_order,
@@ -1953,6 +1824,7 @@ export class SearchEngine {
 
       return {
         ...result,
+        geographic_filters_applied: !!params.geographic_filters,
         geographic_analysis: geographicAnalysis,
         execution_time_ms: Date.now() - startTime,
       };
@@ -1964,7 +1836,49 @@ export class SearchEngine {
   }
 
   /**
-   * Advanced geographic search for alarms with location-based threat analysis
+   * Build geographic query string for alarms
+   */
+  private buildGeographicAlarmQuery(filters: {
+    countries?: string[];
+    continents?: string[];
+    regions?: string[];
+    high_risk_countries?: boolean;
+    exclude_known_providers?: boolean;
+    threat_analysis?: boolean;
+  }): string {
+    const queryParts: string[] = [];
+
+    // Build OR queries for array filters
+    if (filters.countries && filters.countries.length > 0) {
+      const countryQueries = filters.countries.map(country => `country:${country}`);
+      queryParts.push(countryQueries.length === 1 ? countryQueries[0] : `(${countryQueries.join(' OR ')})`);
+    }
+
+    if (filters.continents && filters.continents.length > 0) {
+      const continentQueries = filters.continents.map(continent => `continent:${continent}`);
+      queryParts.push(continentQueries.length === 1 ? continentQueries[0] : `(${continentQueries.join(' OR ')})`);
+    }
+
+    if (filters.regions && filters.regions.length > 0) {
+      const regionQueries = filters.regions.map(region => `region:"${region}"`);
+      queryParts.push(regionQueries.length === 1 ? regionQueries[0] : `(${regionQueries.join(' OR ')})`);
+    }
+
+    // Boolean filters for alarms
+    if (filters.high_risk_countries) {
+      queryParts.push('geographic_risk_score:>=7');
+    }
+
+    if (filters.exclude_known_providers) {
+      queryParts.push('NOT is_cloud_provider:true AND NOT hosting_provider:*');
+    }
+
+    return queryParts.join(' AND ');
+  }
+
+  /**
+   * Advanced geographic search for alarms with location-based threat analysis.
+   * Builds proper query strings for the Firewalla API.
    */
   async searchAlarmsByGeography(params: {
     query?: string;
@@ -2001,54 +1915,45 @@ export class SearchEngine {
         );
       }
 
-      // Build geographic threat query - simplified approach
-      let geographicQuery = params.query || '';
+      // Validate geographic_filters parameter - fix null handling
+      if (params.geographic_filters !== undefined && 
+          (params.geographic_filters === null || typeof params.geographic_filters !== 'object')) {
+        throw new Error(
+          'geographic_filters must be an object if provided'
+        );
+      }
 
-      if (params.geographic_filters) {
-        const geoConditions: string[] = [];
-
-        // Handle countries - take first one to avoid OR parsing issues
-        if (params.geographic_filters.countries?.length) {
-          const firstCountry = params.geographic_filters.countries[0];
-          geoConditions.push(`country:${firstCountry}`);
-        }
-
-        // Handle continents - take first one
-        if (params.geographic_filters.continents?.length) {
-          const firstContinent = params.geographic_filters.continents[0];
-          geoConditions.push(
-            `continent:${firstContinent.includes(' ') ? `"${firstContinent}"` : firstContinent}`
+      // Validate country codes if provided
+      if (params.geographic_filters?.countries?.length) {
+        const countryValidation = validateCountryCodes(params.geographic_filters.countries);
+        if (!countryValidation.isValid) {
+          throw new Error(
+            `Country code validation failed: ${countryValidation.errors.join(', ')}`
           );
         }
+        // Update with validated codes
+        params.geographic_filters.countries = countryValidation.validCodes;
+      }
 
-        // Handle regions - take first one
-        if (params.geographic_filters.regions?.length) {
-          const firstRegion = params.geographic_filters.regions[0];
-          geoConditions.push(`region:${firstRegion}`);
-        }
-
-        if (params.geographic_filters.high_risk_countries) {
-          // Add query for countries with higher security risk
-          geoConditions.push('geographic_risk_score:>=7');
-        }
-
-        if (params.geographic_filters.exclude_known_providers) {
-          geoConditions.push('NOT is_cloud_provider:true');
-          geoConditions.push('NOT hosting_provider:*');
-        }
-
-        if (geoConditions.length > 0) {
-          const geoQueryString = geoConditions.join(' AND ');
-          geographicQuery =
-            !geographicQuery || geographicQuery.trim() === ''
-              ? geoQueryString
-              : `${geographicQuery} AND ${geoQueryString}`;
+      // Build complete query with geographic filters
+      let finalQuery = params.query || '*';
+      
+      if (params.geographic_filters && 
+          typeof params.geographic_filters === 'object' &&
+          params.geographic_filters !== null) {
+        const geographicQuery = this.buildGeographicAlarmQuery(params.geographic_filters);
+        if (geographicQuery) {
+          if (finalQuery === '*') {
+            finalQuery = geographicQuery;
+          } else {
+            finalQuery = `${finalQuery} AND ${geographicQuery}`;
+          }
         }
       }
 
-      // Execute alarm search
+      // Execute search with combined query
       const searchParams = {
-        query: geographicQuery || '*',
+        query: finalQuery,
         limit: params.limit,
         sort_by: params.sort_by,
         group_by: params.group_by,
@@ -2064,6 +1969,7 @@ export class SearchEngine {
 
       return {
         ...result,
+        geographic_filters_applied: !!params.geographic_filters,
         geographic_threat_analysis: threatAnalysis,
         execution_time_ms: Date.now() - startTime,
       };
@@ -2409,7 +2315,6 @@ interface SearchTools {
   search_target_lists: SearchEngine['searchTargetLists'];
   search_cross_reference: SearchEngine['crossReferenceSearch'];
   search_enhanced_cross_reference: SearchEngine['enhancedCrossReferenceSearch'];
-  search_enhanced_scored_cross_reference: SearchEngine['enhancedScoredCrossReferenceSearch'];
   get_correlation_suggestions: SearchEngine['getCorrelationSuggestions'];
   search_flows_by_geography: SearchEngine['searchFlowsByGeography'];
   search_alarms_by_geography: SearchEngine['searchAlarmsByGeography'];
@@ -2434,8 +2339,6 @@ export function createSearchTools(firewalla: FirewallaClient): SearchTools {
       searchEngine.crossReferenceSearch.bind(searchEngine),
     search_enhanced_cross_reference:
       searchEngine.enhancedCrossReferenceSearch.bind(searchEngine),
-    search_enhanced_scored_cross_reference:
-      searchEngine.enhancedScoredCrossReferenceSearch.bind(searchEngine),
     get_correlation_suggestions:
       searchEngine.getCorrelationSuggestions.bind(searchEngine),
     search_flows_by_geography:

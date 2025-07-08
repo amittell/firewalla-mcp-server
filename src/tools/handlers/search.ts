@@ -12,10 +12,26 @@ import type {
   TargetList,
   SearchMetadata,
 } from '../../types.js';
-import { SafeAccess } from '../../validation/error-handler.js';
+import {
+  SafeAccess,
+  QuerySanitizer,
+  ParameterValidator,
+  createErrorResponse,
+  ErrorType,
+} from '../../validation/error-handler.js';
+import { getLimitValidationConfig } from '../../config/limits.js';
+import {
+  withToolTimeout,
+  TimeoutError,
+  createTimeoutErrorResponse,
+} from '../../utils/timeout-manager.js';
+import {
+  withRetryAndTimeout,
+  isRetryableError,
+} from '../../utils/retry-manager.js';
 import { createSearchTools } from '../search.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
-import type { SearchParams } from '../../search/types.js';
+import { SEARCH_FIELDS, type SearchParams } from '../../search/types.js';
 import type { ScoringCorrelationParams } from '../../validation/field-mapper.js';
 import {
   ResponseStandardizer,
@@ -156,6 +172,102 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
     const startTime = Date.now();
 
     try {
+      // Validate required parameters
+      const limitValidation = ParameterValidator.validateNumber(
+        searchArgs.limit,
+        'limit',
+        { required: true, ...getLimitValidationConfig(this.name) }
+      );
+
+      if (!limitValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          limitValidation.errors
+        );
+      }
+
+      const queryValidation = ParameterValidator.validateRequiredString(
+        searchArgs.query,
+        'query'
+      );
+
+      if (!queryValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Query parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          queryValidation.errors
+        );
+      }
+
+      // Validate field names in the query
+      const fieldValidation = QuerySanitizer.validateQueryFields(
+        searchArgs.query,
+        'flows'
+      );
+
+      if (!fieldValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Query contains invalid field names',
+          ErrorType.VALIDATION_ERROR,
+          {
+            query: searchArgs.query,
+            documentation:
+              'See /docs/query-syntax-guide.md for valid field names',
+          },
+          fieldValidation.errors
+        );
+      }
+
+      // Validate group_by parameter if provided
+      if (searchArgs.group_by !== undefined) {
+        const groupByValidation = ParameterValidator.validateEnum(
+          searchArgs.group_by,
+          'group_by',
+          SEARCH_FIELDS.flows,
+          false // optional parameter
+        );
+
+        if (!groupByValidation.isValid) {
+          return createErrorResponse(
+            this.name,
+            'Invalid group_by parameter',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: searchArgs.group_by,
+              valid_values: SEARCH_FIELDS.flows,
+              documentation: 'See /docs/query-syntax-guide.md for valid field names',
+            },
+            groupByValidation.errors
+          );
+        }
+      }
+
+      // Validate cursor format if provided
+      if (searchArgs.cursor !== undefined) {
+        const cursorValidation = ParameterValidator.validateCursor(
+          searchArgs.cursor,
+          'cursor'
+        );
+        if (!cursorValidation.isValid) {
+          return createErrorResponse(
+            this.name,
+            'Invalid cursor format',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: searchArgs.cursor,
+              documentation: 'Cursors should be obtained from previous response next_cursor field',
+            },
+            cursorValidation.errors
+          );
+        }
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -168,7 +280,21 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
         aggregate: searchArgs.aggregate,
         time_range: searchArgs.time_range,
       };
-      const result = await searchTools.search_flows(searchParams);
+
+      // Use retry logic for search operations as they can be prone to timeouts
+      const result = await withRetryAndTimeout(
+        async () => searchTools.search_flows(searchParams),
+        this.name,
+        {
+          maxAttempts: 2, // Conservative retry for search operations
+          initialDelayMs: 2000, // Wait 2 seconds before retry
+          shouldRetry: (error, attempt) => {
+            // Retry on timeouts and network errors, but not on validation errors
+            if (error instanceof TimeoutError) {return true;}
+            return isRetryableError(error) && attempt === 1; // Only retry once for search
+          }
+        }
+      );
       const executionTime = Date.now() - startTime;
 
       // Process flow data
@@ -246,10 +372,44 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
 
       return this.createSuccessResponse(standardResponse);
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000 // Default timeout from timeout-manager
+        );
+      }
+
+      // Handle retry failure errors with enhanced context
+      if (error instanceof Error && error.name === 'RetryFailureError') {
+        const {retryContext} = (error as any);
+        const {userGuidance} = (error as any);
+        
+        return createErrorResponse(
+          this.name,
+          `Search flows operation failed after ${retryContext?.attempts || 'multiple'} attempts: ${error.message}`,
+          ErrorType.SEARCH_ERROR,
+          {
+            retry_attempts: retryContext?.attempts,
+            total_duration_ms: retryContext?.totalDurationMs,
+            final_error: retryContext?.originalError instanceof Error 
+              ? retryContext.originalError.message 
+              : 'Unknown error'
+          },
+          userGuidance || [
+            'Multiple retry attempts failed',
+            'Try reducing the scope of your search query',
+            'Check network connectivity and try again later'
+          ]
+        );
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to search flows: ${errorMessage}`
+      return createErrorResponse(
+        this.name,
+        `Failed to search flows: ${errorMessage}`,
+        ErrorType.SEARCH_ERROR
       );
     }
   }
@@ -291,6 +451,78 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
     const startTime = Date.now();
 
     try {
+      // Validate required parameters
+      const limitValidation = ParameterValidator.validateNumber(
+        searchArgs.limit,
+        'limit',
+        { required: true, ...getLimitValidationConfig(this.name) }
+      );
+
+      if (!limitValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          limitValidation.errors
+        );
+      }
+
+      const queryValidation = ParameterValidator.validateRequiredString(
+        searchArgs.query,
+        'query'
+      );
+
+      if (!queryValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Query parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          queryValidation.errors
+        );
+      }
+
+      // Validate field names in the query
+      const fieldValidation = QuerySanitizer.validateQueryFields(
+        searchArgs.query,
+        'alarms'
+      );
+
+      if (!fieldValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Query contains invalid field names',
+          ErrorType.VALIDATION_ERROR,
+          {
+            query: searchArgs.query,
+            documentation:
+              'See /docs/error-handling-guide.md for troubleshooting',
+          },
+          fieldValidation.errors
+        );
+      }
+
+      // Validate cursor format if provided
+      if (searchArgs.cursor !== undefined) {
+        const cursorValidation = ParameterValidator.validateCursor(
+          searchArgs.cursor,
+          'cursor'
+        );
+        if (!cursorValidation.isValid) {
+          return createErrorResponse(
+            this.name,
+            'Invalid cursor format',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: searchArgs.cursor,
+              documentation: 'Cursors should be obtained from previous response next_cursor field',
+            },
+            cursorValidation.errors
+          );
+        }
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -303,7 +535,11 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
         aggregate: searchArgs.aggregate,
         time_range: searchArgs.time_range,
       };
-      const result = await searchTools.search_alarms(searchParams);
+
+      const result = await withToolTimeout(
+        async () => searchTools.search_alarms(searchParams),
+        this.name
+      );
       const executionTime = Date.now() - startTime;
 
       // Process alarm data
@@ -377,10 +613,16 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
 
       return this.createSuccessResponse(standardResponse);
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to search alarms: ${errorMessage}`
+      return createErrorResponse(
+        this.name,
+        `Failed to search alarms: ${errorMessage}`,
+        ErrorType.SEARCH_ERROR
       );
     }
   }
@@ -426,6 +668,78 @@ For rule management operations, see pause_rule and resume_rule tools.`;
     const startTime = Date.now();
 
     try {
+      // Validate required parameters
+      const limitValidation = ParameterValidator.validateNumber(
+        searchArgs.limit,
+        'limit',
+        { required: true, ...getLimitValidationConfig(this.name) }
+      );
+
+      if (!limitValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          limitValidation.errors
+        );
+      }
+
+      const queryValidation = ParameterValidator.validateRequiredString(
+        searchArgs.query,
+        'query'
+      );
+
+      if (!queryValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Query parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          queryValidation.errors
+        );
+      }
+
+      // Validate field names in the query
+      const fieldValidation = QuerySanitizer.validateQueryFields(
+        searchArgs.query,
+        'rules'
+      );
+
+      if (!fieldValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Query contains invalid field names',
+          ErrorType.VALIDATION_ERROR,
+          {
+            query: searchArgs.query,
+            documentation:
+              'See /docs/query-syntax-guide.md for valid field names',
+          },
+          fieldValidation.errors
+        );
+      }
+
+      // Validate cursor format if provided
+      if (searchArgs.cursor !== undefined) {
+        const cursorValidation = ParameterValidator.validateCursor(
+          searchArgs.cursor,
+          'cursor'
+        );
+        if (!cursorValidation.isValid) {
+          return createErrorResponse(
+            this.name,
+            'Invalid cursor format',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: searchArgs.cursor,
+              documentation: 'Cursors should be obtained from previous response next_cursor field',
+            },
+            cursorValidation.errors
+          );
+        }
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -437,7 +751,11 @@ For rule management operations, see pause_rule and resume_rule tools.`;
         group_by: searchArgs.group_by,
         aggregate: searchArgs.aggregate,
       };
-      const result = await searchTools.search_rules(searchParams);
+
+      const result = await withToolTimeout(
+        async () => searchTools.search_rules(searchParams),
+        this.name
+      );
       const executionTime = Date.now() - startTime;
 
       // Process rule data
@@ -507,10 +825,16 @@ For rule management operations, see pause_rule and resume_rule tools.`;
 
       return this.createSuccessResponse(standardResponse);
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to search rules: ${errorMessage}`
+      return createErrorResponse(
+        this.name,
+        `Failed to search rules: ${errorMessage}`,
+        ErrorType.SEARCH_ERROR
       );
     }
   }
@@ -560,6 +884,93 @@ See the Data Normalization Guide for field details.`;
   ): Promise<ToolResponse> {
     const searchArgs = args as SearchDevicesArgs;
     try {
+      // Validate required parameters
+      const limitValidation = ParameterValidator.validateNumber(
+        searchArgs.limit,
+        'limit',
+        { required: true, ...getLimitValidationConfig(this.name) }
+      );
+
+      if (!limitValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          limitValidation.errors
+        );
+      }
+
+      const queryValidation = ParameterValidator.validateRequiredString(
+        searchArgs.query,
+        'query'
+      );
+
+      if (!queryValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Query parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          queryValidation.errors
+        );
+      }
+
+      // Validate field names in the query
+      const fieldValidation = QuerySanitizer.validateQueryFields(
+        searchArgs.query,
+        'devices'
+      );
+
+      if (!fieldValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Query contains invalid field names',
+          ErrorType.VALIDATION_ERROR,
+          {
+            query: searchArgs.query,
+            documentation:
+              'See /docs/query-syntax-guide.md for valid field names',
+          },
+          fieldValidation.errors
+        );
+      }
+
+      // Validate that both cursor and offset are not provided simultaneously
+      if (searchArgs.cursor !== undefined && searchArgs.offset !== undefined) {
+        return createErrorResponse(
+          this.name,
+          'Cannot provide both cursor and offset parameters simultaneously',
+          ErrorType.VALIDATION_ERROR,
+          {
+            provided_cursor: searchArgs.cursor,
+            provided_offset: searchArgs.offset,
+            documentation: 'Use either cursor-based pagination (cursor) or offset-based pagination (offset), but not both',
+          },
+          ['cursor and offset parameters are mutually exclusive']
+        );
+      }
+
+      // Validate cursor format if provided
+      if (searchArgs.cursor !== undefined) {
+        const cursorValidation = ParameterValidator.validateCursor(
+          searchArgs.cursor,
+          'cursor'
+        );
+        if (!cursorValidation.isValid) {
+          return createErrorResponse(
+            this.name,
+            'Invalid cursor format',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: searchArgs.cursor,
+              documentation: 'Cursors should be obtained from previous response next_cursor field',
+            },
+            cursorValidation.errors
+          );
+        }
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -572,7 +983,11 @@ See the Data Normalization Guide for field details.`;
         aggregate: searchArgs.aggregate,
         time_range: searchArgs.time_range,
       };
-      const result = await searchTools.search_devices(searchParams);
+
+      const result = await withToolTimeout(
+        async () => searchTools.search_devices(searchParams),
+        this.name
+      );
 
       return this.createSuccessResponse({
         count: SafeAccess.safeArrayAccess(
@@ -612,10 +1027,16 @@ See the Data Normalization Guide for field details.`;
         ),
       });
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to search devices: ${errorMessage}`
+      return createErrorResponse(
+        this.name,
+        `Failed to search devices: ${errorMessage}`,
+        ErrorType.SEARCH_ERROR
       );
     }
   }
@@ -668,6 +1089,78 @@ See the Target List Management guide for configuration details.`;
   ): Promise<ToolResponse> {
     const searchArgs = args as SearchTargetListsArgs;
     try {
+      // Validate required parameters
+      const limitValidation = ParameterValidator.validateNumber(
+        searchArgs.limit,
+        'limit',
+        { required: true, ...getLimitValidationConfig(this.name) }
+      );
+
+      if (!limitValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          limitValidation.errors
+        );
+      }
+
+      const queryValidation = ParameterValidator.validateRequiredString(
+        searchArgs.query,
+        'query'
+      );
+
+      if (!queryValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Query parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          queryValidation.errors
+        );
+      }
+
+      // Validate field names in the query
+      const fieldValidation = QuerySanitizer.validateQueryFields(
+        searchArgs.query,
+        'target_lists'
+      );
+
+      if (!fieldValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Query contains invalid field names',
+          ErrorType.VALIDATION_ERROR,
+          {
+            query: searchArgs.query,
+            documentation:
+              'See /docs/query-syntax-guide.md for valid field names',
+          },
+          fieldValidation.errors
+        );
+      }
+
+      // Validate cursor format if provided
+      if (searchArgs.cursor !== undefined) {
+        const cursorValidation = ParameterValidator.validateCursor(
+          searchArgs.cursor,
+          'cursor'
+        );
+        if (!cursorValidation.isValid) {
+          return createErrorResponse(
+            this.name,
+            'Invalid cursor format',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: searchArgs.cursor,
+              documentation: 'Cursors should be obtained from previous response next_cursor field',
+            },
+            cursorValidation.errors
+          );
+        }
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -679,7 +1172,11 @@ See the Target List Management guide for configuration details.`;
         group_by: searchArgs.group_by,
         aggregate: searchArgs.aggregate,
       };
-      const result = await searchTools.search_target_lists(searchParams);
+
+      const result = await withToolTimeout(
+        async () => searchTools.search_target_lists(searchParams),
+        this.name
+      );
 
       return this.createSuccessResponse({
         count: SafeAccess.safeArrayAccess(
@@ -722,10 +1219,16 @@ See the Target List Management guide for configuration details.`;
         ),
       });
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to search target lists: ${errorMessage}`
+      return createErrorResponse(
+        this.name,
+        `Failed to search target lists: ${errorMessage}`,
+        ErrorType.SEARCH_ERROR
       );
     }
   }
@@ -807,82 +1310,94 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
         limit: searchArgs.limit,
       });
 
-      return this.createSuccessResponse({
-        primary_query: SafeAccess.getNestedValue(result, 'primary.query', ''),
-        secondary_queries: SafeAccess.safeArrayMap(
+      // Simplified correlation response structure for better user experience
+      const simplifiedResponse = {
+        // Basic query information
+        query_info: {
+          primary_query: SafeAccess.getNestedValue(result, 'primary.query', ''),
+          secondary_queries: SafeAccess.safeArrayMap(
+            SafeAccess.getNestedValue(result, 'correlations', []),
+            (corr: any) => SafeAccess.getNestedValue(corr, 'query', '')
+          ),
+          correlation_method: SafeAccess.getNestedValue(
+            result,
+            'correlation_summary.correlation_type',
+            'AND'
+          ),
+          correlation_fields: (SafeAccess.getNestedValue(
+            result,
+            'correlation_summary.correlation_fields',
+            []
+          ) as string[]).join(', '),
+        },
+
+        // Summary statistics in simple format
+        summary: {
+          primary_results_count: SafeAccess.getNestedValue(result, 'primary.count', 0),
+          total_correlated_items: SafeAccess.getNestedValue(
+            result,
+            'correlation_summary.total_correlated_count',
+            0
+          ),
+          correlations_found: SafeAccess.safeArrayAccess(
+            SafeAccess.getNestedValue(result, 'correlations', []),
+            arr => arr.length,
+            0
+          ),
+          execution_time_ms: SafeAccess.getNestedValue(result, 'execution_time_ms', 0),
+          temporal_filtering_used: SafeAccess.getNestedValue(
+            result,
+            'correlation_summary.temporal_window_applied',
+            false
+          ),
+        },
+
+        // Simplified correlation results - focus on actionable information
+        correlations: SafeAccess.safeArrayMap(
           SafeAccess.getNestedValue(result, 'correlations', []),
-          (corr: any) => SafeAccess.getNestedValue(corr, 'query', '')
-        ),
-        correlation_fields: SafeAccess.getNestedValue(
-          result,
-          'correlation_summary.correlation_fields',
-          []
-        ),
-        correlation_type: SafeAccess.getNestedValue(
-          result,
-          'correlation_summary.correlation_type',
-          'AND'
-        ),
-        primary_results: SafeAccess.getNestedValue(result, 'primary.count', 0),
-        correlated_results: SafeAccess.getNestedValue(
-          result,
-          'correlation_summary.total_correlated_count',
-          0
-        ),
-        correlation_stats: SafeAccess.getNestedValue(
-          result,
-          'correlation_summary',
-          {}
-        ),
-        temporal_filter_applied: SafeAccess.getNestedValue(
-          result,
-          'correlation_summary.temporal_window_applied',
-          false
-        ),
-        execution_time_ms: SafeAccess.getNestedValue(
-          result,
-          'execution_time_ms',
-          0
-        ),
-        correlation_params: SafeAccess.getNestedValue(
-          result,
-          'correlation_params',
-          {}
-        ),
-        results: SafeAccess.safeArrayMap(
-          SafeAccess.getNestedValue(result, 'correlations', []),
-          (correlation: any) => ({
-            entity_type: SafeAccess.getNestedValue(
-              correlation,
-              'entity_type',
-              'unknown'
-            ),
-            query: SafeAccess.getNestedValue(correlation, 'query', ''),
-            count: SafeAccess.getNestedValue(correlation, 'count', 0),
-            correlation_stats: SafeAccess.getNestedValue(
-              correlation,
-              'correlation_stats',
-              {}
-            ),
-            correlation_results: SafeAccess.safeArrayMap(
-              SafeAccess.getNestedValue(correlation, 'results', []),
-              (item: any) => ({
-                correlation_strength: SafeAccess.getNestedValue(
-                  item,
-                  'correlation_strength',
-                  0
+          (correlation: any) => {
+            const correlationResults = SafeAccess.getNestedValue(correlation, 'results', []) as any[];
+            const topResults = correlationResults.slice(0, 5); // Show top 5 matches only
+            
+            return {
+              query: SafeAccess.getNestedValue(correlation, 'query', ''),
+              entity_type: SafeAccess.getNestedValue(correlation, 'entity_type', 'unknown'),
+              matches_found: SafeAccess.getNestedValue(correlation, 'count', 0),
+              
+              // Simplified correlation matches - key information only
+              top_matches: SafeAccess.safeArrayMap(topResults, (item: any) => ({
+                correlation_strength: Math.round(
+                  (SafeAccess.getNestedValue(item, 'correlation_strength', 0) as number) * 100
+                ), // Convert to percentage
+                matched_on: (SafeAccess.getNestedValue(item, 'matched_fields', []) as string[]).join(', '),
+                summary: this.extractItemSummary(SafeAccess.getNestedValue(item, 'data', {})),
+              })),
+              
+              // Simple statistics
+              stats: {
+                average_correlation: Math.round(
+                  correlationResults.reduce((sum: number, item: any) => 
+                    sum + (SafeAccess.getNestedValue(item, 'correlation_strength', 0) as number), 0
+                  ) / Math.max(correlationResults.length, 1) * 100
                 ),
-                matched_fields: SafeAccess.getNestedValue(
-                  item,
-                  'matched_fields',
-                  []
+                strongest_match: Math.round(
+                  Math.max(...correlationResults.map((item: any) => 
+                    SafeAccess.getNestedValue(item, 'correlation_strength', 0) as number
+                  ), 0) * 100
                 ),
-                data: SafeAccess.getNestedValue(item, 'data', item),
-              })
-            ),
-          })
+              },
+            };
+          }
         ),
-      });
+
+        // User guidance for interpreting results
+        interpretation: {
+          correlation_quality: this.assessCorrelationQuality(result),
+          recommendations: this.generateCorrelationRecommendations(result),
+        },
+      };
+
+      return this.createSuccessResponse(simplifiedResponse);
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
@@ -890,6 +1405,98 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
         `Failed to execute enhanced cross reference search: ${errorMessage}`
       );
     }
+  }
+
+  /**
+   * Extract a simple summary from correlation item data
+   */
+  private extractItemSummary(data: any): string {
+    if (!data || typeof data !== 'object') {return 'No details available';}
+    
+    // Extract key identifying information
+    const parts: string[] = [];
+    
+    if (data.source_ip) {parts.push(`IP: ${data.source_ip}`);}
+    if (data.destination_ip) {parts.push(`→ ${data.destination_ip}`);}
+    if (data.protocol) {parts.push(`(${data.protocol})`);}
+    if (data.action) {parts.push(`Action: ${data.action}`);}
+    if (data.severity) {parts.push(`Severity: ${data.severity}`);}
+    if (data.type) {parts.push(`Type: ${data.type}`);}
+    if (data.device?.name) {parts.push(`Device: ${data.device.name}`);}
+    
+    return parts.length > 0 ? parts.join(' ') : 'Correlation match found';
+  }
+
+  /**
+   * Assess the overall quality of correlations found
+   */
+  private assessCorrelationQuality(result: any): string {
+    const correlations = SafeAccess.getNestedValue(result, 'correlations', []) as any[];
+    if (correlations.length === 0) {return 'No correlations found';}
+    
+    const totalMatches = correlations.reduce((sum: number, corr: any) => 
+      sum + (SafeAccess.getNestedValue(corr, 'count', 0) as number), 0
+    );
+    
+    const avgStrength = correlations.reduce((sum: number, corr: any) => {
+      const results = SafeAccess.getNestedValue(corr, 'results', []) as any[];
+      const avgForCorr = results.reduce((s: number, item: any) => 
+        s + (SafeAccess.getNestedValue(item, 'correlation_strength', 0) as number), 0
+      ) / Math.max(results.length, 1);
+      return sum + avgForCorr;
+    }, 0) / correlations.length;
+    
+    if (avgStrength > 0.8) {return `Excellent (${totalMatches} strong correlations found)`;}
+    if (avgStrength > 0.6) {return `Good (${totalMatches} moderate correlations found)`;}
+    if (avgStrength > 0.4) {return `Fair (${totalMatches} weak correlations found)`;}
+    return `Poor (${totalMatches} very weak correlations found)`;
+  }
+
+  /**
+   * Generate actionable recommendations based on correlation results
+   */
+  private generateCorrelationRecommendations(result: any): string[] {
+    const recommendations: string[] = [];
+    const correlations = SafeAccess.getNestedValue(result, 'correlations', []) as any[];
+    const primaryCount = SafeAccess.getNestedValue(result, 'primary.count', 0) as number;
+    
+    if (correlations.length === 0) {
+      recommendations.push(
+        'No correlations found. Try broader correlation fields or different time windows.',
+        'Consider using fuzzy matching or expanding the search criteria.',
+        'Verify that the primary query returns meaningful results first.'
+      );
+    } else {
+      const totalCorrelated = SafeAccess.getNestedValue(
+        result, 'correlation_summary.total_correlated_count', 0
+      ) as number;
+      const correlationRate = totalCorrelated / Math.max(primaryCount, 1);
+      
+      if (correlationRate > 0.5) {
+        recommendations.push(
+          'High correlation rate detected - consider investigating these patterns.',
+          'Strong correlations suggest related security events or network patterns.'
+        );
+      } else if (correlationRate > 0.1) {
+        recommendations.push(
+          'Moderate correlations found - review the strongest matches first.',
+          'Consider refining correlation fields for more precise results.'
+        );
+      } else {
+        recommendations.push(
+          'Low correlation rate - results may be coincidental.',
+          'Try different correlation fields or adjust time windows.',
+          'Focus on the highest correlation strength matches only.'
+        );
+      }
+      
+      recommendations.push(
+        'Review top matches with correlation strength > 70% for actionable insights.',
+        'Use correlation results to guide further investigation or rule creation.'
+      );
+    }
+    
+    return recommendations;
   }
 }
 
@@ -1238,6 +1845,52 @@ export class GetGeographicStatisticsHandler extends BaseToolHandler {
   ): Promise<ToolResponse> {
     const searchArgs = args as GetGeographicStatisticsArgs;
     try {
+      // Validate entity_type parameter
+      const entityTypeValidation = ParameterValidator.validateEnum(
+        searchArgs.entity_type,
+        'entity_type',
+        ['flows', 'alarms'],
+        true // required parameter
+      );
+
+      if (!entityTypeValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Invalid entity_type parameter',
+          ErrorType.VALIDATION_ERROR,
+          {
+            provided_value: searchArgs.entity_type,
+            valid_values: ['flows', 'alarms'],
+            documentation: 'entity_type must be either "flows" or "alarms"',
+          },
+          entityTypeValidation.errors
+        );
+      }
+
+      // Validate group_by parameter if provided
+      if (searchArgs.group_by !== undefined) {
+        const groupByValidation = ParameterValidator.validateEnum(
+          searchArgs.group_by,
+          'group_by',
+          ['country', 'continent', 'region', 'asn', 'provider'],
+          false // optional parameter
+        );
+
+        if (!groupByValidation.isValid) {
+          return createErrorResponse(
+            this.name,
+            'Invalid group_by parameter',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: searchArgs.group_by,
+              valid_values: ['country', 'continent', 'region', 'asn', 'provider'],
+              documentation: 'group_by must be one of: country, continent, region, asn, provider',
+            },
+            groupByValidation.errors
+          );
+        }
+      }
+
       const searchTools = createSearchTools(firewalla);
       const result = await searchTools.get_geographic_statistics({
         entity_type: searchArgs.entity_type,

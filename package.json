@@ -70,7 +70,8 @@
     "@types/node": "^24.0.3",
     "axios": "^1.10.0",
     "dotenv": "^16.5.0",
-    "geoip-lite": "^1.4.10"
+    "geoip-lite": "^1.4.10",
+    "zod": "^3.25.75"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",

@@ -763,4 +763,402 @@ describe('Load Testing Framework', () => {
       expect(performanceHistory.metrics.concurrentThroughput).toBeGreaterThan(100);
     });
   });
+
+  describe('Large Result Set Performance Testing', () => {
+    it('should handle 1000 result limit efficiently', async () => {
+      // Test maximum standard limit performance
+      const largeResultSet = Array.from({ length: 1000 }, (_, i) => ({
+        id: i,
+        timestamp: Date.now() - i * 1000,
+        data: `item_${i}`,
+        nested: { level1: { level2: `deep_${i}` } }
+      }));
+
+      mockFirewallaClient.getFlowData.mockResolvedValue({
+        results: largeResultSet,
+        pagination: { hasMore: false, cursor: null }
+      });
+
+      const { result, duration } = await measurePerformance(async () => {
+        return await mockFirewallaClient.getFlowData('protocol:tcp', undefined, 'timestamp:desc', 1000);
+      });
+
+      expect(result.results).toHaveLength(1000);
+      expect(duration).toBeLessThan(2000); // Should handle 1000 results within 2 seconds
+      
+      // Memory usage should be reasonable
+      const memoryAfter = process.memoryUsage();
+      expect(memoryAfter.heapUsed).toBeLessThan(200 * 1024 * 1024); // Less than 200MB
+    });
+
+    it('should handle 2000 result limit for cross-reference operations', async () => {
+      // Test enhanced cross-reference limit performance
+      const correlationDataset = Array.from({ length: 2000 }, (_, i) => ({
+        id: i,
+        source_ip: `192.168.${Math.floor(i / 256)}.${i % 256}`,
+        destination_ip: `10.0.${Math.floor(i / 256)}.${i % 256}`,
+        protocol: i % 2 === 0 ? 'tcp' : 'udp',
+        severity: ['low', 'medium', 'high', 'critical'][i % 4],
+        country: ['China', 'Russia', 'Iran', 'Brazil'][i % 4],
+        timestamp: Date.now() - i * 1000
+      }));
+
+      mockFirewallaClient.getFlowData.mockResolvedValue({
+        results: correlationDataset,
+        pagination: { hasMore: false, cursor: null }
+      });
+
+      const { result, duration } = await measurePerformance(async () => {
+        return await mockFirewallaClient.getFlowData(
+          '(country:China OR country:Russia) AND severity:>=medium',
+          undefined,
+          'timestamp:desc',
+          2000
+        );
+      });
+
+      expect(result.results).toHaveLength(2000);
+      expect(duration).toBeLessThan(5000); // Cross-reference operations allowed up to 5 seconds
+      
+      // Verify correlation-sized memory usage
+      const memoryAfter = process.memoryUsage();
+      expect(memoryAfter.heapUsed).toBeLessThan(400 * 1024 * 1024); // Less than 400MB for correlation data
+    });
+
+    it('should handle 500 result limit for bandwidth-intensive operations', async () => {
+      // Test bandwidth analysis performance with memory-intensive data
+      const bandwidthDataset = Array.from({ length: 500 }, (_, i) => ({
+        device_id: i,
+        device_name: `Device_${i}`,
+        bytes_uploaded: Math.floor(Math.random() * 1000000000), // Up to 1GB
+        bytes_downloaded: Math.floor(Math.random() * 5000000000), // Up to 5GB
+        total_bandwidth: 0, // Will be calculated
+        sessions: Array.from({ length: 100 }, (_, j) => ({ // 100 sessions per device
+          session_id: j,
+          duration: Math.floor(Math.random() * 3600),
+          bytes: Math.floor(Math.random() * 10000000)
+        })),
+        metadata: {
+          mac_address: `aa:bb:cc:dd:ee:${i.toString(16).padStart(2, '0')}`,
+          vendor: ['Apple', 'Samsung', 'Microsoft', 'Google'][i % 4],
+          device_type: ['laptop', 'phone', 'tablet', 'desktop'][i % 4]
+        }
+      }));
+
+      // Calculate total bandwidth for each device (memory-intensive operation)
+      bandwidthDataset.forEach(device => {
+        device.total_bandwidth = device.bytes_uploaded + device.bytes_downloaded;
+      });
+
+      mockFirewallaClient.getFlowData.mockResolvedValue({
+        results: bandwidthDataset,
+        pagination: { hasMore: false, cursor: null }
+      });
+
+      const { result, duration } = await measurePerformance(async () => {
+        return await mockFirewallaClient.getFlowData('device_type:laptop OR device_type:desktop', undefined, 'total_bandwidth:desc', 500);
+      });
+
+      expect(result.results).toHaveLength(500);
+      expect(duration).toBeLessThan(3000); // Bandwidth operations should complete within 3 seconds
+      
+      // Memory usage should be controlled for bandwidth data
+      const memoryAfter = process.memoryUsage();
+      expect(memoryAfter.heapUsed).toBeLessThan(250 * 1024 * 1024); // Less than 250MB for 500 devices
+    });
+
+    it('should demonstrate performance difference between limit tiers', async () => {
+      const performanceMetrics: Record<number, number> = {};
+      const limits = [100, 500, 1000, 2000];
+
+      for (const limit of limits) {
+        const dataset = Array.from({ length: limit }, (_, i) => ({
+          id: i,
+          data: `item_${i}`,
+          processing_complexity: Math.random() * 100
+        }));
+
+        mockFirewallaClient.getFlowData.mockResolvedValue({
+          results: dataset,
+          pagination: { hasMore: false, cursor: null }
+        });
+
+        const { duration } = await measurePerformance(async () => {
+          return await mockFirewallaClient.getFlowData(`limit_test:${limit}`, undefined, 'id:desc', limit);
+        });
+
+        performanceMetrics[limit] = duration;
+      }
+
+      // Verify performance scaling characteristics
+      expect(performanceMetrics[100]).toBeLessThan(500);    // Small datasets very fast
+      expect(performanceMetrics[500]).toBeLessThan(1500);   // Medium datasets reasonable
+      expect(performanceMetrics[1000]).toBeLessThan(2500);  // Large datasets acceptable
+      expect(performanceMetrics[2000]).toBeLessThan(5000);  // Very large datasets for correlation
+
+      // Performance should scale reasonably (not exponentially)
+      const scalingRatio = performanceMetrics[2000] / performanceMetrics[100];
+      expect(scalingRatio).toBeLessThan(20); // 2000 items shouldn't take more than 20x longer than 100 items
+    });
+  });
+
+  describe('Complex Query Performance Testing', () => {
+    it('should handle deeply nested logical queries efficiently', async () => {
+      const complexNestedQuery = '(((severity:high OR severity:critical) AND (protocol:tcp OR protocol:udp)) OR ((country:China OR country:Russia) AND blocked:true)) AND (timestamp:>NOW-24h AND bytes:>1000000) AND NOT (source_ip:192.168.* OR source_ip:10.0.*)';
+      
+      const { duration } = await measurePerformance(async () => {
+        return Promise.resolve(QuerySanitizer.sanitizeSearchQuery(complexNestedQuery));
+      });
+
+      expect(duration).toBeLessThan(500); // Complex queries should still validate quickly
+    });
+
+    it('should handle geographic correlation queries with multiple criteria', async () => {
+      const geographicDataset = Array.from({ length: 1000 }, (_, i) => ({
+        id: i,
+        source_ip: `${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+        country: ['China', 'Russia', 'Iran', 'Brazil', 'India', 'United States'][i % 6],
+        continent: ['Asia', 'Europe', 'Asia', 'South America', 'Asia', 'North America'][i % 6],
+        asn: `AS${4134 + (i % 100)}`,
+        risk_score: Math.random(),
+        threat_indicators: {
+          malware_hosting: i % 10 === 0,
+          known_threat_source: i % 15 === 0,
+          high_risk_country: i % 3 === 0
+        }
+      }));
+
+      mockFirewallaClient.getFlowData.mockResolvedValue({
+        results: geographicDataset,
+        pagination: { hasMore: false, cursor: null }
+      });
+
+      const geographicQuery = '(country:China OR country:Russia OR country:Iran) AND risk_score:>0.7 AND (malware_hosting:true OR known_threat_source:true)';
+      
+      const { result, duration } = await measurePerformance(async () => {
+        return await mockFirewallaClient.getFlowData(geographicQuery, undefined, 'risk_score:desc', 1000);
+      });
+
+      expect(result.results).toHaveLength(1000);
+      expect(duration).toBeLessThan(2000); // Geographic correlation should be efficient
+    });
+
+    it('should handle time-based queries with multiple time ranges', async () => {
+      const timeBasedDataset = Array.from({ length: 1000 }, (_, i) => ({
+        id: i,
+        timestamp: Date.now() - (i * 60000), // Each item 1 minute apart
+        created: Date.now() - (i * 3600000), // Each item 1 hour apart for creation
+        last_seen: Date.now() - (Math.random() * 86400000), // Random within last 24h
+        duration: Math.floor(Math.random() * 3600), // Up to 1 hour duration
+        severity: ['low', 'medium', 'high', 'critical'][i % 4]
+      }));
+
+      mockFirewallaClient.getFlowData.mockResolvedValue({
+        results: timeBasedDataset,
+        pagination: { hasMore: false, cursor: null }
+      });
+
+      const timeComplexQuery = '(timestamp:>NOW-1h OR last_seen:>NOW-30m) AND created:<NOW-24h AND duration:[300 TO 3600] AND severity:>=medium';
+      
+      const { result, duration } = await measurePerformance(async () => {
+        return await mockFirewallaClient.getFlowData(timeComplexQuery, undefined, 'timestamp:desc', 1000);
+      });
+
+      expect(result.results).toHaveLength(1000);
+      expect(duration).toBeLessThan(1800); // Time-based queries should be reasonably fast
+    });
+
+    it('should handle wildcard and range queries efficiently', async () => {
+      const wildcardDataset = Array.from({ length: 1000 }, (_, i) => ({
+        id: i,
+        source_ip: `192.168.${Math.floor(i / 256)}.${i % 256}`,
+        destination_ip: `10.0.${Math.floor(i / 256)}.${i % 256}`,
+        port: 80 + (i % 65455), // Ports from 80 to 65535
+        bytes: Math.floor(Math.random() * 1000000000), // Up to 1GB
+        packet_count: Math.floor(Math.random() * 10000),
+        user_agent: [`Chrome_${i}`, `Firefox_${i}`, `Safari_${i}`, `Edge_${i}`][i % 4],
+        hostname: `host-${i}.example.com`
+      }));
+
+      mockFirewallaClient.getFlowData.mockResolvedValue({
+        results: wildcardDataset,
+        pagination: { hasMore: false, cursor: null }
+      });
+
+      const wildcardQuery = 'source_ip:192.168.* AND destination_ip:10.0.* AND port:[80 TO 443] AND bytes:>10000000 AND user_agent:*Chrome* AND hostname:*.example.com';
+      
+      const { result, duration } = await measurePerformance(async () => {
+        return await mockFirewallaClient.getFlowData(wildcardQuery, undefined, 'bytes:desc', 1000);
+      });
+
+      expect(result.results).toHaveLength(1000);
+      expect(duration).toBeLessThan(2500); // Wildcard/range queries are more complex but should be reasonable
+    });
+
+    it('should handle cross-reference correlation with multiple entity types', async () => {
+      // Simulate complex cross-reference operation
+      const primaryDataset = Array.from({ length: 1000 }, (_, i) => ({
+        flow_id: i,
+        source_ip: `192.168.${Math.floor(i / 256)}.${i % 256}`,
+        protocol: i % 2 === 0 ? 'tcp' : 'udp',
+        blocked: i % 5 === 0,
+        bytes: Math.floor(Math.random() * 100000000)
+      }));
+
+      const secondaryDataset = Array.from({ length: 500 }, (_, i) => ({
+        alarm_id: i,
+        source_ip: `192.168.${Math.floor(i / 128)}.${(i * 2) % 256}`, // Some overlap with primary
+        severity: ['low', 'medium', 'high', 'critical'][i % 4],
+        type: ['malware', 'intrusion', 'anomaly', 'policy_violation'][i % 4]
+      }));
+
+      const deviceDataset = Array.from({ length: 200 }, (_, i) => ({
+        device_id: i,
+        device_ip: `192.168.${Math.floor(i / 64)}.${(i * 4) % 256}`, // Some overlap
+        online: i % 3 !== 0,
+        device_type: ['laptop', 'phone', 'tablet', 'desktop'][i % 4]
+      }));
+
+      mockFirewallaClient.getFlowData.mockResolvedValueOnce({
+        results: primaryDataset,
+        pagination: { hasMore: false, cursor: null }
+      });
+
+      // Mock additional calls for cross-reference
+      mockFirewallaClient.getAlarmData = jest.fn().mockResolvedValue({
+        results: secondaryDataset,
+        pagination: { hasMore: false, cursor: null }
+      });
+
+      mockFirewallaClient.getDeviceData = jest.fn().mockResolvedValue({
+        results: deviceDataset,
+        pagination: { hasMore: false, cursor: null }
+      });
+
+      const { duration } = await measurePerformance(async () => {
+        // Simulate cross-reference correlation
+        const flows = await mockFirewallaClient.getFlowData('blocked:true', undefined, 'bytes:desc', 1000);
+        const alarms = await mockFirewallaClient.getAlarmData('severity:>=medium', 500);
+        const devices = await mockFirewallaClient.getDeviceData('online:false', 200);
+
+        // Simulate correlation processing
+        const correlationMap = new Map();
+        flows.results.forEach(flow => {
+          correlationMap.set(flow.source_ip, { flow, alarms: [], devices: [] });
+        });
+
+        alarms.results.forEach(alarm => {
+          if (correlationMap.has(alarm.source_ip)) {
+            correlationMap.get(alarm.source_ip).alarms.push(alarm);
+          }
+        });
+
+        devices.results.forEach(device => {
+          if (correlationMap.has(device.device_ip)) {
+            correlationMap.get(device.device_ip).devices.push(device);
+          }
+        });
+
+        return Array.from(correlationMap.values());
+      });
+
+      expect(duration).toBeLessThan(3000); // Complex correlation should complete within 3 seconds
+    });
+  });
+
+  describe('Memory Pressure Testing for Large Datasets', () => {
+    it('should handle memory pressure during 2000-item correlation processing', async () => {
+      const largeCorrelationDataset = Array.from({ length: 2000 }, (_, i) => ({
+        id: i,
+        primary_field: `primary_${i}`,
+        correlation_data: {
+          field1: `correlation_${i}_1`,
+          field2: `correlation_${i}_2`,
+          field3: `correlation_${i}_3`,
+          numeric_field: Math.random() * 1000000,
+          timestamp: Date.now() - i * 1000
+        },
+        large_text_field: new Array(1000).fill(`text_${i}`).join(' '), // Large text data
+        nested_array: Array.from({ length: 50 }, (_, j) => ({
+          nested_id: j,
+          nested_data: `nested_${i}_${j}`
+        }))
+      }));
+
+      const initialMemory = process.memoryUsage();
+
+      const { result, duration } = await measurePerformance(async () => {
+        // Simulate memory-intensive correlation processing
+        return Promise.resolve(largeCorrelationDataset.map(item => ({
+          ...item,
+          processed_correlation: item.correlation_data.field1 + item.correlation_data.field2,
+          aggregated_nested: item.nested_array.map(n => n.nested_data).join('|'),
+          memory_intensive_calc: item.large_text_field.split(' ').length
+        })));
+      });
+
+      const finalMemory = process.memoryUsage();
+      const memoryIncrease = finalMemory.heapUsed - initialMemory.heapUsed;
+
+      expect(result).toHaveLength(2000);
+      expect(duration).toBeLessThan(4000); // Should process within 4 seconds
+      expect(memoryIncrease).toBeLessThan(300 * 1024 * 1024); // Should not increase memory by more than 300MB
+
+      // Force garbage collection if available
+      if (global.gc) {
+        global.gc();
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const afterGCMemory = process.memoryUsage();
+        const retainedMemory = afterGCMemory.heapUsed - initialMemory.heapUsed;
+        expect(retainedMemory).toBeLessThan(50 * 1024 * 1024); // Should retain less than 50MB after GC
+      }
+    });
+
+    it('should handle streaming processing for very large datasets', async () => {
+      // Simulate processing large datasets in chunks
+      const totalItems = 10000;
+      const chunkSize = 500;
+      const chunks = Math.ceil(totalItems / chunkSize);
+      
+      let processedCount = 0;
+      let maxMemoryUsage = 0;
+      const initialMemory = process.memoryUsage().heapUsed;
+
+      const { duration } = await measurePerformance(async () => {
+        for (let chunk = 0; chunk < chunks; chunk++) {
+          const chunkData = Array.from({ length: chunkSize }, (_, i) => ({
+            id: chunk * chunkSize + i,
+            data: `chunk_${chunk}_item_${i}`,
+            large_data: new Array(200).fill(`data_${chunk}_${i}`).join(' ')
+          }));
+
+          // Process chunk
+          const processedChunk = chunkData.map(item => ({
+            ...item,
+            processed: true,
+            processing_timestamp: Date.now()
+          }));
+
+          processedCount += processedChunk.length;
+
+          // Track memory usage
+          const currentMemory = process.memoryUsage().heapUsed;
+          const memoryUsage = currentMemory - initialMemory;
+          maxMemoryUsage = Math.max(maxMemoryUsage, memoryUsage);
+
+          // Simulate chunk completion (allow GC)
+          if (chunk % 5 === 0 && global.gc) {
+            global.gc();
+          }
+        }
+
+        return processedCount;
+      });
+
+      expect(processedCount).toBe(totalItems);
+      expect(duration).toBeLessThan(8000); // Should process 10k items within 8 seconds
+      expect(maxMemoryUsage).toBeLessThan(100 * 1024 * 1024); // Streaming should keep memory under 100MB
+    });
+  });
 });

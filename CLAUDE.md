@@ -237,9 +237,9 @@ search_cross_reference primary_query:"source_ip:suspicious_ip" secondary_queries
 
 #### Intelligent Caching
 - Query-aware caching with automatic invalidation
-- Context-specific TTL (alarms: 30s, flows: 2m, rules: 10m)
-- LRU eviction with complexity scoring
-- Cache statistics and performance metrics
+- Global TTL (300 seconds default, configurable via CACHE_TTL environment variable)
+- Geographic data caching with LRU eviction (1 hour TTL)
+- Cache statistics and performance metrics for geographic data
 
 #### Result Aggregation
 - Group by any field: `group_by:"protocol"`
@@ -294,32 +294,6 @@ The v1.0.0 implementation introduces advanced cross-reference capabilities with 
 }
 ```
 
-**search_enhanced_scored_cross_reference** (with fuzzy matching)
-```javascript
-{
-  primary_query: "application:Chrome",
-  secondary_queries: ["severity:medium"],
-  correlation_params: {
-    correlationFields: ["source_ip", "user_agent"],
-    correlationType: "OR",
-    enableScoring: true,
-    enableFuzzyMatching: true,
-    minimumScore: 0.5,
-    customWeights: {
-      "source_ip": 1.0,
-      "user_agent": 0.8
-    },
-    fuzzyConfig: {
-      enabled: true,
-      stringThreshold: 0.8,
-      ipSubnetMatching: true,
-      numericTolerance: 0.1,
-      geographicRadius: 50
-    }
-  },
-  limit: 100
-}
-```
 
 ##### get_correlation_suggestions
 ```javascript
@@ -464,8 +438,8 @@ npm run mcp:start
 #### Example Advanced Queries
 
 ```bash
-# Multi-field correlation with scoring
-search_enhanced_scored_cross_reference primary_query:"bytes:>10000000" secondary_queries:["severity:high"] correlation_params:"{correlationFields:['source_ip','country'],correlationType:'AND',enableScoring:true,enableFuzzyMatching:true,minimumScore:0.7}"
+# Enhanced cross-reference with temporal windows
+search_enhanced_cross_reference primary_query:"bytes:>10000000" secondary_queries:["severity:high"] correlation_params:"{correlationFields:['source_ip','country'],correlationType:'AND'}"
 
 # Geographic flow analysis
 search_flows_by_geography query:"blocked:true" geographic_filters:"{countries:['China','Russia'],risk_threshold:0.8}"
@@ -688,10 +662,10 @@ npm run test:null-safety
 ### Performance Monitoring (v1.0.0)
 
 ##### Cache System:
-- Alarms/Flows: 30s TTL (real-time data)
-- Devices/Bandwidth: 2m TTL (medium frequency)
-- Rules: 10m TTL (stable data)
-- Statistics: 1h TTL (static data)
+- API Responses: 300s TTL (configurable via CACHE_TTL environment variable)
+- Geographic Data: 1h TTL with LRU eviction (10,000 entry capacity)
+- Cache key collision prevention with enhanced hashing
+- Automatic cleanup of expired entries
 
 ##### Monitoring Commands:
 ```bash
@@ -703,6 +677,150 @@ DEBUG=performance,metrics npm run dev
 
 # Track query optimization  
 DEBUG=query,optimization npm run mcp:start
+```
+
+## Bulk Operations
+
+The Firewalla MCP server includes 10 bulk operation tools for efficiently managing multiple alarms and rules simultaneously. These tools are optimized for high-volume operations and include comprehensive error handling.
+
+### Bulk Alarm Operations (4 tools)
+
+#### bulk_delete_alarms
+Delete multiple security alarms in a single operation.
+```bash
+# Delete specific alarms by ID
+bulk_delete_alarms ids:["alarm1","alarm2","alarm3"] limit:50
+
+# Delete all alarms matching criteria  
+bulk_delete_alarms query:"severity:low AND resolved:true" limit:100
+```
+
+#### bulk_dismiss_alarms
+Dismiss multiple alarms without deleting them.
+```bash
+# Dismiss specific alarms
+bulk_dismiss_alarms ids:["alarm1","alarm2"] reason:"False positive"
+
+# Dismiss by query
+bulk_dismiss_alarms query:"type:dns_anomaly AND severity:low" limit:50
+```
+
+#### bulk_acknowledge_alarms  
+Mark multiple alarms as acknowledged.
+```bash
+# Acknowledge specific alarms
+bulk_acknowledge_alarms ids:["alarm1","alarm2"] note:"Investigating"
+
+# Acknowledge by criteria
+bulk_acknowledge_alarms query:"severity:high AND unacknowledged:true" limit:25
+```
+
+#### bulk_update_alarms
+Update properties of multiple alarms.
+```bash
+# Update alarm severity
+bulk_update_alarms ids:["alarm1","alarm2"] updates:"{severity:'medium',tags:['reviewed']}"
+
+# Bulk update by query
+bulk_update_alarms query:"type:malware" updates:"{priority:'high'}" limit:100
+```
+
+### Bulk Rule Operations (6 tools)
+
+#### bulk_pause_rules
+Temporarily disable multiple firewall rules.
+```bash  
+# Pause specific rules for 1 hour
+bulk_pause_rules ids:["rule1","rule2"] duration:60 reason:"Maintenance window"
+
+# Pause rules by category
+bulk_pause_rules query:"category:social_media" duration:120 limit:10
+```
+
+#### bulk_resume_rules
+Re-enable previously paused rules.
+```bash
+# Resume specific rules
+bulk_resume_rules ids:["rule1","rule2"]
+
+# Resume all paused rules
+bulk_resume_rules query:"status:paused" limit:50
+```
+
+#### bulk_enable_rules / bulk_disable_rules
+Permanently enable or disable multiple rules.
+```bash
+# Enable gaming rules during specific hours
+bulk_enable_rules query:"category:gaming" limit:20
+
+# Disable legacy rules
+bulk_disable_rules query:"created:<2023-01-01" limit:100
+```
+
+#### bulk_update_rules
+Modify properties of multiple rules.
+```bash
+# Update rule descriptions
+bulk_update_rules ids:["rule1","rule2"] updates:"{description:'Updated policy'}"
+
+# Bulk update rule schedules
+bulk_update_rules query:"category:work_hours" updates:"{schedule:'9-17'}" limit:25
+```
+
+#### bulk_delete_rules
+Permanently remove multiple rules.
+```bash
+# Delete specific rules
+bulk_delete_rules ids:["rule1","rule2"] confirm:true
+
+# Delete unused rules
+bulk_delete_rules query:"hit_count:0 AND created:<2023-06-01" limit:50 confirm:true
+```
+
+### Bulk Operations Features
+
+#### Performance Optimizations
+- **Batch Processing**: Operations processed in optimized batches for performance
+- **Progress Tracking**: Real-time progress updates for large operations
+- **Error Recovery**: Partial failure handling with detailed error reporting
+- **Rate Limiting**: Automatic throttling to prevent API overload
+
+#### Safety Features
+- **Confirmation Required**: Destructive operations require explicit confirmation
+- **Dry Run Mode**: Preview operations before execution
+- **Rollback Support**: Undo capability for certain operations
+- **Audit Logging**: Complete operation history and change tracking
+
+#### Error Handling
+- **Partial Success**: Operations continue even if some items fail
+- **Detailed Reporting**: Per-item success/failure status
+- **Recovery Suggestions**: Actionable error messages with retry guidance
+- **Transaction Safety**: Atomic operations where possible
+
+### Example Bulk Workflows
+
+#### Security Incident Response
+```bash
+# 1. Acknowledge all high-severity alarms
+bulk_acknowledge_alarms query:"severity:high AND acknowledged:false" note:"Security team investigating"
+
+# 2. Temporarily block suspicious domains
+bulk_pause_rules query:"target_value:*.suspicious-domain.com" duration:240 reason:"Security investigation"
+
+# 3. Bulk dismiss false positives
+bulk_dismiss_alarms query:"type:dns_anomaly AND source_ip:192.168.*" reason:"Internal traffic"
+```
+
+#### Maintenance Operations
+```bash
+# 1. Disable old rules before cleanup
+bulk_disable_rules query:"created:<2023-01-01 AND hit_count:0" limit:200
+
+# 2. Clean up resolved alarms
+bulk_delete_alarms query:"resolved:true AND created:<2024-01-01" limit:500 confirm:true
+
+# 3. Update rule descriptions for compliance
+bulk_update_rules query:"category:compliance" updates:"{tags:['reviewed','2024-audit']}"
 ```
 
 ## Debugging

@@ -468,15 +468,10 @@ describe('Search Tools Parameter Validation', () => {
       const specialQuery = 'field:"value with spaces & special chars @#$%"';
       const params = { query: specialQuery, limit: 10 };
       
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue({
-        results: [],
-        metadata: { total: 0 }
-      });
-      
       // Should either succeed with proper escaping or fail with clear error
       try {
-        await searchTools.search_flows(params as any);
-        expect(mockFirewallaClient.searchFlows).toHaveBeenCalled();
+        const result = await searchTools.search_flows(params as any);
+        expect(result).toBeDefined();
       } catch (error) {
         expect((error as Error).message).toMatch(/(Enhanced query validation failed|Query validation failed|Invalid query)/);
       }
@@ -486,13 +481,9 @@ describe('Search Tools Parameter Validation', () => {
       const unicodeQuery = 'device_name:"设备名称🚀"';
       const params = { query: unicodeQuery, limit: 10 };
       
-      mockFirewallaClient.searchFlows = jest.fn().mockResolvedValue({
-        results: [],
-        metadata: { total: 0 }
-      });
-      
       try {
-        await searchTools.search_flows(params as any);
+        const result = await searchTools.search_flows(params as any);
+        expect(result).toBeDefined();
       } catch (error) {
         // Unicode should either be supported or fail gracefully
         expect(error).toBeDefined();

@@ -78,28 +78,28 @@ describe('Parameter Validation - Boundary Cases', () => {
         expect(result.errors).toContain('test must be a valid number');
       });
 
-      test('should handle empty string as zero', () => {
+      test('should reject empty string with enhanced validation', () => {
         const result = ParameterValidator.validateNumber('', 'test', {});
-        expect(result.isValid).toBe(true);
-        expect(result.sanitizedValue).toBe(0);
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('test cannot be empty string');
       });
 
-      test('should handle boolean true as 1', () => {
+      test('should reject boolean values with enhanced validation', () => {
         const result = ParameterValidator.validateNumber(true, 'test', {});
-        expect(result.isValid).toBe(true);
-        expect(result.sanitizedValue).toBe(1);
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('test must be a number, got boolean');
       });
 
-      test('should reject object values as NaN', () => {
+      test('should reject object values with enhanced validation', () => {
         const result = ParameterValidator.validateNumber({}, 'test', {});
         expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('test must be a valid number');
+        expect(result.errors).toContain('test must be a number, got [object Object]');
       });
 
-      test('should reject array values as NaN', () => {
+      test('should reject array values with enhanced validation', () => {
         const result = ParameterValidator.validateNumber([1, 2], 'test', {});
         expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('test must be a valid number');
+        expect(result.errors).toContain('test must be a number, got array');
       });
 
       test('should handle NaN input', () => {
@@ -108,10 +108,10 @@ describe('Parameter Validation - Boundary Cases', () => {
         expect(result.errors).toContain('test must be a valid number');
       });
 
-      test('should handle Infinity input', () => {
+      test('should reject Infinity input with enhanced validation', () => {
         const result = ParameterValidator.validateNumber(Infinity, 'test', {});
-        expect(result.isValid).toBe(true);
-        expect(result.sanitizedValue).toBe(Infinity);
+        expect(result.isValid).toBe(false);
+        expect(result.errors).toContain('test cannot be infinite');
       });
     });
 
@@ -185,16 +185,16 @@ describe('Parameter Validation - Boundary Cases', () => {
       expect(result.errors).toContain('test is required');
     });
 
-    test('should handle empty allowed values array', () => {
+    test('should handle empty allowed values array with enhanced validation', () => {
       const result = ParameterValidator.validateEnum('anything', 'test', []);
       expect(result.isValid).toBe(false);
-      expect(result.errors[0]).toMatch(/test must be one of: .*got 'anything'/);
+      expect(result.errors).toContain('test has no valid options defined');
     });
 
-    test('should handle non-string input', () => {
+    test('should handle non-string input with enhanced validation', () => {
       const result = ParameterValidator.validateEnum(123, 'test', validValues);
       expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('test must be a string');
+      expect(result.errors).toContain('test must be a string, got number');
     });
   });
 
@@ -241,16 +241,16 @@ describe('Parameter Validation - Boundary Cases', () => {
       expect(result.sanitizedValue).toBe(true);
     });
 
-    test('should reject invalid string', () => {
+    test('should reject invalid string with enhanced validation', () => {
       const result = ParameterValidator.validateBoolean('maybe', 'test');
       expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('test must be a boolean value');
+      expect(result.errors).toContain("test must be 'true', 'false', '1', or '0', got 'maybe'");
     });
 
-    test('should reject number input', () => {
+    test('should reject number input with enhanced validation', () => {
       const result = ParameterValidator.validateBoolean(1, 'test');
       expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('test must be a boolean value');
+      expect(result.errors).toContain('test must be a boolean value, got number');
     });
 
     test('should use default value when undefined', () => {

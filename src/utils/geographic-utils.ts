@@ -164,3 +164,72 @@ export function normalizeIP(ip: string): string | null {
 
   return trimmed;
 }
+
+/**
+ * Validate a country code against the known country mappings
+ * @param countryCode - Two-letter country code to validate (e.g., "US", "DE")
+ * @returns true if the country code is valid, false otherwise
+ */
+export function isValidCountryCode(countryCode: string): boolean {
+  if (!countryCode || typeof countryCode !== 'string') {
+    return false;
+  }
+
+  const normalizedCode = countryCode.trim().toUpperCase();
+  return normalizedCode in COUNTRY_TO_CONTINENT;
+}
+
+/**
+ * Validate an array of country codes
+ * @param countryCodes - Array of country codes to validate
+ * @returns Object with validation results and lists of valid/invalid codes
+ */
+export function validateCountryCodes(countryCodes: string[]): {
+  isValid: boolean;
+  validCodes: string[];
+  invalidCodes: string[];
+  errors: string[];
+} {
+  if (!Array.isArray(countryCodes)) {
+    return {
+      isValid: false,
+      validCodes: [],
+      invalidCodes: [],
+      errors: ['Country codes must be provided as an array']
+    };
+  }
+
+  const validCodes: string[] = [];
+  const invalidCodes: string[] = [];
+
+  for (const code of countryCodes) {
+    if (typeof code !== 'string') {
+      invalidCodes.push(String(code));
+      continue;
+    }
+
+    const normalizedCode = code.trim().toUpperCase();
+    if (isValidCountryCode(normalizedCode)) {
+      validCodes.push(normalizedCode);
+    } else {
+      invalidCodes.push(code);
+    }
+  }
+
+  const errors: string[] = [];
+  if (invalidCodes.length > 0) {
+    const knownCodes = Object.keys(COUNTRY_TO_CONTINENT).slice(0, 10).join(', ');
+    errors.push(
+      `Invalid country codes: ${invalidCodes.join(', ')}. ` +
+      `Valid country codes are ISO 3166-1 alpha-2 codes (e.g., ${knownCodes}, ...). ` +
+      `See https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2 for complete list.`
+    );
+  }
+
+  return {
+    isValid: invalidCodes.length === 0,
+    validCodes,
+    invalidCodes,
+    errors
+  };
+}

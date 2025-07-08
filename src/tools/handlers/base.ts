@@ -15,6 +15,14 @@
  */
 
 import type { FirewallaClient } from '../../firewalla/client.js';
+import {
+  createErrorResponse,
+  ErrorType,
+} from '../../validation/error-handler.js';
+import {
+  validateAndSanitizeParameters,
+  type SanitizationConfig,
+} from '../../validation/parameter-sanitizer.js';
 
 /**
  * Base arguments interface for MCP tool execution
@@ -276,28 +284,74 @@ export abstract class BaseToolHandler implements ToolHandler {
    * Create a standardized error response with diagnostic information
    *
    * @param message - Human-readable error message
+   * @param errorType - Specific type of error (defaults to UNKNOWN_ERROR)
    * @param details - Optional additional error context or debugging information
+   * @param validationErrors - Optional array of validation error messages
    * @returns Formatted error response with isError flag set
    * @protected
    */
-  protected createErrorResponse(message: string, details?: any): ToolResponse {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(
-            {
-              error: true,
-              message,
-              tool: this.name,
-              ...(details && { details }),
-            },
-            null,
-            2
-          ),
-        },
-      ],
-      isError: true,
-    };
+  protected createErrorResponse(
+    message: string,
+    errorType: ErrorType = ErrorType.UNKNOWN_ERROR,
+    details?: any,
+    validationErrors?: string[]
+  ): ToolResponse {
+    return createErrorResponse(
+      this.name,
+      message,
+      errorType,
+      details,
+      validationErrors
+    );
+  }
+
+  /**
+   * Sanitize and validate parameters early in the execution pipeline
+   * 
+   * @param rawArgs - Raw arguments from MCP client
+   * @param config - Optional sanitization configuration
+   * @returns Sanitized arguments or error response
+   * @protected
+   */
+  protected sanitizeParameters(
+    rawArgs: unknown,
+    config?: Partial<SanitizationConfig>
+  ): { sanitizedArgs: ToolArgs } | { errorResponse: ToolResponse } {
+    const result = validateAndSanitizeParameters(rawArgs, this.name, config);
+    
+    if ('errorResponse' in result) {
+      return { errorResponse: result.errorResponse };
+    }
+    
+    return { sanitizedArgs: result.sanitizedArgs };
+  }
+
+  /**
+   * Execute tool with automatic parameter sanitization
+   * 
+   * This is a convenience method that automatically sanitizes parameters
+   * before calling the tool's main execution logic. Tools can override
+   * this to customize sanitization behavior.
+   * 
+   * @param rawArgs - Raw arguments from MCP client
+   * @param firewalla - Firewalla API client instance
+   * @param config - Optional sanitization configuration
+   * @returns Promise resolving to tool response
+   * @protected
+   */
+  protected async executeWithSanitization(
+    rawArgs: unknown,
+    firewalla: FirewallaClient,
+    config?: Partial<SanitizationConfig>
+  ): Promise<ToolResponse> {
+    // Early parameter sanitization
+    const sanitizationResult = this.sanitizeParameters(rawArgs, config);
+    
+    if ('errorResponse' in sanitizationResult) {
+      return sanitizationResult.errorResponse;
+    }
+    
+    // Call the tool's execute method with sanitized parameters
+    return this.execute(sanitizationResult.sanitizedArgs, firewalla);
   }
 }

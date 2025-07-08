@@ -52,10 +52,9 @@ import {
   normalizeIP,
 } from '../utils/geographic-utils.js';
 import {
-  normalizeUnknownFields,
-  sanitizeFieldValue,
-  ensureConsistentGeoData,
-  batchNormalize,
+  safeAccess,
+  safeValue,
+  safeGeoData,
 } from '../utils/data-normalizer.js';
 import {
   validateResponseStructure,
@@ -515,14 +514,15 @@ export class FirewallaClient {
     // Normalize and process alarm data
     const rawAlarms = Array.isArray(response.results) ? response.results : [];
 
-    // Apply data normalization to the raw alarm data
-    const normalizedAlarms = batchNormalize(rawAlarms, {
-      message: v => sanitizeFieldValue(v, 'Unknown alarm').value,
-      direction: v => sanitizeFieldValue(v, 'inbound').value,
-      protocol: v => sanitizeFieldValue(v, 'tcp').value,
-      device: v => (v ? normalizeUnknownFields(v) : undefined),
-      remote: v => (v ? normalizeUnknownFields(v) : undefined),
-    });
+    // Apply basic safety to the raw alarm data
+    const normalizedAlarms = rawAlarms.map((alarm: any) => ({
+      ...alarm,
+      message: safeValue(alarm.message, 'Unknown alarm'),
+      direction: safeValue(alarm.direction, 'inbound'),
+      protocol: safeValue(alarm.protocol, 'tcp'),
+      device: alarm.device ? safeAccess(alarm.device) : undefined,
+      remote: alarm.remote ? safeAccess(alarm.remote) : undefined,
+    }));
 
     // Map normalized data to Alarm objects
     const alarms = normalizedAlarms.map(
@@ -2424,7 +2424,7 @@ export class FirewallaClient {
 
     // Ensure consistent geographic data formatting
     if (enrichedAlarm.remote?.geo) {
-      enrichedAlarm.remote.geo = ensureConsistentGeoData(
+      enrichedAlarm.remote.geo = safeGeoData(
         enrichedAlarm.remote.geo
       );
     }

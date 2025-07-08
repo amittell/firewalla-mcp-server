@@ -353,6 +353,18 @@ describe('Geographic Search Tools', () => {
         .rejects.toThrow(/Parameter validation failed.*limit/);
     });
 
+    test('should validate country codes and reject invalid ones', async () => {
+      const paramsWithInvalidCountries = {
+        geographic_filters: {
+          countries: ['US', 'FAKE', 'INVALID']
+        },
+        limit: 100
+      };
+
+      await expect(searchTools.search_flows_by_geography(paramsWithInvalidCountries))
+        .rejects.toThrow(/Country code validation failed.*Invalid country codes: FAKE, INVALID/);
+    });
+
     test('should handle API errors gracefully', async () => {
       mockFirewallaClient.getFlowData = jest.fn().mockRejectedValue(new Error('API Error'));
 
@@ -454,7 +466,7 @@ describe('Geographic Search Tools', () => {
       const result = await searchTools.search_alarms_by_geography(params);
 
       expect(mockFirewallaClient.getActiveAlarms).toHaveBeenCalledWith(
-        'country:RU',
+        '(country:RU OR country:CN OR country:KP)',
         undefined,
         'timestamp:desc',
         50,
@@ -518,6 +530,18 @@ describe('Geographic Search Tools', () => {
 
       await expect(searchTools.search_alarms_by_geography(paramsWithLargeLimit))
         .rejects.toThrow(/Parameter validation failed.*limit/);
+    });
+
+    test('should validate country codes and reject invalid ones', async () => {
+      const paramsWithInvalidCountries = {
+        geographic_filters: {
+          countries: ['US', 'INVALID', 'XYZ', 'DE']
+        },
+        limit: 100
+      };
+
+      await expect(searchTools.search_alarms_by_geography(paramsWithInvalidCountries))
+        .rejects.toThrow(/Country code validation failed.*Invalid country codes: INVALID, XYZ/);
     });
 
     test('should handle empty results gracefully', async () => {

@@ -251,7 +251,7 @@ describe('Problematic MCP Tools Validation', () => {
     it('should handle search tool creation properly', async () => {
       // This test verifies the handler can be instantiated and basic functionality works
       expect(searchFlowsHandler.name).toBe('search_flows');
-      expect(searchFlowsHandler.description).toContain('Advanced flow searching');
+      expect(searchFlowsHandler.description).toContain('Advanced network flow searching');
       expect(searchFlowsHandler.category).toBe('search');
     });
   });

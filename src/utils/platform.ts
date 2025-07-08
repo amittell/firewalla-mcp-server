@@ -4,6 +4,7 @@
 
 import { platform } from 'os';
 import { join, resolve, normalize, sep } from 'path';
+import { logger } from '../monitoring/logger.js';
 
 /**
  * Platform types supported by the application
@@ -367,8 +368,8 @@ export function platformLog(
     // eslint-disable-next-line no-console
     console.error(`${prefix} ${message}`);
   } else if (level === 'warn') {
-    // eslint-disable-next-line no-console
-    console.warn(`${prefix} ${message}`);
+     
+    logger.warn(message, { prefix, level: 'warn', platform: getPlatform() });
   } else {
     // eslint-disable-next-line no-console
     console.log(`${prefix} ${message}`);

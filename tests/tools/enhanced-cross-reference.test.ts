@@ -245,7 +245,7 @@ describe('Enhanced Cross-Reference Search Tools', () => {
       };
 
       await expect(searchTools.search_enhanced_cross_reference(paramsWithTooManyFields))
-        .rejects.toThrow(/maximum of 5/i);
+        .rejects.toThrow(/Maximum 5 correlation fields allowed/i);
     });
 
     test('should provide detailed correlation statistics', async () => {

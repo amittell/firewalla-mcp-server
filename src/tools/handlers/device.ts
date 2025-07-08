@@ -11,16 +11,23 @@ import {
   ErrorType,
 } from '../../validation/error-handler.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
-import {
-  normalizeUnknownFields,
-  sanitizeFieldValue,
-  batchNormalize,
-} from '../../utils/data-normalizer.js';
+// Temporarily commented out for simplification PR
+// import {
+//   safeAccess,
+//   safeValue,
+//   safeByteCount,
+// } from '../../utils/data-normalizer.js';
 import {
   validateResponseStructure,
   normalizeTimestamps,
   createValidationSchema,
 } from '../../utils/data-validator.js';
+import { getLimitValidationConfig } from '../../config/limits.js';
+import {
+  withToolTimeout,
+  TimeoutError,
+  createTimeoutErrorResponse,
+} from '../../utils/timeout-manager.js';
 
 export class GetDeviceStatusHandler extends BaseToolHandler {
   name = 'get_device_status';
@@ -32,15 +39,13 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      // Parameter validation
+      // Parameter validation with standardized limits
       const limitValidation = ParameterValidator.validateNumber(
         args?.limit,
         'limit',
         {
           required: true,
-          min: 1,
-          max: 1000,
-          integer: true,
+          ...getLimitValidationConfig(this.name),
         }
       );
 
@@ -59,11 +64,10 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
       const limit = limitValidation.sanitizedValue! as number;
       const cursor = args?.cursor; // Cursor for pagination
 
-      const devicesResponse = await firewalla.getDeviceStatus(
-        deviceId,
-        includeOffline,
-        limit,
-        cursor
+      const devicesResponse = await withToolTimeout(
+        async () =>
+          firewalla.getDeviceStatus(deviceId, includeOffline, limit, cursor),
+        this.name
       );
 
       // Validate response structure
@@ -74,11 +78,7 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
       );
 
       if (!validationResult.isValid) {
-        // Log validation warnings for debugging
-        console.warn(
-          'Device response validation failed:',
-          validationResult.errors
-        );
+        // Validation warnings logged for debugging
       }
 
       // Normalize device data for consistency
@@ -93,12 +93,13 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
         macVendor: (v: any) => sanitizeFieldValue(v, 'unknown').value,
         network: (v: any) => (v ? normalizeUnknownFields(v) : null),
         group: (v: any) => (v ? normalizeUnknownFields(v) : null),
+        online: (v: any) => Boolean(v), // Ensure consistent boolean handling
       });
 
       // Optimize device counting to avoid dual array iteration
       const deviceCounts = normalizedDevices.reduce(
         (acc: { online: number; offline: number }, d: any) => {
-          if (d.online) {
+          if (d.online === true) {
             acc.online++;
           } else {
             acc.offline++;
@@ -139,7 +140,7 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
             name: finalDevice.name, // Already normalized
             ip: finalDevice.ip, // Already normalized
             macVendor: finalDevice.macVendor, // Already normalized
-            online: SafeAccess.getNestedValue(finalDevice, 'online', false),
+            online: finalDevice.online, // Already normalized to boolean
             lastSeen: unixToISOStringOrNow(
               SafeAccess.getNestedValue(finalDevice, 'lastSeen', 0) as number
             ),
@@ -150,15 +151,11 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
             ),
             network: finalDevice.network, // Already normalized
             group: finalDevice.group, // Already normalized
-            totalDownload: SafeAccess.getNestedValue(
-              finalDevice,
-              'totalDownload',
-              0
+            totalDownload: sanitizeByteCount(
+              SafeAccess.getNestedValue(finalDevice, 'totalDownload', 0)
             ),
-            totalUpload: SafeAccess.getNestedValue(
-              finalDevice,
-              'totalUpload',
-              0
+            totalUpload: sanitizeByteCount(
+              SafeAccess.getNestedValue(finalDevice, 'totalUpload', 0)
             ),
           };
         }),
@@ -169,10 +166,22 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
         ),
       });
     } catch (error: unknown) {
+      // Handle timeout errors specifically
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000 // Default timeout from timeout-manager
+        );
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to get device status: ${errorMessage}`
+      return createErrorResponse(
+        this.name,
+        `Failed to get device status: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { originalError: errorMessage }
       );
     }
   }

@@ -7,16 +7,15 @@ import type { FirewallaClient } from '../../firewalla/client.js';
 import {
   ParameterValidator,
   SafeAccess,
-  createErrorResponse,
   ErrorType,
 } from '../../validation/error-handler.js';
 import { unixToISOString } from '../../utils/timestamp.js';
 import { logger } from '../../monitoring/logger.js';
-import {
-  normalizeUnknownFields,
-  sanitizeFieldValue,
-  batchNormalize,
-} from '../../utils/data-normalizer.js';
+// Temporarily commented out for simplification PR
+// import {
+//   safeAccess,
+//   safeValue,
+// } from '../../utils/data-normalizer.js';
 import { normalizeTimestamps } from '../../utils/data-validator.js';
 
 export class GetBoxesHandler extends BaseToolHandler {
@@ -63,8 +62,7 @@ See the Box Management guide for configuration details.`;
       );
 
       if (!groupIdValidation.isValid) {
-        return createErrorResponse(
-          this.name,
+        return this.createErrorResponse(
           'Parameter validation failed',
           ErrorType.VALIDATION_ERROR,
           undefined,
@@ -82,15 +80,8 @@ See the Box Management guide for configuration details.`;
         (arr: any[]) => arr,
         []
       ) as any[];
-      const normalizedBoxes = batchNormalize(boxResults, {
-        name: (v: any) => sanitizeFieldValue(v, 'Unknown Box').value,
-        model: (v: any) => sanitizeFieldValue(v, 'unknown').value,
-        mode: (v: any) => sanitizeFieldValue(v, 'unknown').value,
-        version: (v: any) => sanitizeFieldValue(v, 'unknown').value,
-        publicIP: (v: any) => sanitizeFieldValue(v, 'unknown').value,
-        group: (v: any) => (v ? normalizeUnknownFields(v) : null),
-        location: (v: any) => (v ? normalizeUnknownFields(v) : null),
-      });
+      // Simplified: just use the raw data for now
+      const normalizedBoxes = boxResults;
 
       return this.createSuccessResponse({
         total_boxes: normalizedBoxes.length,
@@ -120,7 +111,10 @@ See the Box Management guide for configuration details.`;
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(`Failed to get boxes: ${errorMessage}`);
+      return this.createErrorResponse(
+        `Failed to get boxes: ${errorMessage}`,
+        ErrorType.API_ERROR
+      );
     }
   }
 }
@@ -171,9 +165,9 @@ This tool provides the foundation for network health monitoring and dashboard di
   ): Promise<ToolResponse> {
     try {
       const statsResponse = await firewalla.getSimpleStatistics();
-      const stats = SafeAccess.getNestedValue(
-        statsResponse,
-        'results.0',
+      const stats = SafeAccess.safeArrayAccess(
+        statsResponse?.results,
+        (arr: any[]) => arr[0],
         {}
       ) as any;
 
@@ -210,7 +204,8 @@ This tool provides the foundation for network health monitoring and dashboard di
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
-        `Failed to get simple statistics: ${errorMessage}`
+        `Failed to get simple statistics: ${errorMessage}`,
+        ErrorType.API_ERROR
       );
     }
   }
@@ -361,7 +356,8 @@ export class GetStatisticsByRegionHandler extends BaseToolHandler {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
-        `Failed to get statistics by region: ${errorMessage}`
+        `Failed to get statistics by region: ${errorMessage}`,
+        ErrorType.API_ERROR
       );
     }
   }
@@ -503,6 +499,7 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
 
       return this.createErrorResponse(
         `Failed to get box statistics: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        ErrorType.API_ERROR,
         {
           total_boxes: 0,
           box_statistics: [],
@@ -553,8 +550,7 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
       ]);
 
       if (!validationResult.isValid) {
-        return createErrorResponse(
-          this.name,
+        return this.createErrorResponse(
           'Parameter validation failed',
           ErrorType.VALIDATION_ERROR,
           undefined,
@@ -660,6 +656,7 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
         error instanceof Error ? error.message : 'Unknown error';
       return this.createErrorResponse(
         `Failed to get flow trends: ${errorMessage}`,
+        ErrorType.API_ERROR,
         {
           period: _args?.period || '24h',
           interval_seconds: _args?.interval || 3600,
@@ -691,8 +688,7 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
       );
 
       if (!periodValidation.isValid) {
-        return createErrorResponse(
-          this.name,
+        return this.createErrorResponse(
           'Parameter validation failed',
           ErrorType.VALIDATION_ERROR,
           undefined,
@@ -802,7 +798,8 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
-        `Failed to get alarm trends: ${errorMessage}`
+        `Failed to get alarm trends: ${errorMessage}`,
+        ErrorType.API_ERROR
       );
     }
   }
@@ -828,8 +825,7 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
       );
 
       if (!periodValidation.isValid) {
-        return createErrorResponse(
-          this.name,
+        return this.createErrorResponse(
           'Parameter validation failed',
           ErrorType.VALIDATION_ERROR,
           undefined,
@@ -912,6 +908,7 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
         error instanceof Error ? error.message : 'Unknown error';
       return this.createErrorResponse(
         `Failed to get rule trends: ${errorMessage}`,
+        ErrorType.API_ERROR,
         {
           period: _args?.period || '24h',
           troubleshooting:

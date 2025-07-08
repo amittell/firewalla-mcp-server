@@ -93,6 +93,7 @@ export const COUNTRY_TO_CONTINENT: Record<string, string> = {
   JP: 'Asia',
   IN: 'Asia',
   KR: 'Asia',
+  KP: 'Asia',
   TH: 'Asia',
   VN: 'Asia',
   MY: 'Asia',

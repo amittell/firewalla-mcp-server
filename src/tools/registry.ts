@@ -14,12 +14,13 @@
  * - **Extensibility**: Simple registration process for adding new tools
  *
  * Tool Distribution:
- * - Security: 3 handlers (alarms, threats)
+ * - Security: 3 handlers (alarms, threats) + 4 bulk alarm handlers
  * - Network: 3 handlers (flows, bandwidth)
  * - Device: 1 handler (status, inventory)
- * - Rules: 7 handlers (firewall rules, management)
+ * - Rules: 7 handlers (firewall rules, management) + 6 bulk rule handlers
  * - Analytics: 7 handlers (statistics, trends)
  * - Search: 11 handlers (advanced search, correlations, geography)
+ * - Bulk Operations: 10 handlers (alarm & rule bulk operations)
  *
  * @version 1.0.0
  * @author Firewalla MCP Server Team
@@ -69,6 +70,20 @@ import {
   SearchAlarmsByGeographyHandler,
   GetGeographicStatisticsHandler,
 } from './handlers/search.js';
+import {
+  BulkDeleteAlarmsHandler,
+  BulkDismissAlarmsHandler,
+  BulkAcknowledgeAlarmsHandler,
+  BulkUpdateAlarmsHandler,
+} from './handlers/bulk-alarms.js';
+import {
+  BulkPauseRulesHandler,
+  BulkResumeRulesHandler,
+  BulkEnableRulesHandler,
+  BulkDisableRulesHandler,
+  BulkUpdateRulesHandler,
+  BulkDeleteRulesHandler,
+} from './handlers/bulk-rules.js';
 
 /**
  * Central registry for managing all MCP tool handlers
@@ -169,6 +184,21 @@ export class ToolRegistry {
     this.register(new SearchFlowsByGeographyHandler());
     this.register(new SearchAlarmsByGeographyHandler());
     this.register(new GetGeographicStatisticsHandler());
+
+    // Bulk operation tools (10 handlers)
+    // Bulk alarm operations (4 handlers)
+    this.register(new BulkDeleteAlarmsHandler());
+    this.register(new BulkDismissAlarmsHandler());
+    this.register(new BulkAcknowledgeAlarmsHandler());
+    this.register(new BulkUpdateAlarmsHandler());
+
+    // Bulk rule operations (6 handlers)
+    this.register(new BulkPauseRulesHandler());
+    this.register(new BulkResumeRulesHandler());
+    this.register(new BulkEnableRulesHandler());
+    this.register(new BulkDisableRulesHandler());
+    this.register(new BulkUpdateRulesHandler());
+    this.register(new BulkDeleteRulesHandler());
   }
 
   /**
