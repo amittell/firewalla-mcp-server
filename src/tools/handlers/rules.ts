@@ -52,7 +52,11 @@ async function checkRuleStatus(
 ): Promise<RuleStatusInfo> {
   try {
     // First check if the rule exists
-    const existenceCheck = await validateRuleExists(ruleId, toolName, firewalla);
+    const existenceCheck = await validateRuleExists(
+      ruleId,
+      toolName,
+      firewalla
+    );
     if (!existenceCheck.exists) {
       return {
         exists: false,
@@ -65,8 +69,12 @@ async function checkRuleStatus(
 
     // Get the specific rule details to check its status
     const rulesResponse = await firewalla.getNetworkRules(`id:${ruleId}`, 1);
-    const rules = SafeAccess.getNestedValue(rulesResponse, 'results', []) as any[];
-    
+    const rules = SafeAccess.getNestedValue(
+      rulesResponse,
+      'results',
+      []
+    ) as any[];
+
     if (rules.length === 0) {
       return {
         exists: false,
@@ -83,13 +91,22 @@ async function checkRuleStatus(
     }
 
     const rule = rules[0];
-    const status = SafeAccess.getNestedValue(rule, 'status', 'unknown') as string;
-    const resumeTs = SafeAccess.getNestedValue(rule, 'resumeTs', undefined) as number | undefined;
-    
+    const status = SafeAccess.getNestedValue(
+      rule,
+      'status',
+      'unknown'
+    ) as string;
+    const resumeTs = SafeAccess.getNestedValue(rule, 'resumeTs', undefined) as
+      | number
+      | undefined;
+
     // Determine if rule is paused or active
-    const isPaused: boolean = status === 'paused' || status === 'disabled' || Boolean(resumeTs && resumeTs > Date.now() / 1000);
+    const isPaused: boolean =
+      status === 'paused' ||
+      status === 'disabled' ||
+      Boolean(resumeTs && resumeTs > Date.now() / 1000);
     const isActive: boolean = status === 'active' || status === 'enabled';
-    
+
     return {
       exists: true,
       status,
@@ -319,17 +336,17 @@ export class PauseRuleHandler extends BaseToolHandler {
 
       // Check rule status before attempting to pause it
       const statusCheck = await checkRuleStatus(ruleId, this.name, firewalla);
-      
+
       if (!statusCheck.exists) {
         return statusCheck.errorResponse!;
       }
 
       // Prevent redundant pause operations
       if (statusCheck.isPaused) {
-        const resumeInfo = statusCheck.resumeAt 
+        const resumeInfo = statusCheck.resumeAt
           ? ` (scheduled to resume at ${statusCheck.resumeAt})`
           : '';
-        
+
         return createErrorResponse(
           this.name,
           `Rule is already paused${resumeInfo}`,
@@ -343,11 +360,11 @@ export class PauseRuleHandler extends BaseToolHandler {
           },
           [
             'Rule is already in a paused state',
-            statusCheck.resumeAt 
+            statusCheck.resumeAt
               ? `Rule will automatically resume at ${statusCheck.resumeAt}`
               : 'Use resume_rule to manually reactivate the rule',
             'Use get_network_rules to check current rule status',
-            'If you want to extend the pause duration, resume first then pause again'
+            'If you want to extend the pause duration, resume first then pause again',
           ]
         );
       }
@@ -356,11 +373,11 @@ export class PauseRuleHandler extends BaseToolHandler {
       if (!statusCheck.isActive) {
         logger.warn(
           `Rule ${ruleId} has status '${statusCheck.status}' - pausing may not have the expected effect`,
-          { 
+          {
             tool: 'pause_rule',
             rule_id: ruleId,
             current_status: statusCheck.status,
-            warning: 'rule_not_active'
+            warning: 'rule_not_active',
           }
         );
       }
@@ -481,7 +498,7 @@ export class ResumeRuleHandler extends BaseToolHandler {
 
       // Check rule status before attempting to resume it
       const statusCheck = await checkRuleStatus(ruleId, this.name, firewalla);
-      
+
       if (!statusCheck.exists) {
         return statusCheck.errorResponse!;
       }
@@ -501,7 +518,7 @@ export class ResumeRuleHandler extends BaseToolHandler {
             'Rule is already in an active state',
             'Use get_network_rules to verify current rule status',
             'If the rule is not working as expected, check rule configuration instead',
-            'Use pause_rule if you want to temporarily disable the rule'
+            'Use pause_rule if you want to temporarily disable the rule',
           ]
         );
       }
@@ -510,11 +527,11 @@ export class ResumeRuleHandler extends BaseToolHandler {
       if (!statusCheck.isPaused) {
         logger.warn(
           `Rule ${ruleId} has status '${statusCheck.status}' - resuming may not activate it as expected`,
-          { 
+          {
             tool: 'resume_rule',
             rule_id: ruleId,
             current_status: statusCheck.status,
-            warning: 'rule_not_paused'
+            warning: 'rule_not_paused',
           }
         );
       }
@@ -597,70 +614,67 @@ export class GetTargetListsHandler extends BaseToolHandler {
     }
 
     // Use timeout wrapper only for the API call and response processing
-    return withToolTimeout(
-      async () => {
-        const listsResponse = await firewalla.getTargetLists(listType, limit);
+    return withToolTimeout(async () => {
+      const listsResponse = await firewalla.getTargetLists(listType, limit);
 
-        return this.createSuccessResponse({
-          total_lists: SafeAccess.safeArrayAccess(
-            listsResponse.results,
-            arr => arr.length,
-            0
-          ),
-          limit_applied: limit,
-          categories: Array.from(
-            new Set(
-              SafeAccess.safeArrayMap(listsResponse.results, (l: any) =>
-                SafeAccess.getNestedValue(l, 'category', undefined)
-              ).filter(Boolean)
-            )
-          ),
-          target_lists: SafeAccess.safeArrayMap(
-            listsResponse.results,
-            (list: any) => ({
-              id: SafeAccess.getNestedValue(list, 'id', 'unknown'),
-              name: SafeAccess.getNestedValue(list, 'name', 'Unknown List'),
-              owner: SafeAccess.getNestedValue(list, 'owner', 'unknown'),
-              category: SafeAccess.getNestedValue(list, 'category', 'unknown'),
-              entry_count: SafeAccess.safeArrayAccess(
-                SafeAccess.getNestedValue(list, 'targets', []),
-                arr => arr.length,
-                0
-              ),
-              // Target List Buffer Strategy: Per-list target limiting
-              //
-              // Problem: Some target lists (especially threat intelligence feeds)
-              // can contain 10,000+ targets, leading to:
-              // - Excessive response payload sizes
-              // - JSON serialization performance issues
-              // - Client-side rendering problems
-              //
-              // Solution: Limit to 500 targets per list while preserving total count.
-              // This balances:
-              // - Useful data visibility (500 targets shows patterns/types)
-              // - Response performance (manageable payload size)
-              // - Client usability (reasonable display limits)
-              //
-              // The 500 limit was chosen as 5x the original 100 limit to provide
-              // better visibility into large lists while maintaining performance.
-              targets: SafeAccess.safeArrayAccess(
-                SafeAccess.getNestedValue(list, 'targets', []),
-                arr => arr.slice(0, 500), // Per-list target buffer limit
-                []
-              ),
-              last_updated: safeUnixToISOString(
-                SafeAccess.getNestedValue(list, 'lastUpdated', undefined) as
-                  | number
-                  | undefined,
-                undefined
-              ),
-              notes: SafeAccess.getNestedValue(list, 'notes', ''),
-            })
-          ),
-        });
-      },
-      this.name
-    );
+      return this.createSuccessResponse({
+        total_lists: SafeAccess.safeArrayAccess(
+          listsResponse.results,
+          arr => arr.length,
+          0
+        ),
+        limit_applied: limit,
+        categories: Array.from(
+          new Set(
+            SafeAccess.safeArrayMap(listsResponse.results, (l: any) =>
+              SafeAccess.getNestedValue(l, 'category', undefined)
+            ).filter(Boolean)
+          )
+        ),
+        target_lists: SafeAccess.safeArrayMap(
+          listsResponse.results,
+          (list: any) => ({
+            id: SafeAccess.getNestedValue(list, 'id', 'unknown'),
+            name: SafeAccess.getNestedValue(list, 'name', 'Unknown List'),
+            owner: SafeAccess.getNestedValue(list, 'owner', 'unknown'),
+            category: SafeAccess.getNestedValue(list, 'category', 'unknown'),
+            entry_count: SafeAccess.safeArrayAccess(
+              SafeAccess.getNestedValue(list, 'targets', []),
+              arr => arr.length,
+              0
+            ),
+            // Target List Buffer Strategy: Per-list target limiting
+            //
+            // Problem: Some target lists (especially threat intelligence feeds)
+            // can contain 10,000+ targets, leading to:
+            // - Excessive response payload sizes
+            // - JSON serialization performance issues
+            // - Client-side rendering problems
+            //
+            // Solution: Limit to 500 targets per list while preserving total count.
+            // This balances:
+            // - Useful data visibility (500 targets shows patterns/types)
+            // - Response performance (manageable payload size)
+            // - Client usability (reasonable display limits)
+            //
+            // The 500 limit was chosen as 5x the original 100 limit to provide
+            // better visibility into large lists while maintaining performance.
+            targets: SafeAccess.safeArrayAccess(
+              SafeAccess.getNestedValue(list, 'targets', []),
+              arr => arr.slice(0, 500), // Per-list target buffer limit
+              []
+            ),
+            last_updated: safeUnixToISOString(
+              SafeAccess.getNestedValue(list, 'lastUpdated', undefined) as
+                | number
+                | undefined,
+              undefined
+            ),
+            notes: SafeAccess.getNestedValue(list, 'notes', ''),
+          })
+        ),
+      });
+    }, this.name);
   }
 }
 

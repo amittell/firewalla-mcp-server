@@ -368,7 +368,6 @@ export function platformLog(
     // eslint-disable-next-line no-console
     console.error(`${prefix} ${message}`);
   } else if (level === 'warn') {
-     
     logger.warn(message, { prefix, level: 'warn', platform: getPlatform() });
   } else {
     // eslint-disable-next-line no-console

@@ -11,12 +11,12 @@ import {
   ErrorType,
 } from '../../validation/error-handler.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
-// Temporarily commented out for simplification PR
-// import {
-//   safeAccess,
-//   safeValue,
-//   safeByteCount,
-// } from '../../utils/data-normalizer.js';
+import {
+  sanitizeFieldValue,
+  normalizeUnknownFields,
+  batchNormalize,
+  sanitizeByteCount,
+} from '../../utils/data-normalizer.js';
 import {
   validateResponseStructure,
   normalizeTimestamps,

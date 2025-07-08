@@ -28,7 +28,7 @@ import {
 } from '../validation/field-mapper.js';
 import { FieldValidator } from '../validation/field-validator.js';
 import { ErrorFormatter } from '../validation/error-formatter.js';
-import { validateCountryCodes } from '../utils/geographic-utils.js';
+import { validateCountryCodes } from '../utils/geographic.js';
 
 /**
  * Configuration interface for risk thresholds and performance settings
@@ -899,8 +899,12 @@ export class SearchEngine {
       }
 
       // Validate correlation field count before other validations
-      if (params.correlation_params.correlationFields && params.correlation_params.correlationFields.length > 5) {
-        const excessFields = params.correlation_params.correlationFields.slice(5);
+      if (
+        params.correlation_params.correlationFields &&
+        params.correlation_params.correlationFields.length > 5
+      ) {
+        const excessFields =
+          params.correlation_params.correlationFields.slice(5);
         throw new Error(
           `Enhanced cross-reference validation failed: Maximum 5 correlation fields allowed, but ${params.correlation_params.correlationFields.length} provided. Please remove these fields: ${excessFields.join(', ')}`
         );
@@ -1005,7 +1009,7 @@ export class SearchEngine {
         );
 
         // Map correlation results to include scoring information
-        const mappedResults = correlationResult.scoredResults 
+        const mappedResults = correlationResult.scoredResults
           ? correlationResult.scoredResults.map((scoredItem: any) => ({
               correlation_strength: scoredItem.score || 0,
               matched_fields: scoredItem.matchedFields || [],
@@ -1093,7 +1097,10 @@ export class SearchEngine {
       }
 
       // Validate correlation field count for regular cross-reference (single field only)
-      if (typeof params.correlation_field === 'string' && params.correlation_field.includes(',')) {
+      if (
+        typeof params.correlation_field === 'string' &&
+        params.correlation_field.includes(',')
+      ) {
         const fields = params.correlation_field.split(',').map(f => f.trim());
         if (fields.length > 5) {
           const excessFields = fields.slice(5);
@@ -1381,7 +1388,9 @@ export class SearchEngine {
       }
 
       if (params.secondary_queries.length === 0) {
-        throw new Error('secondary_queries array cannot be empty - at least one secondary query is required');
+        throw new Error(
+          'secondary_queries array cannot be empty - at least one secondary query is required'
+        );
       }
 
       // Validate each secondary query
@@ -1680,33 +1689,61 @@ export class SearchEngine {
 
     // Build OR queries for array filters
     if (filters.countries && filters.countries.length > 0) {
-      const countryQueries = filters.countries.map(country => `country:${country}`);
-      queryParts.push(countryQueries.length === 1 ? countryQueries[0] : `(${countryQueries.join(' OR ')})`);
+      const countryQueries = filters.countries.map(
+        country => `country:${country}`
+      );
+      queryParts.push(
+        countryQueries.length === 1
+          ? countryQueries[0]
+          : `(${countryQueries.join(' OR ')})`
+      );
     }
 
     if (filters.continents && filters.continents.length > 0) {
-      const continentQueries = filters.continents.map(continent => `continent:${continent}`);
-      queryParts.push(continentQueries.length === 1 ? continentQueries[0] : `(${continentQueries.join(' OR ')})`);
+      const continentQueries = filters.continents.map(
+        continent => `continent:${continent}`
+      );
+      queryParts.push(
+        continentQueries.length === 1
+          ? continentQueries[0]
+          : `(${continentQueries.join(' OR ')})`
+      );
     }
 
     if (filters.regions && filters.regions.length > 0) {
       const regionQueries = filters.regions.map(region => `region:"${region}"`);
-      queryParts.push(regionQueries.length === 1 ? regionQueries[0] : `(${regionQueries.join(' OR ')})`);
+      queryParts.push(
+        regionQueries.length === 1
+          ? regionQueries[0]
+          : `(${regionQueries.join(' OR ')})`
+      );
     }
 
     if (filters.cities && filters.cities.length > 0) {
       const cityQueries = filters.cities.map(city => `city:"${city}"`);
-      queryParts.push(cityQueries.length === 1 ? cityQueries[0] : `(${cityQueries.join(' OR ')})`);
+      queryParts.push(
+        cityQueries.length === 1
+          ? cityQueries[0]
+          : `(${cityQueries.join(' OR ')})`
+      );
     }
 
     if (filters.asns && filters.asns.length > 0) {
       const asnQueries = filters.asns.map(asn => `asn:${asn}`);
-      queryParts.push(asnQueries.length === 1 ? asnQueries[0] : `(${asnQueries.join(' OR ')})`);
+      queryParts.push(
+        asnQueries.length === 1 ? asnQueries[0] : `(${asnQueries.join(' OR ')})`
+      );
     }
 
     if (filters.hosting_providers && filters.hosting_providers.length > 0) {
-      const providerQueries = filters.hosting_providers.map(provider => `hosting_provider:${provider}`);
-      queryParts.push(providerQueries.length === 1 ? providerQueries[0] : `(${providerQueries.join(' OR ')})`);
+      const providerQueries = filters.hosting_providers.map(
+        provider => `hosting_provider:${provider}`
+      );
+      queryParts.push(
+        providerQueries.length === 1
+          ? providerQueries[0]
+          : `(${providerQueries.join(' OR ')})`
+      );
     }
 
     // Boolean filters
@@ -1772,32 +1809,39 @@ export class SearchEngine {
       }
 
       // Validate geographic_filters parameter - fix null handling
-      if (params.geographic_filters !== undefined && 
-          (params.geographic_filters === null || typeof params.geographic_filters !== 'object')) {
-        throw new Error(
-          'geographic_filters must be an object if provided'
-        );
+      if (
+        params.geographic_filters !== undefined &&
+        (params.geographic_filters === null ||
+          typeof params.geographic_filters !== 'object')
+      ) {
+        throw new Error('geographic_filters must be an object if provided');
       }
 
       // Validate country codes if provided
       if (params.geographic_filters?.countries?.length) {
-        const countryValidation = validateCountryCodes(params.geographic_filters.countries);
-        if (!countryValidation.isValid) {
+        const countryValidation = validateCountryCodes(
+          params.geographic_filters.countries
+        );
+        if (countryValidation.invalid.length > 0) {
           throw new Error(
-            `Country code validation failed: ${countryValidation.errors.join(', ')}`
+            `Country code validation failed: Invalid codes: ${countryValidation.invalid.join(', ')}`
           );
         }
         // Update with validated codes
-        params.geographic_filters.countries = countryValidation.validCodes;
+        params.geographic_filters.countries = countryValidation.valid;
       }
 
       // Build complete query with geographic filters
       let finalQuery = params.query || '*';
-      
-      if (params.geographic_filters && 
-          typeof params.geographic_filters === 'object' &&
-          params.geographic_filters !== null) {
-        const geographicQuery = this.buildGeographicQuery(params.geographic_filters);
+
+      if (
+        params.geographic_filters &&
+        typeof params.geographic_filters === 'object' &&
+        params.geographic_filters !== null
+      ) {
+        const geographicQuery = this.buildGeographicQuery(
+          params.geographic_filters
+        );
         if (geographicQuery) {
           if (finalQuery === '*') {
             finalQuery = geographicQuery;
@@ -1850,18 +1894,34 @@ export class SearchEngine {
 
     // Build OR queries for array filters
     if (filters.countries && filters.countries.length > 0) {
-      const countryQueries = filters.countries.map(country => `country:${country}`);
-      queryParts.push(countryQueries.length === 1 ? countryQueries[0] : `(${countryQueries.join(' OR ')})`);
+      const countryQueries = filters.countries.map(
+        country => `country:${country}`
+      );
+      queryParts.push(
+        countryQueries.length === 1
+          ? countryQueries[0]
+          : `(${countryQueries.join(' OR ')})`
+      );
     }
 
     if (filters.continents && filters.continents.length > 0) {
-      const continentQueries = filters.continents.map(continent => `continent:${continent}`);
-      queryParts.push(continentQueries.length === 1 ? continentQueries[0] : `(${continentQueries.join(' OR ')})`);
+      const continentQueries = filters.continents.map(
+        continent => `continent:${continent}`
+      );
+      queryParts.push(
+        continentQueries.length === 1
+          ? continentQueries[0]
+          : `(${continentQueries.join(' OR ')})`
+      );
     }
 
     if (filters.regions && filters.regions.length > 0) {
       const regionQueries = filters.regions.map(region => `region:"${region}"`);
-      queryParts.push(regionQueries.length === 1 ? regionQueries[0] : `(${regionQueries.join(' OR ')})`);
+      queryParts.push(
+        regionQueries.length === 1
+          ? regionQueries[0]
+          : `(${regionQueries.join(' OR ')})`
+      );
     }
 
     // Boolean filters for alarms
@@ -1916,32 +1976,39 @@ export class SearchEngine {
       }
 
       // Validate geographic_filters parameter - fix null handling
-      if (params.geographic_filters !== undefined && 
-          (params.geographic_filters === null || typeof params.geographic_filters !== 'object')) {
-        throw new Error(
-          'geographic_filters must be an object if provided'
-        );
+      if (
+        params.geographic_filters !== undefined &&
+        (params.geographic_filters === null ||
+          typeof params.geographic_filters !== 'object')
+      ) {
+        throw new Error('geographic_filters must be an object if provided');
       }
 
       // Validate country codes if provided
       if (params.geographic_filters?.countries?.length) {
-        const countryValidation = validateCountryCodes(params.geographic_filters.countries);
-        if (!countryValidation.isValid) {
+        const countryValidation = validateCountryCodes(
+          params.geographic_filters.countries
+        );
+        if (countryValidation.invalid.length > 0) {
           throw new Error(
-            `Country code validation failed: ${countryValidation.errors.join(', ')}`
+            `Country code validation failed: Invalid codes: ${countryValidation.invalid.join(', ')}`
           );
         }
         // Update with validated codes
-        params.geographic_filters.countries = countryValidation.validCodes;
+        params.geographic_filters.countries = countryValidation.valid;
       }
 
       // Build complete query with geographic filters
       let finalQuery = params.query || '*';
-      
-      if (params.geographic_filters && 
-          typeof params.geographic_filters === 'object' &&
-          params.geographic_filters !== null) {
-        const geographicQuery = this.buildGeographicAlarmQuery(params.geographic_filters);
+
+      if (
+        params.geographic_filters &&
+        typeof params.geographic_filters === 'object' &&
+        params.geographic_filters !== null
+      ) {
+        const geographicQuery = this.buildGeographicAlarmQuery(
+          params.geographic_filters
+        );
         if (geographicQuery) {
           if (finalQuery === '*') {
             finalQuery = geographicQuery;

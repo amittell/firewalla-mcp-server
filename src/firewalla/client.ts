@@ -45,12 +45,9 @@ import { logger } from '../monitoring/logger.js';
 import {
   GeographicCache,
   type GeographicCacheStats,
-} from '../utils/geographic-cache.js';
-import {
   getGeographicDataForIP,
-  enrichObjectWithGeo,
   normalizeIP,
-} from '../utils/geographic-utils.js';
+} from '../utils/geographic.js';
 import {
   safeAccess,
   safeValue,
@@ -2380,26 +2377,28 @@ export class FirewallaClient {
    * @returns Enriched flow object with geographic data
    */
   private enrichWithGeographicData(flow: any): any {
-    let enriched = { ...flow };
+    const enriched = { ...flow };
 
-    // Enrich destination IP
+    // Get geographic data for destination IP
     if (flow.destination?.ip) {
-      enriched = enrichObjectWithGeo(
-        enriched,
-        'destination.ip',
-        'destination.geo',
-        this.getGeographicData.bind(this)
-      );
+      const geoData = this.getGeographicData(flow.destination.ip);
+      if (geoData) {
+        enriched.destination = {
+          ...enriched.destination,
+          geo: geoData
+        };
+      }
     }
 
-    // Enrich source IP (if different from destination)
+    // Get geographic data for source IP (if different from destination)
     if (flow.source?.ip && flow.source.ip !== flow.destination?.ip) {
-      enriched = enrichObjectWithGeo(
-        enriched,
-        'source.ip',
-        'source.geo',
-        this.getGeographicData.bind(this)
-      );
+      const geoData = this.getGeographicData(flow.source.ip);
+      if (geoData) {
+        enriched.source = {
+          ...enriched.source,
+          geo: geoData
+        };
+      }
     }
 
     return enriched;
@@ -2415,19 +2414,18 @@ export class FirewallaClient {
       return alarm;
     }
 
-    const enrichedAlarm = enrichObjectWithGeo(
-      alarm,
-      'remote.ip',
-      'remote.geo',
-      this.getGeographicData.bind(this)
-    );
-
-    // Ensure consistent geographic data formatting
-    if (enrichedAlarm.remote?.geo) {
-      enrichedAlarm.remote.geo = safeGeoData(
-        enrichedAlarm.remote.geo
-      );
+    const geoData = this.getGeographicData(alarm.remote.ip);
+    if (!geoData) {
+      return alarm;
     }
+
+    const enrichedAlarm = {
+      ...alarm,
+      remote: {
+        ...alarm.remote,
+        geo: safeGeoData(geoData)
+      }
+    };
 
     return enrichedAlarm;
   }

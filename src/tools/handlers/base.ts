@@ -307,7 +307,7 @@ export abstract class BaseToolHandler implements ToolHandler {
 
   /**
    * Sanitize and validate parameters early in the execution pipeline
-   * 
+   *
    * @param rawArgs - Raw arguments from MCP client
    * @param config - Optional sanitization configuration
    * @returns Sanitized arguments or error response
@@ -318,21 +318,21 @@ export abstract class BaseToolHandler implements ToolHandler {
     config?: Partial<SanitizationConfig>
   ): { sanitizedArgs: ToolArgs } | { errorResponse: ToolResponse } {
     const result = validateAndSanitizeParameters(rawArgs, this.name, config);
-    
+
     if ('errorResponse' in result) {
       return { errorResponse: result.errorResponse };
     }
-    
+
     return { sanitizedArgs: result.sanitizedArgs };
   }
 
   /**
    * Execute tool with automatic parameter sanitization
-   * 
+   *
    * This is a convenience method that automatically sanitizes parameters
    * before calling the tool's main execution logic. Tools can override
    * this to customize sanitization behavior.
-   * 
+   *
    * @param rawArgs - Raw arguments from MCP client
    * @param firewalla - Firewalla API client instance
    * @param config - Optional sanitization configuration
@@ -346,11 +346,11 @@ export abstract class BaseToolHandler implements ToolHandler {
   ): Promise<ToolResponse> {
     // Early parameter sanitization
     const sanitizationResult = this.sanitizeParameters(rawArgs, config);
-    
+
     if ('errorResponse' in sanitizationResult) {
       return sanitizationResult.errorResponse;
     }
-    
+
     // Call the tool's execute method with sanitized parameters
     return this.execute(sanitizationResult.sanitizedArgs, firewalla);
   }

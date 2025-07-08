@@ -144,21 +144,17 @@ export class TimeoutManager {
       if (metrics.duration > finalConfig.warningMs) {
         metrics.warning = true;
         if (finalConfig.enableMetrics) {
-           
           const warning = new PerformanceWarning(
             finalConfig.toolName,
             metrics.duration,
             finalConfig.warningMs
           );
-          logger.warn(
-            warning.message,
-            {
-              tool: finalConfig.toolName,
-              duration_ms: metrics.duration,
-              warning_threshold_ms: finalConfig.warningMs,
-              warning: 'performance_warning'
-            }
-          );
+          logger.warn(warning.message, {
+            tool: finalConfig.toolName,
+            duration_ms: metrics.duration,
+            warning_threshold_ms: finalConfig.warningMs,
+            warning: 'performance_warning',
+          });
         }
       }
 
@@ -184,17 +180,14 @@ export class TimeoutManager {
 
       // Debug logging for extremely fast failures that might be misclassified as timeouts
       if (metrics.duration < 100 && finalConfig.enableMetrics) {
-        logger.warn(
-          `Suspiciously fast operation failure`,
-          {
-            tool: finalConfig.toolName,
-            duration_ms: metrics.duration,
-            error: error instanceof Error ? error.message : 'Unknown error',
-            is_timeout: error instanceof TimeoutError,
-            error_type: error?.constructor?.name,
-            warning: 'fast_failure'
-          }
-        );
+        logger.warn(`Suspiciously fast operation failure`, {
+          tool: finalConfig.toolName,
+          duration_ms: metrics.duration,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          is_timeout: error instanceof TimeoutError,
+          error_type: error?.constructor?.name,
+          warning: 'fast_failure',
+        });
       }
 
       this.recordMetrics(metrics);
@@ -329,7 +322,7 @@ export async function withToolTimeout<T>(
   customTimeoutMs?: number
 ): Promise<T> {
   const startTime = Date.now();
-  
+
   try {
     return await globalTimeoutManager.withTimeout(operation, {
       toolName,
@@ -338,29 +331,26 @@ export async function withToolTimeout<T>(
     });
   } catch (error) {
     const duration = Date.now() - startTime;
-    
+
     // Enhanced immediate failure detection
     if (duration < 50) {
       // This is likely an immediate validation failure, not a timeout
-      logger.warn(
-        `Immediate failure detected`,
-        {
-          tool: toolName,
-          duration_ms: duration,
-          error: error instanceof Error ? error.message : 'Unknown error',
-          error_type: error?.constructor?.name,
-          is_actual_timeout: error instanceof TimeoutError,
-          warning: 'immediate_failure'
-        }
-      );
-      
+      logger.warn(`Immediate failure detected`, {
+        tool: toolName,
+        duration_ms: duration,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        error_type: error?.constructor?.name,
+        is_actual_timeout: error instanceof TimeoutError,
+        warning: 'immediate_failure',
+      });
+
       // Don't wrap immediate failures - they're validation errors, not timeouts
       if (error instanceof Error && !(error instanceof TimeoutError)) {
         // Preserve the original error without timeout context
         throw error;
       }
     }
-    
+
     // Handle actual timeout errors
     if (error instanceof TimeoutError) {
       logger.error(
@@ -370,16 +360,18 @@ export async function withToolTimeout<T>(
           tool: toolName,
           duration_ms: duration,
           timeout_limit_ms: customTimeoutMs || 30000,
-          error_type: 'timeout'
+          error_type: 'timeout',
         }
       );
       throw error; // Re-throw actual timeout errors
     }
-    
+
     // For other errors, preserve the original error type with enhanced context
     if (error instanceof Error) {
       // Add context about the tool but preserve the original error
-      const enhancedError = new Error(`Tool '${toolName}' failed: ${error.message}`);
+      const enhancedError = new Error(
+        `Tool '${toolName}' failed: ${error.message}`
+      );
       enhancedError.name = error.name;
       enhancedError.stack = error.stack;
       // Add debugging information as a property
@@ -391,7 +383,7 @@ export async function withToolTimeout<T>(
       };
       throw enhancedError;
     }
-    
+
     throw error;
   }
 }
@@ -399,17 +391,25 @@ export async function withToolTimeout<T>(
 /**
  * Generate actionable guidance based on tool name and timeout context
  */
-function generateTimeoutGuidance(toolName: string, duration: number, timeoutMs: number): string[] {
+function generateTimeoutGuidance(
+  toolName: string,
+  duration: number,
+  timeoutMs: number
+): string[] {
   const guidance: string[] = [];
-  
+
   // General timeout guidance
   guidance.push(
     `Operation timed out after ${duration}ms (limit: ${timeoutMs}ms).`,
     'This usually indicates the request scope is too large or the API is under heavy load.'
   );
-  
+
   // Tool-specific guidance
-  if (toolName.includes('search') || toolName.includes('flow') || toolName.includes('alarm')) {
+  if (
+    toolName.includes('search') ||
+    toolName.includes('flow') ||
+    toolName.includes('alarm')
+  ) {
     guidance.push(
       '🔍 Search Optimization Tips:',
       '• Reduce the limit parameter (try 100-500 instead of 1000+)',
@@ -417,7 +417,7 @@ function generateTimeoutGuidance(toolName: string, duration: number, timeoutMs: 
       '• Use time_range filters to limit the search window',
       '• Try cursor-based pagination for large datasets'
     );
-    
+
     if (toolName.includes('flow')) {
       guidance.push(
         '• Flow searches: Use protocol filters (e.g., "protocol:tcp")',
@@ -425,7 +425,7 @@ function generateTimeoutGuidance(toolName: string, duration: number, timeoutMs: 
         '• Flow searches: Limit to recent time periods (last hour/day)'
       );
     }
-    
+
     if (toolName.includes('alarm')) {
       guidance.push(
         '• Alarm searches: Filter by severity (e.g., "severity:high")',
@@ -449,7 +449,10 @@ function generateTimeoutGuidance(toolName: string, duration: number, timeoutMs: 
       '• Limit to specific network segments',
       '• Use cursor pagination for large device lists'
     );
-  } else if (toolName.includes('geographic') || toolName.includes('correlation')) {
+  } else if (
+    toolName.includes('geographic') ||
+    toolName.includes('correlation')
+  ) {
     guidance.push(
       '🌍 Geographic/Correlation Tips:',
       '• These operations are computationally intensive',
@@ -458,7 +461,7 @@ function generateTimeoutGuidance(toolName: string, duration: number, timeoutMs: 
       '• Consider breaking into multiple smaller queries'
     );
   }
-  
+
   // Network and system guidance
   guidance.push(
     '',
@@ -469,7 +472,7 @@ function generateTimeoutGuidance(toolName: string, duration: number, timeoutMs: 
     '4. Check if other tools work to isolate the issue',
     '5. Wait a few minutes and retry in case of temporary API overload'
   );
-  
+
   // Recovery suggestions
   guidance.push(
     '',
@@ -480,7 +483,7 @@ function generateTimeoutGuidance(toolName: string, duration: number, timeoutMs: 
     '• Consider using summary tools instead of detailed searches',
     '• Enable retry logic for automatic recovery from transient timeouts'
   );
-  
+
   return guidance;
 }
 
@@ -496,7 +499,7 @@ export function createTimeoutErrorResponse(
   isError: true;
 } {
   const guidance = generateTimeoutGuidance(toolName, duration, timeoutMs);
-  
+
   return createErrorResponse(
     toolName,
     guidance.join('\n'),
@@ -506,22 +509,26 @@ export function createTimeoutErrorResponse(
       timeoutMs,
       performance_context: {
         timeout_ratio: Math.round((duration / timeoutMs) * 100),
-        operation_category: toolName.includes('search') ? 'search' :
-                          toolName.includes('rule') ? 'rule_management' :
-                          toolName.includes('device') ? 'device_monitoring' : 'general',
+        operation_category: toolName.includes('search')
+          ? 'search'
+          : toolName.includes('rule')
+            ? 'rule_management'
+            : toolName.includes('device')
+              ? 'device_monitoring'
+              : 'general',
       },
       documentation: {
         timeout_guide: '/docs/error-handling-guide.md#timeout-errors',
         performance_guide: '/docs/limits-and-performance-guide.md',
         query_optimization: '/docs/query-syntax-guide.md#optimization-tips',
-      }
+      },
     },
     [
       'Timeout occurred - operation took too long to complete',
       'Try reducing the scope of your request or using more specific filters',
       'Check network connectivity and Firewalla API status',
       'Consider breaking large operations into smaller chunks',
-      'See the timeout troubleshooting guide for detailed recovery steps'
+      'See the timeout troubleshooting guide for detailed recovery steps',
     ]
   );
 }

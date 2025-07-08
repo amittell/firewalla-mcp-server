@@ -49,11 +49,11 @@ export class GetFlowDataHandler extends BaseToolHandler {
   ): Promise<ToolResponse> {
     // Early parameter sanitization to prevent null/undefined errors
     const sanitizationResult = this.sanitizeParameters(rawArgs);
-    
+
     if ('errorResponse' in sanitizationResult) {
       return sanitizationResult.errorResponse;
     }
-    
+
     const args = sanitizationResult.sanitizedArgs;
     const startTime = Date.now();
 
@@ -108,7 +108,8 @@ export class GetFlowDataHandler extends BaseToolHandler {
             ErrorType.VALIDATION_ERROR,
             {
               provided_value: startTimeArg,
-              documentation: 'See /docs/query-syntax-guide.md for time range examples',
+              documentation:
+                'See /docs/query-syntax-guide.md for time range examples',
             },
             startTimeValidation.errors
           );
@@ -128,7 +129,8 @@ export class GetFlowDataHandler extends BaseToolHandler {
             ErrorType.VALIDATION_ERROR,
             {
               provided_value: endTime,
-              documentation: 'See /docs/query-syntax-guide.md for time range examples',
+              documentation:
+                'See /docs/query-syntax-guide.md for time range examples',
             },
             endTimeValidation.errors
           );
@@ -137,14 +139,18 @@ export class GetFlowDataHandler extends BaseToolHandler {
 
       // Validate cursor format if provided
       if (cursor !== undefined) {
-        const cursorValidation = ParameterValidator.validateCursor(cursor, 'cursor');
+        const cursorValidation = ParameterValidator.validateCursor(
+          cursor,
+          'cursor'
+        );
         if (!cursorValidation.isValid) {
           return this.createErrorResponse(
             'Invalid cursor format',
             ErrorType.VALIDATION_ERROR,
             {
               provided_value: cursor,
-              documentation: 'Cursors should be obtained from previous response next_cursor field',
+              documentation:
+                'Cursors should be obtained from previous response next_cursor field',
             },
             cursorValidation.errors
           );

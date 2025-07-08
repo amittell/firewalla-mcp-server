@@ -24,11 +24,11 @@ import {
 } from '../../src/utils/data-normalizer.js';
 import { ParameterValidator, SafeAccess } from '../../src/validation/error-handler.js';
 import { 
-  COUNTRY_CODE_MAP,
-  CONTINENT_MAP,
-  REGION_MAP,
-  GEOGRAPHIC_RISK_SCORES
-} from '../../src/utils/geographic-constants.js';
+  COUNTRY_TO_CONTINENT as COUNTRY_CODE_MAP,
+  COUNTRY_TO_CONTINENT as CONTINENT_MAP,
+  COUNTRY_TO_REGION as REGION_MAP,
+  COUNTRY_RISK_SCORES as GEOGRAPHIC_RISK_SCORES
+} from '../../src/utils/geographic.js';
 import { measurePerformance } from '../setup/jest-setup.js';
 
 describe('Geographic Filtering Edge Cases', () => {

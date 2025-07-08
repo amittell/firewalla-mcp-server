@@ -37,7 +37,9 @@ const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
   addJitter: true,
   shouldRetry: (error: unknown, _attempt: number) => {
     // Retry on timeout errors and network-related errors
-    if (error instanceof TimeoutError) {return true;}
+    if (error instanceof TimeoutError) {
+      return true;
+    }
     if (error instanceof Error) {
       const message = error.message.toLowerCase();
       // Retry on common transient errors
@@ -108,7 +110,7 @@ export class RetryManager {
       try {
         const result = await operation();
         const attemptDuration = Date.now() - attemptStartTime;
-        
+
         attemptDetails.push({
           attempt,
           durationMs: attemptDuration,
@@ -122,7 +124,7 @@ export class RetryManager {
               tool: finalConfig.toolName,
               attempt,
               max_attempts: finalConfig.maxAttempts,
-              retry_action: 'success_after_retry'
+              retry_action: 'success_after_retry',
             }
           );
         }
@@ -146,7 +148,7 @@ export class RetryManager {
               tool: finalConfig.toolName,
               attempt,
               error: error instanceof Error ? error.message : 'Unknown error',
-              retry_action: 'abort_non_retryable'
+              retry_action: 'abort_non_retryable',
             }
           );
           throw error;
@@ -162,12 +164,13 @@ export class RetryManager {
               tool: finalConfig.toolName,
               attempts: attempt,
               total_duration_ms: totalDuration,
-              final_error: error instanceof Error ? error.message : 'Unknown error',
+              final_error:
+                error instanceof Error ? error.message : 'Unknown error',
               attempt_details: attemptDetails,
-              retry_action: 'final_failure'
+              retry_action: 'final_failure',
             }
           );
-          
+
           // Enhance the error with retry context
           const enhancedError = this.createRetryFailureError(
             error,
@@ -180,7 +183,9 @@ export class RetryManager {
         }
 
         // Calculate delay for next attempt
-        const baseDelay = finalConfig.initialDelayMs * Math.pow(finalConfig.backoffMultiplier, attempt - 1);
+        const baseDelay =
+          finalConfig.initialDelayMs *
+          Math.pow(finalConfig.backoffMultiplier, attempt - 1);
         let delay = Math.min(baseDelay, finalConfig.maxDelayMs);
 
         // Add jitter to prevent thundering herd
@@ -190,17 +195,14 @@ export class RetryManager {
 
         attemptDetails[attemptDetails.length - 1].delayMs = delay;
 
-        logger.warn(
-          `Operation '${finalConfig.toolName}' failed, retrying`,
-          {
-            tool: finalConfig.toolName,
-            attempt,
-            max_attempts: finalConfig.maxAttempts,
-            retry_delay_ms: Math.round(delay),
-            error: error instanceof Error ? error.message : 'Unknown error',
-            retry_action: 'retry_attempt'
-          }
-        );
+        logger.warn(`Operation '${finalConfig.toolName}' failed, retrying`, {
+          tool: finalConfig.toolName,
+          attempt,
+          max_attempts: finalConfig.maxAttempts,
+          retry_delay_ms: Math.round(delay),
+          error: error instanceof Error ? error.message : 'Unknown error',
+          retry_action: 'retry_attempt',
+        });
 
         // Wait before next attempt
         await this.delay(delay);
@@ -226,15 +228,21 @@ export class RetryManager {
     toolName: string,
     attempts: number,
     totalDurationMs: number,
-    attemptDetails: Array<{ attempt: number; durationMs: number; error?: unknown; delayMs?: number }>
+    attemptDetails: Array<{
+      attempt: number;
+      durationMs: number;
+      error?: unknown;
+      delayMs?: number;
+    }>
   ): Error {
-    const originalMessage = originalError instanceof Error ? originalError.message : 'Unknown error';
-    
+    const originalMessage =
+      originalError instanceof Error ? originalError.message : 'Unknown error';
+
     const enhancedMessage = `Operation '${toolName}' failed after ${attempts} retry attempts (${totalDurationMs}ms total). Final error: ${originalMessage}`;
-    
+
     const enhancedError = new Error(enhancedMessage);
     enhancedError.name = 'RetryFailureError';
-    
+
     // Add retry context
     (enhancedError as any).retryContext = {
       originalError,
@@ -244,13 +252,18 @@ export class RetryManager {
       attemptDetails: attemptDetails.map(detail => ({
         attempt: detail.attempt,
         durationMs: detail.durationMs,
-        error: detail.error instanceof Error ? detail.error.message : detail.error,
+        error:
+          detail.error instanceof Error ? detail.error.message : detail.error,
         delayMs: detail.delayMs,
       })),
     };
 
     // Add user-friendly guidance
-    (enhancedError as any).userGuidance = this.generateUserGuidance(originalError, toolName, attempts);
+    (enhancedError as any).userGuidance = this.generateUserGuidance(
+      originalError,
+      toolName,
+      attempts
+    );
 
     return enhancedError;
   }
@@ -258,7 +271,11 @@ export class RetryManager {
   /**
    * Generate user-friendly guidance based on the error pattern
    */
-  private generateUserGuidance(error: unknown, toolName: string, attempts: number): string[] {
+  private generateUserGuidance(
+    error: unknown,
+    toolName: string,
+    attempts: number
+  ): string[] {
     const guidance: string[] = [];
 
     if (error instanceof TimeoutError) {
@@ -270,7 +287,7 @@ export class RetryManager {
       );
     } else if (error instanceof Error) {
       const message = error.message.toLowerCase();
-      
+
       if (message.includes('network') || message.includes('connection')) {
         guidance.push(
           'Network connectivity issues detected. Check your internet connection.',
@@ -283,7 +300,11 @@ export class RetryManager {
           'Consider reducing the frequency of your requests.',
           'Break large operations into smaller, spaced-out requests.'
         );
-      } else if (message.includes('503') || message.includes('502') || message.includes('504')) {
+      } else if (
+        message.includes('503') ||
+        message.includes('502') ||
+        message.includes('504')
+      ) {
         guidance.push(
           'Firewalla API server is temporarily unavailable.',
           'This is usually a temporary issue - try again in a few minutes.',
@@ -345,7 +366,7 @@ export async function withRetryAndTimeout<T>(
 ): Promise<T> {
   // Import timeout function dynamically to avoid circular dependency
   const { withToolTimeout } = await import('./timeout-manager.js');
-  
+
   return withRetry(
     async () => withToolTimeout(operation, toolName, timeoutMs),
     toolName,

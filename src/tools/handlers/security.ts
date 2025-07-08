@@ -36,67 +36,67 @@ import {
  */
 const ALARM_TYPE_SEVERITY_MAP: Record<string, string> = {
   // Critical severity (immediate threat)
-  'MALWARE_FILE': 'critical',
-  'MALWARE_URL': 'critical', 
-  'RANSOMWARE': 'critical',
-  'BOTNET': 'critical',
-  'C2_COMMUNICATION': 'critical',
-  'CRYPTOJACKING': 'critical',
-  'DATA_EXFILTRATION': 'critical',
-  'BRUTE_FORCE_ATTACK': 'critical',
-  'KNOWN_VULNERABILITY_EXPLOIT': 'critical',
-  'PHISHING': 'critical',
-  'TROJAN': 'critical',
-  'SPYWARE': 'critical',
+  MALWARE_FILE: 'critical',
+  MALWARE_URL: 'critical',
+  RANSOMWARE: 'critical',
+  BOTNET: 'critical',
+  C2_COMMUNICATION: 'critical',
+  CRYPTOJACKING: 'critical',
+  DATA_EXFILTRATION: 'critical',
+  BRUTE_FORCE_ATTACK: 'critical',
+  KNOWN_VULNERABILITY_EXPLOIT: 'critical',
+  PHISHING: 'critical',
+  TROJAN: 'critical',
+  SPYWARE: 'critical',
 
   // High severity (significant security concern)
-  'SUSPICIOUS_ACTIVITY': 'high',
-  'NETWORK_INTRUSION': 'high',
-  'PORT_SCAN': 'high',
-  'DGA_DOMAIN': 'high',
-  'SUSPICIOUS_DNS': 'high',
-  'TOR_CONNECTION': 'high',
-  'PROXY_DETECTED': 'high',
-  'VPN_DETECTED': 'high',
-  'UNUSUAL_TRAFFIC': 'high',
-  'ABNORMAL_PROTOCOL': 'high',
-  'SUSPICIOUS_URL': 'high',
-  'AD_BLOCK_VIOLATION': 'high',
-  'PARENTAL_CONTROL_VIOLATION': 'high',
-  'POLICY_VIOLATION': 'high',
-  'BLOCKED_CONTENT': 'high',
+  SUSPICIOUS_ACTIVITY: 'high',
+  NETWORK_INTRUSION: 'high',
+  PORT_SCAN: 'high',
+  DGA_DOMAIN: 'high',
+  SUSPICIOUS_DNS: 'high',
+  TOR_CONNECTION: 'high',
+  PROXY_DETECTED: 'high',
+  VPN_DETECTED: 'high',
+  UNUSUAL_TRAFFIC: 'high',
+  ABNORMAL_PROTOCOL: 'high',
+  SUSPICIOUS_URL: 'high',
+  AD_BLOCK_VIOLATION: 'high',
+  PARENTAL_CONTROL_VIOLATION: 'high',
+  POLICY_VIOLATION: 'high',
+  BLOCKED_CONTENT: 'high',
 
   // Medium severity (notable events requiring attention)
-  'DNS_ANOMALY': 'medium',
-  'LARGE_UPLOAD': 'medium',
-  'LARGE_DOWNLOAD': 'medium',
-  'UNUSUAL_BANDWIDTH': 'medium',
-  'NEW_DEVICE': 'medium',
-  'DEVICE_OFFLINE': 'medium',
-  'VULNERABILITY_SCAN': 'medium',
-  'INTEL_MATCH': 'medium',
-  'GEO_IP_ANOMALY': 'medium',
-  'TIME_ANOMALY': 'medium',
-  'FREQUENCY_ANOMALY': 'medium',
-  'P2P_ACTIVITY': 'medium',
-  'GAMING_TRAFFIC': 'medium',
-  'STREAMING_TRAFFIC': 'medium',
+  DNS_ANOMALY: 'medium',
+  LARGE_UPLOAD: 'medium',
+  LARGE_DOWNLOAD: 'medium',
+  UNUSUAL_BANDWIDTH: 'medium',
+  NEW_DEVICE: 'medium',
+  DEVICE_OFFLINE: 'medium',
+  VULNERABILITY_SCAN: 'medium',
+  INTEL_MATCH: 'medium',
+  GEO_IP_ANOMALY: 'medium',
+  TIME_ANOMALY: 'medium',
+  FREQUENCY_ANOMALY: 'medium',
+  P2P_ACTIVITY: 'medium',
+  GAMING_TRAFFIC: 'medium',
+  STREAMING_TRAFFIC: 'medium',
 
   // Low severity (informational or minor issues)
-  'DNS_REQUEST': 'low',
-  'HTTP_REQUEST': 'low',
-  'SSL_CERT_ISSUE': 'low',
-  'CONNECTIVITY_ISSUE': 'low',
-  'DEVICE_WAKEUP': 'low',
-  'DEVICE_SLEEP': 'low',
-  'CONFIG_CHANGE': 'low',
-  'SOFTWARE_UPDATE': 'low',
-  'HEARTBEAT': 'low',
-  'STATUS_UPDATE': 'low',
-  'MONITORING_ALERT': 'low',
-  'BACKUP_EVENT': 'low',
-  'MAINTENANCE_EVENT': 'low',
-  'DIAGNOSTIC_EVENT': 'low',
+  DNS_REQUEST: 'low',
+  HTTP_REQUEST: 'low',
+  SSL_CERT_ISSUE: 'low',
+  CONNECTIVITY_ISSUE: 'low',
+  DEVICE_WAKEUP: 'low',
+  DEVICE_SLEEP: 'low',
+  CONFIG_CHANGE: 'low',
+  SOFTWARE_UPDATE: 'low',
+  HEARTBEAT: 'low',
+  STATUS_UPDATE: 'low',
+  MONITORING_ALERT: 'low',
+  BACKUP_EVENT: 'low',
+  MAINTENANCE_EVENT: 'low',
+  DIAGNOSTIC_EVENT: 'low',
 };
 
 /**
@@ -111,7 +111,7 @@ function deriveAlarmSeverity(alarmType: any): string {
 
   // Normalize alarm type to uppercase and remove special characters
   const normalizedType = alarmType.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
-  
+
   // Try exact match first
   if (ALARM_TYPE_SEVERITY_MAP[normalizedType]) {
     return ALARM_TYPE_SEVERITY_MAP[normalizedType];
@@ -119,20 +119,36 @@ function deriveAlarmSeverity(alarmType: any): string {
 
   // Try partial matches for common patterns
   const typeString = normalizedType.toLowerCase();
-  
-  if (typeString.includes('malware') || typeString.includes('virus') || typeString.includes('trojan')) {
+
+  if (
+    typeString.includes('malware') ||
+    typeString.includes('virus') ||
+    typeString.includes('trojan')
+  ) {
     return 'critical';
   }
-  
-  if (typeString.includes('intrusion') || typeString.includes('attack') || typeString.includes('exploit')) {
+
+  if (
+    typeString.includes('intrusion') ||
+    typeString.includes('attack') ||
+    typeString.includes('exploit')
+  ) {
     return 'high';
   }
-  
-  if (typeString.includes('scan') || typeString.includes('suspicious') || typeString.includes('anomaly')) {
+
+  if (
+    typeString.includes('scan') ||
+    typeString.includes('suspicious') ||
+    typeString.includes('anomaly')
+  ) {
     return 'medium';
   }
-  
-  if (typeString.includes('dns') || typeString.includes('http') || typeString.includes('status')) {
+
+  if (
+    typeString.includes('dns') ||
+    typeString.includes('http') ||
+    typeString.includes('status')
+  ) {
     return 'low';
   }
 
@@ -235,7 +251,8 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
             ErrorType.VALIDATION_ERROR,
             {
               provided_value: cursorValidation.sanitizedValue,
-              documentation: 'Cursors should be obtained from previous response next_cursor field',
+              documentation:
+                'Cursors should be obtained from previous response next_cursor field',
             },
             cursorFormatValidation.errors
           );
@@ -324,9 +341,13 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
       });
 
       // Handle severity derivation separately since we need access to the full item
-      normalizedAlarms.forEach(alarm => {
+      normalizedAlarms.forEach((alarm: any) => {
         const providedSeverity = sanitizeFieldValue(alarm.severity, null).value;
-        if (!providedSeverity || providedSeverity === 'unknown' || providedSeverity === null) {
+        if (
+          !providedSeverity ||
+          providedSeverity === 'unknown' ||
+          providedSeverity === null
+        ) {
           // Derive severity from alarm type if severity is missing or unknown
           alarm.severity = deriveAlarmSeverity(alarm.type);
         } else {
@@ -496,55 +517,52 @@ export class DeleteAlarmHandler extends BaseToolHandler {
     const alarmId = alarmIdValidation.sanitizedValue as string;
 
     // Use single timeout wrapper for the entire operation
-    return withToolTimeout(
-      async () => {
-        // First verify the alarm exists before attempting deletion
-        try {
-          const alarmCheck = await firewalla.getSpecificAlarm(alarmId);
+    return withToolTimeout(async () => {
+      // First verify the alarm exists before attempting deletion
+      try {
+        const alarmCheck = await firewalla.getSpecificAlarm(alarmId);
 
-          if (
-            !alarmCheck ||
-            !alarmCheck.results ||
-            alarmCheck.results.length === 0
-          ) {
-            return this.createErrorResponse(
-              `Alarm with ID '${alarmId}' not found`,
-              ErrorType.API_ERROR,
-              undefined,
-              [`Alarm ID '${alarmId}' does not exist or has already been deleted`]
-            );
-          }
-        } catch (checkError: unknown) {
-          // If we can't retrieve the alarm, it likely doesn't exist
-          const checkErrorMessage =
-            checkError instanceof Error ? checkError.message : 'Unknown error';
-          if (
-            checkErrorMessage.includes('not found') ||
-            checkErrorMessage.includes('404')
-          ) {
-            return this.createErrorResponse(
-              `Alarm with ID '${alarmId}' not found`,
-              ErrorType.API_ERROR,
-              undefined,
-              [`Alarm ID '${alarmId}' does not exist or has already been deleted`]
-            );
-          }
-          // Re-throw other errors (network issues, auth problems, etc.)
-          throw checkError;
+        if (
+          !alarmCheck ||
+          !alarmCheck.results ||
+          alarmCheck.results.length === 0
+        ) {
+          return this.createErrorResponse(
+            `Alarm with ID '${alarmId}' not found`,
+            ErrorType.API_ERROR,
+            undefined,
+            [`Alarm ID '${alarmId}' does not exist or has already been deleted`]
+          );
         }
+      } catch (checkError: unknown) {
+        // If we can't retrieve the alarm, it likely doesn't exist
+        const checkErrorMessage =
+          checkError instanceof Error ? checkError.message : 'Unknown error';
+        if (
+          checkErrorMessage.includes('not found') ||
+          checkErrorMessage.includes('404')
+        ) {
+          return this.createErrorResponse(
+            `Alarm with ID '${alarmId}' not found`,
+            ErrorType.API_ERROR,
+            undefined,
+            [`Alarm ID '${alarmId}' does not exist or has already been deleted`]
+          );
+        }
+        // Re-throw other errors (network issues, auth problems, etc.)
+        throw checkError;
+      }
 
-        // Alarm exists, proceed with deletion
-        const response = await firewalla.deleteAlarm(alarmId);
+      // Alarm exists, proceed with deletion
+      const response = await firewalla.deleteAlarm(alarmId);
 
-        return this.createSuccessResponse({
-          success: true,
-          alarm_id: alarmId,
-          message: 'Alarm deleted successfully',
-          deleted_at: getCurrentTimestamp(),
-          details: response,
-        });
-      },
-      'delete_alarm'
-    );
+      return this.createSuccessResponse({
+        success: true,
+        alarm_id: alarmId,
+        message: 'Alarm deleted successfully',
+        deleted_at: getCurrentTimestamp(),
+        details: response,
+      });
+    }, 'delete_alarm');
   }
 }

@@ -3,7 +3,7 @@
  * Provides efficient streaming for large datasets to prevent memory exhaustion
  */
 
-import type { PaginationParams } from './pagination-manager.js';
+import type { PaginationParams } from './pagination.js';
 
 /**
  * Configuration for streaming operations

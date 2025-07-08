@@ -241,7 +241,8 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
             {
               provided_value: searchArgs.group_by,
               valid_values: SEARCH_FIELDS.flows,
-              documentation: 'See /docs/query-syntax-guide.md for valid field names',
+              documentation:
+                'See /docs/query-syntax-guide.md for valid field names',
             },
             groupByValidation.errors
           );
@@ -261,7 +262,8 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
             ErrorType.VALIDATION_ERROR,
             {
               provided_value: searchArgs.cursor,
-              documentation: 'Cursors should be obtained from previous response next_cursor field',
+              documentation:
+                'Cursors should be obtained from previous response next_cursor field',
             },
             cursorValidation.errors
           );
@@ -290,9 +292,11 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
           initialDelayMs: 2000, // Wait 2 seconds before retry
           shouldRetry: (error, attempt) => {
             // Retry on timeouts and network errors, but not on validation errors
-            if (error instanceof TimeoutError) {return true;}
+            if (error instanceof TimeoutError) {
+              return true;
+            }
             return isRetryableError(error) && attempt === 1; // Only retry once for search
-          }
+          },
         }
       );
       const executionTime = Date.now() - startTime;
@@ -382,9 +386,9 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
 
       // Handle retry failure errors with enhanced context
       if (error instanceof Error && error.name === 'RetryFailureError') {
-        const {retryContext} = (error as any);
-        const {userGuidance} = (error as any);
-        
+        const { retryContext } = error as any;
+        const { userGuidance } = error as any;
+
         return createErrorResponse(
           this.name,
           `Search flows operation failed after ${retryContext?.attempts || 'multiple'} attempts: ${error.message}`,
@@ -392,14 +396,15 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
           {
             retry_attempts: retryContext?.attempts,
             total_duration_ms: retryContext?.totalDurationMs,
-            final_error: retryContext?.originalError instanceof Error 
-              ? retryContext.originalError.message 
-              : 'Unknown error'
+            final_error:
+              retryContext?.originalError instanceof Error
+                ? retryContext.originalError.message
+                : 'Unknown error',
           },
           userGuidance || [
             'Multiple retry attempts failed',
             'Try reducing the scope of your search query',
-            'Check network connectivity and try again later'
+            'Check network connectivity and try again later',
           ]
         );
       }
@@ -516,7 +521,8 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
             ErrorType.VALIDATION_ERROR,
             {
               provided_value: searchArgs.cursor,
-              documentation: 'Cursors should be obtained from previous response next_cursor field',
+              documentation:
+                'Cursors should be obtained from previous response next_cursor field',
             },
             cursorValidation.errors
           );
@@ -733,7 +739,8 @@ For rule management operations, see pause_rule and resume_rule tools.`;
             ErrorType.VALIDATION_ERROR,
             {
               provided_value: searchArgs.cursor,
-              documentation: 'Cursors should be obtained from previous response next_cursor field',
+              documentation:
+                'Cursors should be obtained from previous response next_cursor field',
             },
             cursorValidation.errors
           );
@@ -945,7 +952,8 @@ See the Data Normalization Guide for field details.`;
           {
             provided_cursor: searchArgs.cursor,
             provided_offset: searchArgs.offset,
-            documentation: 'Use either cursor-based pagination (cursor) or offset-based pagination (offset), but not both',
+            documentation:
+              'Use either cursor-based pagination (cursor) or offset-based pagination (offset), but not both',
           },
           ['cursor and offset parameters are mutually exclusive']
         );
@@ -964,7 +972,8 @@ See the Data Normalization Guide for field details.`;
             ErrorType.VALIDATION_ERROR,
             {
               provided_value: searchArgs.cursor,
-              documentation: 'Cursors should be obtained from previous response next_cursor field',
+              documentation:
+                'Cursors should be obtained from previous response next_cursor field',
             },
             cursorValidation.errors
           );
@@ -1154,7 +1163,8 @@ See the Target List Management guide for configuration details.`;
             ErrorType.VALIDATION_ERROR,
             {
               provided_value: searchArgs.cursor,
-              documentation: 'Cursors should be obtained from previous response next_cursor field',
+              documentation:
+                'Cursors should be obtained from previous response next_cursor field',
             },
             cursorValidation.errors
           );
@@ -1324,16 +1334,22 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
             'correlation_summary.correlation_type',
             'AND'
           ),
-          correlation_fields: (SafeAccess.getNestedValue(
-            result,
-            'correlation_summary.correlation_fields',
-            []
-          ) as string[]).join(', '),
+          correlation_fields: (
+            SafeAccess.getNestedValue(
+              result,
+              'correlation_summary.correlation_fields',
+              []
+            ) as string[]
+          ).join(', '),
         },
 
         // Summary statistics in simple format
         summary: {
-          primary_results_count: SafeAccess.getNestedValue(result, 'primary.count', 0),
+          primary_results_count: SafeAccess.getNestedValue(
+            result,
+            'primary.count',
+            0
+          ),
           total_correlated_items: SafeAccess.getNestedValue(
             result,
             'correlation_summary.total_correlated_count',
@@ -1344,7 +1360,11 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
             arr => arr.length,
             0
           ),
-          execution_time_ms: SafeAccess.getNestedValue(result, 'execution_time_ms', 0),
+          execution_time_ms: SafeAccess.getNestedValue(
+            result,
+            'execution_time_ms',
+            0
+          ),
           temporal_filtering_used: SafeAccess.getNestedValue(
             result,
             'correlation_summary.temporal_window_applied',
@@ -1356,34 +1376,71 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
         correlations: SafeAccess.safeArrayMap(
           SafeAccess.getNestedValue(result, 'correlations', []),
           (correlation: any) => {
-            const correlationResults = SafeAccess.getNestedValue(correlation, 'results', []) as any[];
+            const correlationResults = SafeAccess.getNestedValue(
+              correlation,
+              'results',
+              []
+            ) as any[];
             const topResults = correlationResults.slice(0, 5); // Show top 5 matches only
-            
+
             return {
               query: SafeAccess.getNestedValue(correlation, 'query', ''),
-              entity_type: SafeAccess.getNestedValue(correlation, 'entity_type', 'unknown'),
+              entity_type: SafeAccess.getNestedValue(
+                correlation,
+                'entity_type',
+                'unknown'
+              ),
               matches_found: SafeAccess.getNestedValue(correlation, 'count', 0),
-              
+
               // Simplified correlation matches - key information only
               top_matches: SafeAccess.safeArrayMap(topResults, (item: any) => ({
                 correlation_strength: Math.round(
-                  (SafeAccess.getNestedValue(item, 'correlation_strength', 0) as number) * 100
+                  (SafeAccess.getNestedValue(
+                    item,
+                    'correlation_strength',
+                    0
+                  ) as number) * 100
                 ), // Convert to percentage
-                matched_on: (SafeAccess.getNestedValue(item, 'matched_fields', []) as string[]).join(', '),
-                summary: this.extractItemSummary(SafeAccess.getNestedValue(item, 'data', {})),
+                matched_on: (
+                  SafeAccess.getNestedValue(
+                    item,
+                    'matched_fields',
+                    []
+                  ) as string[]
+                ).join(', '),
+                summary: this.extractItemSummary(
+                  SafeAccess.getNestedValue(item, 'data', {})
+                ),
               })),
-              
+
               // Simple statistics
               stats: {
                 average_correlation: Math.round(
-                  correlationResults.reduce((sum: number, item: any) => 
-                    sum + (SafeAccess.getNestedValue(item, 'correlation_strength', 0) as number), 0
-                  ) / Math.max(correlationResults.length, 1) * 100
+                  (correlationResults.reduce(
+                    (sum: number, item: any) =>
+                      sum +
+                      (SafeAccess.getNestedValue(
+                        item,
+                        'correlation_strength',
+                        0
+                      ) as number),
+                    0
+                  ) /
+                    Math.max(correlationResults.length, 1)) *
+                    100
                 ),
                 strongest_match: Math.round(
-                  Math.max(...correlationResults.map((item: any) => 
-                    SafeAccess.getNestedValue(item, 'correlation_strength', 0) as number
-                  ), 0) * 100
+                  Math.max(
+                    ...correlationResults.map(
+                      (item: any) =>
+                        SafeAccess.getNestedValue(
+                          item,
+                          'correlation_strength',
+                          0
+                        ) as number
+                    ),
+                    0
+                  ) * 100
                 ),
               },
             };
@@ -1411,19 +1468,35 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
    * Extract a simple summary from correlation item data
    */
   private extractItemSummary(data: any): string {
-    if (!data || typeof data !== 'object') {return 'No details available';}
-    
+    if (!data || typeof data !== 'object') {
+      return 'No details available';
+    }
+
     // Extract key identifying information
     const parts: string[] = [];
-    
-    if (data.source_ip) {parts.push(`IP: ${data.source_ip}`);}
-    if (data.destination_ip) {parts.push(`→ ${data.destination_ip}`);}
-    if (data.protocol) {parts.push(`(${data.protocol})`);}
-    if (data.action) {parts.push(`Action: ${data.action}`);}
-    if (data.severity) {parts.push(`Severity: ${data.severity}`);}
-    if (data.type) {parts.push(`Type: ${data.type}`);}
-    if (data.device?.name) {parts.push(`Device: ${data.device.name}`);}
-    
+
+    if (data.source_ip) {
+      parts.push(`IP: ${data.source_ip}`);
+    }
+    if (data.destination_ip) {
+      parts.push(`→ ${data.destination_ip}`);
+    }
+    if (data.protocol) {
+      parts.push(`(${data.protocol})`);
+    }
+    if (data.action) {
+      parts.push(`Action: ${data.action}`);
+    }
+    if (data.severity) {
+      parts.push(`Severity: ${data.severity}`);
+    }
+    if (data.type) {
+      parts.push(`Type: ${data.type}`);
+    }
+    if (data.device?.name) {
+      parts.push(`Device: ${data.device.name}`);
+    }
+
     return parts.length > 0 ? parts.join(' ') : 'Correlation match found';
   }
 
@@ -1431,24 +1504,47 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
    * Assess the overall quality of correlations found
    */
   private assessCorrelationQuality(result: any): string {
-    const correlations = SafeAccess.getNestedValue(result, 'correlations', []) as any[];
-    if (correlations.length === 0) {return 'No correlations found';}
-    
-    const totalMatches = correlations.reduce((sum: number, corr: any) => 
-      sum + (SafeAccess.getNestedValue(corr, 'count', 0) as number), 0
+    const correlations = SafeAccess.getNestedValue(
+      result,
+      'correlations',
+      []
+    ) as any[];
+    if (correlations.length === 0) {
+      return 'No correlations found';
+    }
+
+    const totalMatches = correlations.reduce(
+      (sum: number, corr: any) =>
+        sum + (SafeAccess.getNestedValue(corr, 'count', 0) as number),
+      0
     );
-    
-    const avgStrength = correlations.reduce((sum: number, corr: any) => {
-      const results = SafeAccess.getNestedValue(corr, 'results', []) as any[];
-      const avgForCorr = results.reduce((s: number, item: any) => 
-        s + (SafeAccess.getNestedValue(item, 'correlation_strength', 0) as number), 0
-      ) / Math.max(results.length, 1);
-      return sum + avgForCorr;
-    }, 0) / correlations.length;
-    
-    if (avgStrength > 0.8) {return `Excellent (${totalMatches} strong correlations found)`;}
-    if (avgStrength > 0.6) {return `Good (${totalMatches} moderate correlations found)`;}
-    if (avgStrength > 0.4) {return `Fair (${totalMatches} weak correlations found)`;}
+
+    const avgStrength =
+      correlations.reduce((sum: number, corr: any) => {
+        const results = SafeAccess.getNestedValue(corr, 'results', []) as any[];
+        const avgForCorr =
+          results.reduce(
+            (s: number, item: any) =>
+              s +
+              (SafeAccess.getNestedValue(
+                item,
+                'correlation_strength',
+                0
+              ) as number),
+            0
+          ) / Math.max(results.length, 1);
+        return sum + avgForCorr;
+      }, 0) / correlations.length;
+
+    if (avgStrength > 0.8) {
+      return `Excellent (${totalMatches} strong correlations found)`;
+    }
+    if (avgStrength > 0.6) {
+      return `Good (${totalMatches} moderate correlations found)`;
+    }
+    if (avgStrength > 0.4) {
+      return `Fair (${totalMatches} weak correlations found)`;
+    }
     return `Poor (${totalMatches} very weak correlations found)`;
   }
 
@@ -1457,9 +1553,17 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
    */
   private generateCorrelationRecommendations(result: any): string[] {
     const recommendations: string[] = [];
-    const correlations = SafeAccess.getNestedValue(result, 'correlations', []) as any[];
-    const primaryCount = SafeAccess.getNestedValue(result, 'primary.count', 0) as number;
-    
+    const correlations = SafeAccess.getNestedValue(
+      result,
+      'correlations',
+      []
+    ) as any[];
+    const primaryCount = SafeAccess.getNestedValue(
+      result,
+      'primary.count',
+      0
+    ) as number;
+
     if (correlations.length === 0) {
       recommendations.push(
         'No correlations found. Try broader correlation fields or different time windows.',
@@ -1468,10 +1572,12 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
       );
     } else {
       const totalCorrelated = SafeAccess.getNestedValue(
-        result, 'correlation_summary.total_correlated_count', 0
+        result,
+        'correlation_summary.total_correlated_count',
+        0
       ) as number;
       const correlationRate = totalCorrelated / Math.max(primaryCount, 1);
-      
+
       if (correlationRate > 0.5) {
         recommendations.push(
           'High correlation rate detected - consider investigating these patterns.',
@@ -1489,13 +1595,13 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
           'Focus on the highest correlation strength matches only.'
         );
       }
-      
+
       recommendations.push(
         'Review top matches with correlation strength > 70% for actionable insights.',
         'Use correlation results to guide further investigation or rule creation.'
       );
     }
-    
+
     return recommendations;
   }
 }
@@ -1883,8 +1989,15 @@ export class GetGeographicStatisticsHandler extends BaseToolHandler {
             ErrorType.VALIDATION_ERROR,
             {
               provided_value: searchArgs.group_by,
-              valid_values: ['country', 'continent', 'region', 'asn', 'provider'],
-              documentation: 'group_by must be one of: country, continent, region, asn, provider',
+              valid_values: [
+                'country',
+                'continent',
+                'region',
+                'asn',
+                'provider',
+              ],
+              documentation:
+                'group_by must be one of: country, continent, region, asn, provider',
             },
             groupByValidation.errors
           );

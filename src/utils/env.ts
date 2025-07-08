@@ -56,16 +56,12 @@ export function getOptionalEnvInt(
 
   const parsed = parseInt(envValue, 10);
   if (!Number.isFinite(parsed)) {
-     
-    logger.warn(
-      `Invalid numeric value for environment variable`,
-      {
-        environment_variable: name,
-        invalid_value: envValue,
-        default_value: defaultValue,
-        action: 'using_default'
-      }
-    );
+    logger.warn(`Invalid numeric value for environment variable`, {
+      environment_variable: name,
+      invalid_value: envValue,
+      default_value: defaultValue,
+      action: 'using_default',
+    });
     return defaultValue;
   }
 
@@ -108,15 +104,11 @@ export function getOptionalEnvBoolean(
     return false;
   }
 
-   
-  logger.warn(
-    `Invalid boolean value for environment variable`,
-    {
-      environment_variable: name,
-      invalid_value: envValue,
-      default_value: defaultValue,
-      action: 'using_default'
-    }
-  );
+  logger.warn(`Invalid boolean value for environment variable`, {
+    environment_variable: name,
+    invalid_value: envValue,
+    default_value: defaultValue,
+    action: 'using_default',
+  });
   return defaultValue;
 }

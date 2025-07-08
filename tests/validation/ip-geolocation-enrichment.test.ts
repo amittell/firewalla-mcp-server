@@ -10,7 +10,7 @@ import {
   mapContinent,
   calculateRiskScore,
   getGeographicDataForIP,
-} from '../../src/utils/geographic-utils.js';
+} from '../../src/utils/geographic.js';
 
 // Mock axios completely
 jest.mock('axios', () => {
