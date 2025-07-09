@@ -2385,7 +2385,7 @@ export class FirewallaClient {
       if (geoData) {
         enriched.destination = {
           ...enriched.destination,
-          geo: geoData
+          geo: geoData,
         };
       }
     }
@@ -2396,7 +2396,7 @@ export class FirewallaClient {
       if (geoData) {
         enriched.source = {
           ...enriched.source,
-          geo: geoData
+          geo: geoData,
         };
       }
     }
@@ -2423,8 +2423,8 @@ export class FirewallaClient {
       ...alarm,
       remote: {
         ...alarm.remote,
-        geo: safeGeoData(geoData)
-      }
+        geo: safeGeoData(geoData),
+      },
     };
 
     return enrichedAlarm;

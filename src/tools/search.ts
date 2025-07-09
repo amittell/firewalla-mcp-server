@@ -1824,7 +1824,7 @@ export class SearchEngine {
         );
         if (countryValidation.invalid.length > 0) {
           throw new Error(
-            `Country code validation failed: Invalid codes: ${countryValidation.invalid.join(', ')}`
+            `Country code validation failed: Invalid country codes: ${countryValidation.invalid.join(', ')}`
           );
         }
         // Update with validated codes
@@ -1991,7 +1991,7 @@ export class SearchEngine {
         );
         if (countryValidation.invalid.length > 0) {
           throw new Error(
-            `Country code validation failed: Invalid codes: ${countryValidation.invalid.join(', ')}`
+            `Country code validation failed: Invalid country codes: ${countryValidation.invalid.join(', ')}`
           );
         }
         // Update with validated codes

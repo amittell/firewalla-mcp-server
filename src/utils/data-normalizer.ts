@@ -134,7 +134,10 @@ export interface SanitizationResult {
 /**
  * Sanitize field value with default fallback and tracking
  */
-export function sanitizeFieldValue(value: any, defaultValue?: any): SanitizationResult {
+export function sanitizeFieldValue(
+  value: any,
+  defaultValue?: any
+): SanitizationResult {
   const modifications: string[] = [];
   let processedValue = value;
   let wasModified = false;
@@ -174,32 +177,38 @@ export function sanitizeFieldValue(value: any, defaultValue?: any): Sanitization
 /**
  * Normalize unknown fields to consistent values
  */
-export function normalizeUnknownFields(value: any, config?: Partial<NormalizationConfig>, visited?: WeakSet<object>): any {
+export function normalizeUnknownFields(
+  value: any,
+  config?: Partial<NormalizationConfig>,
+  visited?: WeakSet<object>
+): any {
   const defaultConfig: NormalizationConfig = {
     defaultUnknownValue: 'unknown',
     preserveNull: false,
     trimWhitespace: true,
     lowerCaseFields: [],
   };
-  
+
   const actualConfig = { ...defaultConfig, ...config };
-  
+
   // Initialize visited set for circular reference detection
   if (!visited) {
     visited = new WeakSet();
   }
-  
+
   if (Array.isArray(value)) {
     // Protect against circular references
     if (visited.has(value)) {
       return '[Circular Reference]';
     }
     visited.add(value);
-    const result = value.map(item => normalizeUnknownFields(item, actualConfig, visited));
+    const result = value.map(item =>
+      normalizeUnknownFields(item, actualConfig, visited)
+    );
     visited.delete(value);
     return result;
   }
-  
+
   if (value && typeof value === 'object') {
     // Protect against circular references
     if (visited.has(value)) {
@@ -213,32 +222,39 @@ export function normalizeUnknownFields(value: any, config?: Partial<Normalizatio
     visited.delete(value);
     return normalized;
   }
-  
+
   // Handle string values
   if (typeof value === 'string') {
-    const lower = value.toLowerCase();
-    if (['unknown', '', 'n/a', 'none', 'null', 'undefined'].includes(lower)) {
+    const trimmed = actualConfig.trimWhitespace ? value.trim() : value;
+    const lower = trimmed.toLowerCase();
+    if (
+      ['unknown', '', 'n/a', 'none', 'null', 'undefined'].includes(lower) ||
+      trimmed === ''
+    ) {
       return actualConfig.defaultUnknownValue;
     }
-    return actualConfig.trimWhitespace ? value.trim() : value;
+    return trimmed;
   }
-  
+
   // Handle null/undefined
   if (value === null || value === undefined) {
     return actualConfig.preserveNull ? null : actualConfig.defaultUnknownValue;
   }
-  
+
   return value;
 }
 
 /**
  * Batch normalize array of objects
  */
-export function batchNormalize(items: any[], transformers: Record<string, (value: any) => any>): any[] {
+export function batchNormalize(
+  items: any[],
+  transformers: Record<string, (value: any) => any>
+): any[] {
   if (!Array.isArray(items)) {
     return [];
   }
-  
+
   return items.map(item => {
     const normalized: any = {};
     for (const [key, transformer] of Object.entries(transformers)) {
@@ -259,13 +275,15 @@ export const sanitizeByteCount = safeByteCount;
 /**
  * Ensure consistent geographic data formatting
  */
-export function ensureConsistentGeoData(geoData: any): GeographicData & { data_quality?: string } {
+export function ensureConsistentGeoData(
+  geoData: any
+): GeographicData & { data_quality?: string } {
   if (!geoData || typeof geoData !== 'object') {
     return {
       country: 'unknown',
       country_code: 'UN',
       continent: 'unknown',
-      region: 'unknown', 
+      region: 'unknown',
       city: 'unknown',
       timezone: 'unknown',
       data_quality: 'missing',
@@ -274,29 +292,42 @@ export function ensureConsistentGeoData(geoData: any): GeographicData & { data_q
 
   // Helper function to title case
   const toTitleCase = (str: string): string => {
-    if (!str) {return 'unknown';}
-    return str.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+    if (!str) {
+      return 'unknown';
+    }
+    // Use word boundary that works with Unicode characters
+    return str.toLowerCase().replace(/(?:^|\s)\S/g, l => l.toUpperCase());
   };
 
   // Helper function to handle country code
   const normalizeCountryCode = (code: any): string => {
-    if (!code || typeof code !== 'string') {return 'UN';}
-    // Only accept 2-letter ISO codes
-    if (code.length !== 2) {return 'UN';}
+    if (!code || typeof code !== 'string') {
+      return 'UN';
+    }
+    // Only accept 2-letter ISO codes with letters only
+    if (code.length !== 2 || !/^[a-zA-Z]{2}$/.test(code)) {
+      return 'UN';
+    }
     return code.toUpperCase();
   };
 
   // Helper function to handle ASN
   const normalizeASN = (asn: any): number | undefined => {
-    if (asn === null || asn === undefined) {return undefined;}
+    if (asn === null || asn === undefined) {
+      return undefined;
+    }
     const num = typeof asn === 'string' ? parseInt(asn, 10) : asn;
     return isNaN(num) ? undefined : num;
   };
 
   // Helper function to handle boolean values
   const normalizeBoolean = (value: any): boolean | undefined => {
-    if (value === null || value === undefined) {return undefined;}
-    if (typeof value === 'boolean') {return value;}
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+    if (typeof value === 'boolean') {
+      return value;
+    }
     if (typeof value === 'string') {
       const lower = value.toLowerCase();
       return lower === 'true' || lower === 'yes' || lower === '1';
@@ -309,12 +340,20 @@ export function ensureConsistentGeoData(geoData: any): GeographicData & { data_q
 
   return {
     country: toTitleCase(geoData.Country || geoData.country || ''),
-    country_code: normalizeCountryCode(geoData.countryCode || geoData.country_code),
-    continent: toTitleCase(geoData.continent || ''),
+    country_code: normalizeCountryCode(
+      geoData.CountryCode || geoData.countryCode || geoData.country_code
+    ),
+    continent: toTitleCase(geoData.Continent || geoData.continent || ''),
     region: toTitleCase(geoData.Region || geoData.region || ''),
-    city: geoData.City || geoData.city || 'unknown',
+    city: toTitleCase(geoData.CITY || geoData.City || geoData.city || ''),
     timezone: geoData.timezone || 'unknown',
     asn: normalizeASN(geoData.ASN || geoData.asn),
+    isp: toTitleCase(geoData.isp || geoData.ISP || ''),
+    organization: toTitleCase(
+      geoData.organization || geoData.Organization || ''
+    ),
+    hosting_provider:
+      geoData.hosting_provider || geoData.HostingProvider || undefined,
     is_vpn: normalizeBoolean(geoData.is_vpn),
     is_cloud_provider: normalizeBoolean(geoData.is_cloud_provider),
     is_proxy: normalizeBoolean(geoData.is_proxy),

@@ -1,7 +1,7 @@
 /**
  * Universal pagination utilities for cursor-based and offset-based pagination
  * Provides consistent pagination interface across all MCP tools
- * 
+ *
  * This module combines functionality from the original pagination.ts and pagination-manager.ts
  * to provide a unified, comprehensive pagination solution.
  */
