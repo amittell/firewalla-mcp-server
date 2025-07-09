@@ -1,141 +1,42 @@
-name: Budget-Friendly CI/CD
+name: CI
 
-# Trigger strategy: Minimize GitHub Actions usage while maintaining quality
 on:
   push:
-    branches: [ main, experimental-tools ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
-# Cost optimization: Cancel in-progress workflows
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Quick checks: Run on ALL branches (2-3 minutes, ~$0.10 per run)
-  # These catch 90% of issues and prevent broken code in CI
-  quick-checks:
-    name: Quick Checks (Format, Build, Lint)
+  test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Prevent runaway costs
-
+    timeout-minutes: 10
+    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    # Cache optimization: Reuse dependencies to save time/money
+    - uses: actions/checkout@v4
+    
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
-
-    # Fast install with frozen lockfile
+    
     - name: Install dependencies
-      run: npm ci --prefer-offline --no-audit
-
-    # Essential checks (fast, high-value)
-    - name: Check code formatting
-      run: npm run format:check
-
-    - name: TypeScript compilation
-      run: npm run typecheck
-
-    - name: Lint check
+      run: npm ci
+    
+    - name: Lint
       run: npm run lint
-
-    - name: Build verification
+    
+    - name: Build
       run: npm run build
-
-    # Quick unit tests only (skip slow integration tests)
-    - name: Quick tests
-      run: npm run test:quick
-
-  # Full test suite: Only run on main branch and PRs to main
-  # This saves significant GitHub Actions minutes on feature branches
-  full-tests:
-    name: Full Test Suite
-    runs-on: ubuntu-latest
-    timeout-minutes: 15  # Comprehensive but time-bounded
-
-    # COST OPTIMIZATION: Only run expensive tests when absolutely necessary
-    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
-
-    needs: quick-checks  # Only run if quick checks pass
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm ci --prefer-offline --no-audit
-
-    # Cache build artifacts from quick-checks job would be ideal here
-    # but for simplicity, we rebuild (still only ~30 seconds)
-    - name: Build project
-      run: npm run build
-
-    # Full comprehensive test suite with real Firewalla credentials
-    - name: Run all tests with coverage
-      env:
-        FIREWALLA_MSP_TOKEN: ${{ secrets.FIREWALLA_MSP_TOKEN }}
-        FIREWALLA_MSP_ID: ${{ secrets.FIREWALLA_MSP_ID }}
-        FIREWALLA_BOX_ID: ${{ secrets.FIREWALLA_BOX_ID }}
+    
+    - name: Test
       run: npm run test:ci
-
-    # Integration tests with real API credentials
-    - name: Integration tests
       env:
         FIREWALLA_MSP_TOKEN: ${{ secrets.FIREWALLA_MSP_TOKEN }}
         FIREWALLA_MSP_ID: ${{ secrets.FIREWALLA_MSP_ID }}
         FIREWALLA_BOX_ID: ${{ secrets.FIREWALLA_BOX_ID }}
-      run: |
-        if npm run | grep -q "test:integration"; then
-          npm run test:integration
-        else
-          echo "Running full test suite includes integration tests"
-        fi
-
-  # Security scan: Only on main branch (monthly cost impact: ~$0.20)
-  security-scan:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    # Only run on main branch to minimize costs
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-
-    - name: Security audit
-      run: npm audit --audit-level high
-
-# Cost breakdown for typical solo project:
-# - quick-checks: ~3 minutes × $0.008/minute = $0.024 per run
-# - full-tests: ~6 minutes × $0.008/minute = $0.048 per run (only main/PRs)
-# - security-scan: ~2 minutes × $0.008/minute = $0.016 per run (only main)
-#
-# Estimated monthly usage for active solo developer:
-# - 50 feature branch pushes: 50 × $0.024 = $1.20
-# - 10 main branch pushes: 10 × ($0.024 + $0.048 + $0.016) = $0.88
-# - 5 PRs: 5 × ($0.024 + $0.048) = $0.36
-# Total: ~$2.44/month (vs $10-15 without optimization)
-#
-# With git hooks catching 80% of issues locally:
-# Actual usage: ~$0.50-1.00/month 🎉
 
