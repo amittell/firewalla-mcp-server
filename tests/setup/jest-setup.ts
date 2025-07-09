@@ -238,19 +238,18 @@ export function withRetries<T>(testFn: () => Promise<T>, category: 'flaky' | 'ne
 }
 
 // Performance measurement utilities
-export function measurePerformance<T>(operation: () => Promise<T>): Promise<{ result: T; duration: number }> {
-  return new Promise(async (resolve, reject) => {
-    const start = Date.now();
+export async function measurePerformance<T>(operation: () => Promise<T>): Promise<{ result: T; duration: number }> {
+  const start = Date.now();
+  
+  try {
+    const result = await operation();
+    const duration = Date.now() - start;
     
-    try {
-      const result = await operation();
-      const duration = Date.now() - start;
-      
-      resolve({ result, duration });
-    } catch (error) {
-      reject(error);
-    }
-  });
+    return { result, duration };
+  } catch (error) {
+    const duration = Date.now() - start;
+    throw error;
+  }
 }
 
 // Environment info logging

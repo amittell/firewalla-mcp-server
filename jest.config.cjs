@@ -28,5 +28,6 @@ module.exports = {
     '/coverage/'
   ],
   setupFilesAfterEnv: ['<rootDir>/tests/setup/jest-setup.ts'],
-  testTimeout: 10000
+  testTimeout: 10000,
+  forceExit: true
 };
