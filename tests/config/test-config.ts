@@ -75,7 +75,7 @@ export const TEST_ENVIRONMENTS: Record<string, TestEnvironmentConfig> = {
     },
     mocking: {
       enableNetworkMocks: true,
-      enableTimeMocks: true,
+      enableTimeMocks: false, // Disabled in CI to prevent hanging tests
       enableFilesystemMocks: true,
     },
     logging: {
