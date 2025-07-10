@@ -679,6 +679,101 @@ DEBUG=performance,metrics npm run dev
 DEBUG=query,optimization npm run mcp:start
 ```
 
+## Security Incident Response
+
+The Firewalla MCP server includes comprehensive incident response capabilities for security operations teams. These tools automate incident creation, correlation, lifecycle management, and reporting.
+
+### Incident Response Tools (4 tools)
+
+#### create_security_incident
+Create security incidents by automatically correlating related alarms and events.
+```bash
+# Auto-correlate recent high-severity alarms into an incident
+create_security_incident auto_correlate:true time_window_minutes:60 title:"Suspicious Activity Investigation"
+
+# Create manual incident from specific alarms
+create_security_incident alarm_ids:["alarm1","alarm2","alarm3"] title:"Brute Force Attack"
+```
+
+#### get_security_incidents
+Retrieve and filter security incidents by status, severity, or date range.
+```bash
+# Get all open incidents
+get_security_incidents status:open limit:25
+
+# Get critical incidents from the last week
+get_security_incidents severity:critical since:"2024-01-01T00:00:00Z" limit:10
+```
+
+#### update_incident_status
+Manage incident lifecycle with status updates and assignment.
+```bash
+# Update incident status with notes
+update_incident_status incident_id:"INC-12345" status:investigating notes:"Starting investigation" assigned_to:"security-team"
+
+# Resolve incident
+update_incident_status incident_id:"INC-12345" status:resolved notes:"Attack blocked, systems secured"
+```
+
+#### generate_incident_report
+Generate comprehensive incident reports with timeline analysis.
+```bash
+# Full incident report with all data sources
+generate_incident_report incident_id:"INC-12345" include_flows:true include_devices:true timeline_analysis:true
+
+# Basic incident summary
+generate_incident_report incident_id:"INC-12345" include_flows:false timeline_analysis:false
+```
+
+### Incident Response Features
+
+#### Automated Correlation
+- **IP-based correlation**: Groups alarms by source/destination IP addresses
+- **Time-window correlation**: Finds related events within configurable time windows
+- **Attack pattern detection**: Identifies common attack patterns (brute force, malware, intrusion)
+- **Severity calculation**: Automatically calculates incident severity based on related alarms
+
+#### Comprehensive Reporting
+- **Timeline analysis**: Chronological view of all related security events
+- **Network flow analysis**: Related network traffic during incident timeframe
+- **Device impact assessment**: Affected devices and their current status
+- **Recommended actions**: Contextual recommendations based on attack patterns
+
+#### Incident Lifecycle Management
+- **Status tracking**: Open → Investigating → Resolved/False Positive
+- **Assignment capabilities**: Assign incidents to security team members
+- **Notes and updates**: Track investigation progress and findings
+- **Audit trail**: Complete history of status changes and updates
+
+### Example Incident Response Workflows
+
+#### Security Alert Triage
+```bash
+# 1. Create incident from recent critical alarms
+create_security_incident auto_correlate:true severity_threshold:critical time_window_minutes:30
+
+# 2. Review all open critical incidents
+get_security_incidents status:open severity:critical
+
+# 3. Assign and update status
+update_incident_status incident_id:"INC-12345" status:investigating assigned_to:"security-analyst"
+
+# 4. Generate detailed report for investigation
+generate_incident_report incident_id:"INC-12345" include_flows:true timeline_analysis:true
+```
+
+#### Post-Incident Analysis
+```bash
+# 1. Get all resolved incidents from the last month
+get_security_incidents status:resolved since:"2024-01-01T00:00:00Z"
+
+# 2. Generate comprehensive reports for each major incident
+generate_incident_report incident_id:"INC-12345" include_flows:true include_devices:true
+
+# 3. Review attack patterns and trends
+get_security_incidents severity:high status:resolved
+```
+
 ## Bulk Operations
 
 The Firewalla MCP server includes 10 bulk operation tools for efficiently managing multiple alarms and rules simultaneously. These tools are optimized for high-volume operations and include comprehensive error handling.

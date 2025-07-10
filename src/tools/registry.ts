@@ -21,6 +21,7 @@
  * - Analytics: 7 handlers (statistics, trends)
  * - Search: 11 handlers (advanced search, correlations, geography)
  * - Bulk Operations: 10 handlers (alarm & rule bulk operations)
+ * - Incident Response: 4 handlers (incident creation, management, reporting)
  *
  * @version 1.0.0
  * @author Firewalla MCP Server Team
@@ -84,6 +85,12 @@ import {
   BulkUpdateRulesHandler,
   BulkDeleteRulesHandler,
 } from './handlers/bulk-rules.js';
+import {
+  CreateSecurityIncidentHandler,
+  GetSecurityIncidentsHandler,
+  UpdateIncidentStatusHandler,
+  GenerateIncidentReportHandler,
+} from './handlers/incident-response.js';
 
 /**
  * Central registry for managing all MCP tool handlers
@@ -199,6 +206,12 @@ export class ToolRegistry {
     this.register(new BulkDisableRulesHandler());
     this.register(new BulkUpdateRulesHandler());
     this.register(new BulkDeleteRulesHandler());
+
+    // Incident Response tools (4 handlers)
+    this.register(new CreateSecurityIncidentHandler());
+    this.register(new GetSecurityIncidentsHandler());
+    this.register(new UpdateIncidentStatusHandler());
+    this.register(new GenerateIncidentReportHandler());
   }
 
   /**
@@ -280,7 +293,7 @@ export class ToolRegistry {
   /**
    * Retrieves all tools belonging to a specific category
    *
-   * Categories include: 'security', 'network', 'device', 'rule', 'analytics', 'search'
+   * Categories include: 'security', 'network', 'device', 'rule', 'analytics', 'search', 'incident_response'
    *
    * @param category - The category to filter by
    * @returns Array of tool handlers in the specified category

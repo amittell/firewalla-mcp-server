@@ -9,7 +9,8 @@ A Model Context Protocol (MCP) server that enables Claude to access and analyze 
 - **Bandwidth Monitoring**: Track top bandwidth consumers and usage patterns  
 - **Rule Management**: View and temporarily pause firewall rules  
 - **Target Lists**: Access CloudFlare and CrowdSec security intelligence
-- **Advanced Search**: Complex query syntax with filters, logical operators, and correlations  
+- **Advanced Search**: Complex query syntax with filters, logical operators, and correlations
+- **Incident Response**: Automated security incident creation, correlation, and comprehensive reporting  
 
 ## Architecture
 
@@ -254,6 +255,18 @@ search for: high severity alarms from IP range 10.0.0.* in the last 24 hours
 ```
 *Uses: `search_devices` with temporal queries + `get_offline_devices`*
 
+**Security Incident Response:**
+```text
+"Create a security incident from recent high-severity alarms and generate a comprehensive report"
+```
+*Uses: `create_security_incident` + `generate_incident_report` for automated incident management*
+
+**Incident Correlation:**
+```text
+"Correlate all security events from the last hour and create an incident"
+```
+*Uses: `create_security_incident` with auto-correlation and time window parameters*
+
 ### Troubleshooting Common Issues
 
 **Connection Problems:**
@@ -318,6 +331,12 @@ If responses are slow:
 - `search_devices` - Device searching with network, status, and usage filters
 - `search_target_lists` - Target list searching with category and ownership filters
 - `search_cross_reference` - Multi-entity searches with correlation across data types
+
+#### Incident Response and Management
+- `create_security_incident` - Create incidents by correlating related alarms and security events
+- `get_security_incidents` - Retrieve incidents with filtering by status, severity, or date range
+- `update_incident_status` - Update incident status (open, investigating, resolved, false_positive)
+- `generate_incident_report` - Generate comprehensive incident reports with timeline analysis
 
 ### Resources (Data Claude can access)
 - `firewall_summary` - Overview of firewall status and health
