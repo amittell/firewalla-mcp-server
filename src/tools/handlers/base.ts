@@ -218,13 +218,7 @@ export interface ToolHandler {
   description: string;
 
   /** @description Tool category for organizational and filtering purposes */
-  category:
-    | 'security'
-    | 'network'
-    | 'device'
-    | 'rule'
-    | 'analytics'
-    | 'search';
+  category: 'security' | 'network' | 'device' | 'rule' | 'analytics' | 'search';
 }
 
 /**

@@ -1,7 +1,7 @@
 /**
  * @fileoverview Tool Registry - Centralized MCP Tool Management
  *
- * Implements a registry pattern for managing 32+ MCP tool handlers with clean
+ * Implements a registry pattern for managing 42 MCP tool handlers with clean
  * organization and easy discovery. Replaces the original monolithic switch statement
  * with a maintainable, testable architecture where each tool is encapsulated in
  * its own handler class.
@@ -131,7 +131,7 @@ export class ToolRegistry {
   /**
    * Automatically registers all available tool handlers organized by category
    *
-   * Registers handlers across 6 functional categories with a total of 32+ tools.
+   * Registers handlers across 7 functional categories with a total of 42 tools.
    * Each handler implements the ToolHandler interface and provides a specific
    * piece of Firewalla functionality.
    *
@@ -199,7 +199,6 @@ export class ToolRegistry {
     this.register(new BulkDisableRulesHandler());
     this.register(new BulkUpdateRulesHandler());
     this.register(new BulkDeleteRulesHandler());
-
   }
 
   /**

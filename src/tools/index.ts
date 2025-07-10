@@ -1,17 +1,18 @@
 /**
  * @fileoverview MCP Tool Setup and Registry Management
  *
- * Implements a clean, modular registry pattern for managing 25 distinct MCP tools
+ * Implements a clean, modular registry pattern for managing 42 distinct MCP tools
  * that provide comprehensive Firewalla firewall management capabilities. Replaces
  * the original 1000+ line switch statement with maintainable, testable handler classes.
  *
  * Tool Categories:
  * - **Security (3 tools)**: Alarm management and threat monitoring
- * - **Network (3 tools)**: Flow analysis and bandwidth monitoring
+ * - **Network (3 tools)**: Flow analysis and bandwidth monitoring  
  * - **Device (1 tool)**: Device status and inventory management
- * - **Rule (6 tools)**: Firewall rule configuration and analytics
- * - **Analytics (6 tools)**: Statistical analysis and trend reporting
- * - **Search (6 tools)**: Advanced search with cross-reference capabilities
+ * - **Rule (7 tools)**: Firewall rule configuration and analytics
+ * - **Analytics (7 tools)**: Statistical analysis and trend reporting
+ * - **Search (11 tools)**: Advanced search with cross-reference capabilities
+ * - **Bulk Operations (10 tools)**: Alarm and rule bulk management
  *
  * Architecture Benefits:
  * - Single Responsibility Principle for each tool handler
