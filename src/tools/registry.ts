@@ -70,9 +70,7 @@ import {
   SearchAlarmsByGeographyHandler,
   GetGeographicStatisticsHandler,
 } from './handlers/search.js';
-import {
-  BulkDeleteAlarmsHandler,
-} from './handlers/bulk-alarms.js';
+import { BulkDeleteAlarmsHandler } from './handlers/bulk-alarms.js';
 import {
   BulkPauseRulesHandler,
   BulkResumeRulesHandler,

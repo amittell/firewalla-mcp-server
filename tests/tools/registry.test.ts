@@ -233,8 +233,8 @@ describe('ToolRegistry', () => {
 
     it('should have expected total number of registered tools', () => {
       const allTools = registry.getToolNames();
-      // Based on the registry.ts file, we expect 32+ tools
-      expect(allTools.length).toBeGreaterThanOrEqual(32);
+      // Based on the registry.ts file, we expect 35+ tools
+      expect(allTools.length).toBeGreaterThanOrEqual(35);
     });
   });
 
