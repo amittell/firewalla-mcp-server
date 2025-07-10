@@ -218,7 +218,13 @@ export interface ToolHandler {
   description: string;
 
   /** @description Tool category for organizational and filtering purposes */
-  category: 'security' | 'network' | 'device' | 'rule' | 'analytics' | 'search' | 'incident_response';
+  category:
+    | 'security'
+    | 'network'
+    | 'device'
+    | 'rule'
+    | 'analytics'
+    | 'search';
 }
 
 /**
@@ -250,8 +256,7 @@ export abstract class BaseToolHandler implements ToolHandler {
     | 'device'
     | 'rule'
     | 'analytics'
-    | 'search'
-    | 'incident_response';
+    | 'search';
 
   /**
    * Execute the tool logic - must be implemented by concrete classes

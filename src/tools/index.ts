@@ -12,7 +12,6 @@
  * - **Rule (6 tools)**: Firewall rule configuration and analytics
  * - **Analytics (6 tools)**: Statistical analysis and trend reporting
  * - **Search (6 tools)**: Advanced search with cross-reference capabilities
- * - **Incident Response (4 tools)**: Security incident management and reporting
  *
  * Architecture Benefits:
  * - Single Responsibility Principle for each tool handler
@@ -110,7 +109,6 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
     'rule',
     'analytics',
     'search',
-    'incident_response',
   ];
   const totalCategories = categories.length;
 
