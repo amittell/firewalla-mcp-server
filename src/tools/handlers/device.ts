@@ -31,7 +31,8 @@ import {
 
 export class GetDeviceStatusHandler extends BaseToolHandler {
   name = 'get_device_status';
-  description = 'Check online/offline status of all network devices with detailed information including MAC addresses, IP addresses, device types, and last seen timestamps. Requires limit parameter. Data is cached for 2 minutes for performance.';
+  description =
+    'Check online/offline status of all network devices with detailed information including MAC addresses, IP addresses, device types, and last seen timestamps. Requires limit parameter. Data is cached for 2 minutes for performance.';
   category = 'device' as const;
 
   async execute(

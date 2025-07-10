@@ -264,7 +264,8 @@ This tool provides the foundation for network health monitoring and dashboard di
 
 export class GetStatisticsByRegionHandler extends BaseToolHandler {
   name = 'get_statistics_by_region';
-  description = 'Get flow statistics grouped by country/region for geographic analysis. No required parameters. Data cached for 5 minutes for performance.';
+  description =
+    'Get flow statistics grouped by country/region for geographic analysis. No required parameters. Data cached for 5 minutes for performance.';
   category = 'analytics' as const;
 
   async execute(
@@ -365,7 +366,8 @@ export class GetStatisticsByRegionHandler extends BaseToolHandler {
 
 export class GetStatisticsByBoxHandler extends BaseToolHandler {
   name = 'get_statistics_by_box';
-  description = 'Get statistics for each Firewalla box with activity scores and health monitoring. No required parameters. Data cached for 5 minutes for performance.';
+  description =
+    'Get statistics for each Firewalla box with activity scores and health monitoring. No required parameters. Data cached for 5 minutes for performance.';
   category = 'analytics' as const;
 
   async execute(
@@ -517,7 +519,8 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
 
 export class GetFlowTrendsHandler extends BaseToolHandler {
   name = 'get_flow_trends';
-  description = 'Get historical flow data trends over time with configurable intervals. Optional interval and period parameters. Data cached for 5 minutes for performance.';
+  description =
+    'Get historical flow data trends over time with configurable intervals. Optional interval and period parameters. Data cached for 5 minutes for performance.';
   category = 'analytics' as const;
 
   async execute(
@@ -670,7 +673,8 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
 
 export class GetAlarmTrendsHandler extends BaseToolHandler {
   name = 'get_alarm_trends';
-  description = 'Get historical alarm data trends over time with configurable periods. Optional period parameter. Data cached for 5 minutes for performance.';
+  description =
+    'Get historical alarm data trends over time with configurable periods. Optional period parameter. Data cached for 5 minutes for performance.';
   category = 'analytics' as const;
 
   async execute(
@@ -807,7 +811,8 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
 
 export class GetRuleTrendsHandler extends BaseToolHandler {
   name = 'get_rule_trends';
-  description = 'Get historical rule activity trends over time with configurable periods. Optional period parameter. Data cached for 5 minutes for performance.';
+  description =
+    'Get historical rule activity trends over time with configurable periods. Optional period parameter. Data cached for 5 minutes for performance.';
   category = 'analytics' as const;
 
   async execute(

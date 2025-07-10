@@ -11,6 +11,7 @@ This guide provides comprehensive documentation for the query syntax used across
 - [Ranges and Comparisons](#ranges-and-comparisons)
 - [Complex Nested Queries](#complex-nested-queries)
 - [Field-Specific Syntax](#field-specific-syntax)
+- [Cache Control and Real-Time Data](#cache-control-and-real-time-data)
 - [Common Query Patterns](#common-query-patterns)
 - [Query Validation](#query-validation)
 - [Best Practices](#best-practices)
@@ -420,6 +421,96 @@ enabled:true
 source:global
 list_type:whitelist
 ```
+
+## Cache Control and Real-Time Data
+
+The Firewalla MCP Server uses intelligent caching to provide fast responses while ensuring data freshness. Understanding the cache behavior helps you get the most current data when needed.
+
+### Cache Timing by Data Type
+
+Different types of data have different cache durations based on how frequently they change:
+
+```
+# Real-time security data (15 seconds)
+get_active_alarms
+search_alarms
+
+# Real-time network data (15 seconds)  
+get_flow_data
+search_flows
+
+# Semi-dynamic data (5 minutes default)
+get_device_status
+get_network_rules
+search_devices
+search_rules
+
+# Statistical data (longer cache)
+get_simple_statistics
+get_flow_trends
+```
+
+### Force Refresh Parameter
+
+For time-sensitive operations, you can bypass the cache using the `force_refresh` parameter:
+
+```
+# Get the absolute latest security alarms (bypasses cache)
+get_active_alarms force_refresh:true limit:50
+
+# Real-time network flow analysis
+search_flows query:"severity:high" force_refresh:true limit:100
+
+# Check device status without cache delay
+get_device_status force_refresh:true limit:25
+```
+
+### Cache Information in Responses
+
+Tools that support caching return cache metadata in their responses:
+
+```json
+{
+  "cache_info": {
+    "ttl_seconds": 15,
+    "from_cache": false,
+    "last_updated": "2024-01-15T10:30:45Z"
+  }
+}
+```
+
+**Cache Fields Explained:**
+- `ttl_seconds`: How long this data will be cached (0 means not cached)
+- `from_cache`: Whether this response came from cache or fresh API call
+- `last_updated`: When this data was last retrieved from the API
+
+### When to Use Force Refresh
+
+Use `force_refresh=true` in these scenarios:
+
+**Security Incident Response:**
+```
+# Get the latest threats immediately
+get_active_alarms force_refresh:true severity:critical limit:20
+
+# Real-time investigation of suspicious activity
+search_flows query:"source_ip:suspicious_ip" force_refresh:true limit:100
+```
+
+**Real-Time Monitoring:**
+```
+# Live bandwidth monitoring
+get_bandwidth_usage force_refresh:true limit:10
+
+# Current device status during troubleshooting
+search_devices query:"online:false" force_refresh:true limit:50
+```
+
+**Performance Considerations:**
+- Force refresh bypasses cache, so responses may be slower
+- Use sparingly to avoid overwhelming the Firewalla API
+- Regular queries use cached data for better performance
+- Cache timestamps help you decide when fresh data is needed
 
 ## Common Query Patterns
 

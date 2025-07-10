@@ -89,6 +89,7 @@ export interface SearchParams {
     start?: string;
     end?: string;
   };
+  force_refresh?: boolean; // Bypass cache for real-time data
 }
 
 /**

@@ -132,7 +132,8 @@ async function checkRuleStatus(
 
 export class GetNetworkRulesHandler extends BaseToolHandler {
   name = 'get_network_rules';
-  description = 'Retrieve firewall rules and conditions including target domains, actions, and status. Requires limit parameter. Data is cached for 10 minutes for performance.';
+  description =
+    'Retrieve firewall rules and conditions including target domains, actions, and status. Requires limit parameter. Data is cached for 10 minutes for performance.';
   category = 'rule' as const;
 
   async execute(
@@ -294,7 +295,8 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
 
 export class PauseRuleHandler extends BaseToolHandler {
   name = 'pause_rule';
-  description = 'Temporarily disable a specific firewall rule. Requires rule_id parameter. Optional duration parameter (default 60 minutes).';
+  description =
+    'Temporarily disable a specific firewall rule. Requires rule_id parameter. Optional duration parameter (default 60 minutes).';
   category = 'rule' as const;
 
   async execute(
@@ -470,7 +472,8 @@ export class PauseRuleHandler extends BaseToolHandler {
 
 export class ResumeRuleHandler extends BaseToolHandler {
   name = 'resume_rule';
-  description = 'Resume a previously paused firewall rule. Requires rule_id parameter.';
+  description =
+    'Resume a previously paused firewall rule. Requires rule_id parameter.';
   category = 'rule' as const;
 
   async execute(
@@ -569,7 +572,8 @@ export class ResumeRuleHandler extends BaseToolHandler {
 
 export class GetTargetListsHandler extends BaseToolHandler {
   name = 'get_target_lists';
-  description = 'Access security target lists (CloudFlare, CrowdSec) with domains and IPs. Requires limit parameter. Data cached for 1 hour for performance.';
+  description =
+    'Access security target lists (CloudFlare, CrowdSec) with domains and IPs. Requires limit parameter. Data cached for 1 hour for performance.';
   category = 'rule' as const;
 
   async execute(
@@ -680,7 +684,8 @@ export class GetTargetListsHandler extends BaseToolHandler {
 
 export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
   name = 'get_network_rules_summary';
-  description = 'Get overview statistics and counts of network rules by category. Requires limit parameter. Data cached for 10 minutes for performance.';
+  description =
+    'Get overview statistics and counts of network rules by category. Requires limit parameter. Data cached for 10 minutes for performance.';
   category = 'rule' as const;
 
   async execute(
@@ -914,7 +919,8 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
 
 export class GetMostActiveRulesHandler extends BaseToolHandler {
   name = 'get_most_active_rules';
-  description = 'Get rules with highest hit counts for traffic analysis. Requires limit parameter. Optional min_hits parameter.';
+  description =
+    'Get rules with highest hit counts for traffic analysis. Requires limit parameter. Optional min_hits parameter.';
   category = 'rule' as const;
 
   async execute(
@@ -1085,7 +1091,8 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
 
 export class GetRecentRulesHandler extends BaseToolHandler {
   name = 'get_recent_rules';
-  description = 'Get recently created or modified firewall rules. Requires limit parameter. Optional hours parameter (default 24 hours lookback).';
+  description =
+    'Get recently created or modified firewall rules. Requires limit parameter. Optional hours parameter (default 24 hours lookback).';
   category = 'rule' as const;
 
   async execute(

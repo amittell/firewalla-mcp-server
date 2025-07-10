@@ -49,6 +49,7 @@ export interface BaseSearchArgs extends ToolArgs {
   sort_order?: 'asc' | 'desc';
   group_by?: string;
   aggregate?: boolean;
+  force_refresh?: boolean;
 }
 
 // Search argument interfaces for type safety
@@ -144,9 +145,21 @@ export interface GetGeographicStatisticsArgs extends ToolArgs {
 
 export class SearchFlowsHandler extends BaseToolHandler {
   name = 'search_flows';
-  description = `Advanced network flow searching with powerful query syntax and enhanced reliability.
+  description = `Advanced network flow searching with powerful query syntax and enhanced reliability. Requires query and limit parameters. Data cached for 15 seconds, use force_refresh=true for real-time network analysis.
   
 Search through network traffic flows using complex queries with logical operators, wildcards, and field-specific filters.
+
+REQUIRED PARAMETERS:
+- query: Search query string using flow field syntax
+- limit: Maximum number of results to return (1-10000)
+
+OPTIONAL PARAMETERS:
+- force_refresh: Bypass cache for real-time data (default: false)
+- cursor: Pagination cursor from previous response
+- time_range: Time window for search (start/end timestamps)
+- sort_by: Field to sort results by
+- group_by: Field to group results by for aggregation
+- aggregate: Enable aggregation statistics
 
 QUERY EXAMPLES:
 - Basic field queries: "protocol:tcp", "blocked:true", "source_ip:192.168.1.100"
@@ -154,6 +167,11 @@ QUERY EXAMPLES:
 - Wildcards: "source_ip:192.168.*", "destination_domain:*.facebook.com"
 - Ranges: "bytes:[1000 TO 50000]", "timestamp:>=2024-01-01"
 - Complex queries: "(protocol:tcp OR protocol:udp) AND source_ip:192.168.* NOT blocked:true"
+
+CACHE CONTROL:
+- Default: 15-second cache for optimal performance
+- Real-time: Use force_refresh=true for live network monitoring
+- Cache info included in responses for timing awareness
 
 PERFORMANCE TIPS:
 - Use specific time ranges for better performance: {"time_range": {"start": "2024-01-01T00:00:00Z", "end": "2024-01-02T00:00:00Z"}}
@@ -270,6 +288,23 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
         }
       }
 
+      // Validate force_refresh parameter if provided
+      const forceRefreshValidation = ParameterValidator.validateBoolean(
+        searchArgs.force_refresh,
+        'force_refresh',
+        false
+      );
+
+      if (!forceRefreshValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Force refresh parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          forceRefreshValidation.errors
+        );
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -281,6 +316,7 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
         group_by: searchArgs.group_by,
         aggregate: searchArgs.aggregate,
         time_range: searchArgs.time_range,
+        force_refresh: forceRefreshValidation.sanitizedValue as boolean,
       };
 
       // Use retry logic for search operations as they can be prone to timeouts
@@ -422,9 +458,19 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
 
 export class SearchAlarmsHandler extends BaseToolHandler {
   name = 'search_alarms';
-  description = `Security alarm searching with powerful filtering and enhanced reliability.
+  description = `Security alarm searching with powerful filtering and enhanced reliability. Requires query and limit parameters. Data cached for 15 seconds, use force_refresh=true for real-time security data.
 
 Search through security alerts and alarms using flexible query syntax to identify threats and suspicious activities.
+
+REQUIRED PARAMETERS:
+- query: Search query string using alarm field syntax
+- limit: Maximum number of results to return (1-10000)
+
+OPTIONAL PARAMETERS:
+- force_refresh: Bypass cache for real-time data (default: false)
+- cursor: Pagination cursor from previous response
+- sort_by: Field to sort results by
+- aggregate: Enable aggregation statistics
 
 QUERY EXAMPLES:
 - Severity filtering: "severity:high", "severity:>=medium", "severity:critical"
@@ -433,6 +479,11 @@ QUERY EXAMPLES:
 - Status queries: "resolved:false", "acknowledged:true"
 - Time-based: "timestamp:>=2024-01-01", "last_24_hours:true"
 - Complex combinations: "severity:high AND source_ip:192.168.* NOT resolved:true"
+
+CACHE CONTROL:
+- Default: 15-second cache for optimal performance
+- Real-time: Use force_refresh=true for incident response
+- Cache info included in responses for timing awareness
 
 COMMON USE CASES:
 - Active threats: "severity:>=high AND resolved:false"
@@ -529,6 +580,23 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
         }
       }
 
+      // Validate force_refresh parameter if provided
+      const forceRefreshValidation = ParameterValidator.validateBoolean(
+        searchArgs.force_refresh,
+        'force_refresh',
+        false
+      );
+
+      if (!forceRefreshValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Force refresh parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          forceRefreshValidation.errors
+        );
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -540,6 +608,7 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
         group_by: searchArgs.group_by,
         aggregate: searchArgs.aggregate,
         time_range: searchArgs.time_range,
+        force_refresh: forceRefreshValidation.sanitizedValue as boolean,
       };
 
       const result = await withToolTimeout(
@@ -849,9 +918,21 @@ For rule management operations, see pause_rule and resume_rule tools.`;
 
 export class SearchDevicesHandler extends BaseToolHandler {
   name = 'search_devices';
-  description = `Network device searching with comprehensive filtering for status, usage patterns, and network properties.
+  description = `Network device searching with comprehensive filtering for status, usage patterns, and network properties. Requires query and limit parameters. Data cached for 5 minutes, use force_refresh=true for real-time device status.
 
 Search through network devices to monitor connectivity, identify issues, and analyze usage patterns.
+
+REQUIRED PARAMETERS:
+- query: Search query string using device field syntax
+- limit: Maximum number of results to return (1-10000)
+
+OPTIONAL PARAMETERS:
+- force_refresh: Bypass cache for real-time status (default: false)
+- cursor: Pagination cursor from previous response
+- time_range: Time window for search (start/end timestamps)
+- sort_by: Field to sort results by
+- group_by: Field to group results by for aggregation
+- aggregate: Enable aggregation statistics
 
 QUERY EXAMPLES:
 - Status filtering: "online:true", "online:false", "last_seen:>=yesterday"
@@ -859,6 +940,11 @@ QUERY EXAMPLES:
 - Network properties: "network_id:main", "dhcp:true", "static_ip:true"
 - Usage patterns: "bandwidth_usage:>1000000", "active_connections:>10"
 - Device types: "device_type:smartphone", "os_type:iOS", "manufacturer:Samsung"
+
+CACHE CONTROL:
+- Default: 5-minute cache for optimal performance
+- Real-time: Use force_refresh=true for device troubleshooting
+- Cache info included in responses for timing awareness
 
 NETWORK MONITORING:
 - Offline devices: "online:false AND last_seen:>=24h" (recently offline)
@@ -980,6 +1066,23 @@ See the Data Normalization Guide for field details.`;
         }
       }
 
+      // Validate force_refresh parameter if provided
+      const forceRefreshValidation = ParameterValidator.validateBoolean(
+        searchArgs.force_refresh,
+        'force_refresh',
+        false
+      );
+
+      if (!forceRefreshValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Force refresh parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          forceRefreshValidation.errors
+        );
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -991,6 +1094,7 @@ See the Data Normalization Guide for field details.`;
         group_by: searchArgs.group_by,
         aggregate: searchArgs.aggregate,
         time_range: searchArgs.time_range,
+        force_refresh: forceRefreshValidation.sanitizedValue as boolean,
       };
 
       const result = await withToolTimeout(

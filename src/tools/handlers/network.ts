@@ -40,7 +40,8 @@ import {
 
 export class GetFlowDataHandler extends BaseToolHandler {
   name = 'get_flow_data';
-  description = 'Query network traffic flows with pagination. Data is cached for 15 seconds for performance. Use force_refresh=true to bypass cache for real-time data.';
+  description =
+    'Query network traffic flows with pagination. Data is cached for 15 seconds for performance. Use force_refresh=true to bypass cache for real-time data.';
   category = 'network' as const;
 
   async execute(
@@ -390,7 +391,8 @@ export class GetFlowDataHandler extends BaseToolHandler {
 
 export class GetBandwidthUsageHandler extends BaseToolHandler {
   name = 'get_bandwidth_usage';
-  description = 'Get top bandwidth consuming devices by data usage. Requires limit and period parameters. Data is cached for 5 minutes for performance.';
+  description =
+    'Get top bandwidth consuming devices by data usage. Requires limit and period parameters. Data is cached for 5 minutes for performance.';
   category = 'network' as const;
 
   async execute(
@@ -500,7 +502,8 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
 
 export class GetOfflineDevicesHandler extends BaseToolHandler {
   name = 'get_offline_devices';
-  description = 'Get all offline devices with last seen timestamps and detailed device information. Requires limit parameter. Data cached for 2 minutes for performance.';
+  description =
+    'Get all offline devices with last seen timestamps and detailed device information. Requires limit parameter. Data cached for 2 minutes for performance.';
   category = 'network' as const;
 
   async execute(

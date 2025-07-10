@@ -423,7 +423,8 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
 
 export class GetSpecificAlarmHandler extends BaseToolHandler {
   name = 'get_specific_alarm';
-  description = 'Get detailed information for a specific alarm by alarm ID. Requires alarm_id parameter obtained from get_active_alarms.';
+  description =
+    'Get detailed information for a specific alarm by alarm ID. Requires alarm_id parameter obtained from get_active_alarms.';
   category = 'security' as const;
 
   async execute(
@@ -504,7 +505,8 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
 
 export class DeleteAlarmHandler extends BaseToolHandler {
   name = 'delete_alarm';
-  description = 'Delete/dismiss a specific security alarm by ID. Requires alarm_id parameter. Use with caution as this permanently removes the alarm.';
+  description =
+    'Delete/dismiss a specific security alarm by ID. Requires alarm_id parameter. Use with caution as this permanently removes the alarm.';
   category = 'security' as const;
 
   async execute(

@@ -279,12 +279,12 @@ If responses are slow:
 ### Tools (Actions Claude can perform)
 
 #### Security Monitoring
-- `get_active_alarms` - Retrieve current security alerts with complete alarm data, IDs, and descriptions
+- `get_active_alarms` - Retrieve current security alerts with complete alarm data, IDs, and descriptions (15s cache, supports force_refresh)
 - `get_specific_alarm` - Get detailed information for a specific alarm ID
 - `delete_alarm` - Remove specific security alarms
 
 #### Network Analysis
-- `get_flow_data` - Query network traffic flows with detailed connection data and device context
+- `get_flow_data` - Query network traffic flows with detailed connection data and device context (15s cache, supports force_refresh)
 - `get_bandwidth_usage` - Get top bandwidth consuming devices with detailed usage statistics
 - `get_offline_devices` - List offline devices with last seen timestamps
 
@@ -536,10 +536,16 @@ DEBUG=cache,performance,api npm run mcp:start
 ```
 
 **Multi-Tier Caching System:**
-- Real-time data (alarms/flows): 30s TTL
+- Real-time data (alarms/flows): 15s TTL
 - Medium-frequency data (devices): 2m TTL  
 - Stable data (rules): 10m TTL
 - Static data (statistics): 1h TTL
+
+**Cache Control Features:**
+- `force_refresh` parameter to bypass cache for real-time data
+- Cache metadata in responses (TTL, freshness, timestamps)
+- Intelligent cache invalidation for dynamic security data
+- Performance optimization while maintaining data freshness
 
 **Performance Metrics:**
 - Response time tracking with P95/P99 percentiles

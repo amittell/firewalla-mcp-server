@@ -364,7 +364,10 @@ export class FirewallaClient {
 
       if (cacheable && method === 'GET') {
         // Use shorter TTL for dynamic data (alarms, flows)
-        const ttlSeconds = endpoint.includes('/alarms') || endpoint.includes('/flows') ? 15 : undefined;
+        const ttlSeconds =
+          endpoint.includes('/alarms') || endpoint.includes('/flows')
+            ? 15
+            : undefined;
         this.setCache(cacheKey, result, ttlSeconds);
       }
 
