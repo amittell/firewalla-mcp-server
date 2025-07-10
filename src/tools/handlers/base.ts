@@ -46,6 +46,8 @@ export interface BaseToolArgs {
   group_by?: string;
   /** @description Optional flag to enable result aggregation */
   aggregate?: boolean;
+  /** @description Optional flag to force refresh and bypass cache */
+  force_refresh?: boolean;
   [key: string]: unknown; // Allow additional properties while maintaining base structure
 }
 

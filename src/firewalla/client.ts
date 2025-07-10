@@ -363,7 +363,9 @@ export class FirewallaClient {
       }
 
       if (cacheable && method === 'GET') {
-        this.setCache(cacheKey, result);
+        // Use shorter TTL for dynamic data (alarms, flows)
+        const ttlSeconds = endpoint.includes('/alarms') || endpoint.includes('/flows') ? 15 : undefined;
+        this.setCache(cacheKey, result, ttlSeconds);
       }
 
       return result;
@@ -466,7 +468,8 @@ export class FirewallaClient {
     groupBy?: string,
     sortBy = 'timestamp:desc',
     limit = 200,
-    cursor?: string
+    cursor?: string,
+    force_refresh = false
   ): Promise<{ count: number; results: Alarm[]; next_cursor?: string }> {
     const params: Record<string, unknown> = {
       sortBy,
@@ -493,7 +496,7 @@ export class FirewallaClient {
       count: number;
       results: any[];
       next_cursor?: string;
-    }>('GET', endpoint, params);
+    }>('GET', endpoint, params, !force_refresh);
 
     // Validate response structure
     const validationSchema = createValidationSchema('alarms');

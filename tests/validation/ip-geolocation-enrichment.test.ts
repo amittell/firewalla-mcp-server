@@ -194,7 +194,7 @@ describe('IP Geolocation Enrichment', () => {
 
       // Should have enriched destination but not source (private IP)
       expect(enrichedFlow.destination.geo).toBeDefined();
-      expect(enrichedFlow.destination.geo.country).toBe('United States');
+      expect(enrichedFlow.destination.geo.country).toBe('US');
       expect(enrichedFlow.destination.geo.continent).toBe('North America');
       expect(enrichedFlow.source.geo).toBeUndefined();
     });
@@ -222,7 +222,7 @@ describe('IP Geolocation Enrichment', () => {
 
       // Should have enriched remote IP
       expect(enrichedAlarm.remote.geo).toBeDefined();
-      expect(enrichedAlarm.remote.geo.country).toBe('United States');
+      expect(enrichedAlarm.remote.geo.country).toBe('US');
       expect(enrichedAlarm.remote.geo.continent).toBe('North America');
     });
 

@@ -21,7 +21,7 @@ import { withToolTimeout } from '../../utils/timeout-manager.js';
  */
 export class BulkDeleteAlarmsHandler extends BaseToolHandler {
   name = 'bulk_delete_alarms';
-  description = 'Delete multiple security alarms in a single operation';
+  description = 'Delete multiple security alarms in a single operation. Requires array of alarm IDs. Use with caution as this permanently removes alarms.';
   category = 'security' as const;
 
   async execute(
@@ -91,7 +91,7 @@ export class BulkDeleteAlarmsHandler extends BaseToolHandler {
  */
 export class BulkDismissAlarmsHandler extends BaseToolHandler {
   name = 'bulk_dismiss_alarms';
-  description = 'Dismiss multiple security alarms in a single operation';
+  description = 'Dismiss multiple security alarms in a single operation. Requires array of alarm IDs. Does not permanently delete alarms.';
   category = 'security' as const;
 
   async execute(
@@ -170,7 +170,7 @@ export class BulkDismissAlarmsHandler extends BaseToolHandler {
  */
 export class BulkAcknowledgeAlarmsHandler extends BaseToolHandler {
   name = 'bulk_acknowledge_alarms';
-  description = 'Acknowledge multiple security alarms in a single operation';
+  description = 'Acknowledge multiple security alarms in a single operation. Requires array of alarm IDs. Marks alarms as reviewed but keeps them active.';
   category = 'security' as const;
 
   async execute(

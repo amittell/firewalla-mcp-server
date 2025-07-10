@@ -3,6 +3,7 @@
  * Combines functionality from geographic-cache.ts, geographic-constants.ts, and geographic-utils.ts
  */
 
+import geoip from 'geoip-lite';
 import type { GeographicData } from '../types.js';
 
 /**
@@ -697,50 +698,24 @@ export function getGeographicDataForIP(ip: string): GeographicData | null {
     return null;
   }
 
-  // This is a placeholder - in production, this would call an actual geolocation service
-  // For testing, return mock data for known IPs
-  if (ip === '8.8.8.8' || ip === '8.8.4.4') {
-    return {
-      country: 'United States',
-      country_code: 'US',
-      continent: 'North America',
-      region: 'California',
-      city: 'Mountain View',
-      timezone: 'America/Los_Angeles',
-      isp: 'Google',
-      organization: 'Google LLC',
-      asn: 15169,
-      geographic_risk_score: calculateRiskScore('US'),
-    };
-  }
+  try {
+    const geo = geoip.lookup(ip);
+    if (!geo) {
+      return null;
+    }
 
-  if (ip === '1.1.1.1') {
     return {
-      country: 'Australia',
-      country_code: 'AU',
-      continent: 'Oceania',
-      region: 'New South Wales',
-      city: 'Sydney',
-      timezone: 'Australia/Sydney',
-      isp: 'Cloudflare',
-      organization: 'Cloudflare, Inc.',
-      asn: 13335,
-      geographic_risk_score: calculateRiskScore('AU'),
+      country: geo.country || 'Unknown',
+      country_code: geo.country || 'UN',
+      continent: mapContinent(geo.country),
+      region: geo.region || 'Unknown',
+      city: geo.city || 'Unknown',
+      timezone: geo.timezone || 'UTC',
+      geographic_risk_score: calculateRiskScore(geo.country),
     };
+  } catch (_error) {
+    return null;
   }
-
-  // Default mock data
-  return {
-    country: 'Unknown',
-    country_code: 'UN',
-    continent: 'Unknown',
-    region: 'Unknown',
-    city: 'Unknown',
-    timezone: 'UTC',
-    isp: 'Unknown',
-    organization: 'Unknown',
-    asn: 0,
-  };
 }
 
 /**

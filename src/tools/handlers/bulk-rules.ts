@@ -22,7 +22,7 @@ import { withToolTimeout } from '../../utils/timeout-manager.js';
  */
 export class BulkPauseRulesHandler extends BaseToolHandler {
   name = 'bulk_pause_rules';
-  description = 'Pause multiple firewall rules in a single operation';
+  description = 'Pause multiple firewall rules in a single operation. Requires array of rule IDs. Optional duration parameter (default 60 minutes).';
   category = 'rule' as const;
 
   async execute(
@@ -128,7 +128,7 @@ export class BulkPauseRulesHandler extends BaseToolHandler {
  */
 export class BulkResumeRulesHandler extends BaseToolHandler {
   name = 'bulk_resume_rules';
-  description = 'Resume multiple paused firewall rules in a single operation';
+  description = 'Resume multiple paused firewall rules in a single operation. Requires array of rule IDs. Re-enables previously paused rules.';
   category = 'rule' as const;
 
   async execute(
@@ -196,7 +196,7 @@ export class BulkResumeRulesHandler extends BaseToolHandler {
  */
 export class BulkEnableRulesHandler extends BaseToolHandler {
   name = 'bulk_enable_rules';
-  description = 'Enable multiple firewall rules in a single operation';
+  description = 'Enable multiple firewall rules in a single operation. Requires array of rule IDs. Permanently enables specified rules.';
   category = 'rule' as const;
 
   async execute(
@@ -271,7 +271,7 @@ export class BulkEnableRulesHandler extends BaseToolHandler {
  */
 export class BulkDisableRulesHandler extends BaseToolHandler {
   name = 'bulk_disable_rules';
-  description = 'Disable multiple firewall rules in a single operation';
+  description = 'Disable multiple firewall rules in a single operation. Requires array of rule IDs. Permanently disables specified rules.';
   category = 'rule' as const;
 
   async execute(
@@ -451,7 +451,7 @@ export class BulkUpdateRulesHandler extends BaseToolHandler {
  */
 export class BulkDeleteRulesHandler extends BaseToolHandler {
   name = 'bulk_delete_rules';
-  description = 'Delete multiple firewall rules in a single operation';
+  description = 'Delete multiple firewall rules in a single operation. Requires array of rule IDs and confirm=true parameter. Use with caution as this permanently removes rules.';
   category = 'rule' as const;
 
   async execute(

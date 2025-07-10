@@ -159,7 +159,7 @@ function deriveAlarmSeverity(alarmType: any): string {
 export class GetActiveAlarmsHandler extends BaseToolHandler {
   name = 'get_active_alarms';
   description =
-    'Retrieve active security alarms with optional severity filtering';
+    'Retrieve active security alarms with optional severity filtering. Data is cached for 15 seconds for performance. Use force_refresh=true to bypass cache for real-time data.';
   category = 'security' as const;
 
   async execute(
@@ -203,6 +203,11 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         ['low', 'medium', 'high', 'critical'],
         false // not required
       );
+      const forceRefreshValidation = ParameterValidator.validateBoolean(
+        args?.force_refresh,
+        'force_refresh',
+        false
+      );
 
       const validationResult = ParameterValidator.combineValidationResults([
         queryValidation,
@@ -212,6 +217,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         cursorValidation,
         includeTotalValidation,
         severityValidation,
+        forceRefreshValidation,
       ]);
 
       if (!validationResult.isValid) {
@@ -269,7 +275,8 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
             groupByValidation.sanitizedValue as string | undefined,
             (sortByValidation.sanitizedValue as string) || 'timestamp:desc',
             limitValidation.sanitizedValue as number,
-            cursorValidation.sanitizedValue as string | undefined
+            cursorValidation.sanitizedValue as string | undefined,
+            forceRefreshValidation.sanitizedValue as boolean
           ),
         'get_active_alarms'
       );
@@ -389,6 +396,11 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
           alarmValidationResult.warnings.length > 0
             ? alarmValidationResult.warnings
             : undefined,
+        cache_info: {
+          ttl_seconds: forceRefreshValidation.sanitizedValue ? 0 : 15,
+          from_cache: !forceRefreshValidation.sanitizedValue,
+          last_updated: getCurrentTimestamp(),
+        },
       });
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
@@ -411,7 +423,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
 
 export class GetSpecificAlarmHandler extends BaseToolHandler {
   name = 'get_specific_alarm';
-  description = 'Get detailed information for a specific alarm';
+  description = 'Get detailed information for a specific alarm by alarm ID. Requires alarm_id parameter obtained from get_active_alarms.';
   category = 'security' as const;
 
   async execute(
@@ -492,7 +504,7 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
 
 export class DeleteAlarmHandler extends BaseToolHandler {
   name = 'delete_alarm';
-  description = 'Delete/dismiss a specific alarm';
+  description = 'Delete/dismiss a specific security alarm by ID. Requires alarm_id parameter. Use with caution as this permanently removes the alarm.';
   category = 'security' as const;
 
   async execute(
