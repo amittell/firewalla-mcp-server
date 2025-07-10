@@ -4,6 +4,7 @@
  */
 
 import type { PaginationParams } from './pagination.js';
+import { webcrypto } from 'crypto';
 
 /**
  * Configuration for streaming operations
@@ -358,6 +359,10 @@ export class StreamingManager {
    * Generate a unique session ID
    */
   private generateSessionId(): string {
+    // Use crypto.randomUUID if available, fallback to current implementation
+    if (webcrypto && webcrypto.randomUUID) {
+      return `stream_${webcrypto.randomUUID()}`;
+    }
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).substring(2);
     return `stream_${timestamp}_${random}`;
@@ -465,16 +470,21 @@ export class StreamingManager {
  */
 export const globalStreamingManager = new StreamingManager();
 
+// Default streaming threshold - can be overridden via environment variable
+const DEFAULT_STREAMING_THRESHOLD = 
+  parseInt(process.env.FIREWALLA_STREAMING_THRESHOLD || '500', 10);
+
 /**
  * Utility function to check if a tool should use streaming
  */
 export function shouldUseStreaming(
   toolName: string,
   requestedLimit: number,
-  estimatedTotal?: number
+  estimatedTotal?: number,
+  customThreshold?: number
 ): boolean {
   // Use streaming for large requests or when total is estimated to be large
-  const streamingThreshold = 500;
+  const streamingThreshold = customThreshold ?? DEFAULT_STREAMING_THRESHOLD;
 
   if (requestedLimit > streamingThreshold) {
     return true;

@@ -685,16 +685,16 @@ export function convertOffsetToCursorParams(params: {
   const warnings: string[] = [];
 
   if (params.offset && params.offset > 0) {
-    warnings.push(
-      'Offset-based pagination is deprecated and has been converted to cursor-based pagination'
+    throw new Error(
+      'Offset-to-cursor conversion is not yet implemented. ' +
+      'Please use cursor-based pagination directly. ' +
+      'This conversion requires API-specific logic that depends on the underlying data structure and sorting requirements.'
     );
-    // Note: This is a simplified conversion. In practice, you'd need to implement
-    // offset-to-cursor conversion based on your specific API requirements.
   }
 
   return {
     limit: params.limit,
-    cursor: undefined, // Would need actual conversion logic based on your API
+    cursor: undefined,
     warnings,
   };
 }

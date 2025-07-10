@@ -1016,62 +1016,11 @@ export interface ResponseTransformConfig {
  * Re-exported from data validation utilities for convenience
  */
 
-/**
- * Result of data structure validation
- */
-export interface ValidationResult {
-  /** Whether the validation passed */
-  isValid: boolean;
-  /** Array of error messages if validation failed */
-  errors: string[];
-  /** Array of warning messages for non-critical issues */
-  warnings: string[];
-  /** Suggestions for fixing validation errors */
-  suggestions: string[];
-  /** Additional metadata about the validation */
-  metadata?: {
-    /** Number of fields validated */
-    fieldsValidated: number;
-    /** Number of missing required fields */
-    missingFields: number;
-    /** Number of type mismatches found */
-    typeMismatches: number;
-    /** Validation execution time in milliseconds */
-    validationTime: number;
-  };
-}
-
-/**
- * Result of type checking validation
- */
-export interface TypeValidationResult {
-  /** Whether all type checks passed */
-  isValid: boolean;
-  /** Array of fields that failed type validation */
-  invalidFields: Array<{
-    /** Field name that failed validation */
-    field: string;
-    /** Expected type */
-    expectedType: string;
-    /** Actual type found */
-    actualType: string;
-    /** Current value */
-    actualValue: any;
-    /** Suggestion for fixing the type issue */
-    suggestion: string;
-  }>;
-  /** Summary of type validation results */
-  summary: {
-    /** Total fields checked */
-    totalFields: number;
-    /** Fields that passed validation */
-    validFields: number;
-    /** Fields that failed validation */
-    invalidFields: number;
-    /** Fields with convertible types */
-    convertibleFields: number;
-  };
-}
+// Re-export validation types from data-validator module
+export type {
+  ValidationResult,
+  TypeValidationResult
+} from './utils/data-validator.js';
 
 /**
  * Configuration for data normalization behavior

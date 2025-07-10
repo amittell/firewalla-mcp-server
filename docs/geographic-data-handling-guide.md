@@ -125,8 +125,6 @@ The system encounters various forms of "unknown" or missing data:
 ```typescript
 const explicitUnknownPatterns = [
   'unknown',
-  'Unknown',
-  'UNKNOWN',
   'n/a',
   'N/A',
   'null',

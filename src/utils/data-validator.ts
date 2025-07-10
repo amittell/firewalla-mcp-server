@@ -9,8 +9,6 @@
  * @version 1.0.0
  */
 
-// Importing for type reference in JSDoc comments
-// import type { GeographicData } from '../types.js';
 
 /**
  * Result of data structure validation

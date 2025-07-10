@@ -7,6 +7,25 @@ import { TimeoutError } from './timeout-manager.js';
 import { logger } from '../monitoring/logger.js';
 
 /**
+ * Enhanced error with retry context information
+ */
+export interface RetryFailureError extends Error {
+  retryContext: {
+    originalError: unknown;
+    toolName: string;
+    attempts: number;
+    totalDurationMs: number;
+    attemptDetails: Array<{
+      attempt: number;
+      durationMs: number;
+      error?: string | unknown;
+      delayMs?: number;
+    }>;
+  };
+  userGuidance: string[];
+}
+
+/**
  * Retry configuration options
  */
 export interface RetryConfig {
@@ -234,17 +253,17 @@ export class RetryManager {
       error?: unknown;
       delayMs?: number;
     }>
-  ): Error {
+  ): RetryFailureError {
     const originalMessage =
       originalError instanceof Error ? originalError.message : 'Unknown error';
 
     const enhancedMessage = `Operation '${toolName}' failed after ${attempts} retry attempts (${totalDurationMs}ms total). Final error: ${originalMessage}`;
 
-    const enhancedError = new Error(enhancedMessage);
+    const enhancedError = new Error(enhancedMessage) as RetryFailureError;
     enhancedError.name = 'RetryFailureError';
 
     // Add retry context
-    (enhancedError as any).retryContext = {
+    enhancedError.retryContext = {
       originalError,
       toolName,
       attempts,
@@ -259,7 +278,7 @@ export class RetryManager {
     };
 
     // Add user-friendly guidance
-    (enhancedError as any).userGuidance = this.generateUserGuidance(
+    enhancedError.userGuidance = this.generateUserGuidance(
       originalError,
       toolName,
       attempts

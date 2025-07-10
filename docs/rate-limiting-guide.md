@@ -118,14 +118,18 @@ class RateLimitManager {
     this.lastRequestTime = Date.now();
     
     try {
-      return await request();
-    } catch (error) {
-      if (error.errorType === 'rate_limit_error') {
-        const retryAfter = error.details?.retryAfter || 60;
-        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-        return await this.makeRequest(request);
+      while (true) {
+        try {
+          return await request();
+        } catch (error) {
+          if (error.errorType !== 'rate_limit_error') {
+            throw error;
+          }
+          const retryAfter = error.details?.retryAfter || 60;
+          await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+          // Continue the loop to retry in the same frame
+        }
       }
-      throw error;
     } finally {
       this.activeRequests--;
     }
