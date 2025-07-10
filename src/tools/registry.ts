@@ -1,7 +1,7 @@
 /**
  * @fileoverview Tool Registry - Centralized MCP Tool Management
  *
- * Implements a registry pattern for managing 42 MCP tool handlers with clean
+ * Implements a registry pattern for managing 35 MCP tool handlers with clean
  * organization and easy discovery. Replaces the original monolithic switch statement
  * with a maintainable, testable architecture where each tool is encapsulated in
  * its own handler class.
@@ -20,7 +20,7 @@
  * - Rules: 7 handlers (firewall rules, management) + 6 bulk rule handlers
  * - Analytics: 7 handlers (statistics, trends)
  * - Search: 11 handlers (advanced search, correlations, geography)
- * - Bulk Operations: 10 handlers (alarm & rule bulk operations)
+ * - Bulk Operations: 3 handlers (legitimate alarm & rule bulk operations)
  *
  * @version 1.0.0
  * @author Firewalla MCP Server Team
@@ -72,17 +72,10 @@ import {
 } from './handlers/search.js';
 import {
   BulkDeleteAlarmsHandler,
-  BulkDismissAlarmsHandler,
-  BulkAcknowledgeAlarmsHandler,
-  BulkUpdateAlarmsHandler,
 } from './handlers/bulk-alarms.js';
 import {
   BulkPauseRulesHandler,
   BulkResumeRulesHandler,
-  BulkEnableRulesHandler,
-  BulkDisableRulesHandler,
-  BulkUpdateRulesHandler,
-  BulkDeleteRulesHandler,
 } from './handlers/bulk-rules.js';
 
 /**
@@ -131,7 +124,7 @@ export class ToolRegistry {
   /**
    * Automatically registers all available tool handlers organized by category
    *
-   * Registers handlers across 7 functional categories with a total of 42 tools.
+   * Registers handlers across 7 functional categories with a total of 35 tools.
    * Each handler implements the ToolHandler interface and provides a specific
    * piece of Firewalla functionality.
    *
@@ -185,20 +178,13 @@ export class ToolRegistry {
     this.register(new SearchAlarmsByGeographyHandler());
     this.register(new GetGeographicStatisticsHandler());
 
-    // Bulk operation tools (10 handlers)
-    // Bulk alarm operations (4 handlers)
+    // Bulk operation tools (3 handlers)
+    // Bulk alarm operations (1 handler)
     this.register(new BulkDeleteAlarmsHandler());
-    this.register(new BulkDismissAlarmsHandler());
-    this.register(new BulkAcknowledgeAlarmsHandler());
-    this.register(new BulkUpdateAlarmsHandler());
 
-    // Bulk rule operations (6 handlers)
+    // Bulk rule operations (2 handlers)
     this.register(new BulkPauseRulesHandler());
     this.register(new BulkResumeRulesHandler());
-    this.register(new BulkEnableRulesHandler());
-    this.register(new BulkDisableRulesHandler());
-    this.register(new BulkUpdateRulesHandler());
-    this.register(new BulkDeleteRulesHandler());
   }
 
   /**
