@@ -687,8 +687,8 @@ export function convertOffsetToCursorParams(params: {
   if (params.offset && params.offset > 0) {
     throw new Error(
       'Offset-to-cursor conversion is not yet implemented. ' +
-      'Please use cursor-based pagination directly. ' +
-      'This conversion requires API-specific logic that depends on the underlying data structure and sorting requirements.'
+        'Please use cursor-based pagination directly. ' +
+        'This conversion requires API-specific logic that depends on the underlying data structure and sorting requirements.'
     );
   }
 

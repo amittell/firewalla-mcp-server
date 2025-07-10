@@ -1019,7 +1019,7 @@ export interface ResponseTransformConfig {
 // Re-export validation types from data-validator module
 export type {
   ValidationResult,
-  TypeValidationResult
+  TypeValidationResult,
 } from './utils/data-validator.js';
 
 /**

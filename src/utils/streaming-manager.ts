@@ -471,8 +471,10 @@ export class StreamingManager {
 export const globalStreamingManager = new StreamingManager();
 
 // Default streaming threshold - can be overridden via environment variable
-const DEFAULT_STREAMING_THRESHOLD = 
-  parseInt(process.env.FIREWALLA_STREAMING_THRESHOLD || '500', 10);
+const DEFAULT_STREAMING_THRESHOLD = parseInt(
+  process.env.FIREWALLA_STREAMING_THRESHOLD || '500',
+  10
+);
 
 /**
  * Utility function to check if a tool should use streaming

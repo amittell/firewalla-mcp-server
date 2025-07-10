@@ -9,7 +9,6 @@
  * @version 1.0.0
  */
 
-
 /**
  * Result of data structure validation
  */
