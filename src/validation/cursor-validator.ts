@@ -3,7 +3,8 @@
  * Provides comprehensive cursor format validation and standardized error handling
  */
 
-import { ErrorType, createErrorResponse, type ValidationResult } from './error-handler.js';
+import { ErrorType, createErrorResponse } from './error-handler.js';
+import type { ValidationResult } from '../types.js';
 import { VALIDATION_CONFIG } from '../config/limits.js';
 
 /**
@@ -180,58 +181,58 @@ export class CursorValidator {
           ],
         };
       }
-    }
 
-    // Check for suspicious patterns that might indicate issues
-    const suspiciousPatterns = [
-      /[<>'"&]/, // HTML/XML injection attempts
-      /\.\.\//, // Path traversal attempts
-      /\s/, // Whitespace (cursors shouldn't contain spaces)
-    ];
+      // Check for suspicious patterns that might indicate issues
+      const suspiciousPatterns = [
+        /[<>'"&]/, // HTML/XML injection attempts
+        /\.\.\//, // Path traversal attempts
+        /\s/, // Whitespace (cursors shouldn't contain spaces)
+      ];
 
-    // Check for control characters separately to avoid ESLint no-control-regex rule
-    const hasControlChars = cursor.split('').some(char => {
-      const code = char.charCodeAt(0);
-      return (code >= 0 && code <= 31) || code === 127;
-    });
+      // Check for control characters separately to avoid ESLint no-control-regex rule
+      const hasControlChars = cursor.split('').some(char => {
+        const code = char.charCodeAt(0);
+        return (code >= 0 && code <= 31) || code === 127;
+      });
 
-    for (const pattern of suspiciousPatterns) {
-      if (pattern.test(cursor)) {
+      for (const pattern of suspiciousPatterns) {
+        if (pattern.test(cursor)) {
+          return {
+            isValid: false,
+            errors: [`${paramName} contains invalid characters`],
+            validationError: {
+              type: 'format',
+              message: 'Cursor contains suspicious or invalid characters',
+              providedValue: cursor,
+              expectedFormat: 'Clean alphanumeric cursor string',
+            },
+            suggestions: [
+              'Use only cursors returned by the API',
+              'Check for encoding or escaping issues',
+              'Verify cursor source and integrity',
+            ],
+          };
+        }
+      }
+
+      // Check for control characters
+      if (hasControlChars) {
         return {
           isValid: false,
-          errors: [`${paramName} contains invalid characters`],
+          errors: [`${paramName} contains control characters`],
           validationError: {
             type: 'format',
-            message: 'Cursor contains suspicious or invalid characters',
+            message: 'Cursor contains control characters',
             providedValue: cursor,
-            expectedFormat: 'Clean alphanumeric cursor string',
+            expectedFormat: 'Clean alphanumeric cursor string without control characters',
           },
           suggestions: [
             'Use only cursors returned by the API',
-            'Check for encoding or escaping issues',
+            'Check for encoding or character corruption',
             'Verify cursor source and integrity',
           ],
         };
       }
-    }
-
-    // Check for control characters
-    if (hasControlChars) {
-      return {
-        isValid: false,
-        errors: [`${paramName} contains control characters`],
-        validationError: {
-          type: 'format',
-          message: 'Cursor contains control characters',
-          providedValue: cursor,
-          expectedFormat: 'Clean alphanumeric cursor string without control characters',
-        },
-        suggestions: [
-          'Use only cursors returned by the API',
-          'Check for encoding or character corruption',
-          'Verify cursor source and integrity',
-        ],
-      };
     }
 
     return {

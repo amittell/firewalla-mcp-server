@@ -392,12 +392,12 @@ Understanding when different error types occur is crucial for proper error handl
 
 **Prevention Patterns**:
 ```bash
-# High-risk queries (likely to timeout)
-search_flows query:"protocol:tcp" limit:2000                    # Too broad
-search_alarms query:"severity:>=low" limit:1000                 # Includes low-severity
-get_bandwidth_usage period:"30d" limit:1000                     # Long time period
+// High-risk queries (likely to timeout)
+search_flows query:"protocol:tcp" limit:2000                    // Too broad
+search_alarms query:"severity:>=low" limit:1000                 // Includes low-severity
+get_bandwidth_usage period:"30d" limit:1000                     // Long time period
 
-# Optimized alternatives
+// Optimized alternatives
 search_flows query:"protocol:tcp AND timestamp:>NOW-1h" limit:500
 search_alarms query:"severity:>=medium" limit:500  
 get_bandwidth_usage period:"24h" limit:500
@@ -614,7 +614,7 @@ function classifyError(error: any, context: any): ErrorType {
 
 1. **Large Search Operations**:
    ```bash
-   # These queries frequently timeout
+   // These queries frequently timeout
    search_flows query:"timestamp:>NOW-7d" limit:2000
    search_alarms query:"severity:>=low" limit:1000
    search_devices query:"online:true" limit:2000
@@ -622,13 +622,13 @@ function classifyError(error: any, context: any): ErrorType {
 
 2. **Complex Correlation Queries**:
    ```bash
-   # Cross-reference operations with large datasets
+   // Cross-reference operations with large datasets
    search_enhanced_cross_reference primary_query:"protocol:tcp" secondary_queries:["severity:high"] limit:5000
    ```
 
 3. **Bandwidth Analysis on Large Networks**:
    ```bash
-   # Heavy processing operations
+   // Heavy processing operations
    get_bandwidth_usage period:"30d" limit:1000
    ```
 
@@ -660,33 +660,33 @@ const timeoutPrevention = {
 
 1. **Parameter Type Errors**:
    ```bash
-   # These cause immediate validation errors
-   search_flows query:"severity:high" limit:"invalid"     # Non-numeric limit
-   get_device_status limit:-1                             # Negative limit
-   search_alarms query:123                                # Non-string query
+   // These cause immediate validation errors
+   search_flows query:"severity:high" limit:"invalid"     // Non-numeric limit
+   get_device_status limit:-1                             // Negative limit
+   search_alarms query:123                                // Non-string query
    ```
 
 2. **Parameter Range Errors**:
    ```bash
-   # Out of range parameters
-   search_flows limit:50000                               # Exceeds maximum
-   get_bandwidth_usage limit:0                            # Below minimum
+   // Out of range parameters
+   search_flows limit:50000                               // Exceeds maximum
+   get_bandwidth_usage limit:0                            // Below minimum
    ```
 
 #### Query Validation (Quick Processing)
 
 1. **Syntax Errors**:
    ```bash
-   # Malformed queries
-   search_flows query:"severity:high AND (protocol:tcp"   # Unmatched parentheses
-   search_alarms query:"severity:\"high"                  # Unmatched quotes
+   // Malformed queries
+   search_flows query:"severity:high AND (protocol:tcp"   // Unmatched parentheses
+   search_alarms query:"severity:\"high"                  // Unmatched quotes
    ```
 
 2. **Field Validation**:
    ```bash
-   # Invalid field names
-   search_flows query:"invalid_field:value"              # Unknown field
-   search_devices query:"non_existent:data"              # Field doesn't exist
+   // Invalid field names
+   search_flows query:"invalid_field:value"              // Unknown field
+   search_devices query:"non_existent:data"              // Field doesn't exist
    ```
 
 ### Error Response Time Patterns
@@ -701,11 +701,11 @@ const errorResponseTimes = {
   timeout_error: {
     network_timeout: '5000-30000ms',      // Network connectivity issues
     processing_timeout: '10000ms+',       // Server processing limits
-    api_timeout: '30000ms+',              # External API timeouts
+    api_timeout: '30000ms+',              // External API timeouts
   },
   rate_limit_error: {
-    detection: '100-500ms',               # Quick API response
-    recovery: '60000ms+',                 # Wait time before retry
+    detection: '100-500ms',               // Quick API response
+    recovery: '60000ms+',                 // Wait time before retry
   }
 }
 ```
@@ -1009,12 +1009,12 @@ async function getDeviceListWithFallback(limit: number = 100) {
 
 #### 1. Check Configuration
 ```bash
-# Verify environment variables
+// Verify environment variables
 echo $FIREWALLA_MSP_TOKEN
 echo $FIREWALLA_MSP_ID  
 echo $FIREWALLA_BOX_ID
 
-# Test basic connectivity
+// Test basic connectivity
 curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
      "https://$FIREWALLA_MSP_ID/v2/boxes/$FIREWALLA_BOX_ID/alarms?limit=1"
 ```

@@ -5,8 +5,6 @@
 
 import {
   ParameterValidator,
-  createErrorResponse,
-  ErrorType,
 } from '../validation/error-handler.js';
 import { withToolTimeout, TimeoutError } from './timeout-manager.js';
 import type { FirewallaClient } from '../firewalla/client.js';
@@ -293,11 +291,8 @@ export class BulkOperationManager {
       };
     } catch (error) {
       // Handle catastrophic failures
-      throw createErrorResponse(
-        `bulk_${operationName}`,
-        `Bulk operation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        ErrorType.UNKNOWN_ERROR
-      );
+      const errorMessage = `Bulk operation failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      throw new Error(errorMessage);
     }
   }
 

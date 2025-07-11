@@ -1018,7 +1018,6 @@ export interface ResponseTransformConfig {
 
 // Re-export validation types from data-validator module
 export type {
-  ValidationResult,
   TypeValidationResult,
 } from './utils/data-validator.js';
 
@@ -1046,4 +1045,31 @@ export interface SanitizationResult {
   wasModified: boolean;
   /** Description of what was modified, if any */
   modifications: string[];
+}
+
+/**
+ * Consolidated validation result interface used across the application
+ */
+export interface ValidationResult {
+  /** Whether the validation passed */
+  isValid: boolean;
+  /** Array of error messages if validation failed */
+  errors: string[];
+  /** Array of warning messages for non-critical issues */
+  warnings?: string[];
+  /** Suggestions for fixing validation errors */
+  suggestions?: string[];
+  /** Sanitized/validated value (if applicable) */
+  sanitizedValue?: unknown;
+  /** Additional metadata about the validation */
+  metadata?: {
+    /** Number of fields validated */
+    fieldsValidated?: number;
+    /** Number of missing required fields */
+    missingFields?: number;
+    /** Number of type mismatches found */
+    typeMismatches?: number;
+    /** Validation execution time in milliseconds */
+    validationTime?: number;
+  };
 }

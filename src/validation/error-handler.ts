@@ -4,6 +4,7 @@
  */
 
 import { FieldValidator } from './field-validator.js';
+import type { ValidationResult } from '../types.js';
 
 /**
  * Interface for validatable objects
@@ -57,11 +58,6 @@ export interface LegacyStandardError {
   validation_errors?: string[];
 }
 
-export interface ValidationResult {
-  isValid: boolean;
-  errors: string[];
-  sanitizedValue?: unknown;
-}
 
 /**
  * Create a standard error response with enhanced error typing

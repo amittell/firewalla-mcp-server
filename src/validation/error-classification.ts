@@ -76,12 +76,22 @@ export const ERROR_PATTERNS = {
     /memcached.*error/i,
   ],
 
-  // Correlation and search errors
+  // Correlation errors
   CORRELATION_ERRORS: [
     /correlation.*failed/i,
+    /cross.*reference.*failed/i,
+    /mapping.*error/i,
+  ],
+
+  // Search-specific errors
+  SEARCH_ERRORS: [
     /search.*failed/i,
     /query.*failed/i,
     /index.*error/i,
+    /search.*timeout/i,
+    /query.*syntax.*error/i,
+    /invalid.*search.*field/i,
+    /search.*limit.*exceeded/i,
   ],
 } as const;
 
@@ -225,6 +235,8 @@ export class ErrorClassifier {
               return ErrorType.CACHE_ERROR;
             case 'CORRELATION_ERRORS':
               return ErrorType.CORRELATION_ERROR;
+            case 'SEARCH_ERRORS':
+              return ErrorType.SEARCH_ERROR;
           }
         }
       }

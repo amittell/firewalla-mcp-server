@@ -6,7 +6,8 @@
 import { queryParser } from '../search/parser.js';
 import { SEARCH_FIELDS, type QueryNode, type FieldQuery, type ComparisonQuery, type RangeQuery } from '../search/types.js';
 import { FIELD_MAPPINGS, type EntityType, type CorrelationFieldName } from './field-mapper.js';
-import { QuerySanitizer, type ValidationResult } from './error-handler.js';
+import { QuerySanitizer } from './error-handler.js';
+import type { ValidationResult } from '../types.js';
 
 /**
  * Detailed error information with position and suggestions

@@ -143,6 +143,144 @@ export interface GetGeographicStatisticsArgs extends ToolArgs {
   limit?: number;
 }
 
+/**
+ * Common search parameter validation helper
+ */
+type CommonSearchValidationResult = {
+  isValid: false;
+  response: ToolResponse;
+} | {
+  isValid: true;
+  limit: number;
+  query: string;
+  cursor?: string;
+  groupBy?: string;
+};
+
+function validateCommonSearchParameters(
+  args: BaseSearchArgs,
+  toolName: string,
+  entityType: 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists'
+): CommonSearchValidationResult {
+  // Validate required limit parameter
+  const limitValidation = ParameterValidator.validateNumber(
+    args.limit,
+    'limit',
+    { required: true, ...getLimitValidationConfig(toolName) }
+  );
+
+  if (!limitValidation.isValid) {
+    return {
+      isValid: false,
+      response: createErrorResponse(
+        toolName,
+        'Parameter validation failed',
+        ErrorType.VALIDATION_ERROR,
+        undefined,
+        limitValidation.errors
+      )
+    };
+  }
+
+  // Validate required query parameter
+  const queryValidation = ParameterValidator.validateRequiredString(
+    args.query,
+    'query'
+  );
+
+  if (!queryValidation.isValid) {
+    return {
+      isValid: false,
+      response: createErrorResponse(
+        toolName,
+        'Query parameter validation failed',
+        ErrorType.VALIDATION_ERROR,
+        undefined,
+        queryValidation.errors
+      )
+    };
+  }
+
+  // Validate field names in the query
+  const fieldValidation = QuerySanitizer.validateQueryFields(
+    args.query,
+    entityType
+  );
+
+  if (!fieldValidation.isValid) {
+    return {
+      isValid: false,
+      response: createErrorResponse(
+        toolName,
+        'Query contains invalid field names',
+        ErrorType.VALIDATION_ERROR,
+        {
+          query: args.query,
+          documentation: entityType === 'alarms'
+            ? 'See /docs/error-handling-guide.md for troubleshooting'
+            : 'See /docs/query-syntax-guide.md for valid field names',
+        },
+        fieldValidation.errors
+      )
+    };
+  }
+
+  // Validate cursor format if provided
+  if (args.cursor !== undefined) {
+    const cursorValidation = ParameterValidator.validateCursor(
+      args.cursor,
+      'cursor'
+    );
+    if (!cursorValidation.isValid) {
+      return {
+        isValid: false,
+        response: createErrorResponse(
+          toolName,
+          'Invalid cursor format',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          cursorValidation.errors
+        )
+      };
+    }
+  }
+
+  // Validate group_by parameter if provided
+  if (args.group_by !== undefined) {
+    const groupByValidation = ParameterValidator.validateEnum(
+      args.group_by,
+      'group_by',
+      SEARCH_FIELDS[entityType],
+      false
+    );
+
+    if (!groupByValidation.isValid) {
+      return {
+        isValid: false,
+        response: createErrorResponse(
+          toolName,
+          'Invalid group_by field',
+          ErrorType.VALIDATION_ERROR,
+          {
+            group_by: args.group_by,
+            valid_fields: SEARCH_FIELDS[entityType],
+            documentation: 'See /docs/query-syntax-guide.md for valid fields',
+          },
+          groupByValidation.errors
+        )
+      };
+    }
+  }
+
+  return {
+    isValid: true,
+    limit: args.limit,
+    query: args.query,
+    cursor: args.cursor,
+    groupBy: args.group_by,
+  };
+}
+
 export class SearchFlowsHandler extends BaseToolHandler {
   name = 'search_flows';
   description = `Advanced network flow searching with powerful query syntax and enhanced reliability. Requires query and limit parameters. Data cached for 15 seconds, use force_refresh=true for real-time network analysis.
@@ -190,81 +328,15 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
     const startTime = Date.now();
 
     try {
-      // Validate required parameters
-      const limitValidation = ParameterValidator.validateNumber(
-        searchArgs.limit,
-        'limit',
-        { required: true, ...getLimitValidationConfig(this.name) }
-      );
-
-      if (!limitValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Parameter validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          limitValidation.errors
-        );
-      }
-
-      const queryValidation = ParameterValidator.validateRequiredString(
-        searchArgs.query,
-        'query'
-      );
-
-      if (!queryValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Query parameter validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          queryValidation.errors
-        );
-      }
-
-      // Validate field names in the query
-      const fieldValidation = QuerySanitizer.validateQueryFields(
-        searchArgs.query,
+      // Validate common search parameters
+      const validation = validateCommonSearchParameters(
+        searchArgs,
+        this.name,
         'flows'
       );
 
-      if (!fieldValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Query contains invalid field names',
-          ErrorType.VALIDATION_ERROR,
-          {
-            query: searchArgs.query,
-            documentation:
-              'See /docs/query-syntax-guide.md for valid field names',
-          },
-          fieldValidation.errors
-        );
-      }
-
-      // Validate group_by parameter if provided
-      if (searchArgs.group_by !== undefined) {
-        const groupByValidation = ParameterValidator.validateEnum(
-          searchArgs.group_by,
-          'group_by',
-          SEARCH_FIELDS.flows,
-          false // optional parameter
-        );
-
-        if (!groupByValidation.isValid) {
-          return createErrorResponse(
-            this.name,
-            'Invalid group_by parameter',
-            ErrorType.VALIDATION_ERROR,
-            {
-              provided_value: searchArgs.group_by,
-              valid_values: SEARCH_FIELDS.flows,
-              documentation:
-                'See /docs/query-syntax-guide.md for valid field names',
-            },
-            groupByValidation.errors
-          );
-        }
+      if (!validation.isValid) {
+        return validation.response;
       }
 
       // Validate cursor format if provided
@@ -507,77 +579,15 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
     const startTime = Date.now();
 
     try {
-      // Validate required parameters
-      const limitValidation = ParameterValidator.validateNumber(
-        searchArgs.limit,
-        'limit',
-        { required: true, ...getLimitValidationConfig(this.name) }
-      );
-
-      if (!limitValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Parameter validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          limitValidation.errors
-        );
-      }
-
-      const queryValidation = ParameterValidator.validateRequiredString(
-        searchArgs.query,
-        'query'
-      );
-
-      if (!queryValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Query parameter validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          queryValidation.errors
-        );
-      }
-
-      // Validate field names in the query
-      const fieldValidation = QuerySanitizer.validateQueryFields(
-        searchArgs.query,
+      // Validate common search parameters
+      const validation = validateCommonSearchParameters(
+        searchArgs,
+        this.name,
         'alarms'
       );
 
-      if (!fieldValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Query contains invalid field names',
-          ErrorType.VALIDATION_ERROR,
-          {
-            query: searchArgs.query,
-            documentation:
-              'See /docs/error-handling-guide.md for troubleshooting',
-          },
-          fieldValidation.errors
-        );
-      }
-
-      // Validate cursor format if provided
-      if (searchArgs.cursor !== undefined) {
-        const cursorValidation = ParameterValidator.validateCursor(
-          searchArgs.cursor,
-          'cursor'
-        );
-        if (!cursorValidation.isValid) {
-          return createErrorResponse(
-            this.name,
-            'Invalid cursor format',
-            ErrorType.VALIDATION_ERROR,
-            {
-              provided_value: searchArgs.cursor,
-              documentation:
-                'Cursors should be obtained from previous response next_cursor field',
-            },
-            cursorValidation.errors
-          );
-        }
+      if (!validation.isValid) {
+        return validation.response;
       }
 
       // Validate force_refresh parameter if provided
@@ -743,77 +753,15 @@ For rule management operations, see pause_rule and resume_rule tools.`;
     const startTime = Date.now();
 
     try {
-      // Validate required parameters
-      const limitValidation = ParameterValidator.validateNumber(
-        searchArgs.limit,
-        'limit',
-        { required: true, ...getLimitValidationConfig(this.name) }
-      );
-
-      if (!limitValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Parameter validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          limitValidation.errors
-        );
-      }
-
-      const queryValidation = ParameterValidator.validateRequiredString(
-        searchArgs.query,
-        'query'
-      );
-
-      if (!queryValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Query parameter validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          queryValidation.errors
-        );
-      }
-
-      // Validate field names in the query
-      const fieldValidation = QuerySanitizer.validateQueryFields(
-        searchArgs.query,
+      // Validate common search parameters
+      const validation = validateCommonSearchParameters(
+        searchArgs,
+        this.name,
         'rules'
       );
 
-      if (!fieldValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Query contains invalid field names',
-          ErrorType.VALIDATION_ERROR,
-          {
-            query: searchArgs.query,
-            documentation:
-              'See /docs/query-syntax-guide.md for valid field names',
-          },
-          fieldValidation.errors
-        );
-      }
-
-      // Validate cursor format if provided
-      if (searchArgs.cursor !== undefined) {
-        const cursorValidation = ParameterValidator.validateCursor(
-          searchArgs.cursor,
-          'cursor'
-        );
-        if (!cursorValidation.isValid) {
-          return createErrorResponse(
-            this.name,
-            'Invalid cursor format',
-            ErrorType.VALIDATION_ERROR,
-            {
-              provided_value: searchArgs.cursor,
-              documentation:
-                'Cursors should be obtained from previous response next_cursor field',
-            },
-            cursorValidation.errors
-          );
-        }
+      if (!validation.isValid) {
+        return validation.response;
       }
 
       const searchTools = createSearchTools(firewalla);
@@ -977,56 +925,15 @@ See the Data Normalization Guide for field details.`;
   ): Promise<ToolResponse> {
     const searchArgs = args as SearchDevicesArgs;
     try {
-      // Validate required parameters
-      const limitValidation = ParameterValidator.validateNumber(
-        searchArgs.limit,
-        'limit',
-        { required: true, ...getLimitValidationConfig(this.name) }
-      );
-
-      if (!limitValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Parameter validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          limitValidation.errors
-        );
-      }
-
-      const queryValidation = ParameterValidator.validateRequiredString(
-        searchArgs.query,
-        'query'
-      );
-
-      if (!queryValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Query parameter validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          queryValidation.errors
-        );
-      }
-
-      // Validate field names in the query
-      const fieldValidation = QuerySanitizer.validateQueryFields(
-        searchArgs.query,
+      // Validate common search parameters
+      const validation = validateCommonSearchParameters(
+        searchArgs,
+        this.name,
         'devices'
       );
 
-      if (!fieldValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Query contains invalid field names',
-          ErrorType.VALIDATION_ERROR,
-          {
-            query: searchArgs.query,
-            documentation:
-              'See /docs/query-syntax-guide.md for valid field names',
-          },
-          fieldValidation.errors
-        );
+      if (!validation.isValid) {
+        return validation.response;
       }
 
       // Validate that both cursor and offset are not provided simultaneously
@@ -1202,77 +1109,15 @@ See the Target List Management guide for configuration details.`;
   ): Promise<ToolResponse> {
     const searchArgs = args as SearchTargetListsArgs;
     try {
-      // Validate required parameters
-      const limitValidation = ParameterValidator.validateNumber(
-        searchArgs.limit,
-        'limit',
-        { required: true, ...getLimitValidationConfig(this.name) }
-      );
-
-      if (!limitValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Parameter validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          limitValidation.errors
-        );
-      }
-
-      const queryValidation = ParameterValidator.validateRequiredString(
-        searchArgs.query,
-        'query'
-      );
-
-      if (!queryValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Query parameter validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          queryValidation.errors
-        );
-      }
-
-      // Validate field names in the query
-      const fieldValidation = QuerySanitizer.validateQueryFields(
-        searchArgs.query,
+      // Validate common search parameters
+      const validation = validateCommonSearchParameters(
+        searchArgs,
+        this.name,
         'target_lists'
       );
 
-      if (!fieldValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Query contains invalid field names',
-          ErrorType.VALIDATION_ERROR,
-          {
-            query: searchArgs.query,
-            documentation:
-              'See /docs/query-syntax-guide.md for valid field names',
-          },
-          fieldValidation.errors
-        );
-      }
-
-      // Validate cursor format if provided
-      if (searchArgs.cursor !== undefined) {
-        const cursorValidation = ParameterValidator.validateCursor(
-          searchArgs.cursor,
-          'cursor'
-        );
-        if (!cursorValidation.isValid) {
-          return createErrorResponse(
-            this.name,
-            'Invalid cursor format',
-            ErrorType.VALIDATION_ERROR,
-            {
-              provided_value: searchArgs.cursor,
-              documentation:
-                'Cursors should be obtained from previous response next_cursor field',
-            },
-            cursorValidation.errors
-          );
-        }
+      if (!validation.isValid) {
+        return validation.response;
       }
 
       const searchTools = createSearchTools(firewalla);

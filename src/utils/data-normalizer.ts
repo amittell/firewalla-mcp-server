@@ -36,7 +36,7 @@ export function safeValue(value: any, defaultValue?: any): any {
     return defaultValue ?? null;
   }
 
-  if (typeof value === 'number' && !isFinite(value)) {
+  if (typeof value === 'number' && !Number.isFinite(value)) {
     return defaultValue ?? null;
   }
 
@@ -77,12 +77,12 @@ function safeNumber(value: any): number | null {
   }
 
   if (typeof value === 'number') {
-    return isFinite(value) ? value : null;
+    return Number.isFinite(value) ? value : null;
   }
 
   if (typeof value === 'string') {
     const parsed = Number(value.trim());
-    return isFinite(parsed) ? parsed : null;
+    return Number.isFinite(parsed) ? parsed : null;
   }
 
   return null;
@@ -161,7 +161,7 @@ export function sanitizeFieldValue(
     modifications.push('trimmed whitespace');
   }
   // Handle NaN numbers
-  else if (typeof value === 'number' && !isFinite(value)) {
+  else if (typeof value === 'number' && !Number.isFinite(value)) {
     processedValue = defaultValue ?? 0;
     wasModified = true;
     modifications.push('replaced NaN with default');

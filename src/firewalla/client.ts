@@ -51,7 +51,6 @@ import {
 import {
   safeAccess,
   safeValue,
-  safeGeoData,
 } from '../utils/data-normalizer.js';
 import {
   validateResponseStructure,
@@ -2429,7 +2428,7 @@ export class FirewallaClient {
       ...alarm,
       remote: {
         ...alarm.remote,
-        geo: safeGeoData(geoData),
+        geo: geoData,
       },
     };
 
