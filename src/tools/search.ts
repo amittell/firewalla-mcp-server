@@ -28,7 +28,7 @@ import {
 } from '../validation/field-mapper.js';
 import { FieldValidator } from '../validation/field-validator.js';
 import { ErrorFormatter } from '../validation/error-formatter.js';
-import { validateCountryCodes } from '../utils/geographic.js';
+import { validateCountryCodes, enrichObjectWithGeo } from '../utils/geographic.js';
 
 /**
  * Configuration interface for risk thresholds and performance settings
@@ -701,6 +701,9 @@ export class SearchEngine {
 
       // Apply client-side offset if needed (for backward compatibility)
       let results = response.results || [];
+      
+      // Enrich results with geographic data
+      results = results.map(flow => enrichObjectWithGeo(flow));
       if (params.offset && !params.cursor) {
         results = results.slice(params.offset);
       }
@@ -784,6 +787,9 @@ export class SearchEngine {
 
       // Apply client-side offset if needed (for backward compatibility)
       let results = response.results || [];
+      
+      // Enrich results with geographic data
+      results = results.map(flow => enrichObjectWithGeo(flow));
       if (params.offset && !params.cursor) {
         results = results.slice(params.offset);
       }
@@ -876,6 +882,10 @@ export class SearchEngine {
     secondary_queries: string[];
     correlation_params: EnhancedCorrelationParams;
     limit?: number;
+    entity_types?: {
+      primary?: 'flows' | 'alarms' | 'rules' | 'devices';
+      secondary?: Array<'flows' | 'alarms' | 'rules' | 'devices'>;
+    };
   }): Promise<any> {
     const startTime = Date.now();
 
@@ -956,11 +966,16 @@ export class SearchEngine {
         );
       }
 
-      // Determine entity types based on query patterns
-      const primaryType = suggestEntityType(params.primary_query) || 'flows';
-      const secondaryTypes = params.secondary_queries.map(
-        q => suggestEntityType(q) || 'alarms'
-      );
+      // Determine entity types (use provided types or fall back to pattern matching)
+      const primaryType = params.entity_types?.primary || 
+                         suggestEntityType(params.primary_query) || 
+                         'flows';
+      
+      const secondaryTypes = params.secondary_queries.map((q, index) => {
+        return params.entity_types?.secondary?.[index] || 
+               suggestEntityType(q) || 
+               'alarms';
+      });
 
       // Execute primary query
       const primaryResult = await this.executeSearchByType(
@@ -1074,6 +1089,10 @@ export class SearchEngine {
     secondary_queries: string[];
     correlation_field: string;
     limit?: number;
+    entity_types?: {
+      primary?: 'flows' | 'alarms' | 'rules' | 'devices';
+      secondary?: Array<'flows' | 'alarms' | 'rules' | 'devices'>;
+    };
   }): Promise<any> {
     const startTime = Date.now();
 
@@ -1123,11 +1142,16 @@ export class SearchEngine {
         );
       }
 
-      // Determine entity types based on query patterns
-      const primaryType = suggestEntityType(params.primary_query) || 'flows';
-      const secondaryTypes = params.secondary_queries.map(
-        q => suggestEntityType(q) || 'alarms'
-      );
+      // Determine entity types (use provided types or fall back to pattern matching)
+      const primaryType = params.entity_types?.primary || 
+                         suggestEntityType(params.primary_query) || 
+                         'flows';
+      
+      const secondaryTypes = params.secondary_queries.map((q, index) => {
+        return params.entity_types?.secondary?.[index] || 
+               suggestEntityType(q) || 
+               'alarms';
+      });
 
       // Execute primary query using generic method
       const primaryResult = await this.executeSearchByType(
@@ -1672,7 +1696,7 @@ export class SearchEngine {
   }
 
   /**
-   * Build geographic query string from filters
+   * Build geographic query string from filters using FirewallaClient
    */
   private buildGeographicQuery(filters: {
     countries?: string[];
@@ -1685,82 +1709,8 @@ export class SearchEngine {
     exclude_vpn?: boolean;
     min_risk_score?: number;
   }): string {
-    const queryParts: string[] = [];
-
-    // Build OR queries for array filters
-    if (filters.countries && filters.countries.length > 0) {
-      const countryQueries = filters.countries.map(
-        country => `country:${country}`
-      );
-      queryParts.push(
-        countryQueries.length === 1
-          ? countryQueries[0]
-          : `(${countryQueries.join(' OR ')})`
-      );
-    }
-
-    if (filters.continents && filters.continents.length > 0) {
-      const continentQueries = filters.continents.map(
-        continent => `continent:${continent}`
-      );
-      queryParts.push(
-        continentQueries.length === 1
-          ? continentQueries[0]
-          : `(${continentQueries.join(' OR ')})`
-      );
-    }
-
-    if (filters.regions && filters.regions.length > 0) {
-      const regionQueries = filters.regions.map(region => `region:"${region}"`);
-      queryParts.push(
-        regionQueries.length === 1
-          ? regionQueries[0]
-          : `(${regionQueries.join(' OR ')})`
-      );
-    }
-
-    if (filters.cities && filters.cities.length > 0) {
-      const cityQueries = filters.cities.map(city => `city:"${city}"`);
-      queryParts.push(
-        cityQueries.length === 1
-          ? cityQueries[0]
-          : `(${cityQueries.join(' OR ')})`
-      );
-    }
-
-    if (filters.asns && filters.asns.length > 0) {
-      const asnQueries = filters.asns.map(asn => `asn:${asn}`);
-      queryParts.push(
-        asnQueries.length === 1 ? asnQueries[0] : `(${asnQueries.join(' OR ')})`
-      );
-    }
-
-    if (filters.hosting_providers && filters.hosting_providers.length > 0) {
-      const providerQueries = filters.hosting_providers.map(
-        provider => `hosting_provider:${provider}`
-      );
-      queryParts.push(
-        providerQueries.length === 1
-          ? providerQueries[0]
-          : `(${providerQueries.join(' OR ')})`
-      );
-    }
-
-    // Boolean filters
-    if (filters.exclude_cloud) {
-      queryParts.push('NOT is_cloud_provider:true');
-    }
-
-    if (filters.exclude_vpn) {
-      queryParts.push('NOT is_vpn:true');
-    }
-
-    // Numeric filters
-    if (filters.min_risk_score !== undefined) {
-      queryParts.push(`geographic_risk_score:>=${filters.min_risk_score}`);
-    }
-
-    return queryParts.join(' AND ');
+    // Use FirewallaClient's buildGeoQuery method for proper API syntax
+    return this.firewalla.buildGeoQuery(filters);
   }
 
   /**
@@ -1890,50 +1840,8 @@ export class SearchEngine {
     exclude_known_providers?: boolean;
     threat_analysis?: boolean;
   }): string {
-    const queryParts: string[] = [];
-
-    // Build OR queries for array filters
-    if (filters.countries && filters.countries.length > 0) {
-      const countryQueries = filters.countries.map(
-        country => `country:${country}`
-      );
-      queryParts.push(
-        countryQueries.length === 1
-          ? countryQueries[0]
-          : `(${countryQueries.join(' OR ')})`
-      );
-    }
-
-    if (filters.continents && filters.continents.length > 0) {
-      const continentQueries = filters.continents.map(
-        continent => `continent:${continent}`
-      );
-      queryParts.push(
-        continentQueries.length === 1
-          ? continentQueries[0]
-          : `(${continentQueries.join(' OR ')})`
-      );
-    }
-
-    if (filters.regions && filters.regions.length > 0) {
-      const regionQueries = filters.regions.map(region => `region:"${region}"`);
-      queryParts.push(
-        regionQueries.length === 1
-          ? regionQueries[0]
-          : `(${regionQueries.join(' OR ')})`
-      );
-    }
-
-    // Boolean filters for alarms
-    if (filters.high_risk_countries) {
-      queryParts.push('geographic_risk_score:>=7');
-    }
-
-    if (filters.exclude_known_providers) {
-      queryParts.push('NOT is_cloud_provider:true AND NOT hosting_provider:*');
-    }
-
-    return queryParts.join(' AND ');
+    // Use FirewallaClient's buildGeoQuery method for proper API syntax
+    return this.firewalla.buildGeoQuery(filters);
   }
 
   /**

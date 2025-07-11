@@ -19,6 +19,7 @@
  */
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import { createHash } from 'crypto';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
 import {
   FirewallaConfig,
@@ -48,10 +49,7 @@ import {
   getGeographicDataForIP,
   normalizeIP,
 } from '../utils/geographic.js';
-import {
-  safeAccess,
-  safeValue,
-} from '../utils/data-normalizer.js';
+import { safeAccess, safeValue } from '../utils/data-normalizer.js';
 import {
   validateResponseStructure,
   normalizeTimestamps,
@@ -254,7 +252,9 @@ export class FirewallaClient {
         : 'no-params';
 
     // Include box ID, method, endpoint, and parameters with separators
-    return `fw:${this.config.boxId}:${method}:${endpoint.replace(/[^a-zA-Z0-9]/g, '_')}:${Buffer.from(paramStr).toString('base64').substring(0, 32)}`;
+    // Use SHA256 hash to ensure unique cache keys without truncation issues
+    const paramHash = createHash('sha256').update(paramStr).digest('hex').substring(0, 32);
+    return `fw:${this.config.boxId}:${method}:${endpoint.replace(/[^a-zA-Z0-9]/g, '_')}:${paramHash}`;
   }
 
   /**
@@ -294,13 +294,48 @@ export class FirewallaClient {
       .trim();
   }
 
+  /**
+   * Filter parameters for GET requests to /v2/* endpoints to only include allowed scalar fields
+   * Fixes issue where complex objects get serialized as [object Object] causing "Bad Request" errors
+   */
+  private filterParametersForDataEndpoints(
+    method: string,
+    endpoint: string,
+    params?: Record<string, unknown>
+  ): Record<string, unknown> | undefined {
+    // Only filter GET requests to raw /v2/* data endpoints
+    if (method !== 'GET' || !endpoint.startsWith('/v2/') || !params) {
+      return params;
+    }
+
+    // Skip filtering for /v2/*/search endpoints that accept JSON bodies
+    if (endpoint.includes('/search')) {
+      return params;
+    }
+
+    // Allowed scalar parameters for raw /v2/* endpoints
+    const allowedParams = ['query', 'limit', 'sortBy', 'groupBy', 'cursor'];
+    
+    const filtered: Record<string, unknown> = {};
+    
+    for (const [key, value] of Object.entries(params)) {
+      if (allowedParams.includes(key) && value !== undefined) {
+        filtered[key] = value;
+      }
+    }
+
+    return filtered;
+  }
+
   private async request<T>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     endpoint: string,
     params?: Record<string, unknown>,
     cacheable = true
   ): Promise<T> {
-    const cacheKey = this.getCacheKey(endpoint, params, method);
+    // Filter parameters for raw /v2/* data endpoints to prevent "Bad Request" errors
+    const filteredParams = this.filterParametersForDataEndpoints(method, endpoint, params);
+    const cacheKey = this.getCacheKey(endpoint, filteredParams, method);
 
     if (cacheable && method === 'GET') {
       const cached = this.getFromCache<T>(cacheKey);
@@ -314,7 +349,7 @@ export class FirewallaClient {
 
       switch (method) {
         case 'GET':
-          response = await this.api.get(endpoint, { params });
+          response = await this.api.get(endpoint, { params: filteredParams });
           break;
         case 'POST':
           response = await this.api.post(endpoint, params);
@@ -323,7 +358,7 @@ export class FirewallaClient {
           response = await this.api.put(endpoint, params);
           break;
         case 'DELETE':
-          response = await this.api.delete(endpoint, { params });
+          response = await this.api.delete(endpoint, { params: filteredParams });
           break;
       }
 
@@ -382,6 +417,11 @@ export class FirewallaClient {
         if (status) {
           switch (status) {
             case 400:
+              console.log('API 400 Error Details:', {
+                url,
+                params: filteredParams,
+                response: error.response?.data
+              });
               errorMessage = `Bad Request: Invalid parameters sent to ${url}`;
               break;
             case 401:
@@ -479,6 +519,19 @@ export class FirewallaClient {
     };
 
     if (query) {
+      // Convert severity:X queries to type:>=X queries since API doesn't understand severity
+      if (typeof query === 'string') {
+        query = query.replace(/severity:(high|medium|low|critical)/gi, (match: string, severity: string) => {
+          const severityMap: Record<string, number> = {
+            low: 1,
+            medium: 4,
+            high: 8,
+            critical: 12,
+          };
+          const minType = severityMap[severity.toLowerCase()];
+          return minType !== undefined ? `type:>=${minType}` : match;
+        });
+      }
       params.query = query;
     }
     if (groupBy) {
@@ -488,10 +541,7 @@ export class FirewallaClient {
       params.cursor = cursor;
     }
 
-    // Use global endpoint with box parameter for filtering
-    if (this.config.boxId) {
-      params.box = this.config.boxId;
-    }
+    // Use global endpoint - box filtering happens via authentication
     const endpoint = `/v2/alarms`;
 
     const response = await this.request<{
@@ -2561,9 +2611,12 @@ export class FirewallaClient {
       return flow;
     });
 
+    // Enrich flows with geographic data
+    const enrichedFlows = flows.map(flow => this.enrichWithGeographicData(flow));
+
     return {
-      count: response.count || flows.length,
-      results: flows,
+      count: response.count || enrichedFlows.length,
+      results: enrichedFlows,
       next_cursor: response.next_cursor,
       aggregations: response.aggregations,
       metadata: {
@@ -2648,6 +2701,20 @@ export class FirewallaClient {
           ? `${params.query} AND status:1`
           : 'status:1';
       }
+      
+      // Convert severity:X queries to type:>=X queries since API doesn't understand severity
+      if (params.query && typeof params.query === 'string') {
+        params.query = params.query.replace(/severity:(high|medium|low|critical)/gi, (match: string, severity: string) => {
+          const severityMap: Record<string, number> = {
+            low: 1,
+            medium: 4,
+            high: 8,
+            critical: 12,
+          };
+          const minType = severityMap[severity.toLowerCase()];
+          return minType !== undefined ? `type:>=${minType}` : match;
+        });
+      }
 
       if (options.min_severity && typeof options.min_severity === 'string') {
         const severityMap: Record<string, number> = {
@@ -2669,6 +2736,39 @@ export class FirewallaClient {
         }
       }
 
+      // Build request parameters for GET endpoint
+      // Use the standard /v2/alarms endpoint with query parameter
+      const requestParams: Record<string, unknown> = {
+        limit,
+      };
+      
+      // Note: The box parameter is not supported by the alarms endpoint
+      // Box filtering happens automatically based on API authentication
+      
+      // Only include query if it's meaningful
+      if (params.query && params.query !== 'undefined') {
+        requestParams.query = params.query;
+      }
+      
+      // Include sortBy, groupBy if provided
+      // Convert timestamp:desc to ts:desc for API compatibility
+      if (params.sortBy) {
+        requestParams.sortBy = params.sortBy === 'timestamp:desc' ? 'ts:desc' : 
+                             params.sortBy === 'timestamp:asc' ? 'ts:asc' : 
+                             params.sortBy;
+      }
+      if (params.groupBy) {
+        requestParams.groupBy = params.groupBy;
+      }
+      
+      // Only include cursor if present
+      if (params.cursor) {
+        requestParams.cursor = params.cursor;
+      }
+
+      // Log parameters for debugging
+      logger.info('searchAlarms: Making GET request with params:', requestParams);
+      
       // Enhanced API request with better error handling
       let response;
       try {
@@ -2677,7 +2777,7 @@ export class FirewallaClient {
           results: any[];
           next_cursor?: string;
           aggregations?: any;
-        }>('GET', `/v2/alarms`, params);
+        }>('GET', `/v2/alarms`, requestParams);
       } catch (apiError) {
         if (apiError instanceof Error) {
           if (apiError.message.includes('timeout')) {
@@ -2809,9 +2909,12 @@ export class FirewallaClient {
         })
         .filter(alarm => alarm.gid && alarm.gid !== 'unknown'); // Filter out invalid alarms
 
+      // Enrich alarms with geographic data
+      const enrichedAlarms = alarms.map(alarm => this.enrichAlarmWithGeographicData(alarm));
+
       return {
-        count: response.count || alarms.length,
-        results: alarms,
+        count: response.count || enrichedAlarms.length,
+        results: enrichedAlarms,
         next_cursor: response.next_cursor,
         aggregations: response.aggregations,
         metadata: {
@@ -3695,22 +3798,34 @@ export class FirewallaClient {
 
   /**
    * Multi-entity searches with correlation across different data types
+   * Enhanced with proper entity type handling
    */
   @optimizeResponse('cross-reference')
   async searchCrossReference(
     primaryQuery: SearchQuery,
     secondaryQueries: Record<string, SearchQuery>,
     correlationField: string,
-    options: SearchOptions = {}
+    options: SearchOptions = {},
+    entityTypes?: {
+      primary?: 'flows' | 'alarms' | 'rules' | 'devices';
+      secondary?: Record<string, 'flows' | 'alarms' | 'rules' | 'devices'>;
+    }
   ): Promise<CrossReferenceResult> {
     try {
-      // Execute primary search first
-      const primary = await this.searchFlows(primaryQuery, options);
+      // Determine primary entity type (default to flows for backward compatibility)
+      const primaryEntityType = entityTypes?.primary || 'flows';
+      
+      // Execute primary search with proper entity type
+      const primary = await this.executeSearchByEntityType(
+        primaryEntityType, 
+        primaryQuery, 
+        options
+      );
 
       // Extract correlation values from primary results
       const correlationValues = new Set<string>();
-      primary.results.forEach(flow => {
-        const value = this.extractFieldValue(flow, correlationField);
+      primary.results.forEach(result => {
+        const value = this.extractFieldValue(result, correlationField);
         if (value) {
           correlationValues.add(String(value));
         }
@@ -3738,16 +3853,16 @@ export class FirewallaClient {
             : correlationFilter,
         };
 
-        // Execute appropriate search based on query name/type
-        if (name.includes('alarm')) {
-          secondary[name] = await this.searchAlarms(enhancedQuery, options);
-        } else if (name.includes('rule')) {
-          secondary[name] = await this.searchRules(enhancedQuery, options);
-        } else if (name.includes('device')) {
-          secondary[name] = await this.searchDevices(enhancedQuery, options);
-        } else {
-          secondary[name] = await this.searchFlows(enhancedQuery, options);
-        }
+        // Determine secondary entity type
+        const secondaryEntityType = entityTypes?.secondary?.[name] || 
+                                   this.inferEntityTypeFromName(name);
+
+        // Execute appropriate search based on entity type
+        secondary[name] = await this.executeSearchByEntityType(
+          secondaryEntityType,
+          enhancedQuery,
+          options
+        );
       }
 
       // Calculate correlation statistics
@@ -3778,6 +3893,45 @@ export class FirewallaClient {
         `Failed to search cross reference: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
+  }
+
+  /**
+   * Execute search based on entity type
+   */
+  private async executeSearchByEntityType(
+    entityType: 'flows' | 'alarms' | 'rules' | 'devices',
+    query: SearchQuery,
+    options: SearchOptions
+  ): Promise<SearchResult<any>> {
+    switch (entityType) {
+      case 'flows':
+        return this.searchFlows(query, options);
+      case 'alarms':
+        return this.searchAlarms(query, options);
+      case 'rules':
+        return this.searchRules(query, options);
+      case 'devices':
+        return this.searchDevices(query, options);
+      default:
+        throw new Error(`Unsupported entity type: ${entityType}`);
+    }
+  }
+
+  /**
+   * Infer entity type from query name (fallback for backward compatibility)
+   */
+  private inferEntityTypeFromName(name: string): 'flows' | 'alarms' | 'rules' | 'devices' {
+    const lowerName = name.toLowerCase();
+    
+    if (lowerName.includes('alarm')) {
+      return 'alarms';
+    } else if (lowerName.includes('rule')) {
+      return 'rules';
+    } else if (lowerName.includes('device')) {
+      return 'devices';
+    } 
+      return 'flows'; // Default fallback
+    
   }
 
   /**
@@ -4336,6 +4490,121 @@ export class FirewallaClient {
   }
 
   /**
+   * Build geographic query string from filters for Firewalla API
+   * 
+   * Converts geographic filter objects into API-compatible query syntax.
+   * Supports countries, continents, regions, cities, ASNs, hosting providers,
+   * and boolean exclusion filters.
+   * 
+   * @param filters - Geographic filter configuration
+   * @returns Query string compatible with Firewalla API
+   */
+  buildGeoQuery(filters: {
+    countries?: string[];
+    continents?: string[];
+    regions?: string[];
+    cities?: string[];
+    asns?: string[];
+    hosting_providers?: string[];
+    exclude_cloud?: boolean;
+    exclude_vpn?: boolean;
+    min_risk_score?: number;
+    // Alarm-specific filters
+    high_risk_countries?: boolean;
+    exclude_known_providers?: boolean;
+    threat_analysis?: boolean;
+  }): string {
+    const queryParts: string[] = [];
+
+    // Build OR queries for array filters
+    if (filters.countries && filters.countries.length > 0) {
+      const countryQueries = filters.countries.map(
+        country => `country:"${country}"`
+      );
+      queryParts.push(
+        countryQueries.length === 1
+          ? countryQueries[0]
+          : `(${countryQueries.join(' OR ')})`
+      );
+    }
+
+    if (filters.continents && filters.continents.length > 0) {
+      const continentQueries = filters.continents.map(
+        continent => `continent:"${continent}"`
+      );
+      queryParts.push(
+        continentQueries.length === 1
+          ? continentQueries[0]
+          : `(${continentQueries.join(' OR ')})`
+      );
+    }
+
+    if (filters.regions && filters.regions.length > 0) {
+      const regionQueries = filters.regions.map(region => `region:"${region}"`);
+      queryParts.push(
+        regionQueries.length === 1
+          ? regionQueries[0]
+          : `(${regionQueries.join(' OR ')})`
+      );
+    }
+
+    if (filters.cities && filters.cities.length > 0) {
+      const cityQueries = filters.cities.map(city => `city:"${city}"`);
+      queryParts.push(
+        cityQueries.length === 1
+          ? cityQueries[0]
+          : `(${cityQueries.join(' OR ')})`
+      );
+    }
+
+    if (filters.asns && filters.asns.length > 0) {
+      const asnQueries = filters.asns.map(asn => `asn:"${asn}"`);
+      queryParts.push(
+        asnQueries.length === 1 ? asnQueries[0] : `(${asnQueries.join(' OR ')})`
+      );
+    }
+
+    if (filters.hosting_providers && filters.hosting_providers.length > 0) {
+      const providerQueries = filters.hosting_providers.map(
+        provider => `hosting_provider:"${provider}"`
+      );
+      queryParts.push(
+        providerQueries.length === 1
+          ? providerQueries[0]
+          : `(${providerQueries.join(' OR ')})`
+      );
+    }
+
+    // Boolean filters
+    if (filters.exclude_cloud === true) {
+      queryParts.push('NOT is_cloud_provider:true');
+    }
+
+    if (filters.exclude_vpn === true) {
+      queryParts.push('NOT is_vpn:true');
+    }
+
+    // Numeric filters
+    if (filters.min_risk_score !== undefined && 
+        typeof filters.min_risk_score === 'number' && 
+        filters.min_risk_score >= 0) {
+      queryParts.push(`geographic_risk_score:>=${filters.min_risk_score}`);
+    }
+
+    // Alarm-specific boolean filters
+    if (filters.high_risk_countries === true) {
+      queryParts.push('geographic_risk_score:>=7');
+    }
+
+    if (filters.exclude_known_providers === true) {
+      queryParts.push('NOT is_cloud_provider:true AND NOT hosting_provider:*');
+    }
+
+    // Note: threat_analysis is typically handled by the API server,
+    // not as a query filter, so we don't add it to the query string
+
+    return queryParts.join(' AND ');
+  }
 
   /**
    * Extract field value from object using dot notation
