@@ -3,17 +3,17 @@
  * Swappable later for StatsD/Prometheus without touching call-sites.
  */
 
-type Tags = Record<string, string | number | boolean>;
+// Tags parameter removed for simplification - kept for future StatsD/Prometheus compatibility
 
 class InMemoryMetrics {
   private counters = new Map<string, number>();
   private timings = new Map<string, number[]>();
 
-  count(name: string, delta = 1, _tags?: Tags): void {
+  count(name: string, delta = 1): void {
     this.counters.set(name, (this.counters.get(name) ?? 0) + delta);
   }
 
-  timing(name: string, value: number, _tags?: Tags): void {
+  timing(name: string, value: number): void {
     if (!this.timings.has(name)) {
       this.timings.set(name, []);
     }

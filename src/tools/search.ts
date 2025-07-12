@@ -176,6 +176,119 @@ export class SearchEngine {
   }
 
   /**
+   * Validate basic search parameters
+   */
+  private validateBasicSearchParams(params: any, _methodName: string): void {
+    if (
+      !params ||
+      typeof params !== 'object' ||
+      !params.query ||
+      typeof params.query !== 'string' ||
+      !params.query.trim()
+    ) {
+      throw new Error(
+        'Parameters object with query property is required and query must be a non-empty string'
+      );
+    }
+  }
+
+  /**
+   * Validate correlation field count
+   */
+  private validateCorrelationFieldCount(
+    fields: string[] | string,
+    maxFields: number = 5
+  ): void {
+    const fieldArray = Array.isArray(fields)
+      ? fields
+      : fields.split(',').map(f => f.trim());
+    if (fieldArray.length > maxFields) {
+      const excessFields = fieldArray.slice(maxFields);
+      throw new Error(
+        `Maximum ${maxFields} correlation fields allowed, but ${fieldArray.length} provided. Please remove these fields: ${excessFields.join(', ')}`
+      );
+    }
+  }
+
+  /**
+   * Validate geographic filters if provided
+   */
+  private validateGeographicFilters(geographic_filters: any): void {
+    if (
+      geographic_filters !== undefined &&
+      (geographic_filters === null || typeof geographic_filters !== 'object')
+    ) {
+      throw new Error('geographic_filters must be an object if provided');
+    }
+
+    if (!geographic_filters) {
+      return;
+    }
+
+    // Validate country codes
+    if (geographic_filters.countries?.length) {
+      const countryValidation = validateCountryCodes(
+        geographic_filters.countries
+      );
+      if (countryValidation.invalid.length > 0) {
+        throw new Error(
+          `Country code validation failed: Invalid country codes: ${countryValidation.invalid.join(', ')}`
+        );
+      }
+      geographic_filters.countries = countryValidation.valid;
+    }
+
+    // Validate array fields
+    const arrayFields = [
+      'continents',
+      'regions',
+      'cities',
+      'asns',
+      'hosting_providers',
+    ];
+    for (const field of arrayFields) {
+      if (geographic_filters[field] !== undefined) {
+        if (!Array.isArray(geographic_filters[field])) {
+          throw new Error(`${field} must be an array if provided`);
+        }
+        // Validate non-empty strings in arrays
+        const invalidValues = geographic_filters[field].filter(
+          (value: any) => typeof value !== 'string' || value.trim() === ''
+        );
+        if (invalidValues.length > 0) {
+          throw new Error(
+            `${field} array contains invalid values: must be non-empty strings`
+          );
+        }
+      }
+    }
+
+    // Validate boolean fields
+    const booleanFields = ['exclude_vpn', 'exclude_cloud'];
+    for (const field of booleanFields) {
+      if (
+        geographic_filters[field] !== undefined &&
+        typeof geographic_filters[field] !== 'boolean'
+      ) {
+        throw new Error(`${field} must be a boolean if provided`);
+      }
+    }
+
+    // Validate numeric fields
+    if (geographic_filters.min_risk_score !== undefined) {
+      if (
+        typeof geographic_filters.min_risk_score !== 'number' ||
+        geographic_filters.min_risk_score < 0 ||
+        geographic_filters.min_risk_score > 10
+      ) {
+        throw new Error(
+          'min_risk_score must be a number between 0 and 10 if provided'
+        );
+      }
+    }
+  }
+
+  /**
    * Initialize search strategies for different entity types
    */
   private initializeStrategies(): void {
@@ -634,18 +747,8 @@ export class SearchEngine {
     const startTime = Date.now();
 
     try {
-      // Basic parameter validation with security checks
-      if (
-        !params ||
-        typeof params !== 'object' ||
-        !params.query ||
-        typeof params.query !== 'string' ||
-        !params.query.trim()
-      ) {
-        throw new Error(
-          'Parameters object with query property is required and query must be a non-empty string'
-        );
-      }
+      // Validate basic search parameters
+      this.validateBasicSearchParams(params, 'searchFlows');
 
       // Basic security check for dangerous patterns
       const dangerousPatterns = [
@@ -694,24 +797,9 @@ export class SearchEngine {
       }
 
       // Add geographic filters if provided
-      if (
-        params.geographic_filters &&
-        typeof params.geographic_filters === 'object' &&
-        params.geographic_filters !== null
-      ) {
-        // Validate country codes if provided
-        if (params.geographic_filters.countries?.length) {
-          const countryValidation = validateCountryCodes(
-            params.geographic_filters.countries
-          );
-          if (countryValidation.invalid.length > 0) {
-            throw new Error(
-              `Country code validation failed: Invalid country codes: ${countryValidation.invalid.join(', ')}`
-            );
-          }
-          // Update with validated codes
-          params.geographic_filters.countries = countryValidation.valid;
-        }
+      if (params.geographic_filters) {
+        // Validate geographic filters
+        this.validateGeographicFilters(params.geographic_filters);
 
         const geographicQuery = this.buildGeographicQuery(
           params.geographic_filters
@@ -789,18 +877,8 @@ export class SearchEngine {
     const startTime = Date.now();
 
     try {
-      // Basic parameter validation with security checks
-      if (
-        !params ||
-        typeof params !== 'object' ||
-        !params.query ||
-        typeof params.query !== 'string' ||
-        !params.query.trim()
-      ) {
-        throw new Error(
-          'Parameters object with query property is required and query must be a non-empty string'
-        );
-      }
+      // Validate basic search parameters
+      this.validateBasicSearchParams(params, 'searchFlows');
 
       // Basic security check for dangerous patterns
       const dangerousPatterns = [
@@ -962,15 +1040,16 @@ export class SearchEngine {
       }
 
       // Validate correlation field count before other validations
-      if (
-        params.correlation_params.correlationFields &&
-        params.correlation_params.correlationFields.length > 5
-      ) {
-        const excessFields =
-          params.correlation_params.correlationFields.slice(5);
-        throw new Error(
-          `Enhanced cross-reference validation failed: Maximum 5 correlation fields allowed, but ${params.correlation_params.correlationFields.length} provided. Please remove these fields: ${excessFields.join(', ')}`
-        );
+      if (params.correlation_params.correlationFields) {
+        try {
+          this.validateCorrelationFieldCount(
+            params.correlation_params.correlationFields
+          );
+        } catch (error) {
+          throw new Error(
+            `Enhanced cross-reference validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+          );
+        }
       }
 
       // Validate enhanced cross-reference parameters with detailed error messages
@@ -1145,10 +1224,7 @@ export class SearchEngine {
     secondary_queries: string[];
     correlation_field: string;
     limit?: number;
-    entity_types?: {
-      primary?: 'flows' | 'alarms' | 'rules' | 'devices';
-      secondary?: Array<'flows' | 'alarms' | 'rules' | 'devices'>;
-    };
+    primary_entity_type?: 'flows' | 'alarms' | 'rules' | 'devices';
   }): Promise<any> {
     const startTime = Date.now();
 
@@ -1198,18 +1274,14 @@ export class SearchEngine {
         );
       }
 
-      // Determine entity types (use provided types or fall back to pattern matching)
+      // Determine entity types (use provided type or fall back to pattern matching)
       const primaryType =
-        params.entity_types?.primary ||
+        params.primary_entity_type ||
         suggestEntityType(params.primary_query) ||
         'flows';
 
-      const secondaryTypes = params.secondary_queries.map((q, index) => {
-        return (
-          params.entity_types?.secondary?.[index] ||
-          suggestEntityType(q) ||
-          'alarms'
-        );
+      const secondaryTypes = params.secondary_queries.map(q => {
+        return suggestEntityType(q) || 'alarms';
       });
 
       // Execute primary query using generic method
@@ -1826,27 +1898,9 @@ export class SearchEngine {
         );
       }
 
-      // Validate geographic_filters parameter - fix null handling
-      if (
-        params.geographic_filters !== undefined &&
-        (params.geographic_filters === null ||
-          typeof params.geographic_filters !== 'object')
-      ) {
-        throw new Error('geographic_filters must be an object if provided');
-      }
-
-      // Validate country codes if provided
-      if (params.geographic_filters?.countries?.length) {
-        const countryValidation = validateCountryCodes(
-          params.geographic_filters.countries
-        );
-        if (countryValidation.invalid.length > 0) {
-          throw new Error(
-            `Country code validation failed: Invalid country codes: ${countryValidation.invalid.join(', ')}`
-          );
-        }
-        // Update with validated codes
-        params.geographic_filters.countries = countryValidation.valid;
+      // Validate geographic filters if provided
+      if (params.geographic_filters) {
+        this.validateGeographicFilters(params.geographic_filters);
       }
 
       // Build complete query with geographic filters

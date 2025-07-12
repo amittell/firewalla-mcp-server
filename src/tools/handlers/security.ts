@@ -325,10 +325,6 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         alarmValidationSchema
       );
 
-      if (!alarmValidationResult.isValid) {
-        // Validation warnings logged for debugging
-      }
-
       // Normalize alarm data for consistency
       const alarmResults = SafeAccess.safeArrayAccess(
         response.results,
@@ -347,24 +343,25 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         remote: (v: any) => (v ? normalizeUnknownFields(v) : null),
       });
 
-      // Handle severity derivation separately since we need access to the full item
-      normalizedAlarms.forEach((alarm: any) => {
+      // Handle severity derivation using immutable approach
+      const finalNormalizedAlarms = normalizedAlarms.map((alarm: any) => {
         const providedSeverity = sanitizeFieldValue(alarm.severity, null).value;
-        if (
+        const finalSeverity =
           !providedSeverity ||
           providedSeverity === 'unknown' ||
           providedSeverity === null
-        ) {
-          // Derive severity from alarm type if severity is missing or unknown
-          alarm.severity = deriveAlarmSeverity(alarm.type);
-        } else {
-          alarm.severity = providedSeverity;
-        }
+            ? deriveAlarmSeverity(alarm.type)
+            : providedSeverity;
+
+        return {
+          ...alarm,
+          severity: finalSeverity,
+        };
       });
 
       return this.createSuccessResponse({
         count: SafeAccess.getNestedValue(response as any, 'count', 0),
-        alarms: SafeAccess.safeArrayMap(normalizedAlarms, (alarm: any) => {
+        alarms: SafeAccess.safeArrayMap(finalNormalizedAlarms, (alarm: any) => {
           // Apply timestamp normalization to each alarm
           const timestampNormalized = normalizeTimestamps(alarm);
           const finalAlarm = timestampNormalized.data;

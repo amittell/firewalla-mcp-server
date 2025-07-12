@@ -341,27 +341,6 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
         return validation.response;
       }
 
-      // Validate cursor format if provided
-      if (searchArgs.cursor !== undefined) {
-        const cursorValidation = ParameterValidator.validateCursor(
-          searchArgs.cursor,
-          'cursor'
-        );
-        if (!cursorValidation.isValid) {
-          return createErrorResponse(
-            this.name,
-            'Invalid cursor format',
-            ErrorType.VALIDATION_ERROR,
-            {
-              provided_value: searchArgs.cursor,
-              documentation:
-                'Cursors should be obtained from previous response next_cursor field',
-            },
-            cursorValidation.errors
-          );
-        }
-      }
-
       // Validate force_refresh parameter if provided
       const forceRefreshValidation = ParameterValidator.validateBoolean(
         searchArgs.force_refresh,
@@ -1081,27 +1060,6 @@ See the Data Normalization Guide for field details.`;
           },
           ['cursor and offset parameters are mutually exclusive']
         );
-      }
-
-      // Validate cursor format if provided
-      if (searchArgs.cursor !== undefined) {
-        const cursorValidation = ParameterValidator.validateCursor(
-          searchArgs.cursor,
-          'cursor'
-        );
-        if (!cursorValidation.isValid) {
-          return createErrorResponse(
-            this.name,
-            'Invalid cursor format',
-            ErrorType.VALIDATION_ERROR,
-            {
-              provided_value: searchArgs.cursor,
-              documentation:
-                'Cursors should be obtained from previous response next_cursor field',
-            },
-            cursorValidation.errors
-          );
-        }
       }
 
       // Validate force_refresh parameter if provided

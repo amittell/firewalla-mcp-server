@@ -116,16 +116,14 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
       const response = await handler.execute(args || {}, firewalla);
 
       // <add success telemetry>
-      metrics.count('tool.success', 1, { tool: name });
-      metrics.timing('tool.latency_ms', Date.now() - startTime, {
-        tool: name,
-      });
+      metrics.count('tool.success');
+      metrics.timing('tool.latency_ms', Date.now() - startTime);
       // </add>
 
       return response;
     } catch (error: unknown) {
       // <add error metric>
-      metrics.count('tool.error', 1, { tool: name });
+      metrics.count('tool.error');
       // </add>
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';

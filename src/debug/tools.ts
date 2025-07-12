@@ -64,7 +64,12 @@ export class DebugTools {
           Object.keys(allMetrics.timings).length,
         counters: allMetrics.counters,
         timings: Object.fromEntries(
-          Object.entries(allMetrics.timings).slice(0, 5)
+          Object.entries(allMetrics.timings)
+            .sort(([, a], [, b]) => {
+              // Sort by count (most frequently called operations are most relevant)
+              return b.count - a.count;
+            })
+            .slice(0, 5)
         ),
       },
       health,

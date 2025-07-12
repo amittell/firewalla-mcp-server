@@ -201,7 +201,9 @@ export function normalizeUnknownFields(
       return '[Circular Reference]';
     }
     seen.add(value);
-    const result = value.map(item => normalizeUnknownFields(item, actualConfig, seen));
+    const result = value.map(item =>
+      normalizeUnknownFields(item, actualConfig, seen)
+    );
     seen.delete(value);
     return result;
   }

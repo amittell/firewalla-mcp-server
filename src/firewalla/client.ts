@@ -637,7 +637,7 @@ export class FirewallaClient {
     return {
       count: response.count || timestampNormalizedAlarms.length,
       results: timestampNormalizedAlarms.map(alarm =>
-        this.enrichAlarmWithGeographicData(alarm)
+        this.enrichWithGeographicData(alarm, ['remote.ip'])
       ),
       next_cursor: response.next_cursor,
     };
@@ -757,7 +757,9 @@ export class FirewallaClient {
 
     return {
       count: response.count || flows.length,
-      results: flows.map(flow => this.enrichWithGeographicData(flow)),
+      results: flows.map(flow =>
+        this.enrichWithGeographicData(flow, ['destination.ip', 'source.ip'])
+      ),
       next_cursor: response.next_cursor,
     };
   }
@@ -2451,32 +2453,65 @@ export class FirewallaClient {
   }
 
   /**
-   * Enrich flow object with geographic data for source and destination IPs
-   * @param flow - Flow object to enrich
-   * @returns Enriched flow object with geographic data
+   * Set field value in object using dot notation
+   * @param obj - Object to modify
+   * @param fieldPath - Dot notation path (e.g., 'destination.geo')
+   * @param value - Value to set
    */
-  private enrichWithGeographicData(flow: any): any {
-    const enriched = { ...flow };
-
-    // Get geographic data for destination IP
-    if (flow.destination?.ip) {
-      const geoData = this.getGeographicData(flow.destination.ip);
-      if (geoData) {
-        enriched.destination = {
-          ...enriched.destination,
-          geo: geoData,
-        };
-      }
+  private setFieldValue(obj: any, fieldPath: string, value: any): void {
+    const keys = fieldPath.split('.');
+    const lastKey = keys.pop();
+    if (!lastKey) {
+      return;
     }
 
-    // Get geographic data for source IP (if different from destination)
-    if (flow.source?.ip && flow.source.ip !== flow.destination?.ip) {
-      const geoData = this.getGeographicData(flow.source.ip);
-      if (geoData) {
-        enriched.source = {
-          ...enriched.source,
-          geo: geoData,
-        };
+    let current = obj;
+    for (const key of keys) {
+      if (!current[key] || typeof current[key] !== 'object') {
+        current[key] = {};
+      }
+      current = current[key];
+    }
+    current[lastKey] = value;
+  }
+
+  /**
+   * Generic method to enrich object with geographic data based on IP paths
+   * @param obj - Object to enrich
+   * @param ipPaths - Array of dot notation paths to IP fields (optional, defaults to common flow/alarm paths)
+   * @returns Enriched object with geographic data
+   */
+  private enrichWithGeographicData(obj: any, ipPaths?: string[]): any {
+    const enriched = { ...obj };
+    const processedIPs = new Set<string>();
+
+    // Ensure ipPaths is always an array, with default paths for common flow/alarm fields
+    const defaultPaths = [
+      'source.ip',
+      'destination.ip',
+      'src.ip',
+      'dst.ip',
+      'remote.ip',
+      'device.ip',
+      'local.ip',
+      'peer.ip',
+    ];
+    const pathsArray = ipPaths
+      ? Array.isArray(ipPaths)
+        ? ipPaths
+        : [ipPaths]
+      : defaultPaths;
+
+    for (const path of pathsArray) {
+      const ip = this.extractFieldValue(obj, path);
+      if (ip && typeof ip === 'string' && !processedIPs.has(ip)) {
+        processedIPs.add(ip);
+        const geoData = this.getGeographicData(ip);
+        if (geoData) {
+          const pathParts = path.split('.');
+          const geoPath = [...pathParts.slice(0, -1), 'geo'].join('.');
+          this.setFieldValue(enriched, geoPath, geoData);
+        }
       }
     }
 
@@ -2484,29 +2519,17 @@ export class FirewallaClient {
   }
 
   /**
-   * Enrich alarm object with geographic data for remote IP
+   * Backward compatibility method for alarm enrichment
    * @param alarm - Alarm object to enrich
-   * @returns Enriched alarm object with geographic data
+   * @returns Enriched alarm with geographic data
    */
-  private enrichAlarmWithGeographicData(alarm: any): any {
-    if (!alarm.remote?.ip) {
-      return alarm;
-    }
-
-    const geoData = this.getGeographicData(alarm.remote.ip);
-    if (!geoData) {
-      return alarm;
-    }
-
-    const enrichedAlarm = {
-      ...alarm,
-      remote: {
-        ...alarm.remote,
-        geo: geoData,
-      },
-    };
-
-    return enrichedAlarm;
+  enrichAlarmWithGeographicData(alarm: any): any {
+    return this.enrichWithGeographicData(alarm, [
+      'src.ip',
+      'dst.ip',
+      'remote.ip',
+      'device.ip',
+    ]);
   }
 
   // Advanced Search Methods
@@ -2637,7 +2660,7 @@ export class FirewallaClient {
 
     // Enrich flows with geographic data
     const enrichedFlows = flows.map(flow =>
-      this.enrichWithGeographicData(flow)
+      this.enrichWithGeographicData(flow, ['destination.ip', 'source.ip'])
     );
 
     return {
@@ -2946,7 +2969,7 @@ export class FirewallaClient {
 
       // Enrich alarms with geographic data
       const enrichedAlarms = alarms.map(alarm =>
-        this.enrichAlarmWithGeographicData(alarm)
+        this.enrichWithGeographicData(alarm, ['remote.ip'])
       );
 
       return {
@@ -3843,16 +3866,10 @@ export class FirewallaClient {
     secondaryQueries: Record<string, SearchQuery>,
     correlationField: string,
     options: SearchOptions = {},
-    entityTypes?: {
-      primary?: 'flows' | 'alarms' | 'rules' | 'devices';
-      secondary?: Record<string, 'flows' | 'alarms' | 'rules' | 'devices'>;
-    }
+    primaryEntityType: 'flows' | 'alarms' | 'rules' | 'devices' = 'flows'
   ): Promise<CrossReferenceResult> {
     try {
-      // Determine primary entity type (default to flows for backward compatibility)
-      const primaryEntityType = entityTypes?.primary || 'flows';
-
-      // Execute primary search with proper entity type
+      // Execute primary search with specified entity type
       const primary = await this.executeSearchByEntityType(
         primaryEntityType,
         primaryQuery,
@@ -3890,9 +3907,8 @@ export class FirewallaClient {
             : correlationFilter,
         };
 
-        // Determine secondary entity type
-        const secondaryEntityType =
-          entityTypes?.secondary?.[name] || this.inferEntityTypeFromName(name);
+        // Infer secondary entity type from query name or default to flows
+        const secondaryEntityType = this.inferEntityTypeFromName(name);
 
         // Execute appropriate search based on entity type
         secondary[name] = await this.executeSearchByEntityType(
