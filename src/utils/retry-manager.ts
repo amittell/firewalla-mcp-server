@@ -376,19 +376,114 @@ export function isRetryableError(error: unknown): boolean {
 
 /**
  * Create retry-aware timeout wrapper that combines timeout and retry logic
+ * This function properly manages timeout budgets to prevent retry delays from
+ * exceeding total operation time limits.
  */
 export async function withRetryAndTimeout<T>(
   operation: () => Promise<T>,
   toolName: string,
   retryConfig: Partial<RetryConfig> = {},
-  timeoutMs?: number
+  totalTimeoutMs?: number
 ): Promise<T> {
   // Import timeout function dynamically to avoid circular dependency
   const { withToolTimeout } = await import('./timeout-manager.js');
+  const { getToolTimeout } = await import('../config/limits.js');
+
+  const finalConfig = { ...DEFAULT_RETRY_CONFIG, ...retryConfig };
+  const effectiveTotalTimeout = totalTimeoutMs || getToolTimeout(toolName);
+
+  // Calculate maximum possible retry delays
+  const maxRetryDelays = calculateMaxRetryDelays(finalConfig);
+
+  // Validate timeout budget
+  if (maxRetryDelays >= effectiveTotalTimeout * 0.8) {
+    logger.warn(
+      `Retry configuration may exceed timeout budget for tool '${toolName}'`,
+      {
+        tool: toolName,
+        total_timeout_ms: effectiveTotalTimeout,
+        max_retry_delays_ms: maxRetryDelays,
+        max_attempts: finalConfig.maxAttempts,
+        warning: 'timeout_budget_warning',
+        recommendation: 'Consider reducing maxAttempts or delays',
+      }
+    );
+
+    // Adjust retry config to fit within timeout budget
+    finalConfig.maxAttempts = Math.max(1, Math.min(finalConfig.maxAttempts, 2));
+    finalConfig.maxDelayMs = Math.min(
+      finalConfig.maxDelayMs,
+      effectiveTotalTimeout * 0.2
+    );
+  }
+
+  // Calculate per-attempt timeout with budget for retries
+  const timeReservedForRetries = Math.min(
+    maxRetryDelays,
+    effectiveTotalTimeout * 0.3
+  );
+  const timeForOperations = effectiveTotalTimeout - timeReservedForRetries;
+
+  // Import performance thresholds for minimum timeout
+  const { PERFORMANCE_THRESHOLDS } = await import('../config/limits.js');
+  const perAttemptTimeout = Math.max(
+    PERFORMANCE_THRESHOLDS.MIN_PER_ATTEMPT_TIMEOUT, // Use configured minimum
+    Math.floor(timeForOperations / finalConfig.maxAttempts)
+  );
+
+  logger.debug(`Timeout budget allocation for tool '${toolName}'`, {
+    tool: toolName,
+    total_timeout_ms: effectiveTotalTimeout,
+    time_for_operations_ms: timeForOperations,
+    time_reserved_for_retries_ms: timeReservedForRetries,
+    per_attempt_timeout_ms: perAttemptTimeout,
+    max_attempts: finalConfig.maxAttempts,
+  });
+
+  const startTime = Date.now();
 
   return withRetry(
-    async () => withToolTimeout(operation, toolName, timeoutMs),
+    async () => {
+      // Check if we've exceeded total timeout budget
+      const elapsedTime = Date.now() - startTime;
+      if (elapsedTime >= effectiveTotalTimeout) {
+        throw new Error(
+          `Total operation timeout exceeded (${elapsedTime}ms >= ${effectiveTotalTimeout}ms) for tool '${toolName}'`
+        );
+      }
+
+      // Adjust per-attempt timeout based on remaining time
+      const remainingTime = effectiveTotalTimeout - elapsedTime;
+      const adjustedTimeout = Math.min(perAttemptTimeout, remainingTime);
+
+      if (adjustedTimeout < 1000) {
+        throw new Error(
+          `Insufficient time remaining (${adjustedTimeout}ms) for tool '${toolName}' attempt`
+        );
+      }
+
+      return withToolTimeout(operation, toolName, adjustedTimeout);
+    },
     toolName,
-    retryConfig
+    finalConfig
   );
+}
+
+/**
+ * Calculate the maximum possible retry delays for a given configuration
+ */
+function calculateMaxRetryDelays(config: Required<RetryConfig>): number {
+  let totalDelays = 0;
+
+  for (let attempt = 1; attempt < config.maxAttempts; attempt++) {
+    const baseDelay =
+      config.initialDelayMs * Math.pow(config.backoffMultiplier, attempt - 1);
+    const cappedDelay = Math.min(baseDelay, config.maxDelayMs);
+
+    // With jitter, delays can be 50% to 100% of calculated delay
+    const maxJitteredDelay = config.addJitter ? cappedDelay : cappedDelay;
+    totalDelays += maxJitteredDelay;
+  }
+
+  return totalDelays;
 }

@@ -49,7 +49,7 @@ export interface PerformanceMetrics {
 }
 
 /**
- * Timeout error class for better error handling
+ * Timeout error class for actual timeout situations
  */
 export class TimeoutError extends Error {
   public readonly isTimeout = true;
@@ -58,9 +58,27 @@ export class TimeoutError extends Error {
 
   constructor(toolName: string, duration: number, timeoutMs: number) {
     super(
-      `Operation '${toolName}' timed out after ${duration}ms (limit: ${timeoutMs}ms)`
+      `Operation '${toolName}' timed out after ${duration}ms (limit: ${timeoutMs}ms). This indicates the operation took too long to complete, likely due to large data volumes or API performance issues.`
     );
     this.name = 'TimeoutError';
+    this.duration = duration;
+    this.toolName = toolName;
+  }
+}
+
+/**
+ * Validation error class for immediate parameter/validation failures
+ */
+export class ValidationError extends Error {
+  public readonly isValidation = true;
+  public readonly duration: number;
+  public readonly toolName: string;
+
+  constructor(toolName: string, duration: number, originalError: string) {
+    super(
+      `Tool '${toolName}' failed validation: ${originalError}. This is an immediate parameter or configuration error, not a timeout (completed in ${duration}ms).`
+    );
+    this.name = 'ValidationError';
     this.duration = duration;
     this.toolName = toolName;
   }
@@ -99,7 +117,12 @@ export class TimeoutManager {
     operation: () => Promise<T>,
     config: Partial<TimeoutConfig> = {}
   ): Promise<T> {
-    const finalConfig = { ...DEFAULT_TIMEOUT_CONFIG, ...config };
+    // Ensure timeoutMs is never undefined by using nullish coalescing
+    const finalConfig = {
+      ...DEFAULT_TIMEOUT_CONFIG,
+      ...config,
+      timeoutMs: config.timeoutMs ?? DEFAULT_TIMEOUT_CONFIG.timeoutMs,
+    };
     const operationId = `${finalConfig.toolName}_${Date.now()}_${Math.random()}`;
 
     const metrics: PerformanceMetrics = {
@@ -326,7 +349,7 @@ export async function withToolTimeout<T>(
   try {
     return await globalTimeoutManager.withTimeout(operation, {
       toolName,
-      timeoutMs: customTimeoutMs,
+      timeoutMs: customTimeoutMs ?? DEFAULT_TIMEOUT_CONFIG.timeoutMs,
       enableMetrics: true,
     });
   } catch (error) {
@@ -335,57 +358,146 @@ export async function withToolTimeout<T>(
     // Enhanced immediate failure detection
     if (duration < 50) {
       // This is likely an immediate validation failure, not a timeout
-      logger.warn(`Immediate failure detected`, {
+      logger.warn(`Immediate validation failure detected`, {
         tool: toolName,
         duration_ms: duration,
         error: error instanceof Error ? error.message : 'Unknown error',
         error_type: error?.constructor?.name,
         is_actual_timeout: error instanceof TimeoutError,
-        warning: 'immediate_failure',
+        warning: 'immediate_validation_failure',
       });
 
-      // Don't wrap immediate failures - they're validation errors, not timeouts
+      // Convert immediate failures to ValidationError for clarity
       if (error instanceof Error && !(error instanceof TimeoutError)) {
-        // Preserve the original error without timeout context
-        throw error;
+        throw new ValidationError(toolName, duration, error.message);
       }
     }
 
     // Handle actual timeout errors
     if (error instanceof TimeoutError) {
       logger.error(
-        `Actual timeout occurred`,
+        `Actual timeout occurred - operation exceeded time limit`,
         error instanceof Error ? error : undefined,
         {
           tool: toolName,
           duration_ms: duration,
           timeout_limit_ms: customTimeoutMs || 30000,
-          error_type: 'timeout',
+          error_type: 'actual_timeout',
         }
       );
       throw error; // Re-throw actual timeout errors
     }
 
-    // For other errors, preserve the original error type with enhanced context
+    // For other errors that took longer (may be slow validation or processing errors)
     if (error instanceof Error) {
-      // Add context about the tool but preserve the original error
-      const enhancedError = new Error(
-        `Tool '${toolName}' failed: ${error.message}`
-      );
-      enhancedError.name = error.name;
-      enhancedError.stack = error.stack;
-      // Add debugging information as a property
-      (enhancedError as any).debugInfo = {
-        duration,
-        toolName,
-        originalError: error.message,
-        wasImmediate: duration < 50,
-      };
-      throw enhancedError;
+      // If it's not immediate and not a timeout, it might be a slow processing error
+      if (duration >= 50 && duration < (customTimeoutMs || 30000)) {
+        const processingError = new Error(
+          `Tool '${toolName}' failed after ${duration}ms: ${error.message}. This appears to be a processing error, not a timeout.`
+        );
+        processingError.name = error.name;
+        processingError.stack = error.stack;
+        // Add debugging information as a property
+        (processingError as any).debugInfo = {
+          duration,
+          toolName,
+          originalError: error.message,
+          wasImmediate: false,
+          wasTimeout: false,
+          errorCategory: 'processing_error',
+        };
+        throw processingError;
+      }
+
+      // For any other edge cases, preserve original error
+      throw error;
     }
 
     throw error;
   }
+}
+
+/**
+ * Generate actionable guidance for validation errors
+ */
+function generateValidationGuidance(
+  toolName: string,
+  duration: number,
+  originalError: string
+): string[] {
+  const guidance: string[] = [];
+
+  // General validation guidance
+  guidance.push(
+    `Validation failed immediately (${duration}ms).`,
+    'This is a parameter or configuration error, not a performance issue.',
+    `Original error: ${originalError}`
+  );
+
+  // Tool-specific validation guidance
+  guidance.push(
+    '',
+    '🔧 Common Parameter Issues:',
+    '• Check that all required parameters are provided',
+    '• Verify parameter types match the expected format',
+    '• Ensure numeric parameters are within valid ranges',
+    '• Check that enum values are from the allowed list',
+    '• Verify API credentials and box configuration'
+  );
+
+  if (originalError.toLowerCase().includes('limit')) {
+    guidance.push(
+      '',
+      '📊 Limit Parameter Issues:',
+      '• The limit parameter is required for most tools',
+      '• Limit must be a positive integer',
+      '• Consider reasonable limits (10-1000 for most operations)',
+      '• Some tools have maximum limit restrictions'
+    );
+  }
+
+  if (
+    originalError.toLowerCase().includes('auth') ||
+    originalError.toLowerCase().includes('credential')
+  ) {
+    guidance.push(
+      '',
+      '🔐 Authentication Issues:',
+      '• Verify FIREWALLA_MSP_TOKEN is set correctly',
+      '• Check FIREWALLA_MSP_ID matches your domain',
+      '• Ensure FIREWALLA_BOX_ID is the correct box identifier',
+      '• Confirm the API token has necessary permissions'
+    );
+  }
+
+  // Add tool-specific validation guidance
+  if (toolName.includes('search')) {
+    guidance.push(
+      '',
+      '🔍 Search Tool Validation:',
+      '• Ensure query syntax is correct',
+      '• Check that search fields are valid',
+      '• Verify time range format (ISO 8601)'
+    );
+  } else if (toolName.includes('rule')) {
+    guidance.push(
+      '',
+      '🛡️ Rule Tool Validation:',
+      '• Confirm rule IDs exist',
+      '• Check rule action values (block, allow, timelimit)',
+      '• Verify target format matches expected pattern'
+    );
+  } else if (toolName.includes('device')) {
+    guidance.push(
+      '',
+      '📱 Device Tool Validation:',
+      '• Check device ID format',
+      '• Verify network scope parameters',
+      '• Ensure status filters are valid'
+    );
+  }
+
+  return guidance;
 }
 
 /**
@@ -488,6 +600,61 @@ function generateTimeoutGuidance(
 }
 
 /**
+ * Create a standardized validation error response for MCP tools
+ */
+export function createValidationErrorResponse(
+  toolName: string,
+  duration: number,
+  originalError: string
+): {
+  content: Array<{ type: string; text: string }>;
+  isError: true;
+} {
+  const guidance = generateValidationGuidance(
+    toolName,
+    duration,
+    originalError
+  );
+
+  return createErrorResponse(
+    toolName,
+    guidance.join('\n'),
+    ErrorType.VALIDATION_ERROR,
+    {
+      duration,
+      originalError,
+      validation_context: {
+        was_immediate: duration < 50,
+        error_category: originalError.toLowerCase().includes('limit')
+          ? 'missing_parameter'
+          : originalError.toLowerCase().includes('auth')
+            ? 'authentication'
+            : 'parameter_validation',
+        operation_category: toolName.includes('search')
+          ? 'search'
+          : toolName.includes('rule')
+            ? 'rule_management'
+            : toolName.includes('device')
+              ? 'device_monitoring'
+              : 'general',
+      },
+      documentation: {
+        validation_guide: '/docs/error-handling-guide.md#validation-errors',
+        parameter_guide: '/docs/firewalla-api-reference.md#parameters',
+        authentication_guide: '/docs/firewalla-api-reference.md#authentication',
+      },
+    },
+    [
+      'Parameter validation failed - this is not a timeout',
+      'Check the specific error message for parameter requirements',
+      'Verify all required parameters are provided',
+      'Ensure parameter values match expected types and ranges',
+      'See the validation troubleshooting guide for common fixes',
+    ]
+  );
+}
+
+/**
  * Create a standardized timeout error response for MCP tools with enhanced guidance
  */
 export function createTimeoutErrorResponse(
@@ -509,6 +676,7 @@ export function createTimeoutErrorResponse(
       timeoutMs,
       performance_context: {
         timeout_ratio: Math.round((duration / timeoutMs) * 100),
+        was_actual_timeout: duration >= timeoutMs,
         operation_category: toolName.includes('search')
           ? 'search'
           : toolName.includes('rule')
@@ -524,7 +692,7 @@ export function createTimeoutErrorResponse(
       },
     },
     [
-      'Timeout occurred - operation took too long to complete',
+      'Actual timeout occurred - operation exceeded time limit',
       'Try reducing the scope of your request or using more specific filters',
       'Check network connectivity and Firewalla API status',
       'Consider breaking large operations into smaller chunks',

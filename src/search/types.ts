@@ -90,6 +90,18 @@ export interface SearchParams {
     end?: string;
   };
   force_refresh?: boolean; // Bypass cache for real-time data
+  geographic_filters?: {
+    countries?: string[];
+    continents?: string[];
+    regions?: string[];
+    cities?: string[];
+    asns?: string[];
+    hosting_providers?: string[];
+    exclude_cloud?: boolean;
+    exclude_vpn?: boolean;
+    min_risk_score?: number;
+  };
+  include_analytics?: boolean; // Include geographic analysis in response
 }
 
 /**

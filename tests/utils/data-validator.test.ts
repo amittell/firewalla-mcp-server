@@ -183,8 +183,8 @@ describe('Data Validator', () => {
       const result = checkFieldTypes(data, typeMap);
 
       expect(result.isValid).toBe(true);
-      expect(result.summary.validFields).toBe(5);
-      expect(result.summary.invalidFields).toBe(0);
+      expect(result.metadata.summary.validFields).toBe(5);
+      expect(result.metadata.summary.invalidFields).toBe(0);
     });
 
     it('should detect type mismatches', () => {
@@ -202,7 +202,7 @@ describe('Data Validator', () => {
 
       expect(result.isValid).toBe(false);
       expect(result.invalidFields).toHaveLength(2);
-      expect(result.summary.invalidFields).toBe(2);
+      expect(result.metadata.summary.invalidFields).toBe(2);
     });
 
     it('should suggest type conversions', () => {
@@ -218,7 +218,7 @@ describe('Data Validator', () => {
 
       const result = checkFieldTypes(data, typeMap);
 
-      expect(result.summary.convertibleFields).toBe(2);
+      expect(result.metadata.summary.convertibleFields).toBe(2);
       expect(result.invalidFields[0].suggestion).toContain('Convert string');
     });
 

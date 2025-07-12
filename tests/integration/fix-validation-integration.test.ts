@@ -710,7 +710,7 @@ describe('Fix Validation Integration Tests', () => {
       it('should demonstrate all fixes working together in realistic scenario', async () => {
         // Simulate a complex tool call that exercises all the fixes
         const complexToolCall = {
-          tool: 'search_flows_by_geography',
+          tool: 'search_flows',
           parameters: {
             query: 'severity:high AND (protocol:tcp OR protocol:udp)',
             limit: 500,

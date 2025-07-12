@@ -66,7 +66,6 @@ import {
   SearchCrossReferenceHandler,
   SearchEnhancedCrossReferenceHandler,
   GetCorrelationSuggestionsHandler,
-  SearchFlowsByGeographyHandler,
   SearchAlarmsByGeographyHandler,
   GetGeographicStatisticsHandler,
 } from './handlers/search.js';
@@ -169,10 +168,9 @@ export class ToolRegistry {
     this.register(new SearchTargetListsHandler());
     this.register(new SearchCrossReferenceHandler());
 
-    // Enhanced cross-reference and geographic search tools (5 handlers)
+    // Enhanced cross-reference and geographic search tools (4 handlers)
     this.register(new SearchEnhancedCrossReferenceHandler());
     this.register(new GetCorrelationSuggestionsHandler());
-    this.register(new SearchFlowsByGeographyHandler());
     this.register(new SearchAlarmsByGeographyHandler());
     this.register(new GetGeographicStatisticsHandler());
 

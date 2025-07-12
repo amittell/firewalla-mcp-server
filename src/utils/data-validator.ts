@@ -11,13 +11,21 @@
 
 import type { ValidationResult } from '../types.js';
 
-
 /**
  * Result of type checking validation
+ * Compatible with main ValidationResult interface
  */
 export interface TypeValidationResult {
   /** Whether all type checks passed */
   isValid: boolean;
+  /** Array of error messages if validation failed */
+  errors: string[];
+  /** Array of warning messages for non-critical issues */
+  warnings?: string[];
+  /** Suggestions for fixing validation errors */
+  suggestions?: string[];
+  /** Sanitized/validated value (if applicable) */
+  sanitizedValue?: unknown;
   /** Array of fields that failed type validation */
   invalidFields: Array<{
     /** Field name that failed validation */
@@ -31,16 +39,27 @@ export interface TypeValidationResult {
     /** Suggestion for fixing the type issue */
     suggestion: string;
   }>;
-  /** Summary of type validation results */
-  summary: {
-    /** Total fields checked */
-    totalFields: number;
-    /** Fields that passed validation */
-    validFields: number;
-    /** Fields that failed validation */
-    invalidFields: number;
-    /** Fields with convertible types */
-    convertibleFields: number;
+  /** Additional metadata about the validation */
+  metadata?: {
+    /** Number of fields validated */
+    fieldsValidated?: number;
+    /** Number of missing required fields */
+    missingFields?: number;
+    /** Number of type mismatches found */
+    typeMismatches?: number;
+    /** Validation execution time in milliseconds */
+    validationTime?: number;
+    /** Summary of type validation results */
+    summary: {
+      /** Total fields checked */
+      totalFields: number;
+      /** Fields that passed validation */
+      validFields: number;
+      /** Fields that failed validation */
+      invalidFields: number;
+      /** Fields with convertible types */
+      convertibleFields: number;
+    };
   };
 }
 
@@ -316,6 +335,8 @@ export function checkFieldTypes(
   if (!data || typeof data !== 'object') {
     return {
       isValid: false,
+      errors: ['Data must be a valid object'],
+      suggestions: ['Ensure data is a valid object'],
       invalidFields: [
         {
           field: '<root>',
@@ -325,11 +346,15 @@ export function checkFieldTypes(
           suggestion: 'Ensure data is a valid object',
         },
       ],
-      summary: {
-        totalFields: 0,
-        validFields: 0,
-        invalidFields: 1,
-        convertibleFields: 0,
+      metadata: {
+        fieldsValidated: 0,
+        typeMismatches: 1,
+        summary: {
+          totalFields: 0,
+          validFields: 0,
+          invalidFields: 1,
+          convertibleFields: 0,
+        },
       },
     };
   }
@@ -365,14 +390,27 @@ export function checkFieldTypes(
   const totalFields = Object.keys(typeMap).length;
   const isValid = invalidFields.length === 0;
 
+  // Create error and suggestion messages from invalid fields
+  const errors = invalidFields.map(
+    field =>
+      `Field '${field.field}' has incorrect type: expected ${field.expectedType}, got ${field.actualType}`
+  );
+  const suggestions = invalidFields.map(field => field.suggestion);
+
   return {
     isValid,
+    errors,
+    suggestions: suggestions.length > 0 ? suggestions : undefined,
     invalidFields,
-    summary: {
-      totalFields,
-      validFields,
-      invalidFields: invalidFields.length,
-      convertibleFields,
+    metadata: {
+      fieldsValidated: totalFields,
+      typeMismatches: invalidFields.length,
+      summary: {
+        totalFields,
+        validFields,
+        invalidFields: invalidFields.length,
+        convertibleFields,
+      },
     },
   };
 }

@@ -253,7 +253,10 @@ export class FirewallaClient {
 
     // Include box ID, method, endpoint, and parameters with separators
     // Use SHA256 hash to ensure unique cache keys without truncation issues
-    const paramHash = createHash('sha256').update(paramStr).digest('hex').substring(0, 32);
+    const paramHash = createHash('sha256')
+      .update(paramStr)
+      .digest('hex')
+      .substring(0, 32);
     return `fw:${this.config.boxId}:${method}:${endpoint.replace(/[^a-zA-Z0-9]/g, '_')}:${paramHash}`;
   }
 
@@ -314,10 +317,10 @@ export class FirewallaClient {
     }
 
     // Allowed scalar parameters for raw /v2/* endpoints
-    const allowedParams = ['query', 'limit', 'sortBy', 'groupBy', 'cursor'];
-    
+    const allowedParams = ['query', 'limit', 'sortBy', 'groupBy', 'cursor', 'box'];
+
     const filtered: Record<string, unknown> = {};
-    
+
     for (const [key, value] of Object.entries(params)) {
       if (allowedParams.includes(key) && value !== undefined) {
         filtered[key] = value;
@@ -334,7 +337,11 @@ export class FirewallaClient {
     cacheable = true
   ): Promise<T> {
     // Filter parameters for raw /v2/* data endpoints to prevent "Bad Request" errors
-    const filteredParams = this.filterParametersForDataEndpoints(method, endpoint, params);
+    const filteredParams = this.filterParametersForDataEndpoints(
+      method,
+      endpoint,
+      params
+    );
     const cacheKey = this.getCacheKey(endpoint, filteredParams, method);
 
     if (cacheable && method === 'GET') {
@@ -358,7 +365,9 @@ export class FirewallaClient {
           response = await this.api.put(endpoint, params);
           break;
         case 'DELETE':
-          response = await this.api.delete(endpoint, { params: filteredParams });
+          response = await this.api.delete(endpoint, {
+            params: filteredParams,
+          });
           break;
       }
 
@@ -417,10 +426,10 @@ export class FirewallaClient {
         if (status) {
           switch (status) {
             case 400:
-              console.log('API 400 Error Details:', {
+              logger.debug('API 400 Error Details:', {
                 url,
                 params: filteredParams,
-                response: error.response?.data
+                response: error.response?.data,
               });
               errorMessage = `Bad Request: Invalid parameters sent to ${url}`;
               break;
@@ -521,16 +530,19 @@ export class FirewallaClient {
     if (query) {
       // Convert severity:X queries to type:>=X queries since API doesn't understand severity
       if (typeof query === 'string') {
-        query = query.replace(/severity:(high|medium|low|critical)/gi, (match: string, severity: string) => {
-          const severityMap: Record<string, number> = {
-            low: 1,
-            medium: 4,
-            high: 8,
-            critical: 12,
-          };
-          const minType = severityMap[severity.toLowerCase()];
-          return minType !== undefined ? `type:>=${minType}` : match;
-        });
+        query = query.replace(
+          /severity:(high|medium|low|critical)/gi,
+          (match: string, severity: string) => {
+            const severityMap: Record<string, number> = {
+              low: 1,
+              medium: 4,
+              high: 8,
+              critical: 12,
+            };
+            const minType = severityMap[severity.toLowerCase()];
+            return minType !== undefined ? `type:>=${minType}` : match;
+          }
+        );
       }
       params.query = query;
     }
@@ -541,7 +553,12 @@ export class FirewallaClient {
       params.cursor = cursor;
     }
 
-    // Use global endpoint - box filtering happens via authentication
+    // Add box parameter for filtering if configured
+    if (this.config.boxId) {
+      params.box = this.config.boxId;
+    }
+
+    // Use global endpoint with box parameter for filtering
     const endpoint = `/v2/alarms`;
 
     const response = await this.request<{
@@ -2612,7 +2629,9 @@ export class FirewallaClient {
     });
 
     // Enrich flows with geographic data
-    const enrichedFlows = flows.map(flow => this.enrichWithGeographicData(flow));
+    const enrichedFlows = flows.map(flow =>
+      this.enrichWithGeographicData(flow)
+    );
 
     return {
       count: response.count || enrichedFlows.length,
@@ -2701,19 +2720,22 @@ export class FirewallaClient {
           ? `${params.query} AND status:1`
           : 'status:1';
       }
-      
+
       // Convert severity:X queries to type:>=X queries since API doesn't understand severity
       if (params.query && typeof params.query === 'string') {
-        params.query = params.query.replace(/severity:(high|medium|low|critical)/gi, (match: string, severity: string) => {
-          const severityMap: Record<string, number> = {
-            low: 1,
-            medium: 4,
-            high: 8,
-            critical: 12,
-          };
-          const minType = severityMap[severity.toLowerCase()];
-          return minType !== undefined ? `type:>=${minType}` : match;
-        });
+        params.query = params.query.replace(
+          /severity:(high|medium|low|critical)/gi,
+          (match: string, severity: string) => {
+            const severityMap: Record<string, number> = {
+              low: 1,
+              medium: 4,
+              high: 8,
+              critical: 12,
+            };
+            const minType = severityMap[severity.toLowerCase()];
+            return minType !== undefined ? `type:>=${minType}` : match;
+          }
+        );
       }
 
       if (options.min_severity && typeof options.min_severity === 'string') {
@@ -2741,34 +2763,40 @@ export class FirewallaClient {
       const requestParams: Record<string, unknown> = {
         limit,
       };
-      
+
       // Note: The box parameter is not supported by the alarms endpoint
       // Box filtering happens automatically based on API authentication
-      
+
       // Only include query if it's meaningful
       if (params.query && params.query !== 'undefined') {
         requestParams.query = params.query;
       }
-      
+
       // Include sortBy, groupBy if provided
       // Convert timestamp:desc to ts:desc for API compatibility
       if (params.sortBy) {
-        requestParams.sortBy = params.sortBy === 'timestamp:desc' ? 'ts:desc' : 
-                             params.sortBy === 'timestamp:asc' ? 'ts:asc' : 
-                             params.sortBy;
+        requestParams.sortBy =
+          params.sortBy === 'timestamp:desc'
+            ? 'ts:desc'
+            : params.sortBy === 'timestamp:asc'
+              ? 'ts:asc'
+              : params.sortBy;
       }
       if (params.groupBy) {
         requestParams.groupBy = params.groupBy;
       }
-      
+
       // Only include cursor if present
       if (params.cursor) {
         requestParams.cursor = params.cursor;
       }
 
       // Log parameters for debugging
-      logger.info('searchAlarms: Making GET request with params:', requestParams);
-      
+      logger.info(
+        'searchAlarms: Making GET request with params:',
+        requestParams
+      );
+
       // Enhanced API request with better error handling
       let response;
       try {
@@ -2910,7 +2938,9 @@ export class FirewallaClient {
         .filter(alarm => alarm.gid && alarm.gid !== 'unknown'); // Filter out invalid alarms
 
       // Enrich alarms with geographic data
-      const enrichedAlarms = alarms.map(alarm => this.enrichAlarmWithGeographicData(alarm));
+      const enrichedAlarms = alarms.map(alarm =>
+        this.enrichAlarmWithGeographicData(alarm)
+      );
 
       return {
         count: response.count || enrichedAlarms.length,
@@ -3814,11 +3844,11 @@ export class FirewallaClient {
     try {
       // Determine primary entity type (default to flows for backward compatibility)
       const primaryEntityType = entityTypes?.primary || 'flows';
-      
+
       // Execute primary search with proper entity type
       const primary = await this.executeSearchByEntityType(
-        primaryEntityType, 
-        primaryQuery, 
+        primaryEntityType,
+        primaryQuery,
         options
       );
 
@@ -3854,8 +3884,8 @@ export class FirewallaClient {
         };
 
         // Determine secondary entity type
-        const secondaryEntityType = entityTypes?.secondary?.[name] || 
-                                   this.inferEntityTypeFromName(name);
+        const secondaryEntityType =
+          entityTypes?.secondary?.[name] || this.inferEntityTypeFromName(name);
 
         // Execute appropriate search based on entity type
         secondary[name] = await this.executeSearchByEntityType(
@@ -3920,18 +3950,19 @@ export class FirewallaClient {
   /**
    * Infer entity type from query name (fallback for backward compatibility)
    */
-  private inferEntityTypeFromName(name: string): 'flows' | 'alarms' | 'rules' | 'devices' {
+  private inferEntityTypeFromName(
+    name: string
+  ): 'flows' | 'alarms' | 'rules' | 'devices' {
     const lowerName = name.toLowerCase();
-    
+
     if (lowerName.includes('alarm')) {
       return 'alarms';
     } else if (lowerName.includes('rule')) {
       return 'rules';
     } else if (lowerName.includes('device')) {
       return 'devices';
-    } 
-      return 'flows'; // Default fallback
-    
+    }
+    return 'flows'; // Default fallback
   }
 
   /**
@@ -4491,11 +4522,11 @@ export class FirewallaClient {
 
   /**
    * Build geographic query string from filters for Firewalla API
-   * 
+   *
    * Converts geographic filter objects into API-compatible query syntax.
    * Supports countries, continents, regions, cities, ASNs, hosting providers,
    * and boolean exclusion filters.
-   * 
+   *
    * @param filters - Geographic filter configuration
    * @returns Query string compatible with Firewalla API
    */
@@ -4585,9 +4616,11 @@ export class FirewallaClient {
     }
 
     // Numeric filters
-    if (filters.min_risk_score !== undefined && 
-        typeof filters.min_risk_score === 'number' && 
-        filters.min_risk_score >= 0) {
+    if (
+      filters.min_risk_score !== undefined &&
+      typeof filters.min_risk_score === 'number' &&
+      filters.min_risk_score >= 0
+    ) {
       queryParts.push(`geographic_risk_score:>=${filters.min_risk_score}`);
     }
 
@@ -4610,6 +4643,10 @@ export class FirewallaClient {
    * Extract field value from object using dot notation
    */
   private extractFieldValue(obj: any, fieldPath: string): any {
+    if (!fieldPath || typeof fieldPath !== 'string') {
+      logger.warn('extractFieldValue called with invalid fieldPath:', { fieldPath });
+      return undefined;
+    }
     return fieldPath.split('.').reduce((current, key) => current?.[key], obj);
   }
 

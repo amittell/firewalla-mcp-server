@@ -40,11 +40,14 @@ export async function withTimeout<T>(
   timeoutMs: number = 30000
 ): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  
+
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error('Operation timed out')), timeoutMs);
+    timeoutId = setTimeout(
+      () => reject(new Error('Operation timed out')),
+      timeoutMs
+    );
   });
-  
+
   try {
     return await Promise.race([promise, timeoutPromise]);
   } finally {

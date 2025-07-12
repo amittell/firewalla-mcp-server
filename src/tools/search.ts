@@ -28,7 +28,10 @@ import {
 } from '../validation/field-mapper.js';
 import { FieldValidator } from '../validation/field-validator.js';
 import { ErrorFormatter } from '../validation/error-formatter.js';
-import { validateCountryCodes, enrichObjectWithGeo } from '../utils/geographic.js';
+import {
+  validateCountryCodes,
+  enrichObjectWithGeo,
+} from '../utils/geographic.js';
 
 /**
  * Configuration interface for risk thresholds and performance settings
@@ -690,6 +693,36 @@ export class SearchEngine {
         queryString = `ts:${startTs}-${endTs} AND (${params.query})`;
       }
 
+      // Add geographic filters if provided
+      if (
+        params.geographic_filters &&
+        typeof params.geographic_filters === 'object' &&
+        params.geographic_filters !== null
+      ) {
+        // Validate country codes if provided
+        if (params.geographic_filters.countries?.length) {
+          const countryValidation = validateCountryCodes(
+            params.geographic_filters.countries
+          );
+          if (countryValidation.invalid.length > 0) {
+            throw new Error(
+              `Country code validation failed: Invalid country codes: ${countryValidation.invalid.join(', ')}`
+            );
+          }
+          // Update with validated codes
+          params.geographic_filters.countries = countryValidation.valid;
+        }
+        
+        const geographicQuery = this.buildGeographicQuery(
+          params.geographic_filters
+        );
+        if (geographicQuery) {
+          queryString = queryString
+            ? `${queryString} AND ${geographicQuery}`
+            : geographicQuery;
+        }
+      }
+
       // Call API directly without complex validation/parsing
       const response = await this.firewalla.getFlowData(
         queryString,
@@ -701,9 +734,10 @@ export class SearchEngine {
 
       // Apply client-side offset if needed (for backward compatibility)
       let results = response.results || [];
-      
-      // Enrich results with geographic data
-      results = results.map(flow => enrichObjectWithGeo(flow));
+
+      // Enrich results with geographic data (filtering out null entries)
+      results = results.filter(flow => flow !== null && flow !== undefined)
+                      .map(flow => enrichObjectWithGeo(flow));
       if (params.offset && !params.cursor) {
         results = results.slice(params.offset);
       }
@@ -713,7 +747,13 @@ export class SearchEngine {
         results = results.slice(0, params.limit);
       }
 
-      return {
+      // Add geographic analysis if requested
+      let geographicAnalysis;
+      if (params.include_analytics || params.geographic_filters) {
+        geographicAnalysis = this.analyzeGeographicData(results);
+      }
+
+      const result: SearchResult = {
         results,
         count: results.length,
         limit: params.limit,
@@ -722,6 +762,16 @@ export class SearchEngine {
         execution_time_ms: Date.now() - startTime,
         next_cursor: response.next_cursor,
       };
+
+      // Add optional fields
+      if (geographicAnalysis) {
+        (result as any).geographic_analysis = geographicAnalysis;
+      }
+      if (params.geographic_filters) {
+        (result as any).geographic_filters_applied = true;
+      }
+
+      return result;
     } catch (error) {
       throw new Error(
         `search_flows failed: ${error instanceof Error ? error.message : String(error)}`
@@ -787,9 +837,10 @@ export class SearchEngine {
 
       // Apply client-side offset if needed (for backward compatibility)
       let results = response.results || [];
-      
-      // Enrich results with geographic data
-      results = results.map(flow => enrichObjectWithGeo(flow));
+
+      // Enrich results with geographic data (filtering out null entries)
+      results = results.filter(flow => flow !== null && flow !== undefined)
+                      .map(flow => enrichObjectWithGeo(flow));
       if (params.offset && !params.cursor) {
         results = results.slice(params.offset);
       }
@@ -967,14 +1018,17 @@ export class SearchEngine {
       }
 
       // Determine entity types (use provided types or fall back to pattern matching)
-      const primaryType = params.entity_types?.primary || 
-                         suggestEntityType(params.primary_query) || 
-                         'flows';
-      
+      const primaryType =
+        params.entity_types?.primary ||
+        suggestEntityType(params.primary_query) ||
+        'flows';
+
       const secondaryTypes = params.secondary_queries.map((q, index) => {
-        return params.entity_types?.secondary?.[index] || 
-               suggestEntityType(q) || 
-               'alarms';
+        return (
+          params.entity_types?.secondary?.[index] ||
+          suggestEntityType(q) ||
+          'alarms'
+        );
       });
 
       // Execute primary query
@@ -1143,14 +1197,17 @@ export class SearchEngine {
       }
 
       // Determine entity types (use provided types or fall back to pattern matching)
-      const primaryType = params.entity_types?.primary || 
-                         suggestEntityType(params.primary_query) || 
-                         'flows';
-      
+      const primaryType =
+        params.entity_types?.primary ||
+        suggestEntityType(params.primary_query) ||
+        'flows';
+
       const secondaryTypes = params.secondary_queries.map((q, index) => {
-        return params.entity_types?.secondary?.[index] || 
-               suggestEntityType(q) || 
-               'alarms';
+        return (
+          params.entity_types?.secondary?.[index] ||
+          suggestEntityType(q) ||
+          'alarms'
+        );
       });
 
       // Execute primary query using generic method
@@ -1713,121 +1770,6 @@ export class SearchEngine {
     return this.firewalla.buildGeoQuery(filters);
   }
 
-  /**
-   * Advanced geographic search for flows with location-based filtering and analysis.
-   * Supports multiple values for each geographic filter (countries, continents, regions, etc.)
-   * using OR logic. Builds proper query strings for the Firewalla API.
-   */
-  async searchFlowsByGeography(params: {
-    query?: string;
-    geographic_filters?: {
-      countries?: string[];
-      continents?: string[];
-      regions?: string[];
-      cities?: string[];
-      asns?: string[];
-      hosting_providers?: string[];
-      exclude_cloud?: boolean;
-      exclude_vpn?: boolean;
-      min_risk_score?: number;
-    };
-    limit: number;
-    sort_by?: string;
-    sort_order?: 'asc' | 'desc';
-    group_by?: string;
-    aggregate?: boolean;
-  }): Promise<any> {
-    const startTime = Date.now();
-
-    try {
-      // Validate limit parameter
-      const limitValidation = ParameterValidator.validateNumber(
-        params.limit,
-        'limit',
-        {
-          required: true,
-          min: 1,
-          max: 1000,
-          integer: true,
-        }
-      );
-
-      if (!limitValidation.isValid) {
-        throw new Error(
-          `Parameter validation failed: ${limitValidation.errors.join(', ')}`
-        );
-      }
-
-      // Validate geographic_filters parameter - fix null handling
-      if (
-        params.geographic_filters !== undefined &&
-        (params.geographic_filters === null ||
-          typeof params.geographic_filters !== 'object')
-      ) {
-        throw new Error('geographic_filters must be an object if provided');
-      }
-
-      // Validate country codes if provided
-      if (params.geographic_filters?.countries?.length) {
-        const countryValidation = validateCountryCodes(
-          params.geographic_filters.countries
-        );
-        if (countryValidation.invalid.length > 0) {
-          throw new Error(
-            `Country code validation failed: Invalid country codes: ${countryValidation.invalid.join(', ')}`
-          );
-        }
-        // Update with validated codes
-        params.geographic_filters.countries = countryValidation.valid;
-      }
-
-      // Build complete query with geographic filters
-      let finalQuery = params.query || '*';
-
-      if (
-        params.geographic_filters &&
-        typeof params.geographic_filters === 'object' &&
-        params.geographic_filters !== null
-      ) {
-        const geographicQuery = this.buildGeographicQuery(
-          params.geographic_filters
-        );
-        if (geographicQuery) {
-          if (finalQuery === '*') {
-            finalQuery = geographicQuery;
-          } else {
-            finalQuery = `${finalQuery} AND ${geographicQuery}`;
-          }
-        }
-      }
-
-      // Execute search with combined query
-      const searchParams = {
-        query: finalQuery,
-        limit: params.limit,
-        sort_by: params.sort_by,
-        sort_order: params.sort_order,
-        group_by: params.group_by,
-        aggregate: params.aggregate,
-      };
-
-      const result = await this.searchFlows(searchParams);
-
-      // Add geographic analysis
-      const geographicAnalysis = this.analyzeGeographicData(result.results);
-
-      return {
-        ...result,
-        geographic_filters_applied: !!params.geographic_filters,
-        geographic_analysis: geographicAnalysis,
-        execution_time_ms: Date.now() - startTime,
-      };
-    } catch (error) {
-      throw new Error(
-        `Geographic flows search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
-  }
 
   /**
    * Build geographic query string for alarms
@@ -2291,7 +2233,6 @@ interface SearchTools {
   search_cross_reference: SearchEngine['crossReferenceSearch'];
   search_enhanced_cross_reference: SearchEngine['enhancedCrossReferenceSearch'];
   get_correlation_suggestions: SearchEngine['getCorrelationSuggestions'];
-  search_flows_by_geography: SearchEngine['searchFlowsByGeography'];
   search_alarms_by_geography: SearchEngine['searchAlarmsByGeography'];
   get_geographic_statistics: SearchEngine['getGeographicStatistics'];
 }
@@ -2316,8 +2257,6 @@ export function createSearchTools(firewalla: FirewallaClient): SearchTools {
       searchEngine.enhancedCrossReferenceSearch.bind(searchEngine),
     get_correlation_suggestions:
       searchEngine.getCorrelationSuggestions.bind(searchEngine),
-    search_flows_by_geography:
-      searchEngine.searchFlowsByGeography.bind(searchEngine),
     search_alarms_by_geography:
       searchEngine.searchAlarmsByGeography.bind(searchEngine),
     get_geographic_statistics:

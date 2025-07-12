@@ -393,7 +393,8 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         pages_traversed: pagesTraversed,
         has_more: !!response.next_cursor,
         validation_warnings:
-          alarmValidationResult.warnings && alarmValidationResult.warnings.length > 0
+          alarmValidationResult.warnings &&
+          alarmValidationResult.warnings.length > 0
             ? alarmValidationResult.warnings
             : undefined,
         cache_info: {

@@ -178,6 +178,20 @@ export const TROUBLESHOOTING_GUIDES = {
     'Try using exact matches instead of wildcards',
   ],
   
+  [ErrorType.SERVICE_UNAVAILABLE]: [
+    'Check if the MCP server is running in safe mode',
+    'Verify the WAVE0_ENABLED environment variable is not set to false',
+    'Wait for service maintenance to complete',
+    'Try again after a short delay',
+  ],
+  
+  [ErrorType.TOOL_DISABLED]: [
+    'Check if the tool is listed in MCP_DISABLED_TOOLS environment variable',
+    'Verify the tool name is spelled correctly',
+    'Contact administrator to enable the tool',
+    'Use alternative tools if available',
+  ],
+  
   [ErrorType.UNKNOWN_ERROR]: [
     'Check the detailed error message for clues',
     'Try the operation again after a short delay',
@@ -199,6 +213,8 @@ export const DOCUMENTATION_LINKS = {
   [ErrorType.CACHE_ERROR]: '/docs/caching-guide.md',
   [ErrorType.CORRELATION_ERROR]: '/docs/correlation-guide.md',
   [ErrorType.SEARCH_ERROR]: '/docs/query-syntax-guide.md',
+  [ErrorType.SERVICE_UNAVAILABLE]: '/docs/troubleshooting-guide.md',
+  [ErrorType.TOOL_DISABLED]: '/docs/feature-flags-guide.md',
   [ErrorType.UNKNOWN_ERROR]: '/docs/troubleshooting-guide.md',
 } as const;
 
@@ -207,44 +223,93 @@ export const DOCUMENTATION_LINKS = {
  */
 export class ErrorClassifier {
   /**
-   * Classify an error based on its message and context
+   * Classify an error based on its message and context with improved timeout detection
    */
   static classifyError(error: Error | string, context?: ErrorContext): ErrorType {
     const errorMessage = typeof error === 'string' ? error : error.message;
     const errorString = errorMessage.toLowerCase();
 
-    // Check each error pattern category
-    for (const [errorType, patterns] of Object.entries(ERROR_PATTERNS)) {
-      for (const pattern of patterns) {
-        if (pattern.test(errorString)) {
-          // Map pattern names to ErrorType enum values
-          switch (errorType) {
-            case 'NETWORK_ERRORS':
-              return ErrorType.NETWORK_ERROR;
-            case 'AUTH_ERRORS':
-              return ErrorType.AUTHENTICATION_ERROR;
-            case 'NOT_FOUND_ERRORS':
-              return ErrorType.API_ERROR; // Not found is a type of API error
-            case 'RATE_LIMIT_ERRORS':
-              return ErrorType.RATE_LIMIT_ERROR;
-            case 'TIMEOUT_ERRORS':
-              return ErrorType.TIMEOUT_ERROR;
-            case 'VALIDATION_ERRORS':
-              return ErrorType.VALIDATION_ERROR;
-            case 'CACHE_ERRORS':
-              return ErrorType.CACHE_ERROR;
-            case 'CORRELATION_ERRORS':
-              return ErrorType.CORRELATION_ERROR;
-            case 'SEARCH_ERRORS':
-              return ErrorType.SEARCH_ERROR;
-          }
+    // First, check for likely misclassified timeouts
+    if (errorString.includes('timeout')) {
+      const executionTime = context?.context?.executionTime as number | undefined;
+      if (this.isLikelyMisclassifiedTimeout(error, executionTime)) {
+        // This looks like a validation or other error that mentions timeout
+        // Check for validation patterns specifically
+        if (ERROR_PATTERNS.VALIDATION_ERRORS.some(pattern => pattern.test(errorString))) {
+          return ErrorType.VALIDATION_ERROR;
         }
+        if (ERROR_PATTERNS.AUTH_ERRORS.some(pattern => pattern.test(errorString))) {
+          return ErrorType.AUTHENTICATION_ERROR;
+        }
+        if (ERROR_PATTERNS.NETWORK_ERRORS.some(pattern => pattern.test(errorString))) {
+          return ErrorType.NETWORK_ERROR;
+        }
+      } else {
+        // This appears to be a real timeout
+        return ErrorType.TIMEOUT_ERROR;
       }
     }
 
-    // Context-based classification if pattern matching fails
+    // Priority-based classification to handle pattern conflicts
+    // Higher priority error types are checked first
+    
+    // 1. Authentication errors (highest priority - security critical)
+    if (ERROR_PATTERNS.AUTH_ERRORS.some(pattern => pattern.test(errorString))) {
+      return ErrorType.AUTHENTICATION_ERROR;
+    }
+
+    // 2. Validation errors (high priority - parameter issues)
+    if (ERROR_PATTERNS.VALIDATION_ERRORS.some(pattern => pattern.test(errorString))) {
+      return ErrorType.VALIDATION_ERROR;
+    }
+
+    // 3. Rate limiting errors (high priority - service protection)
+    if (ERROR_PATTERNS.RATE_LIMIT_ERRORS.some(pattern => pattern.test(errorString))) {
+      return ErrorType.RATE_LIMIT_ERROR;
+    }
+
+    // 4. Network errors (medium priority - infrastructure issues)
+    if (ERROR_PATTERNS.NETWORK_ERRORS.some(pattern => pattern.test(errorString))) {
+      return ErrorType.NETWORK_ERROR;
+    }
+
+    // 5. Timeout errors (only real timeouts reach here)
+    if (ERROR_PATTERNS.TIMEOUT_ERRORS.some(pattern => pattern.test(errorString))) {
+      return ErrorType.TIMEOUT_ERROR;
+    }
+
+    // 6. Cache errors (medium priority)
+    if (ERROR_PATTERNS.CACHE_ERRORS.some(pattern => pattern.test(errorString))) {
+      return ErrorType.CACHE_ERROR;
+    }
+
+    // 7. Search-specific errors
+    if (ERROR_PATTERNS.SEARCH_ERRORS.some(pattern => pattern.test(errorString))) {
+      return ErrorType.SEARCH_ERROR;
+    }
+
+    // 8. Correlation errors
+    if (ERROR_PATTERNS.CORRELATION_ERRORS.some(pattern => pattern.test(errorString))) {
+      return ErrorType.CORRELATION_ERROR;
+    }
+
+    // 9. API errors (including not found - lower priority as these are more generic)
+    if (ERROR_PATTERNS.NOT_FOUND_ERRORS.some(pattern => pattern.test(errorString))) {
+      return ErrorType.API_ERROR;
+    }
+
+    // Context-based classification for edge cases
     if (context?.operation?.includes('search') || context?.operation?.includes('query')) {
       return ErrorType.SEARCH_ERROR;
+    }
+
+    if (context?.operation?.includes('auth') || context?.operation?.includes('login')) {
+      return ErrorType.AUTHENTICATION_ERROR;
+    }
+
+    if (context?.parameters && Object.keys(context.parameters).length > 0) {
+      // If we have parameters but no clear pattern match, likely a validation issue
+      return ErrorType.VALIDATION_ERROR;
     }
 
     return ErrorType.UNKNOWN_ERROR;
@@ -331,6 +396,12 @@ export class ErrorClassifier {
       case ErrorType.SEARCH_ERROR:
         return `Search operation failed - check query syntax`;
       
+      case ErrorType.SERVICE_UNAVAILABLE:
+        return `Service is temporarily unavailable for ${operation}`;
+      
+      case ErrorType.TOOL_DISABLED:
+        return `Tool is currently disabled for ${operation}`;
+      
       case ErrorType.UNKNOWN_ERROR:
         return `Unknown error occurred during ${operation}: ${originalMessage}`;
       
@@ -380,11 +451,17 @@ export class ErrorClassifier {
     duration?: number
   ): boolean {
     const errorMessage = typeof error === 'string' ? error : error.message;
+    const errorString = errorMessage.toLowerCase();
     
     // If duration is very short (< 100ms) but error mentions timeout,
     // it's likely a misclassification
-    if (duration && duration < 100 && errorMessage.toLowerCase().includes('timeout')) {
+    if (duration && duration < 100 && errorString.includes('timeout')) {
       return true;
+    }
+    
+    // If duration is very long (> 30s), it's probably a real timeout
+    if (duration && duration > 30000) {
+      return false;
     }
     
     // Check for patterns that suggest immediate failure rather than actual timeout
@@ -392,10 +469,47 @@ export class ErrorClassifier {
       /connection.*refused/i,
       /not.*found/i,
       /invalid.*parameter/i,
+      /parameter.*required/i,
+      /missing.*parameter/i,
       /authentication.*failed/i,
+      /unauthorized/i,
+      /forbidden/i,
+      /bad.*request/i,
+      /validation.*failed/i,
+      /syntax.*error/i,
+      /parse.*error/i,
+      /format.*error/i,
+      /400/,
+      /401/,
+      /403/,
+      /404/,
     ];
     
-    return immediateFailurePatterns.some(pattern => pattern.test(errorMessage));
+    // If it contains timeout but also contains immediate failure patterns, 
+    // it's likely misclassified
+    if (errorString.includes('timeout') && 
+        immediateFailurePatterns.some(pattern => pattern.test(errorString))) {
+      return true;
+    }
+    
+    // Check for specific timeout error contexts that suggest real timeouts
+    const realTimeoutIndicators = [
+      /operation.*timeout/i,
+      /request.*timeout/i,
+      /socket.*timeout/i,
+      /connection.*timeout/i,
+      /read.*timeout/i,
+      /write.*timeout/i,
+      /execution.*timeout/i,
+    ];
+    
+    // If it contains timeout and specific timeout indicators, it's probably real
+    if (errorString.includes('timeout') && 
+        realTimeoutIndicators.some(pattern => pattern.test(errorString))) {
+      return false;
+    }
+    
+    return false;
   }
 
   /**

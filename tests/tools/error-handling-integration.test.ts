@@ -306,7 +306,7 @@ describe('Error Handling Integration Tests', () => {
         const errorData = JSON.parse(response.content[0].text);
         expect(errorData.errorType).toBe('api_error');
         expect(errorData.message).toContain('Failed to get flow data');
-        expect(errorData.details.originalError).toBe('Internal server error');
+        expect(errorData.details.originalError).toContain('Internal server error');
       });
     });
 

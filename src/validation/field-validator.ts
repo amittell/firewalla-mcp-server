@@ -20,17 +20,26 @@ export interface DetailedFieldValidation {
 
 /**
  * Field validation result with multiple suggestions
+ * Compatible with main ValidationResult interface
  */
 export interface FieldValidationResult {
   isValid: boolean;
   errors: string[];
+  warnings?: string[];
   suggestions: string[];
+  sanitizedValue?: unknown;
   fieldMapping: Record<string, string[]>;
   closestMatches: Array<{
     field: string;
     similarity: number;
     entityType: EntityType;
   }>;
+  metadata?: {
+    fieldsValidated?: number;
+    missingFields?: number;
+    typeMismatches?: number;
+    validationTime?: number;
+  };
 }
 
 export class FieldValidator {

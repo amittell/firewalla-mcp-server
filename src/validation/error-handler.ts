@@ -24,6 +24,8 @@ export enum ErrorType {
   CACHE_ERROR = 'cache_error',
   CORRELATION_ERROR = 'correlation_error',
   SEARCH_ERROR = 'search_error',
+  SERVICE_UNAVAILABLE = 'service_unavailable',
+  TOOL_DISABLED = 'tool_disabled',
   UNKNOWN_ERROR = 'unknown_error'
 }
 
@@ -1233,12 +1235,12 @@ export class QuerySanitizer {
     // Normalize common patterns for better parsing
     const normalizedQuery = trimmedQuery
       .replace(/\s+/g, ' ')  // Normalize whitespace
+      .replace(/\s+(AND|OR|NOT)\s+/gi, ' $1 ')  // Normalize logical operators FIRST
       .replace(/\s*:\s*/g, ':')  // Remove spaces around colons
       .replace(/\s*>\s*=\s*/g, '>=')  // Handle spaced '>='
       .replace(/\s*<\s*=\s*/g, '<=')  // Handle spaced '<='
       .replace(/\s*!\s*=\s*/g, '!=')  // Handle spaced '!='
-      .replace(/\s*(>=|<=|!=|>|<)\s*/g, '$1')  // Remove spaces around operators
-      .replace(/\s+(AND|OR|NOT)\s+/gi, ' $1 ');  // Normalize logical operators
+      .replace(/\s*(>=|<=|!=|>|<)\s*/g, '$1');  // Remove spaces around operators
 
     return {
       isValid: true,

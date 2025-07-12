@@ -11,6 +11,7 @@ import {
 } from '../../validation/error-handler.js';
 import { unixToISOString } from '../../utils/timestamp.js';
 import { logger } from '../../monitoring/logger.js';
+import { withToolTimeout } from '../../utils/timeout-manager.js';
 // Temporarily commented out for simplification PR
 // import {
 //   safeAccess,
@@ -72,7 +73,10 @@ See the Box Management guide for configuration details.`;
 
       const groupId = groupIdValidation.sanitizedValue;
 
-      const boxesResponse = await firewalla.getBoxes(groupId as string);
+      const boxesResponse = await withToolTimeout(
+        async () => firewalla.getBoxes(groupId as string),
+        this.name
+      );
 
       // Normalize box data for consistency
       const boxResults = SafeAccess.safeArrayAccess(
@@ -164,7 +168,10 @@ This tool provides the foundation for network health monitoring and dashboard di
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      const statsResponse = await firewalla.getSimpleStatistics();
+      const statsResponse = await withToolTimeout(
+        async () => firewalla.getSimpleStatistics(),
+        this.name
+      );
       const stats = SafeAccess.safeArrayAccess(
         statsResponse?.results,
         (arr: any[]) => arr[0],
@@ -273,7 +280,10 @@ export class GetStatisticsByRegionHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      const stats = await firewalla.getStatisticsByRegion();
+      const stats = await withToolTimeout(
+        async () => firewalla.getStatisticsByRegion(),
+        this.name
+      );
 
       // Validate response structure with comprehensive null/undefined guards
       if (
@@ -375,7 +385,10 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      const stats = await firewalla.getStatisticsByBox();
+      const stats = await withToolTimeout(
+        async () => firewalla.getStatisticsByBox(),
+        this.name
+      );
 
       // Validate stats response structure
       if (!stats || typeof stats !== 'object') {
@@ -564,9 +577,13 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
       const period = periodValidation.sanitizedValue!;
       const interval = intervalValidation.sanitizedValue!;
 
-      const trends = await firewalla.getFlowTrends(
-        period as '1h' | '24h' | '7d' | '30d',
-        interval as number
+      const trends = await withToolTimeout(
+        async () =>
+          firewalla.getFlowTrends(
+            period as '1h' | '24h' | '7d' | '30d',
+            interval as number
+          ),
+        this.name
       );
 
       // Validate trends response structure
@@ -702,8 +719,10 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
 
       const period = periodValidation.sanitizedValue!;
 
-      const trends = await firewalla.getAlarmTrends(
-        period as '1h' | '24h' | '7d' | '30d'
+      const trends = await withToolTimeout(
+        async () =>
+          firewalla.getAlarmTrends(period as '1h' | '24h' | '7d' | '30d'),
+        this.name
       );
 
       // Defensive programming: validate trends response structure
@@ -840,8 +859,10 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
 
       const period = periodValidation.sanitizedValue!;
 
-      const trends = await firewalla.getRuleTrends(
-        period as '1h' | '24h' | '7d' | '30d'
+      const trends = await withToolTimeout(
+        async () =>
+          firewalla.getRuleTrends(period as '1h' | '24h' | '7d' | '30d'),
+        this.name
       );
 
       // Validate trends response structure

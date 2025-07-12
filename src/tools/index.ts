@@ -34,6 +34,9 @@ import { logger } from '../monitoring/logger.js';
 import { ToolRegistry } from './registry.js';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
 
+import { featureFlags } from '../config/feature-flags.js';
+import { metrics } from '../monitoring/metrics.js';
+
 /**
  * Registers and configures all Firewalla MCP tools on the server using a modular registry pattern
  *
@@ -72,6 +75,30 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
   server.setRequestHandler(CallToolRequestSchema, async request => {
     const { name, arguments: args } = request.params;
 
+    // <add WAVE-0 safety-net and telemetry>
+    // Global safety-net: disable all tools when WAVE-0 flag off
+    if (!featureFlags.WAVE0_ENABLED) {
+      return createErrorResponse(
+        name,
+        'MCP server running in safe-mode, tools disabled',
+        ErrorType.SERVICE_UNAVAILABLE,
+        { timestamp: getCurrentTimestamp() }
+      );
+    }
+
+    // Per-tool disable list
+    if (featureFlags.disabledTools.includes(name)) {
+      return createErrorResponse(
+        name,
+        `Tool '${name}' is temporarily disabled`,
+        ErrorType.TOOL_DISABLED,
+        { timestamp: getCurrentTimestamp() }
+      );
+    }
+
+    const startTime = Date.now();
+    // </add>
+
     try {
       // Get handler from the registry
       const handler = toolRegistry.getHandler(name);
@@ -86,8 +113,20 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
       logger.debug(
         `Executing tool: ${name} with handler: ${handler.constructor.name}`
       );
-      return await handler.execute(args || {}, firewalla);
+      const response = await handler.execute(args || {}, firewalla);
+
+      // <add success telemetry>
+      metrics.count('tool.success', 1, { tool: name });
+      metrics.timing('tool.latency_ms', Date.now() - startTime, {
+        tool: name,
+      });
+      // </add>
+
+      return response;
     } catch (error: unknown) {
+      // <add error metric>
+      metrics.count('tool.error', 1, { tool: name });
+      // </add>
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       logger.error(`Tool execution failed for ${name}:`, error as Error);

@@ -202,7 +202,37 @@ const mockFirewallaClient = {
   searchAlarms: jest.fn(),
   searchRules: jest.fn(),
   searchDevices: jest.fn(),
-  searchTargetLists: jest.fn()
+  searchTargetLists: jest.fn(),
+  
+  // WAVE-2: Geographic query building method
+  buildGeoQuery: jest.fn().mockImplementation((filters) => {
+    const queryParts = [];
+    if (filters.countries?.length) {
+      queryParts.push(`country:(${filters.countries.join(' OR ')})`);
+    }
+    if (filters.continents?.length) {
+      queryParts.push(`continent:(${filters.continents.join(' OR ')})`);
+    }
+    if (filters.regions?.length) {
+      queryParts.push(`region:(${filters.regions.join(' OR ')})`);
+    }
+    if (filters.exclude_cloud) {
+      queryParts.push('cloud_provider:false');
+    }
+    if (filters.exclude_vpn) {
+      queryParts.push('vpn:false');
+    }
+    if (filters.exclude_known_providers) {
+      queryParts.push('cloud_provider:false');
+    }
+    if (filters.high_risk_countries) {
+      queryParts.push('risk_score:>=7');
+    }
+    if (filters.min_risk_score !== undefined) {
+      queryParts.push(`risk_score:>=${filters.min_risk_score}`);
+    }
+    return queryParts.join(' AND ');
+  })
 } as unknown as FirewallaClient;
 
 describe('Geographic Search Tools', () => {
@@ -213,7 +243,7 @@ describe('Geographic Search Tools', () => {
     jest.clearAllMocks();
   });
 
-  describe('search_flows_by_geography', () => {
+  describe('search_flows with geographic features', () => {
 
     test('should perform basic geographic search with country filter', async () => {
       const params = {
@@ -224,10 +254,10 @@ describe('Geographic Search Tools', () => {
         limit: 100
       };
 
-      const result = await searchTools.search_flows_by_geography(params);
+      const result = await searchTools.search_flows(params);
 
       expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
-        'protocol:tcp AND (country:US OR country:DE)',
+        'protocol:tcp AND country:(US OR DE)',
         undefined,
         'ts:desc',
         100,
@@ -241,16 +271,17 @@ describe('Geographic Search Tools', () => {
 
     test('should filter by continent', async () => {
       const params = {
+        query: '*',
         geographic_filters: {
           continents: ['Europe', 'Asia']
         },
         limit: 50
       };
 
-      const result = await searchTools.search_flows_by_geography(params);
+      const result = await searchTools.search_flows(params);
 
       expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
-        '(continent:Europe OR continent:Asia)',
+        '* AND continent:(Europe OR Asia)',
         undefined,
         'ts:desc',
         50,
@@ -261,16 +292,17 @@ describe('Geographic Search Tools', () => {
 
     test('should exclude cloud providers', async () => {
       const params = {
+        query: '*',
         geographic_filters: {
           exclude_cloud: true
         },
         limit: 100
       };
 
-      const result = await searchTools.search_flows_by_geography(params);
+      const result = await searchTools.search_flows(params);
 
       expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
-        'NOT is_cloud_provider:true',
+        '* AND cloud_provider:false',
         undefined,
         'ts:desc',
         100,
@@ -280,16 +312,17 @@ describe('Geographic Search Tools', () => {
 
     test('should filter by minimum risk score', async () => {
       const params = {
+        query: '*',
         geographic_filters: {
           min_risk_score: 7
         },
         limit: 100
       };
 
-      const result = await searchTools.search_flows_by_geography(params);
+      const result = await searchTools.search_flows(params);
 
       expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
-        'geographic_risk_score:>=7',
+        '* AND risk_score:>=7',
         undefined,
         'ts:desc',
         100,
@@ -308,10 +341,10 @@ describe('Geographic Search Tools', () => {
         limit: 100
       };
 
-      const result = await searchTools.search_flows_by_geography(params);
+      const result = await searchTools.search_flows(params);
 
       expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
-        'bytes:>1000 AND country:CN AND NOT is_vpn:true AND geographic_risk_score:>=5',
+        'bytes:>1000 AND country:(CN) AND vpn:false AND risk_score:>=5',
         undefined,
         'ts:desc',
         100,
@@ -323,12 +356,14 @@ describe('Geographic Search Tools', () => {
       // Set up specific mock data for this test
       
       const params = {
+        query: '*',
         limit: 100,
         aggregate: true,
-        group_by: 'country'
+        group_by: 'country',
+        include_analytics: true
       };
 
-      const result = await searchTools.search_flows_by_geography(params);
+      const result = await searchTools.search_flows(params);
 
       expect(result.geographic_analysis).toMatchObject({
         total_flows: 3,
@@ -344,24 +379,26 @@ describe('Geographic Search Tools', () => {
 
     test('should validate required limit parameter', async () => {
       const paramsWithoutLimit = {
+        query: '*',
         geographic_filters: {
           countries: ['US']
         }
       };
 
-      await expect(searchTools.search_flows_by_geography(paramsWithoutLimit as any))
-        .rejects.toThrow(/Parameter validation failed.*limit/);
+      await expect(searchTools.search_flows(paramsWithoutLimit as any))
+        .rejects.toThrow(/limit parameter is required/);
     });
 
     test('should validate country codes and reject invalid ones', async () => {
       const paramsWithInvalidCountries = {
+        query: '*',
         geographic_filters: {
           countries: ['US', 'FAKE', 'INVALID']
         },
         limit: 100
       };
 
-      await expect(searchTools.search_flows_by_geography(paramsWithInvalidCountries))
+      await expect(searchTools.search_flows(paramsWithInvalidCountries))
         .rejects.toThrow(/Country code validation failed.*Invalid country codes: FAKE, INVALID/);
     });
 
@@ -369,14 +406,15 @@ describe('Geographic Search Tools', () => {
       mockFirewallaClient.getFlowData = jest.fn().mockRejectedValue(new Error('API Error'));
 
       const params = {
+        query: '*',
         geographic_filters: {
           countries: ['US']
         },
         limit: 100
       };
 
-      await expect(searchTools.search_flows_by_geography(params))
-        .rejects.toThrow(/Geographic flows search failed/);
+      await expect(searchTools.search_flows(params))
+        .rejects.toThrow(/search_flows failed/);
     });
   });
 
@@ -443,7 +481,7 @@ describe('Geographic Search Tools', () => {
       const result = await searchTools.search_alarms_by_geography(params);
 
       expect(mockFirewallaClient.getActiveAlarms).toHaveBeenCalledWith(
-        'severity:high AND geographic_risk_score:>=7',
+        'severity:high AND risk_score:>=7',
         undefined,
         'timestamp:desc',
         100,
@@ -466,7 +504,7 @@ describe('Geographic Search Tools', () => {
       const result = await searchTools.search_alarms_by_geography(params);
 
       expect(mockFirewallaClient.getActiveAlarms).toHaveBeenCalledWith(
-        '(country:RU OR country:CN OR country:KP)',
+        'country:(RU OR CN OR KP)',
         undefined,
         'timestamp:desc',
         50,
@@ -485,7 +523,7 @@ describe('Geographic Search Tools', () => {
       const result = await searchTools.search_alarms_by_geography(params);
 
       expect(mockFirewallaClient.getActiveAlarms).toHaveBeenCalledWith(
-        'NOT is_cloud_provider:true AND NOT hosting_provider:*',
+        'cloud_provider:false',
         undefined,
         'timestamp:desc',
         100,
@@ -774,7 +812,7 @@ describe('Geographic Search Tools', () => {
         aggregate: true
       };
 
-      const result = await searchTools.search_flows_by_geography(params);
+      const result = await searchTools.search_flows(params);
 
       expect(result).toHaveProperty('geographic_analysis');
       expect(result.geographic_analysis.total_flows).toBe(1);
@@ -903,10 +941,12 @@ describe('Geographic Search Tools', () => {
       mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(incompleteGeoData);
 
       const params = {
-        limit: 100
+        query: '*',
+        limit: 100,
+        include_analytics: true
       };
 
-      const result = await searchTools.search_flows_by_geography(params);
+      const result = await searchTools.search_flows(params);
 
       expect(result.geographic_analysis).toBeDefined();
       expect(result.geographic_analysis.total_flows).toBe(3);
@@ -946,8 +986,10 @@ describe('Geographic Search Tools', () => {
       mockFirewallaClient.getFlowData = jest.fn().mockResolvedValue(largeGeoData);
 
       const startTime = Date.now();
-      const result = await searchTools.search_flows_by_geography({
-        limit: 1000
+      const result = await searchTools.search_flows({
+        query: '*',
+        limit: 1000,
+        include_analytics: true
       });
       const executionTime = Date.now() - startTime;
 
@@ -973,7 +1015,7 @@ describe('Geographic Search Tools', () => {
 
       // Expect this to throw an error due to invalid format
       try {
-        await searchTools.search_flows_by_geography(invalidFilters);
+        await searchTools.search_flows(invalidFilters);
         throw new Error('Should have failed');
       } catch (error) {
         expect((error as Error).message).toMatch(/countries\.map is not a function|validation|parameter/i);
@@ -1012,7 +1054,8 @@ describe('Geographic Search Tools', () => {
       });
       
       const promises = Array.from({ length: 5 }, () =>
-        searchTools.search_flows_by_geography({
+        searchTools.search_flows({
+          query: '*',
           geographic_filters: { countries: ['US'] },
           limit: 10
         })

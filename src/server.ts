@@ -15,6 +15,8 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { featureFlags } from './config/feature-flags.js';
+import { metrics } from './monitoring/metrics.js';
 import {
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
@@ -514,6 +516,60 @@ export class FirewallaMCPServer {
                   description:
                     'Include aggregation statistics (default: false)',
                 },
+                geographic_filters: {
+                  type: 'object',
+                  properties: {
+                    countries: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by specific countries (ISO 3166-1 alpha-2)',
+                    },
+                    continents: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by continents',
+                    },
+                    regions: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by geographic regions',
+                    },
+                    cities: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by specific cities',
+                    },
+                    asns: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by ASN numbers',
+                    },
+                    hosting_providers: {
+                      type: 'array',
+                      items: { type: 'string' },
+                      description: 'Filter by hosting providers',
+                    },
+                    exclude_cloud: {
+                      type: 'boolean',
+                      description: 'Exclude cloud provider traffic',
+                    },
+                    exclude_vpn: {
+                      type: 'boolean',
+                      description: 'Exclude VPN/proxy traffic',
+                    },
+                    min_risk_score: {
+                      type: 'number',
+                      minimum: 0,
+                      maximum: 1,
+                      description: 'Minimum geographic risk score',
+                    },
+                  },
+                  description: 'Optional geographic filtering options',
+                },
+                include_analytics: {
+                  type: 'boolean',
+                  description: 'Include geographic analysis summary (default: false)',
+                },
               },
               required: ['query', 'limit'],
             },
@@ -953,95 +1009,6 @@ export class FirewallaMCPServer {
             },
           },
           {
-            name: 'search_flows_by_geography',
-            description:
-              'Advanced Firewalla geographic flow search with location-based filtering and analysis',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                query: {
-                  type: 'string',
-                  description:
-                    'Optional flow search query using advanced syntax',
-                },
-                geographic_filters: {
-                  type: 'object',
-                  properties: {
-                    countries: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Filter by specific countries',
-                    },
-                    continents: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Filter by continents',
-                    },
-                    regions: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Filter by geographic regions',
-                    },
-                    cities: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Filter by specific cities',
-                    },
-                    asns: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Filter by ASN numbers',
-                    },
-                    hosting_providers: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Filter by hosting providers',
-                    },
-                    exclude_cloud: {
-                      type: 'boolean',
-                      description: 'Exclude cloud provider traffic',
-                    },
-                    exclude_vpn: {
-                      type: 'boolean',
-                      description: 'Exclude VPN/proxy traffic',
-                    },
-                    min_risk_score: {
-                      type: 'number',
-                      minimum: 0,
-                      maximum: 1,
-                      description: 'Minimum geographic risk score',
-                    },
-                  },
-                  description: 'Geographic filtering options',
-                },
-                limit: {
-                  type: 'number',
-                  minimum: 1,
-                  maximum: 10000,
-                  description: 'Maximum number of flows to return',
-                },
-                sort_by: {
-                  type: 'string',
-                  description: 'Sort flows by field',
-                },
-                sort_order: {
-                  type: 'string',
-                  enum: ['asc', 'desc'],
-                  description: 'Sort order',
-                },
-                group_by: {
-                  type: 'string',
-                  description: 'Group results by field',
-                },
-                aggregate: {
-                  type: 'boolean',
-                  description: 'Include aggregation statistics',
-                },
-              },
-              required: ['limit'],
-            },
-          },
-          {
             name: 'search_alarms_by_geography',
             description:
               'Firewalla geographic alarm search with location-based threat analysis',
@@ -1290,8 +1257,38 @@ export class FirewallaMCPServer {
 // Start server if run directly (ES module compatible)
 if (import.meta.url === `file://${process.argv[1]}`) {
   const server = new FirewallaMCPServer();
-  server.start().catch((error: Error) => {
-    process.stderr.write(`Fatal error: ${error.message}\n`);
-    process.exit(1);
-  });
+  server
+    .start()
+    .then(() => {
+      const healthPortEnv = process.env.MCP_HEALTH_PORT;
+      if (healthPortEnv) {
+        const port = Number(healthPortEnv);
+        import('node:http')
+          .then(({ createServer }) => {
+            createServer((_req, res) => {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  wave0: featureFlags,
+                  metrics: metrics.snapshot(),
+                  uptime: process.uptime(),
+                })
+              );
+            }).listen(port, () => {
+              process.stderr.write(
+                `Health endpoint listening on http://localhost:${port}\n`
+              );
+            });
+          })
+          .catch((error: Error) => {
+            process.stderr.write(
+              `Failed to start health endpoint: ${error.message}\n`
+            );
+          });
+      }
+    })
+    .catch((error: Error) => {
+      process.stderr.write(`Fatal error: ${error.message}\n`);
+      process.exit(1);
+    });
 }

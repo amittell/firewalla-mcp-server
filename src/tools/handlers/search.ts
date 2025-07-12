@@ -38,6 +38,7 @@ import {
   BackwardCompatibilityLayer,
 } from '../../utils/response-standardizer.js';
 import { shouldUseLegacyFormat } from '../../config/response-config.js';
+import { validateCountryCodes } from '../../utils/geographic.js';
 
 // Base search interface to reduce duplication
 export interface BaseSearchArgs extends ToolArgs {
@@ -58,6 +59,18 @@ export interface SearchFlowsArgs extends BaseSearchArgs {
     start?: string;
     end?: string;
   };
+  geographic_filters?: {
+    countries?: string[];
+    continents?: string[];
+    regions?: string[];
+    cities?: string[];
+    asns?: string[];
+    hosting_providers?: string[];
+    exclude_vpn?: boolean;
+    exclude_cloud?: boolean;
+    min_risk_score?: number;
+  };
+  include_analytics?: boolean;
 }
 
 export interface SearchAlarmsArgs extends BaseSearchArgs {
@@ -65,6 +78,12 @@ export interface SearchAlarmsArgs extends BaseSearchArgs {
     start?: string;
     end?: string;
   };
+
+  /**
+   * Filter alarms by severity level.
+   * Allowed values: low | medium | high | critical
+   */
+  severity?: 'low' | 'medium' | 'high' | 'critical';
 }
 
 export interface SearchRulesArgs extends BaseSearchArgs {}
@@ -97,25 +116,6 @@ export interface GetCorrelationSuggestionsArgs extends ToolArgs {
   secondary_queries: string[];
 }
 
-export interface SearchFlowsByGeographyArgs extends ToolArgs {
-  query?: string;
-  geographic_filters?: {
-    countries?: string[];
-    continents?: string[];
-    regions?: string[];
-    cities?: string[];
-    asns?: string[];
-    hosting_providers?: string[];
-    exclude_cloud?: boolean;
-    exclude_vpn?: boolean;
-    min_risk_score?: number;
-  };
-  limit: number;
-  sort_by?: string;
-  sort_order?: 'asc' | 'desc';
-  group_by?: string;
-  aggregate?: boolean;
-}
 
 export interface SearchAlarmsByGeographyArgs extends ToolArgs {
   query?: string;
@@ -146,16 +146,18 @@ export interface GetGeographicStatisticsArgs extends ToolArgs {
 /**
  * Common search parameter validation helper
  */
-type CommonSearchValidationResult = {
-  isValid: false;
-  response: ToolResponse;
-} | {
-  isValid: true;
-  limit: number;
-  query: string;
-  cursor?: string;
-  groupBy?: string;
-};
+type CommonSearchValidationResult =
+  | {
+      isValid: false;
+      response: ToolResponse;
+    }
+  | {
+      isValid: true;
+      limit: number;
+      query: string;
+      cursor?: string;
+      groupBy?: string;
+    };
 
 function validateCommonSearchParameters(
   args: BaseSearchArgs,
@@ -178,7 +180,7 @@ function validateCommonSearchParameters(
         ErrorType.VALIDATION_ERROR,
         undefined,
         limitValidation.errors
-      )
+      ),
     };
   }
 
@@ -197,7 +199,7 @@ function validateCommonSearchParameters(
         ErrorType.VALIDATION_ERROR,
         undefined,
         queryValidation.errors
-      )
+      ),
     };
   }
 
@@ -216,12 +218,13 @@ function validateCommonSearchParameters(
         ErrorType.VALIDATION_ERROR,
         {
           query: args.query,
-          documentation: entityType === 'alarms'
-            ? 'See /docs/error-handling-guide.md for troubleshooting'
-            : 'See /docs/query-syntax-guide.md for valid field names',
+          documentation:
+            entityType === 'alarms'
+              ? 'See /docs/error-handling-guide.md for troubleshooting'
+              : 'See /docs/query-syntax-guide.md for valid field names',
         },
         fieldValidation.errors
-      )
+      ),
     };
   }
 
@@ -240,7 +243,7 @@ function validateCommonSearchParameters(
           ErrorType.VALIDATION_ERROR,
           undefined,
           cursorValidation.errors
-        )
+        ),
       };
     }
   }
@@ -267,7 +270,7 @@ function validateCommonSearchParameters(
             documentation: 'See /docs/query-syntax-guide.md for valid fields',
           },
           groupByValidation.errors
-        )
+        ),
       };
     }
   }
@@ -377,9 +380,96 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
         );
       }
 
+      // ------------------------------------------------------------
+      // WAVE-1: Severity handling
+      // ------------------------------------------------------------
+      let finalQuery = searchArgs.query;
+
+      if (searchArgs.severity !== undefined) {
+        // Validate severity enum value
+        const severityValidation = ParameterValidator.validateEnum(
+          searchArgs.severity,
+          'severity',
+          ['low', 'medium', 'high', 'critical'],
+          true
+        );
+
+        if (!severityValidation.isValid) {
+          return createErrorResponse(
+            this.name,
+            'Invalid severity parameter',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: searchArgs.severity,
+              valid_values: ['low', 'medium', 'high', 'critical'],
+            },
+            severityValidation.errors
+          );
+        }
+
+        // Append severity filter to the existing query (if any)
+        finalQuery = finalQuery
+          ? `${finalQuery} AND severity:${searchArgs.severity}`
+          : `severity:${searchArgs.severity}`;
+      }
+
+      // ------------------------------------------------------------
+      // Validate geographic_filters if provided
+      // ------------------------------------------------------------
+      if (searchArgs.geographic_filters !== undefined) {
+        // Validate it's an object
+        if (typeof searchArgs.geographic_filters !== 'object' || searchArgs.geographic_filters === null) {
+          return createErrorResponse(
+            this.name,
+            'Invalid geographic_filters parameter',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: searchArgs.geographic_filters,
+              expected: 'object with optional fields: countries, continents, regions, cities, etc.',
+            }
+          );
+        }
+
+        // Validate country codes if provided
+        if (searchArgs.geographic_filters.countries && searchArgs.geographic_filters.countries.length > 0) {
+          const countryValidation = validateCountryCodes(searchArgs.geographic_filters.countries);
+          if (!countryValidation.valid) {
+            return createErrorResponse(
+              this.name,
+              `Country code validation failed: Invalid country codes: ${countryValidation.invalid.join(', ')}`,
+              ErrorType.VALIDATION_ERROR,
+              {
+                invalid_codes: countryValidation.invalid,
+                valid_codes: countryValidation.valid,
+                documentation: 'Country codes must be ISO 3166-1 alpha-2 format (e.g., US, CN, GB)',
+              }
+            );
+          }
+        }
+      }
+
+      // ------------------------------------------------------------
+      // Validate include_analytics parameter if provided
+      // ------------------------------------------------------------
+      const includeAnalyticsValidation = ParameterValidator.validateBoolean(
+        searchArgs.include_analytics,
+        'include_analytics',
+        false
+      );
+
+      if (!includeAnalyticsValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Include analytics parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          includeAnalyticsValidation.errors
+        );
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
-        query: searchArgs.query,
+        query: finalQuery,
         limit: searchArgs.limit,
         offset: searchArgs.offset,
         cursor: searchArgs.cursor,
@@ -389,6 +479,8 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
         aggregate: searchArgs.aggregate,
         time_range: searchArgs.time_range,
         force_refresh: forceRefreshValidation.sanitizedValue as boolean,
+        geographic_filters: searchArgs.geographic_filters,
+        include_analytics: includeAnalyticsValidation.sanitizedValue as boolean,
       };
 
       // Use retry logic for search operations as they can be prone to timeouts
@@ -419,9 +511,39 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
             'source.ip',
             'unknown'
           ),
+          source_country: SafeAccess.getNestedValue(
+            flow as any,
+            'source.geo.country',
+            'unknown'
+          ),
+          source_city: SafeAccess.getNestedValue(
+            flow as any,
+            'source.geo.city',
+            'unknown'
+          ),
+          source_continent: SafeAccess.getNestedValue(
+            flow as any,
+            'source.geo.continent',
+            'unknown'
+          ),
           destination_ip: SafeAccess.getNestedValue(
             flow as any,
             'destination.ip',
+            'unknown'
+          ),
+          destination_country: SafeAccess.getNestedValue(
+            flow as any,
+            'destination.geo.country',
+            'unknown'
+          ),
+          destination_city: SafeAccess.getNestedValue(
+            flow as any,
+            'destination.geo.city',
+            'unknown'
+          ),
+          destination_continent: SafeAccess.getNestedValue(
+            flow as any,
+            'destination.geo.continent',
             'unknown'
           ),
           protocol: SafeAccess.getNestedValue(
@@ -1206,12 +1328,16 @@ export class SearchCrossReferenceHandler extends BaseToolHandler {
     const searchArgs = args as SearchCrossReferenceArgs;
     try {
       const searchTools = createSearchTools(firewalla);
-      const result = await searchTools.search_cross_reference({
-        primary_query: searchArgs.primary_query,
-        secondary_queries: searchArgs.secondary_queries,
-        correlation_field: searchArgs.correlation_field,
-        limit: searchArgs.limit,
-      });
+      const result = await withToolTimeout(
+        async () =>
+          searchTools.search_cross_reference({
+            primary_query: searchArgs.primary_query,
+            secondary_queries: searchArgs.secondary_queries,
+            correlation_field: searchArgs.correlation_field,
+            limit: searchArgs.limit,
+          }),
+        this.name
+      );
 
       return this.createSuccessResponse({
         primary_query: SafeAccess.getNestedValue(result, 'primary.query', ''),
@@ -1240,6 +1366,10 @@ export class SearchCrossReferenceHandler extends BaseToolHandler {
         ),
       });
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
@@ -1262,12 +1392,16 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
     const searchArgs = args as SearchEnhancedCrossReferenceArgs;
     try {
       const searchTools = createSearchTools(firewalla);
-      const result = await searchTools.search_enhanced_cross_reference({
-        primary_query: searchArgs.primary_query,
-        secondary_queries: searchArgs.secondary_queries,
-        correlation_params: searchArgs.correlation_params,
-        limit: searchArgs.limit,
-      });
+      const result = await withToolTimeout(
+        async () =>
+          searchTools.search_enhanced_cross_reference({
+            primary_query: searchArgs.primary_query,
+            secondary_queries: searchArgs.secondary_queries,
+            correlation_params: searchArgs.correlation_params,
+            limit: searchArgs.limit,
+          }),
+        this.name
+      );
 
       // Simplified correlation response structure for better user experience
       const simplifiedResponse = {
@@ -1405,6 +1539,10 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
 
       return this.createSuccessResponse(simplifiedResponse);
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
@@ -1568,10 +1706,14 @@ export class GetCorrelationSuggestionsHandler extends BaseToolHandler {
     const searchArgs = args as GetCorrelationSuggestionsArgs;
     try {
       const searchTools = createSearchTools(firewalla);
-      const result = await searchTools.get_correlation_suggestions({
-        primary_query: searchArgs.primary_query,
-        secondary_queries: searchArgs.secondary_queries,
-      });
+      const result = await withToolTimeout(
+        async () =>
+          searchTools.get_correlation_suggestions({
+            primary_query: searchArgs.primary_query,
+            secondary_queries: searchArgs.secondary_queries,
+          }),
+        this.name
+      );
 
       return this.createSuccessResponse({
         entity_types: SafeAccess.getNestedValue(result, 'entity_types', []),
@@ -1613,6 +1755,10 @@ export class GetCorrelationSuggestionsHandler extends BaseToolHandler {
         ),
       });
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
@@ -1622,133 +1768,6 @@ export class GetCorrelationSuggestionsHandler extends BaseToolHandler {
   }
 }
 
-export class SearchFlowsByGeographyHandler extends BaseToolHandler {
-  name = 'search_flows_by_geography';
-  description =
-    'Advanced geographic flow search with location-based filtering and analysis';
-  category = 'search' as const;
-
-  async execute(
-    args: ToolArgs,
-    firewalla: FirewallaClient
-  ): Promise<ToolResponse> {
-    const searchArgs = args as SearchFlowsByGeographyArgs;
-    try {
-      const searchTools = createSearchTools(firewalla);
-      const result = await searchTools.search_flows_by_geography({
-        query: searchArgs.query,
-        geographic_filters: searchArgs.geographic_filters,
-        limit: searchArgs.limit,
-        sort_by: searchArgs.sort_by,
-        sort_order: searchArgs.sort_order,
-        group_by: searchArgs.group_by,
-        aggregate: searchArgs.aggregate,
-      });
-
-      return this.createSuccessResponse({
-        query_executed: SafeAccess.getNestedValue(result, 'query', ''),
-        count: SafeAccess.safeArrayAccess(result.results, arr => arr.length, 0),
-        geographic_analysis: {
-          total_flows: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.total_flows',
-            0
-          ),
-          unique_countries: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.unique_countries',
-            0
-          ),
-          unique_continents: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.unique_continents',
-            0
-          ),
-          cloud_provider_flows: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.cloud_provider_flows',
-            0
-          ),
-          vpn_flows: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.vpn_flows',
-            0
-          ),
-          high_risk_flows: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.high_risk_flows',
-            0
-          ),
-          top_countries: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.top_countries',
-            {}
-          ),
-          top_asns: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.top_asns',
-            {}
-          ),
-        },
-        flows: SafeAccess.safeArrayMap(result.results, (flow: Flow) => ({
-          timestamp: unixToISOStringOrNow(flow.ts),
-          source_ip: SafeAccess.getNestedValue(
-            flow as any,
-            'source.ip',
-            'unknown'
-          ),
-          destination_ip: SafeAccess.getNestedValue(
-            flow as any,
-            'destination.ip',
-            'unknown'
-          ),
-          protocol: SafeAccess.getNestedValue(
-            flow as any,
-            'protocol',
-            'unknown'
-          ),
-          bytes: SafeAccess.getNestedValue(flow as any, 'bytes', 0),
-          geographic_data: {
-            country: SafeAccess.getNestedValue(
-              flow as any,
-              'geo.country',
-              'unknown'
-            ),
-            continent: SafeAccess.getNestedValue(
-              flow as any,
-              'geo.continent',
-              'unknown'
-            ),
-            city: SafeAccess.getNestedValue(flow as any, 'geo.city', 'unknown'),
-            asn: SafeAccess.getNestedValue(flow as any, 'geo.asn', 'unknown'),
-            is_cloud: SafeAccess.getNestedValue(
-              flow as any,
-              'geo.isCloud',
-              false
-            ),
-            is_vpn: SafeAccess.getNestedValue(flow as any, 'geo.isVPN', false),
-            risk_score: SafeAccess.getNestedValue(
-              flow as any,
-              'geo.riskScore',
-              0
-            ),
-          },
-        })),
-        execution_time_ms: SafeAccess.getNestedValue(
-          result,
-          'execution_time_ms',
-          0
-        ),
-      });
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to search flows by geography: ${errorMessage}`
-      );
-    }
-  }
-}
 
 export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
   name = 'search_alarms_by_geography';
@@ -1762,13 +1781,17 @@ export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
     const searchArgs = args as SearchAlarmsByGeographyArgs;
     try {
       const searchTools = createSearchTools(firewalla);
-      const result = await searchTools.search_alarms_by_geography({
-        query: searchArgs.query,
-        geographic_filters: searchArgs.geographic_filters,
-        limit: searchArgs.limit,
-        sort_by: searchArgs.sort_by,
-        group_by: searchArgs.group_by,
-      });
+      const result = await withToolTimeout(
+        async () =>
+          searchTools.search_alarms_by_geography({
+            query: searchArgs.query,
+            geographic_filters: searchArgs.geographic_filters,
+            limit: searchArgs.limit,
+            sort_by: searchArgs.sort_by,
+            group_by: searchArgs.group_by,
+          }),
+        this.name
+      );
 
       return this.createSuccessResponse({
         query_executed: SafeAccess.getNestedValue(result, 'query', ''),
@@ -1879,6 +1902,10 @@ export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
         ),
       });
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
@@ -1954,13 +1981,17 @@ export class GetGeographicStatisticsHandler extends BaseToolHandler {
       }
 
       const searchTools = createSearchTools(firewalla);
-      const result = await searchTools.get_geographic_statistics({
-        entity_type: searchArgs.entity_type,
-        time_range: searchArgs.time_range,
-        analysis_type: searchArgs.analysis_type,
-        group_by: searchArgs.group_by,
-        limit: searchArgs.limit,
-      });
+      const result = await withToolTimeout(
+        async () =>
+          searchTools.get_geographic_statistics({
+            entity_type: searchArgs.entity_type,
+            time_range: searchArgs.time_range,
+            analysis_type: searchArgs.analysis_type,
+            group_by: searchArgs.group_by,
+            limit: searchArgs.limit,
+          }),
+        this.name
+      );
 
       return this.createSuccessResponse({
         entity_type: SafeAccess.getNestedValue(
@@ -1996,6 +2027,10 @@ export class GetGeographicStatisticsHandler extends BaseToolHandler {
         ),
       });
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(

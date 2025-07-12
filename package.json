@@ -49,7 +49,14 @@
     "ci:quick": "npm run format:check && npm run typecheck && npm run lint && npm run build && npm run test:quick",
     "ci:full": "npm run ci:quick && npm run test:ci",
     "demo:optimization": "node scripts/demo-optimization.cjs",
-    "test:optimized": "cross-env OPTIMIZE_TESTS=true npm test -- tests/firewalla/client-device-optimized.test.ts"
+    "test:optimized": "cross-env OPTIMIZE_TESTS=true npm test -- tests/firewalla/client-device-optimized.test.ts",
+    "test:regression": "cross-env NODE_ENV=test jest --testPathPatterns='regression' --passWithNoTests",
+    "test:regression:wave0": "cross-env NODE_ENV=test jest tests/regression/wave-0-features.test.ts",
+    "test:regression:wave1": "cross-env NODE_ENV=test jest tests/regression/wave-1-validation.test.ts",
+    "test:regression:wave2": "cross-env NODE_ENV=test jest tests/regression/wave-2-search.test.ts",
+    "test:regression:contracts": "cross-env NODE_ENV=test jest tests/regression/api-contracts.test.ts",
+    "test:regression:performance": "cross-env NODE_ENV=test jest tests/regression/performance.test.ts",
+    "test:regression:all": "npm run test:regression:wave0 && npm run test:regression:wave1 && npm run test:regression:wave2 && npm run test:regression:contracts && npm run test:regression:performance"
   },
   "keywords": [
     "mcp",

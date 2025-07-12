@@ -40,7 +40,7 @@ interface HandlerRegistration {
   className: string;
 }
 
-interface ValidationResult {
+interface ToolValidationResult {
   tool: string;
   status: 'VALID' | 'WARNING' | 'ERROR';
   issues: string[];
@@ -65,7 +65,7 @@ interface ValidationReport {
     errors: number;
     discrepancies: string[];
   };
-  toolResults: ValidationResult[];
+  toolResults: ToolValidationResult[];
   recommendations: string[];
 }
 
@@ -487,8 +487,8 @@ export class MCPToolValidator {
   /**
    * Validate all tools by cross-referencing schemas and handlers
    */
-  private async validateAllTools(): Promise<ValidationResult[]> {
-    const results: ValidationResult[] = [];
+  private async validateAllTools(): Promise<ToolValidationResult[]> {
+    const results: ToolValidationResult[] = [];
     
     // Get all unique tool names from both sources
     const schemaNames = new Set(this.toolSchemas.map(t => t.name));
@@ -506,7 +506,7 @@ export class MCPToolValidator {
   /**
    * Validate a single tool
    */
-  private async validateTool(toolName: string): Promise<ValidationResult> {
+  private async validateTool(toolName: string): Promise<ToolValidationResult> {
     const schema = this.toolSchemas.find(s => s.name === toolName);
     const handler = this.handlerRegistrations.find(h => h.name === toolName);
     
@@ -736,7 +736,7 @@ export class MCPToolValidator {
   /**
    * Generate comprehensive validation report
    */
-  private generateReport(results: ValidationResult[]): ValidationReport {
+  private generateReport(results: ToolValidationResult[]): ValidationReport {
     const summary = {
       totalTools: results.length,
       schemasFound: results.filter(r => r.checks.schemaExists).length,

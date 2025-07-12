@@ -97,7 +97,6 @@ export function getToolLimit(toolName: string): number {
     search_target_lists: STANDARD_LIMITS.SEARCH_TARGET_LISTS,
 
     // Geographic search tools
-    search_flows_by_geography: STANDARD_LIMITS.GEOGRAPHIC_FLOWS,
     search_alarms_by_geography: STANDARD_LIMITS.GEOGRAPHIC_ALARMS,
     get_geographic_statistics: STANDARD_LIMITS.GEOGRAPHIC_STATS,
 
@@ -123,7 +122,6 @@ export function getToolPerformanceTier(
 
   const moderateTools = [
     'get_bandwidth_usage',
-    'search_flows_by_geography',
     'search_alarms_by_geography',
   ];
 
@@ -147,6 +145,37 @@ export function getToolPerformanceTier(
   }
 
   return 'SIMPLE';
+}
+
+/**
+ * Get the appropriate total timeout for a specific tool based on its complexity
+ */
+export function getToolTimeout(toolName: string): number {
+  const complexTools = [
+    'search_enhanced_cross_reference',
+    'search_cross_reference',
+    'get_correlation_suggestions',
+    'search_alarms_by_geography',
+    'get_geographic_statistics',
+  ];
+
+  const searchTools = [
+    'search_flows',
+    'search_alarms',
+    'search_rules',
+    'search_devices',
+    'search_target_lists',
+  ];
+
+  if (complexTools.includes(toolName)) {
+    return PERFORMANCE_THRESHOLDS.COMPLEX_OPERATION_TIMEOUT;
+  }
+
+  if (searchTools.includes(toolName) || toolName.includes('search')) {
+    return PERFORMANCE_THRESHOLDS.SEARCH_OPERATION_TIMEOUT;
+  }
+
+  return PERFORMANCE_THRESHOLDS.SIMPLE_OPERATION_TIMEOUT;
 }
 
 /**
@@ -197,5 +226,14 @@ export function getLimitValidationConfig(toolName: string) {
 export const PERFORMANCE_THRESHOLDS = {
   WARNING_MS: 1000, // Log warning if operation takes longer than 1 second
   ERROR_MS: 5000, // Log error if operation takes longer than 5 seconds
-  TIMEOUT_MS: 10000, // Hard timeout for all operations
+  TIMEOUT_MS: 30000, // Hard timeout for all operations (increased to accommodate retries)
+
+  // Timeout budgets for different operation types
+  SIMPLE_OPERATION_TIMEOUT: 15000, // 15s for basic operations
+  SEARCH_OPERATION_TIMEOUT: 30000, // 30s for search operations
+  COMPLEX_OPERATION_TIMEOUT: 45000, // 45s for complex correlation/geographic operations
+
+  // Per-attempt timeouts (used within retry loops)
+  PER_ATTEMPT_TIMEOUT: 10000, // 10s per individual attempt
+  MIN_PER_ATTEMPT_TIMEOUT: 2000, // Minimum 2s per attempt
 } as const;

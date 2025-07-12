@@ -3,9 +3,7 @@
  * Provides infrastructure for performing operations on multiple resources efficiently
  */
 
-import {
-  ParameterValidator,
-} from '../validation/error-handler.js';
+import { ParameterValidator } from '../validation/error-handler.js';
 import { withToolTimeout, TimeoutError } from './timeout-manager.js';
 import type { FirewallaClient } from '../firewalla/client.js';
 
@@ -90,7 +88,12 @@ export class BulkOperationManager {
   private config: BulkOperationConfig;
 
   constructor(config: Partial<BulkOperationConfig> = {}) {
-    this.config = { ...DEFAULT_BULK_CONFIG, ...config };
+    // Ensure timeoutMs is never undefined
+    this.config = {
+      ...DEFAULT_BULK_CONFIG,
+      ...config,
+      timeoutMs: config.timeoutMs ?? DEFAULT_BULK_CONFIG.timeoutMs,
+    };
   }
 
   /**
@@ -184,7 +187,7 @@ export class BulkOperationManager {
             const result = await withToolTimeout(
               async () => operation(id, firewalla, index),
               `bulk_${operationName}`,
-              this.config.timeoutMs / ids.length // Distribute timeout across items
+              Math.min(this.config.timeoutMs, 10000) // Use per-item timeout, max 10s
             );
 
             return {
