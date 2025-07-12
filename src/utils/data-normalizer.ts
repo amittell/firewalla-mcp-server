@@ -180,7 +180,7 @@ export function sanitizeFieldValue(
 export function normalizeUnknownFields(
   value: any,
   config?: Partial<NormalizationConfig>,
-  visited?: WeakSet<object>
+  seen?: Set<any>
 ): any {
   const defaultConfig: NormalizationConfig = {
     defaultUnknownValue: 'unknown',
@@ -191,35 +191,31 @@ export function normalizeUnknownFields(
 
   const actualConfig = { ...defaultConfig, ...config };
 
-  // Initialize visited set for circular reference detection
-  if (!visited) {
-    visited = new WeakSet();
+  // Simple circular reference detection using Set
+  if (!seen) {
+    seen = new Set();
   }
 
   if (Array.isArray(value)) {
-    // Protect against circular references
-    if (visited.has(value)) {
+    if (seen.has(value)) {
       return '[Circular Reference]';
     }
-    visited.add(value);
-    const result = value.map(item =>
-      normalizeUnknownFields(item, actualConfig, visited)
-    );
-    visited.delete(value);
+    seen.add(value);
+    const result = value.map(item => normalizeUnknownFields(item, actualConfig, seen));
+    seen.delete(value);
     return result;
   }
 
   if (value && typeof value === 'object') {
-    // Protect against circular references
-    if (visited.has(value)) {
+    if (seen.has(value)) {
       return '[Circular Reference]';
     }
-    visited.add(value);
+    seen.add(value);
     const normalized: any = {};
     for (const [key, val] of Object.entries(value)) {
-      normalized[key] = normalizeUnknownFields(val, actualConfig, visited);
+      normalized[key] = normalizeUnknownFields(val, actualConfig, seen);
     }
-    visited.delete(value);
+    seen.delete(value);
     return normalized;
   }
 
@@ -295,8 +291,7 @@ export function ensureConsistentGeoData(
     if (!str) {
       return 'unknown';
     }
-    // Use word boundary that works with Unicode characters
-    return str.toLowerCase().replace(/(?:^|\s)\S/g, l => l.toUpperCase());
+    return str.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
   };
 
   // Helper function to handle country code
@@ -317,7 +312,7 @@ export function ensureConsistentGeoData(
       return undefined;
     }
     const num = typeof asn === 'string' ? parseInt(asn, 10) : asn;
-    return isNaN(num) ? undefined : num;
+    return Number.isNaN(num) ? undefined : num;
   };
 
   // Helper function to handle boolean values

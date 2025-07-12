@@ -116,7 +116,6 @@ export interface GetCorrelationSuggestionsArgs extends ToolArgs {
   secondary_queries: string[];
 }
 
-
 export interface SearchAlarmsByGeographyArgs extends ToolArgs {
   query?: string;
   geographic_filters?: {
@@ -418,21 +417,30 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
       // ------------------------------------------------------------
       if (searchArgs.geographic_filters !== undefined) {
         // Validate it's an object
-        if (typeof searchArgs.geographic_filters !== 'object' || searchArgs.geographic_filters === null) {
+        if (
+          typeof searchArgs.geographic_filters !== 'object' ||
+          searchArgs.geographic_filters === null
+        ) {
           return createErrorResponse(
             this.name,
             'Invalid geographic_filters parameter',
             ErrorType.VALIDATION_ERROR,
             {
               provided_value: searchArgs.geographic_filters,
-              expected: 'object with optional fields: countries, continents, regions, cities, etc.',
+              expected:
+                'object with optional fields: countries, continents, regions, cities, etc.',
             }
           );
         }
 
         // Validate country codes if provided
-        if (searchArgs.geographic_filters.countries && searchArgs.geographic_filters.countries.length > 0) {
-          const countryValidation = validateCountryCodes(searchArgs.geographic_filters.countries);
+        if (
+          searchArgs.geographic_filters.countries &&
+          searchArgs.geographic_filters.countries.length > 0
+        ) {
+          const countryValidation = validateCountryCodes(
+            searchArgs.geographic_filters.countries
+          );
           if (!countryValidation.valid) {
             return createErrorResponse(
               this.name,
@@ -441,7 +449,8 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
               {
                 invalid_codes: countryValidation.invalid,
                 valid_codes: countryValidation.valid,
-                documentation: 'Country codes must be ISO 3166-1 alpha-2 format (e.g., US, CN, GB)',
+                documentation:
+                  'Country codes must be ISO 3166-1 alpha-2 format (e.g., US, CN, GB)',
               }
             );
           }
@@ -1767,7 +1776,6 @@ export class GetCorrelationSuggestionsHandler extends BaseToolHandler {
     }
   }
 }
-
 
 export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
   name = 'search_alarms_by_geography';

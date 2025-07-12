@@ -522,7 +522,8 @@ export class FirewallaMCPServer {
                     countries: {
                       type: 'array',
                       items: { type: 'string' },
-                      description: 'Filter by specific countries (ISO 3166-1 alpha-2)',
+                      description:
+                        'Filter by specific countries (ISO 3166-1 alpha-2)',
                     },
                     continents: {
                       type: 'array',
@@ -568,7 +569,8 @@ export class FirewallaMCPServer {
                 },
                 include_analytics: {
                   type: 'boolean',
-                  description: 'Include geographic analysis summary (default: false)',
+                  description:
+                    'Include geographic analysis summary (default: false)',
                 },
               },
               required: ['query', 'limit'],

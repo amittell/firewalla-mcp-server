@@ -317,7 +317,14 @@ export class FirewallaClient {
     }
 
     // Allowed scalar parameters for raw /v2/* endpoints
-    const allowedParams = ['query', 'limit', 'sortBy', 'groupBy', 'cursor', 'box'];
+    const allowedParams = [
+      'query',
+      'limit',
+      'sortBy',
+      'groupBy',
+      'cursor',
+      'box',
+    ];
 
     const filtered: Record<string, unknown> = {};
 
@@ -4644,7 +4651,9 @@ export class FirewallaClient {
    */
   private extractFieldValue(obj: any, fieldPath: string): any {
     if (!fieldPath || typeof fieldPath !== 'string') {
-      logger.warn('extractFieldValue called with invalid fieldPath:', { fieldPath });
+      logger.warn('extractFieldValue called with invalid fieldPath:', {
+        fieldPath,
+      });
       return undefined;
     }
     return fieldPath.split('.').reduce((current, key) => current?.[key], obj);

@@ -120,10 +120,7 @@ export function getToolPerformanceTier(
     'get_correlation_suggestions',
   ];
 
-  const moderateTools = [
-    'get_bandwidth_usage',
-    'search_alarms_by_geography',
-  ];
+  const moderateTools = ['get_bandwidth_usage', 'search_alarms_by_geography'];
 
   const statisticalTools = [
     'get_simple_statistics',

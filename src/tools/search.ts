@@ -712,7 +712,7 @@ export class SearchEngine {
           // Update with validated codes
           params.geographic_filters.countries = countryValidation.valid;
         }
-        
+
         const geographicQuery = this.buildGeographicQuery(
           params.geographic_filters
         );
@@ -736,8 +736,9 @@ export class SearchEngine {
       let results = response.results || [];
 
       // Enrich results with geographic data (filtering out null entries)
-      results = results.filter(flow => flow !== null && flow !== undefined)
-                      .map(flow => enrichObjectWithGeo(flow));
+      results = results
+        .filter(flow => flow !== null && flow !== undefined)
+        .map(flow => enrichObjectWithGeo(flow));
       if (params.offset && !params.cursor) {
         results = results.slice(params.offset);
       }
@@ -839,8 +840,9 @@ export class SearchEngine {
       let results = response.results || [];
 
       // Enrich results with geographic data (filtering out null entries)
-      results = results.filter(flow => flow !== null && flow !== undefined)
-                      .map(flow => enrichObjectWithGeo(flow));
+      results = results
+        .filter(flow => flow !== null && flow !== undefined)
+        .map(flow => enrichObjectWithGeo(flow));
       if (params.offset && !params.cursor) {
         results = results.slice(params.offset);
       }
@@ -1769,7 +1771,6 @@ export class SearchEngine {
     // Use FirewallaClient's buildGeoQuery method for proper API syntax
     return this.firewalla.buildGeoQuery(filters);
   }
-
 
   /**
    * Build geographic query string for alarms
