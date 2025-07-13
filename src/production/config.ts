@@ -1,9 +1,13 @@
+import * as dotenv from 'dotenv';
 import type { FirewallaConfig } from '../types';
 import {
   getRequiredEnvVar,
   getOptionalEnvVar,
   getOptionalEnvInt,
 } from '../utils/env.js';
+
+// Configure dotenv to load environment variables
+dotenv.config();
 
 export interface ProductionConfig extends FirewallaConfig {
   environment: 'production' | 'staging' | 'development';
