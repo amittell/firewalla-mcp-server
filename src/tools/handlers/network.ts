@@ -348,10 +348,10 @@ export class GetFlowDataHandler extends BaseToolHandler {
       );
 
       // Apply geographic enrichment for IP addresses
-      processedFlows = await this.enrichGeoIfNeeded(
-        processedFlows,
-        ['source_ip', 'destination_ip']
-      );
+      processedFlows = await this.enrichGeoIfNeeded(processedFlows, [
+        'source_ip',
+        'destination_ip',
+      ]);
 
       // Create metadata for standardized response
       const metadata: PaginationMetadata = {
@@ -487,7 +487,7 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
       // insufficient data rather than an error
 
       const startTime = Date.now();
-      
+
       // Process bandwidth usage data
       const bandwidthData = SafeAccess.safeArrayMap(results, (item: any) => ({
         device_id: SafeAccess.getNestedValue(item, 'device_id', 'unknown'),
@@ -666,7 +666,7 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
       const limitedOfflineDevices = offlineDevices.slice(0, limit);
 
       const responseStartTime = Date.now();
-      
+
       // Process device data
       const deviceData = SafeAccess.safeArrayMap(
         limitedOfflineDevices,
@@ -695,10 +695,9 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
       );
 
       // Apply geographic enrichment for IP addresses
-      const enrichedDeviceData = await this.enrichGeoIfNeeded(
-        deviceData,
-        ['ip']
-      );
+      const enrichedDeviceData = await this.enrichGeoIfNeeded(deviceData, [
+        'ip',
+      ]);
 
       const unifiedResponseData = {
         total_offline_devices: offlineDevices.length,

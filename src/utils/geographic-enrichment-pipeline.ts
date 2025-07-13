@@ -1,11 +1,11 @@
 /**
  * Geographic Enrichment Pipeline
- * 
+ *
  * Implements a high-performance, fault-tolerant pipeline for enriching data with
- * geographic information. Features multiple fallback providers, performance 
+ * geographic information. Features multiple fallback providers, performance
  * monitoring, and success rate tracking to guarantee ≥95% enrichment success
  * with ≤3ms latency impact.
- * 
+ *
  * Architecture:
  * - Multi-tier fallback strategy (primary → secondary → tertiary → default)
  * - Batch processing for efficiency
@@ -15,14 +15,14 @@
  */
 
 import type { GeographicData } from '../types.js';
-import { 
-  getGeographicDataForIP, 
-  isPrivateIP, 
-  normalizeIP, 
+import {
+  getGeographicDataForIP,
+  isPrivateIP,
+  normalizeIP,
   calculateRiskScore,
   mapContinent,
   COUNTRY_TO_CONTINENT,
-  type GeographicCache 
+  type GeographicCache,
 } from './geographic.js';
 import { featureFlags } from '../config/feature-flags.js';
 import { logger } from '../monitoring/logger.js';
@@ -59,18 +59,58 @@ export interface BatchEnrichmentRequest {
  */
 const IP_RANGE_MAPPING: Record<string, Partial<GeographicData>> = {
   // Major cloud providers
-  '54.': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true },
-  '52.': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true },
-  '3.': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true },
-  '18.': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true },
-  
+  '54.': {
+    country: 'United States',
+    country_code: 'US',
+    continent: 'North America',
+    is_cloud_provider: true,
+  },
+  '52.': {
+    country: 'United States',
+    country_code: 'US',
+    continent: 'North America',
+    is_cloud_provider: true,
+  },
+  '3.': {
+    country: 'United States',
+    country_code: 'US',
+    continent: 'North America',
+    is_cloud_provider: true,
+  },
+  '18.': {
+    country: 'United States',
+    country_code: 'US',
+    continent: 'North America',
+    is_cloud_provider: true,
+  },
+
   // Major ISP ranges
-  '8.8.': { country: 'United States', country_code: 'US', continent: 'North America', isp: 'Google' },
-  '1.1.': { country: 'United States', country_code: 'US', continent: 'North America', isp: 'Cloudflare' },
-  
+  '8.8.': {
+    country: 'United States',
+    country_code: 'US',
+    continent: 'North America',
+    isp: 'Google',
+  },
+  '1.1.': {
+    country: 'United States',
+    country_code: 'US',
+    continent: 'North America',
+    isp: 'Cloudflare',
+  },
+
   // Regional blocks (examples)
-  '46.': { country: 'Germany', country_code: 'DE', continent: 'Europe', region: 'Western Europe' },
-  '185.': { country: 'United Kingdom', country_code: 'GB', continent: 'Europe', region: 'Northern Europe' },
+  '46.': {
+    country: 'Germany',
+    country_code: 'DE',
+    continent: 'Europe',
+    region: 'Western Europe',
+  },
+  '185.': {
+    country: 'United Kingdom',
+    country_code: 'GB',
+    continent: 'Europe',
+    region: 'Northern Europe',
+  },
 };
 
 /**
@@ -88,7 +128,7 @@ const DEFAULT_GEOGRAPHIC_DATA: GeographicData = {
 
 /**
  * Geographic Enrichment Pipeline
- * 
+ *
  * High-performance pipeline that guarantees geographic data enrichment with
  * comprehensive fallback strategies and performance monitoring.
  */
@@ -97,12 +137,12 @@ export class GeographicEnrichmentPipeline {
   private geoCache: GeographicCache;
   private performanceBudgetMs: number;
   private successTarget: number;
-  
+
   constructor(geoCache: GeographicCache) {
     this.geoCache = geoCache;
     this.performanceBudgetMs = featureFlags.GEOGRAPHIC_ENRICHMENT_BUDGET_MS;
     this.successTarget = featureFlags.GEOGRAPHIC_ENRICHMENT_SUCCESS_TARGET;
-    
+
     this.stats = {
       totalRequests: 0,
       successfulRequests: 0,
@@ -128,11 +168,11 @@ export class GeographicEnrichmentPipeline {
       let cached: GeographicData | null | undefined = undefined;
       try {
         cached = this.geoCache.get(normalizedIP);
-      } catch (error) {
+      } catch (_error) {
         // Cache error - continue with other providers
         cached = undefined;
       }
-      
+
       if (cached !== undefined) {
         logger.debug('Geographic enrichment cache hit', { ip: normalizedIP });
         return this.createResult(cached, 'cache', startTime, cached !== null);
@@ -143,11 +183,18 @@ export class GeographicEnrichmentPipeline {
       if (primaryResult.success) {
         try {
           this.geoCache.set(normalizedIP, primaryResult.data);
-        } catch (error) {
+        } catch (_error) {
           // Cache set error - continue without caching
         }
-        logger.debug('Geographic enrichment primary provider success', { ip: normalizedIP });
-        return this.createResult(primaryResult.data, 'primary', startTime, true);
+        logger.debug('Geographic enrichment primary provider success', {
+          ip: normalizedIP,
+        });
+        return this.createResult(
+          primaryResult.data,
+          'primary',
+          startTime,
+          true
+        );
       }
 
       // Secondary provider: IP range mapping
@@ -156,11 +203,18 @@ export class GeographicEnrichmentPipeline {
         if (secondaryResult) {
           try {
             this.geoCache.set(normalizedIP, secondaryResult);
-          } catch (error) {
+          } catch (_error) {
             // Cache set error - continue without caching
           }
-          logger.debug('Geographic enrichment secondary provider success', { ip: normalizedIP });
-          return this.createResult(secondaryResult, 'secondary', startTime, true);
+          logger.debug('Geographic enrichment secondary provider success', {
+            ip: normalizedIP,
+          });
+          return this.createResult(
+            secondaryResult,
+            'secondary',
+            startTime,
+            true
+          );
         }
 
         // Tertiary provider: Country-based defaults
@@ -168,10 +222,12 @@ export class GeographicEnrichmentPipeline {
         if (tertiaryResult) {
           try {
             this.geoCache.set(normalizedIP, tertiaryResult);
-          } catch (error) {
+          } catch (_error) {
             // Cache set error - continue without caching
           }
-          logger.debug('Geographic enrichment tertiary provider success', { ip: normalizedIP });
+          logger.debug('Geographic enrichment tertiary provider success', {
+            ip: normalizedIP,
+          });
           return this.createResult(tertiaryResult, 'tertiary', startTime, true);
         }
       }
@@ -179,14 +235,23 @@ export class GeographicEnrichmentPipeline {
       // Default fallback
       try {
         this.geoCache.set(normalizedIP, DEFAULT_GEOGRAPHIC_DATA);
-      } catch (error) {
+      } catch (_error) {
         // Cache set error - continue without caching
       }
-      logger.debug('Geographic enrichment using default fallback', { ip: normalizedIP });
-      return this.createResult(DEFAULT_GEOGRAPHIC_DATA, 'default', startTime, true);
-
+      logger.debug('Geographic enrichment using default fallback', {
+        ip: normalizedIP,
+      });
+      return this.createResult(
+        DEFAULT_GEOGRAPHIC_DATA,
+        'default',
+        startTime,
+        true
+      );
     } catch (error) {
-      logger.debug('Geographic enrichment failed', { ip, error: error instanceof Error ? error.message : 'unknown' });
+      logger.debug('Geographic enrichment failed', {
+        ip,
+        error: error instanceof Error ? error.message : 'unknown',
+      });
       return this.createResult(null, 'failed', startTime, false);
     }
   }
@@ -194,22 +259,27 @@ export class GeographicEnrichmentPipeline {
   /**
    * Batch enrich multiple IPs for efficiency
    */
-  async enrichBatch(requests: BatchEnrichmentRequest[]): Promise<Map<string, EnrichmentResult>> {
+  async enrichBatch(
+    requests: BatchEnrichmentRequest[]
+  ): Promise<Map<string, EnrichmentResult>> {
     const results = new Map<string, EnrichmentResult>();
-    
+
     if (!featureFlags.shouldEnrichRequest()) {
       // Feature flag disabled or rollout sampling excluded this request
       for (const request of requests) {
-        results.set(request.ip, this.createResult(null, 'failed', process.hrtime.bigint(), false));
+        results.set(
+          request.ip,
+          this.createResult(null, 'failed', process.hrtime.bigint(), false)
+        );
       }
       return results;
     }
 
     const batchStartTime = process.hrtime.bigint();
     const uniqueIPs = [...new Set(requests.map(r => r.ip))];
-    
+
     // Process IPs in parallel with performance budget
-    const enrichmentPromises = uniqueIPs.map(async (ip) => {
+    const enrichmentPromises = uniqueIPs.map(async ip => {
       const result = await this.enrichIP(ip);
       results.set(ip, result);
       return result;
@@ -217,13 +287,17 @@ export class GeographicEnrichmentPipeline {
 
     try {
       await Promise.allSettled(enrichmentPromises);
-    } catch (error) {
+    } catch (_error) {
       // Log error but continue with partial results
-      logger.error('Batch enrichment error', error instanceof Error ? error : new Error(String(error)));
+      logger.error(
+        'Batch enrichment error',
+        _error instanceof Error ? _error : new Error(String(_error))
+      );
     }
 
     // Simple performance budget warning
-    const batchLatencyMs = Number(process.hrtime.bigint() - batchStartTime) / 1_000_000;
+    const batchLatencyMs =
+      Number(process.hrtime.bigint() - batchStartTime) / 1_000_000;
     if (batchLatencyMs > this.performanceBudgetMs) {
       logger.debug('Geographic enrichment batch exceeded performance budget', {
         batchLatencyMs,
@@ -247,7 +321,7 @@ export class GeographicEnrichmentPipeline {
     }
 
     const requests: BatchEnrichmentRequest[] = [];
-    
+
     // Collect all IPs that need enrichment
     for (const field of ipFields) {
       const ip = this.getNestedValue(obj, field);
@@ -265,7 +339,7 @@ export class GeographicEnrichmentPipeline {
 
     // Perform batch enrichment
     const enrichmentResults = await this.enrichBatch(requests);
-    
+
     // Apply results to object
     const enriched = { ...obj };
     for (const request of requests) {
@@ -281,11 +355,13 @@ export class GeographicEnrichmentPipeline {
   /**
    * Try primary geographic provider (geoip-lite)
    */
-  private async tryPrimaryProvider(ip: string): Promise<{ data: GeographicData | null; success: boolean }> {
+  private async tryPrimaryProvider(
+    ip: string
+  ): Promise<{ data: GeographicData | null; success: boolean }> {
     try {
       const data = getGeographicDataForIP(ip);
       return { data, success: data !== null };
-    } catch (error) {
+    } catch (_error) {
       return { data: null, success: false };
     }
   }
@@ -299,7 +375,9 @@ export class GeographicEnrichmentPipeline {
         return {
           ...DEFAULT_GEOGRAPHIC_DATA,
           ...geoData,
-          geographic_risk_score: geoData.geographic_risk_score ?? calculateRiskScore(geoData.country_code || 'UN'),
+          geographic_risk_score:
+            geoData.geographic_risk_score ??
+            calculateRiskScore(geoData.country_code || 'UN'),
         };
       }
     }
@@ -322,7 +400,7 @@ export class GeographicEnrichmentPipeline {
 
     // Very basic geographic inference based on IP allocation
     let countryCode = 'US'; // Default to US for unknown ranges
-    
+
     // Basic regional allocation (simplified)
     if (firstOctet >= 1 && firstOctet <= 126) {
       countryCode = 'US'; // North America
@@ -333,7 +411,7 @@ export class GeographicEnrichmentPipeline {
     }
 
     const continent = mapContinent(countryCode);
-    
+
     return {
       country: COUNTRY_TO_CONTINENT[countryCode] || 'Unknown',
       country_code: countryCode,
@@ -355,13 +433,13 @@ export class GeographicEnrichmentPipeline {
     success: boolean
   ): EnrichmentResult {
     const latencyMs = Number(process.hrtime.bigint() - startTime) / 1_000_000;
-    
+
     if (success) {
       this.stats.successfulRequests++;
     }
-    
+
     this.updateStats(latencyMs);
-    
+
     return {
       data,
       source,
@@ -374,10 +452,11 @@ export class GeographicEnrichmentPipeline {
    * Update basic statistics
    */
   private updateStats(latencyMs: number): void {
-    this.stats.successRate = this.stats.totalRequests > 0 
-      ? this.stats.successfulRequests / this.stats.totalRequests 
-      : 0;
-    
+    this.stats.successRate =
+      this.stats.totalRequests > 0
+        ? this.stats.successfulRequests / this.stats.totalRequests
+        : 0;
+
     // Simple performance budget warning (keep as requested)
     if (latencyMs > this.performanceBudgetMs) {
       logger.debug('Geographic enrichment exceeded performance budget', {
@@ -386,7 +465,6 @@ export class GeographicEnrichmentPipeline {
       });
     }
   }
-
 
   /**
    * Get nested object value by path
@@ -401,7 +479,9 @@ export class GeographicEnrichmentPipeline {
   private setNestedValue(obj: any, path: string, value: any): void {
     const keys = path.split('.');
     const lastKey = keys.pop();
-    if (!lastKey) {return;}
+    if (!lastKey) {
+      return;
+    }
 
     const target = keys.reduce((current, key) => {
       if (!(key in current)) {
@@ -447,7 +527,9 @@ let globalPipeline: GeographicEnrichmentPipeline | null = null;
 /**
  * Get or create the global geographic enrichment pipeline
  */
-export function getGlobalEnrichmentPipeline(geoCache: GeographicCache): GeographicEnrichmentPipeline {
+export function getGlobalEnrichmentPipeline(
+  geoCache: GeographicCache
+): GeographicEnrichmentPipeline {
   if (!globalPipeline) {
     globalPipeline = new GeographicEnrichmentPipeline(geoCache);
   }
@@ -473,17 +555,15 @@ export async function enrichWithGeographicData<T extends Record<string, any>>(
 /**
  * Convenience function for batch enriching arrays of objects
  */
-export async function enrichArrayWithGeographicData<T extends Record<string, any>>(
-  objects: T[],
-  geoCache: GeographicCache,
-  ipFields?: string[]
-): Promise<T[]> {
+export async function enrichArrayWithGeographicData<
+  T extends Record<string, any>,
+>(objects: T[], geoCache: GeographicCache, ipFields?: string[]): Promise<T[]> {
   if (!featureFlags.GEOGRAPHIC_ENRICHMENT_ENABLED || objects.length === 0) {
     return objects;
   }
 
   const pipeline = getGlobalEnrichmentPipeline(geoCache);
-  
+
   // Process objects in parallel for efficiency
   const enrichedObjects = await Promise.all(
     objects.map(async obj => pipeline.enrichObject(obj, ipFields))

@@ -341,11 +341,13 @@ export class SearchEngine {
       },
       processResults: (results, params) => {
         let filteredResults = results;
-        
+
         // Client-side filtering to ensure results match query criteria
         if (params.query && typeof params.query === 'string') {
           // Extract severity filter from query (e.g., "severity:medium")
-          const severityMatch = params.query.match(/severity:(high|medium|low|critical)/i);
+          const severityMatch = params.query.match(
+            /severity:(high|medium|low|critical)/i
+          );
           if (severityMatch) {
             const expectedSeverity = severityMatch[1].toLowerCase();
             // Map severity names to their string values for filtering
@@ -353,56 +355,63 @@ export class SearchEngine {
               low: ['low'],
               medium: ['medium'],
               high: ['high'],
-              critical: ['critical']
+              critical: ['critical'],
             };
-            
-            const validSeverities = severityMapping[expectedSeverity] || [expectedSeverity];
-            filteredResults = results.filter(alarm =>
-              alarm.severity && validSeverities.includes(alarm.severity.toLowerCase())
+
+            const validSeverities = severityMapping[expectedSeverity] || [
+              expectedSeverity,
+            ];
+            filteredResults = results.filter(
+              alarm =>
+                alarm.severity &&
+                validSeverities.includes(alarm.severity.toLowerCase())
             );
           }
-          
+
           // Extract type filter from query (e.g., "type:1" or "type:>=4")
           const typeMatch = params.query.match(/type:([><=]*\d+)/i);
           if (typeMatch) {
             const typeExpression = typeMatch[1];
             if (typeExpression.startsWith('>=')) {
               const minType = parseInt(typeExpression.substring(2));
-              filteredResults = filteredResults.filter(alarm =>
-                alarm.type && parseInt(String(alarm.type)) >= minType
+              filteredResults = filteredResults.filter(
+                alarm => alarm.type && parseInt(String(alarm.type)) >= minType
               );
             } else if (typeExpression.startsWith('<=')) {
               const maxType = parseInt(typeExpression.substring(2));
-              filteredResults = filteredResults.filter(alarm =>
-                alarm.type && parseInt(String(alarm.type)) <= maxType
+              filteredResults = filteredResults.filter(
+                alarm => alarm.type && parseInt(String(alarm.type)) <= maxType
               );
             } else if (typeExpression.startsWith('>')) {
               const minType = parseInt(typeExpression.substring(1));
-              filteredResults = filteredResults.filter(alarm =>
-                alarm.type && parseInt(String(alarm.type)) > minType
+              filteredResults = filteredResults.filter(
+                alarm => alarm.type && parseInt(String(alarm.type)) > minType
               );
             } else if (typeExpression.startsWith('<')) {
               const maxType = parseInt(typeExpression.substring(1));
-              filteredResults = filteredResults.filter(alarm =>
-                alarm.type && parseInt(String(alarm.type)) < maxType
+              filteredResults = filteredResults.filter(
+                alarm => alarm.type && parseInt(String(alarm.type)) < maxType
               );
             } else {
               const exactType = parseInt(typeExpression);
-              filteredResults = filteredResults.filter(alarm =>
-                alarm.type && parseInt(String(alarm.type)) === exactType
+              filteredResults = filteredResults.filter(
+                alarm =>
+                  alarm.type && parseInt(String(alarm.type)) === exactType
               );
             }
           }
-          
+
           // Extract status filter from query (e.g., "status:1" or "resolved:true")
           const statusMatch = params.query.match(/status:(\d+)/i);
           if (statusMatch) {
             const expectedStatus = parseInt(statusMatch[1]);
-            filteredResults = filteredResults.filter(alarm =>
-              alarm.status && parseInt(String(alarm.status)) === expectedStatus
+            filteredResults = filteredResults.filter(
+              alarm =>
+                alarm.status &&
+                parseInt(String(alarm.status)) === expectedStatus
             );
           }
-          
+
           const resolvedMatch = params.query.match(/resolved:(true|false)/i);
           if (resolvedMatch) {
             const isResolved = resolvedMatch[1].toLowerCase() === 'true';
@@ -412,7 +421,7 @@ export class SearchEngine {
               return isResolved ? status === 2 : status !== 2;
             });
           }
-          
+
           // Extract source_ip filter from query (e.g., "source_ip:192.168.1.1")
           const sourceIpMatch = params.query.match(/source_ip:([^\s]+)/i);
           if (sourceIpMatch) {
@@ -433,7 +442,7 @@ export class SearchEngine {
             }
           }
         }
-        
+
         if (params.limit) {
           return filteredResults.slice(0, params.limit);
         }
@@ -454,18 +463,18 @@ export class SearchEngine {
       },
       processResults: (results, params) => {
         let filteredResults = results;
-        
+
         // Client-side filtering to ensure results match query criteria
         if (params.query && typeof params.query === 'string') {
           // Extract action filter from query (e.g., "action:block")
           const actionMatch = params.query.match(/action:(\w+)/i);
           if (actionMatch) {
             const expectedAction = actionMatch[1].toLowerCase();
-            filteredResults = results.filter(rule =>
-              rule.action?.toLowerCase() === expectedAction
+            filteredResults = results.filter(
+              rule => rule.action?.toLowerCase() === expectedAction
             );
           }
-          
+
           // Extract target filter from query (e.g., "target_value:*.facebook.com")
           const targetMatch = params.query.match(/target_value:([^\s]+)/i);
           if (targetMatch) {
@@ -483,17 +492,17 @@ export class SearchEngine {
               );
             }
           }
-          
+
           // Extract status filter from query (e.g., "status:active")
           const statusMatch = params.query.match(/status:(\w+)/i);
           if (statusMatch) {
             const expectedStatus = statusMatch[1].toLowerCase();
-            filteredResults = filteredResults.filter(rule =>
-              rule.status?.toLowerCase() === expectedStatus
+            filteredResults = filteredResults.filter(
+              rule => rule.status?.toLowerCase() === expectedStatus
             );
           }
         }
-        
+
         if (params.limit) {
           return filteredResults.slice(0, params.limit);
         }

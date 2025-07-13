@@ -727,14 +727,17 @@ export function isValidIPv6(ip: string): boolean {
   }
 
   // Comprehensive IPv6 pattern
-  const ipv6Pattern = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;
+  const ipv6Pattern =
+    /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;
   return ipv6Pattern.test(ip);
 }
 
 /**
  * Enhanced geographic data provider with fallback mechanisms
  */
-export function getEnhancedGeographicDataForIP(ip: string): GeographicData | null {
+export function getEnhancedGeographicDataForIP(
+  ip: string
+): GeographicData | null {
   // Check if private IP
   if (!ip || isPrivateIP(ip)) {
     return null;
@@ -789,34 +792,136 @@ function detectIPRange(ip: string): GeographicData | null {
   // Known cloud provider ranges
   const cloudProviderRanges: Record<string, Partial<GeographicData>> = {
     // AWS ranges
-    '54.': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true, isp: 'Amazon' },
-    '52.': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true, isp: 'Amazon' },
-    '3.': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true, isp: 'Amazon' },
-    '18.': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true, isp: 'Amazon' },
-    
+    '54.': {
+      country: 'United States',
+      country_code: 'US',
+      continent: 'North America',
+      is_cloud_provider: true,
+      isp: 'Amazon',
+    },
+    '52.': {
+      country: 'United States',
+      country_code: 'US',
+      continent: 'North America',
+      is_cloud_provider: true,
+      isp: 'Amazon',
+    },
+    '3.': {
+      country: 'United States',
+      country_code: 'US',
+      continent: 'North America',
+      is_cloud_provider: true,
+      isp: 'Amazon',
+    },
+    '18.': {
+      country: 'United States',
+      country_code: 'US',
+      continent: 'North America',
+      is_cloud_provider: true,
+      isp: 'Amazon',
+    },
+
     // Google ranges
-    '8.8': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true, isp: 'Google' },
-    '8.34': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true, isp: 'Google' },
-    '8.35': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true, isp: 'Google' },
-    
+    '8.8': {
+      country: 'United States',
+      country_code: 'US',
+      continent: 'North America',
+      is_cloud_provider: true,
+      isp: 'Google',
+    },
+    '8.34': {
+      country: 'United States',
+      country_code: 'US',
+      continent: 'North America',
+      is_cloud_provider: true,
+      isp: 'Google',
+    },
+    '8.35': {
+      country: 'United States',
+      country_code: 'US',
+      continent: 'North America',
+      is_cloud_provider: true,
+      isp: 'Google',
+    },
+
     // Cloudflare ranges
-    '1.1': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true, isp: 'Cloudflare' },
-    '1.0': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true, isp: 'Cloudflare' },
-    
+    '1.1': {
+      country: 'United States',
+      country_code: 'US',
+      continent: 'North America',
+      is_cloud_provider: true,
+      isp: 'Cloudflare',
+    },
+    '1.0': {
+      country: 'United States',
+      country_code: 'US',
+      continent: 'North America',
+      is_cloud_provider: true,
+      isp: 'Cloudflare',
+    },
+
     // Microsoft Azure ranges
-    '13.': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true, isp: 'Microsoft' },
-    '20.': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true, isp: 'Microsoft' },
-    '40.': { country: 'United States', country_code: 'US', continent: 'North America', is_cloud_provider: true, isp: 'Microsoft' },
-    
+    '13.': {
+      country: 'United States',
+      country_code: 'US',
+      continent: 'North America',
+      is_cloud_provider: true,
+      isp: 'Microsoft',
+    },
+    '20.': {
+      country: 'United States',
+      country_code: 'US',
+      continent: 'North America',
+      is_cloud_provider: true,
+      isp: 'Microsoft',
+    },
+    '40.': {
+      country: 'United States',
+      country_code: 'US',
+      continent: 'North America',
+      is_cloud_provider: true,
+      isp: 'Microsoft',
+    },
+
     // European ranges
-    '46.': { country: 'Germany', country_code: 'DE', continent: 'Europe', region: 'Western Europe' },
-    '85.': { country: 'Germany', country_code: 'DE', continent: 'Europe', region: 'Western Europe' },
-    '185.': { country: 'United Kingdom', country_code: 'GB', continent: 'Europe', region: 'Northern Europe' },
-    
+    '46.': {
+      country: 'Germany',
+      country_code: 'DE',
+      continent: 'Europe',
+      region: 'Western Europe',
+    },
+    '85.': {
+      country: 'Germany',
+      country_code: 'DE',
+      continent: 'Europe',
+      region: 'Western Europe',
+    },
+    '185.': {
+      country: 'United Kingdom',
+      country_code: 'GB',
+      continent: 'Europe',
+      region: 'Northern Europe',
+    },
+
     // Asian ranges
-    '202.': { country: 'China', country_code: 'CN', continent: 'Asia', region: 'Eastern Asia' },
-    '218.': { country: 'China', country_code: 'CN', continent: 'Asia', region: 'Eastern Asia' },
-    '58.': { country: 'China', country_code: 'CN', continent: 'Asia', region: 'Eastern Asia' },
+    '202.': {
+      country: 'China',
+      country_code: 'CN',
+      continent: 'Asia',
+      region: 'Eastern Asia',
+    },
+    '218.': {
+      country: 'China',
+      country_code: 'CN',
+      continent: 'Asia',
+      region: 'Eastern Asia',
+    },
+    '58.': {
+      country: 'China',
+      country_code: 'CN',
+      continent: 'Asia',
+      region: 'Eastern Asia',
+    },
   };
 
   // Check two-octet patterns first

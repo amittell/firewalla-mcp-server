@@ -110,7 +110,7 @@ See the Box Management guide for configuration details.`;
       });
 
       const startTime = Date.now();
-      
+
       // Process box data
       const boxData = normalizedBoxes.map((box: any) => {
         // Apply timestamp normalization
@@ -136,10 +136,9 @@ See the Box Management guide for configuration details.`;
       });
 
       // Apply geographic enrichment for public IP addresses
-      const enrichedBoxData = await this.enrichGeoIfNeeded(
-        boxData,
-        ['public_ip']
-      );
+      const enrichedBoxData = await this.enrichGeoIfNeeded(boxData, [
+        'public_ip',
+      ]);
 
       const unifiedResponseData = {
         total_boxes: normalizedBoxes.length,
@@ -231,7 +230,7 @@ This tool provides the foundation for network health monitoring and dashboard di
       ) as any;
 
       const startTime = Date.now();
-      
+
       const unifiedResponseData = {
         statistics: {
           online_boxes: SafeAccess.getNestedValue(
@@ -263,7 +262,7 @@ This tool provides the foundation for network health monitoring and dashboard di
       };
 
       const executionTime = Date.now() - startTime;
-      
+
       return this.createUnifiedResponse(unifiedResponseData, {
         executionTimeMs: executionTime,
       });
@@ -432,7 +431,7 @@ export class GetStatisticsByRegionHandler extends BaseToolHandler {
         }));
 
       const startTime = Date.now();
-      
+
       const unifiedResponseData = {
         total_regions: stats.results.length,
         regional_statistics: regionalStatistics,
@@ -592,7 +591,7 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
       );
 
       const startTime = Date.now();
-      
+
       const unifiedResponseData = {
         total_boxes: stats.results.length,
         box_statistics: boxStatistics,
@@ -724,7 +723,7 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
       );
 
       const startTime = Date.now();
-      
+
       const unifiedResponseData = {
         period,
         interval_seconds: interval,
@@ -895,7 +894,7 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
       );
 
       const startTime = Date.now();
-      
+
       const unifiedResponseData = {
         period,
         data_points: validTrends.length,
@@ -1045,7 +1044,7 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
       );
 
       const startTime = Date.now();
-      
+
       const unifiedResponseData = {
         period,
         data_points: validTrends.length,

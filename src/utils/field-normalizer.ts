@@ -1,6 +1,6 @@
 /**
  * Simple Field Normalization Layer for Solo Dev OSS Project
- * 
+ *
  * Provides consistent field handling across the codebase.
  * Focuses on practical normalization for common issues.
  */
@@ -101,7 +101,10 @@ export function normalizeFieldValue(
  */
 export function normalizeFieldNames(
   obj: Record<string, any>,
-  options: Pick<FieldNormalizationOptions, 'toSnakeCase' | 'toCamelCase' | 'mappings'> = {}
+  options: Pick<
+    FieldNormalizationOptions,
+    'toSnakeCase' | 'toCamelCase' | 'mappings'
+  > = {}
 ): Record<string, any> {
   if (!obj || typeof obj !== 'object') {
     return obj;
@@ -152,7 +155,7 @@ export function normalizeObject<T extends Record<string, any>>(
 
   // Then normalize field values
   const result: Record<string, any> = {};
-  
+
   Object.entries(normalized).forEach(([key, value]) => {
     const normalizedValue = normalizeFieldValue(value, {
       defaultValue: options.defaultValue,
@@ -188,84 +191,84 @@ export function normalizeArray<T extends Record<string, any>>(
  */
 export const FIELD_ALIAS_MAP: Record<string, string> = {
   // IP address variations
-  'sourceIP': 'source_ip',
-  'destinationIP': 'destination_ip',
-  'deviceIP': 'device_ip',
-  'publicIP': 'public_ip',
-  'ipAddress': 'ip_address',
-  
+  sourceIP: 'source_ip',
+  destinationIP: 'destination_ip',
+  deviceIP: 'device_ip',
+  publicIP: 'public_ip',
+  ipAddress: 'ip_address',
+
   // Time field variations
-  'timestamp': 'ts',
-  'createdAt': 'created_at',
-  'updatedAt': 'updated_at',
-  'lastSeen': 'last_seen',
-  'lastHitTs': 'last_hit_ts',
-  'updateTs': 'update_ts',
-  'resumeTs': 'resume_ts',
-  'statsResetTs': 'stats_reset_ts',
-  
+  timestamp: 'ts',
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
+  lastSeen: 'last_seen',
+  lastHitTs: 'last_hit_ts',
+  updateTs: 'update_ts',
+  resumeTs: 'resume_ts',
+  statsResetTs: 'stats_reset_ts',
+
   // Count and statistics
-  'deviceCount': 'device_count',
-  'ruleCount': 'rule_count',
-  'alarmCount': 'alarm_count',
-  'totalDownload': 'total_download',
-  'totalUpload': 'total_upload',
-  'bytesDownloaded': 'bytes_downloaded',
-  'bytesUploaded': 'bytes_uploaded',
-  'totalBytes': 'total_bytes',
-  
+  deviceCount: 'device_count',
+  ruleCount: 'rule_count',
+  alarmCount: 'alarm_count',
+  totalDownload: 'total_download',
+  totalUpload: 'total_upload',
+  bytesDownloaded: 'bytes_downloaded',
+  bytesUploaded: 'bytes_uploaded',
+  totalBytes: 'total_bytes',
+
   // Device and network info
-  'deviceName': 'device_name',
-  'macAddress': 'mac_address',
-  'macVendor': 'mac_vendor',
-  'deviceType': 'device_type',
-  'networkId': 'network_id',
-  'networkName': 'network_name',
-  'groupId': 'group_id',
-  'groupName': 'group_name',
-  'ipReserved': 'ip_reserved',
-  
+  deviceName: 'device_name',
+  macAddress: 'mac_address',
+  macVendor: 'mac_vendor',
+  deviceType: 'device_type',
+  networkId: 'network_id',
+  networkName: 'network_name',
+  groupId: 'group_id',
+  groupName: 'group_name',
+  ipReserved: 'ip_reserved',
+
   // Geographic data
-  'countryCode': 'country_code',
-  'isCloudProvider': 'is_cloud_provider',
-  'isProxy': 'is_proxy',
-  'isVpn': 'is_vpn',
-  'geographicRiskScore': 'geographic_risk_score',
-  'hostingProvider': 'hosting_provider',
-  
+  countryCode: 'country_code',
+  isCloudProvider: 'is_cloud_provider',
+  isProxy: 'is_proxy',
+  isVpn: 'is_vpn',
+  geographicRiskScore: 'geographic_risk_score',
+  hostingProvider: 'hosting_provider',
+
   // Security and alarm data
-  'alarmType': 'alarm_type',
-  'ruleType': 'rule_type',
-  'threatLevel': 'threat_level',
-  'blockType': 'block_type',
-  'dnsOnly': 'dns_only',
-  
+  alarmType: 'alarm_type',
+  ruleType: 'rule_type',
+  threatLevel: 'threat_level',
+  blockType: 'block_type',
+  dnsOnly: 'dns_only',
+
   // Temporal and scheduling
-  'cronTime': 'cron_time',
-  'timeUsage': 'time_usage',
-  
+  cronTime: 'cron_time',
+  timeUsage: 'time_usage',
+
   // Common query parameters
-  'groupBy': 'group_by',
-  'sortBy': 'sort_by',
-  'queryBy': 'query_by',
-  'startTime': 'start_time',
-  'endTime': 'end_time',
-  'forceRefresh': 'force_refresh',
-  'includeOffline': 'include_offline',
-  'includeAnalytics': 'include_analytics',
-  'sortOrder': 'sort_order',
-  
+  groupBy: 'group_by',
+  sortBy: 'sort_by',
+  queryBy: 'query_by',
+  startTime: 'start_time',
+  endTime: 'end_time',
+  forceRefresh: 'force_refresh',
+  includeOffline: 'include_offline',
+  includeAnalytics: 'include_analytics',
+  sortOrder: 'sort_order',
+
   // Response metadata
-  'executionTime': 'execution_time_ms',
-  'hasMore': 'has_more',
-  'nextCursor': 'next_cursor',
-  'totalCount': 'total_count',
-  'resultCount': 'result_count',
-  'dataSource': 'data_source',
-  'entityType': 'entity_type',
-  'geoEnriched': 'geo_enriched',
-  'fieldNormalized': 'field_normalized',
-  'lastUpdated': 'last_updated',
+  executionTime: 'execution_time_ms',
+  hasMore: 'has_more',
+  nextCursor: 'next_cursor',
+  totalCount: 'total_count',
+  resultCount: 'result_count',
+  dataSource: 'data_source',
+  entityType: 'entity_type',
+  geoEnriched: 'geo_enriched',
+  fieldNormalized: 'field_normalized',
+  lastUpdated: 'last_updated',
 };
 
 /**
@@ -276,23 +279,23 @@ export function toSnakeCaseDeep<T = any>(obj: T): T {
   if (obj === null || obj === undefined) {
     return obj;
   }
-  
+
   if (Array.isArray(obj)) {
     return obj.map(item => toSnakeCaseDeep(item)) as T;
   }
-  
+
   if (typeof obj === 'object' && obj.constructor === Object) {
     const converted: Record<string, any> = {};
-    
+
     for (const [key, value] of Object.entries(obj)) {
       // Use alias mapping first, then fall back to snake_case conversion
       const snakeKey = FIELD_ALIAS_MAP[key] || toSnakeCase(key);
       converted[snakeKey] = toSnakeCaseDeep(value);
     }
-    
+
     return converted as T;
   }
-  
+
   // Return primitive values unchanged
   return obj;
 }
@@ -305,21 +308,21 @@ export const COMMON_FIELD_MAPPINGS: FieldMapping[] = [
   { from: 'sourceIP', to: 'source_ip' },
   { from: 'destinationIP', to: 'destination_ip' },
   { from: 'deviceIP', to: 'device_ip' },
-  
+
   // Time field variations
   { from: 'timestamp', to: 'ts' },
   { from: 'createdAt', to: 'created_at' },
   { from: 'updatedAt', to: 'updated_at' },
-  
+
   // Geographic data variations
   { from: 'countryCode', to: 'country_code' },
   { from: 'ipAddress', to: 'ip_address' },
-  
+
   // Device info variations
   { from: 'deviceName', to: 'device_name' },
   { from: 'macAddress', to: 'mac_address' },
   { from: 'deviceType', to: 'device_type' },
-  
+
   // Security data variations
   { from: 'alarmType', to: 'alarm_type' },
   { from: 'ruleType', to: 'rule_type' },
@@ -351,24 +354,27 @@ export function normalizeFirewallaResponse<T extends Record<string, any>>(
  */
 export const normalize = {
   /** Normalize to snake_case with empty handling */
-  toApi: (obj: any) => normalizeObject(obj, { 
-    toSnakeCase: true, 
-    removeEmpty: true,
-    mappings: COMMON_FIELD_MAPPINGS,
-  }),
-  
+  toApi: (obj: any) =>
+    normalizeObject(obj, {
+      toSnakeCase: true,
+      removeEmpty: true,
+      mappings: COMMON_FIELD_MAPPINGS,
+    }),
+
   /** Normalize from API response */
   fromApi: (obj: any) => normalizeFirewallaResponse(obj),
-  
+
   /** Just handle empty values */
-  emptyValues: (obj: any) => normalizeObject(obj, { 
-    removeEmpty: false, 
-    defaultValue: null 
-  }),
-  
+  emptyValues: (obj: any) =>
+    normalizeObject(obj, {
+      removeEmpty: false,
+      defaultValue: null,
+    }),
+
   /** Just normalize field names */
-  fieldNames: (obj: any) => normalizeFieldNames(obj, { 
-    toSnakeCase: true,
-    mappings: COMMON_FIELD_MAPPINGS,
-  }),
+  fieldNames: (obj: any) =>
+    normalizeFieldNames(obj, {
+      toSnakeCase: true,
+      mappings: COMMON_FIELD_MAPPINGS,
+    }),
 };

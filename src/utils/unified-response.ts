@@ -1,6 +1,6 @@
 /**
  * Unified Response Format for Solo Dev OSS Project
- * 
+ *
  * Simple, consistent response format for all MCP tools.
  * Focuses on practicality and maintainability over enterprise complexity.
  */
@@ -13,27 +13,27 @@ import type { ToolResponse } from '../tools/handlers/base.js';
 export interface UnifiedResponse<T = any> {
   /** Whether the operation was successful */
   success: boolean;
-  
+
   /** The actual data payload */
   data?: T;
-  
+
   /** Error message if success is false */
   error?: string;
-  
+
   /** Basic metadata */
   meta: {
     /** Timestamp when response was generated */
     timestamp: string;
-    
+
     /** Tool that generated this response */
     tool: string;
-    
+
     /** Simple request identifier */
     request_id: string;
-    
+
     /** Number of results returned (for arrays) */
     count?: number;
-    
+
     /** Execution time in milliseconds */
     execution_time_ms?: number;
   };
@@ -51,7 +51,7 @@ export function createSuccessResponse<T>(
   } = {}
 ): UnifiedResponse<T> {
   const count = Array.isArray(data) ? data.length : undefined;
-  
+
   return {
     success: true,
     data,
@@ -104,17 +104,16 @@ export function toToolResponse(unifiedResponse: UnifiedResponse): ToolResponse {
 /**
  * Simple wrapper to convert any tool handler to use unified responses
  */
-export function withUnifiedResponse<T extends (...args: any[]) => Promise<ToolResponse>>(
-  handler: T,
-  toolName: string
-): T {
+export function withUnifiedResponse<
+  T extends (...args: any[]) => Promise<ToolResponse>,
+>(handler: T, toolName: string): T {
   return (async (...args: Parameters<T>) => {
     const startTime = Date.now();
     const requestId = generateRequestId();
-    
+
     try {
       const result = await handler(...args);
-      
+
       // If it's already an error, convert to unified error format
       if (result.isError) {
         const errorText = result.content[0]?.text || 'Unknown error';
@@ -124,16 +123,16 @@ export function withUnifiedResponse<T extends (...args: any[]) => Promise<ToolRe
         } catch {
           errorData = { message: errorText };
         }
-        
+
         const unifiedError = createErrorResponse(
           errorData.message || errorData.error || 'Unknown error',
           toolName,
           { requestId }
         );
-        
+
         return toToolResponse(unifiedError);
       }
-      
+
       // Convert successful response to unified format
       let data;
       try {
@@ -141,13 +140,13 @@ export function withUnifiedResponse<T extends (...args: any[]) => Promise<ToolRe
       } catch {
         data = result.content[0]?.text || {};
       }
-      
+
       const executionTimeMs = Date.now() - startTime;
       const unifiedSuccess = createSuccessResponse(data, toolName, {
         executionTimeMs,
         requestId,
       });
-      
+
       return toToolResponse(unifiedSuccess);
     } catch (error) {
       const unifiedError = createErrorResponse(
@@ -155,7 +154,7 @@ export function withUnifiedResponse<T extends (...args: any[]) => Promise<ToolRe
         toolName,
         { requestId }
       );
-      
+
       return toToolResponse(unifiedError);
     }
   }) as T;

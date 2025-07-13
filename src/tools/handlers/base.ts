@@ -27,7 +27,7 @@ import {
 import { toSnakeCaseDeep } from '../../utils/field-normalizer.js';
 import {
   enrichWithGeographicData,
-  getGlobalEnrichmentPipeline
+  getGlobalEnrichmentPipeline,
 } from '../../utils/geographic-enrichment-pipeline.js';
 import { geoCache } from '../../utils/geographic.js';
 import { featureFlags } from '../../config/feature-flags.js';
@@ -347,14 +347,18 @@ export abstract class BaseToolHandler implements ToolHandler {
     const meta: Record<string, any> = {};
 
     // Apply geographic enrichment if enabled
-    if (this.options.enableGeoEnrichment && featureFlags.GEOGRAPHIC_ENRICHMENT_ENABLED) {
+    if (
+      this.options.enableGeoEnrichment &&
+      featureFlags.GEOGRAPHIC_ENRICHMENT_ENABLED
+    ) {
       try {
         processedData = await enrichWithGeographicData(processedData, geoCache);
         meta.geo_enriched = true;
       } catch (error) {
         // Geographic enrichment failure shouldn't break the response
         meta.geo_enriched = false;
-        meta.geo_enrichment_error = error instanceof Error ? error.message : 'Unknown error';
+        meta.geo_enrichment_error =
+          error instanceof Error ? error.message : 'Unknown error';
       }
     }
 
@@ -366,7 +370,8 @@ export abstract class BaseToolHandler implements ToolHandler {
       } catch (error) {
         // Field normalization failure shouldn't break the response
         meta.field_normalized = false;
-        meta.field_normalization_error = error instanceof Error ? error.message : 'Unknown error';
+        meta.field_normalization_error =
+          error instanceof Error ? error.message : 'Unknown error';
       }
     }
 
@@ -376,7 +381,7 @@ export abstract class BaseToolHandler implements ToolHandler {
       data: processedData,
       meta: {
         request_id: options.requestId || generateRequestId(),
-        execution_time_ms: options.executionTimeMs || (Date.now() - startTime),
+        execution_time_ms: options.executionTimeMs || Date.now() - startTime,
         handler: this.name,
         timestamp: new Date().toISOString(),
         count: Array.isArray(processedData) ? processedData.length : undefined,
@@ -409,14 +414,17 @@ export abstract class BaseToolHandler implements ToolHandler {
     payload: T,
     ipFields: string[] = ['source_ip', 'destination_ip', 'device_ip', 'ip']
   ): Promise<T> {
-    if (!this.options.enableGeoEnrichment || !featureFlags.GEOGRAPHIC_ENRICHMENT_ENABLED) {
+    if (
+      !this.options.enableGeoEnrichment ||
+      !featureFlags.GEOGRAPHIC_ENRICHMENT_ENABLED
+    ) {
       return payload;
     }
 
     try {
       const pipeline = getGlobalEnrichmentPipeline(geoCache);
-      return await pipeline.enrichObject(payload as any, ipFields) as T;
-    } catch (error) {
+      return (await pipeline.enrichObject(payload as any, ipFields)) as T;
+    } catch (_error) {
       // Return original payload if enrichment fails
       return payload;
     }

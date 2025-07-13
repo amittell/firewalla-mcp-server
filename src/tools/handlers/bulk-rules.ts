@@ -102,7 +102,7 @@ export class BulkPauseRulesHandler extends BaseToolHandler {
 
       // Execute the bulk operation
       const startTime = Date.now();
-      
+
       const result = await manager.executeBulkOperation(
         bulkValidation.sanitizedIds,
         pauseOperation,
@@ -197,7 +197,7 @@ export class BulkResumeRulesHandler extends BaseToolHandler {
 
       // Execute the bulk operation
       const startTime = Date.now();
-      
+
       const result = await manager.executeBulkOperation(
         bulkValidation.sanitizedIds,
         resumeOperation,

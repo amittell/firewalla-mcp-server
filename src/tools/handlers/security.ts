@@ -376,38 +376,43 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
       });
 
       const startTime = Date.now();
-      
-      // Process alarm data with timestamps
-      const processedAlarms = SafeAccess.safeArrayMap(finalNormalizedAlarms, (alarm: any) => {
-        // Apply timestamp normalization to each alarm
-        const timestampNormalized = normalizeTimestamps(alarm);
-        const finalAlarm = timestampNormalized.data;
 
-        return {
-          aid: SafeAccess.getNestedValue(finalAlarm, 'aid', 0),
-          timestamp: unixToISOStringOrNow(finalAlarm.ts),
-          type: finalAlarm.type, // Already normalized
-          status: finalAlarm.status, // Already normalized
-          message: finalAlarm.message, // Already normalized
-          direction: finalAlarm.direction, // Already normalized
-          protocol: finalAlarm.protocol, // Already normalized
-          gid: SafeAccess.getNestedValue(finalAlarm, 'gid', 'unknown'),
-          severity: finalAlarm.severity, // Already normalized
-          // Include conditional properties if present (now normalized)
-          ...(finalAlarm.device && { device: finalAlarm.device }),
-          ...(finalAlarm.remote && { remote: finalAlarm.remote }),
-          ...(finalAlarm.src && { src: finalAlarm.src }),
-          ...(finalAlarm.dst && { dst: finalAlarm.dst }),
-          ...(finalAlarm.port && { port: finalAlarm.port }),
-          ...(finalAlarm.dport && { dport: finalAlarm.dport }),
-        };
-      });
+      // Process alarm data with timestamps
+      const processedAlarms = SafeAccess.safeArrayMap(
+        finalNormalizedAlarms,
+        (alarm: any) => {
+          // Apply timestamp normalization to each alarm
+          const timestampNormalized = normalizeTimestamps(alarm);
+          const finalAlarm = timestampNormalized.data;
+
+          return {
+            aid: SafeAccess.getNestedValue(finalAlarm, 'aid', 0),
+            timestamp: unixToISOStringOrNow(finalAlarm.ts),
+            type: finalAlarm.type, // Already normalized
+            status: finalAlarm.status, // Already normalized
+            message: finalAlarm.message, // Already normalized
+            direction: finalAlarm.direction, // Already normalized
+            protocol: finalAlarm.protocol, // Already normalized
+            gid: SafeAccess.getNestedValue(finalAlarm, 'gid', 'unknown'),
+            severity: finalAlarm.severity, // Already normalized
+            // Include conditional properties if present (now normalized)
+            ...(finalAlarm.device && { device: finalAlarm.device }),
+            ...(finalAlarm.remote && { remote: finalAlarm.remote }),
+            ...(finalAlarm.src && { src: finalAlarm.src }),
+            ...(finalAlarm.dst && { dst: finalAlarm.dst }),
+            ...(finalAlarm.port && { port: finalAlarm.port }),
+            ...(finalAlarm.dport && { dport: finalAlarm.dport }),
+          };
+        }
+      );
 
       // Apply geographic enrichment to IP fields in alarm data
-      const enrichedAlarms = await this.enrichGeoIfNeeded(
-        processedAlarms,
-        ['src', 'dst', 'device.ip', 'remote.ip']
-      );
+      const enrichedAlarms = await this.enrichGeoIfNeeded(processedAlarms, [
+        'src',
+        'dst',
+        'device.ip',
+        'remote.ip',
+      ]);
 
       const unifiedResponseData = {
         count: SafeAccess.getNestedValue(response as any, 'count', 0),
@@ -511,12 +516,14 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
       }
 
       const startTime = Date.now();
-      
+
       // Apply geographic enrichment to the alarm data
-      const enrichedAlarm = await this.enrichGeoIfNeeded(
-        response,
-        ['src', 'dst', 'device.ip', 'remote.ip']
-      );
+      const enrichedAlarm = await this.enrichGeoIfNeeded(response, [
+        'src',
+        'dst',
+        'device.ip',
+        'remote.ip',
+      ]);
 
       const unifiedResponseData = {
         alarm: enrichedAlarm,
@@ -642,7 +649,7 @@ export class DeleteAlarmHandler extends BaseToolHandler {
       const response = await firewalla.deleteAlarm(alarmId);
 
       const startTime = Date.now();
-      
+
       const unifiedResponseData = {
         success: true,
         alarm_id: alarmId,

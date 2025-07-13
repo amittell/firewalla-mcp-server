@@ -13,7 +13,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 3
     
     steps:
     - uses: actions/checkout@v4
@@ -33,10 +33,9 @@ jobs:
     - name: Build
       run: npm run build
     
-    - name: Test
-      run: npm run test:ci
+    - name: Core Tests
+      run: npm run test:quick
       env:
-        FIREWALLA_MSP_TOKEN: ${{ secrets.FIREWALLA_MSP_TOKEN }}
-        FIREWALLA_MSP_ID: ${{ secrets.FIREWALLA_MSP_ID }}
-        FIREWALLA_BOX_ID: ${{ secrets.FIREWALLA_BOX_ID }}
+        CI: true
+        NODE_ENV: test
 

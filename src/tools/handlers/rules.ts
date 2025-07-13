@@ -207,7 +207,7 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
       }
 
       const startTime = Date.now();
-      
+
       const unifiedResponseData = {
         count: SafeAccess.getNestedValue(optimizedResponse, 'count', 0),
         summary_mode: summaryOnly,
@@ -427,7 +427,7 @@ export class PauseRuleHandler extends BaseToolHandler {
       );
 
       const startTime = Date.now();
-      
+
       const unifiedResponseData = {
         success: SafeAccess.getNestedValue(result as any, 'success', false),
         message: SafeAccess.getNestedValue(
@@ -603,7 +603,7 @@ export class ResumeRuleHandler extends BaseToolHandler {
       );
 
       const startTime = Date.now();
-      
+
       const unifiedResponseData = {
         success: SafeAccess.getNestedValue(result as any, 'success', false),
         message: SafeAccess.getNestedValue(
@@ -701,7 +701,7 @@ export class GetTargetListsHandler extends BaseToolHandler {
       const listsResponse = await firewalla.getTargetLists(listType, limit);
 
       const startTime = Date.now();
-      
+
       const unifiedResponseData = {
         total_lists: SafeAccess.safeArrayAccess(
           listsResponse.results,
@@ -966,7 +966,7 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
       }
 
       const startTime = Date.now();
-      
+
       const unifiedResponseData = {
         total_rules: allRules.length,
         limit_applied: limit,
@@ -1131,7 +1131,7 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
         .slice(0, limit);
 
       const startTime = Date.now();
-      
+
       const unifiedResponseData = {
         total_rules_analyzed: SafeAccess.safeArrayAccess(
           allRulesResponse.results,
@@ -1345,7 +1345,7 @@ export class GetRecentRulesHandler extends BaseToolHandler {
         .slice(0, limit);
 
       const startTime = Date.now();
-      
+
       const unifiedResponseData = {
         total_rules_analyzed: SafeAccess.safeArrayAccess(
           allRulesResponse.results,

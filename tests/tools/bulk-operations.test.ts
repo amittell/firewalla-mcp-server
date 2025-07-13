@@ -372,7 +372,7 @@ describe('Bulk Operations MCP Tools Comprehensive Testing', () => {
         // Handle unified response format
         const data = parsedResponse.data?.bulk_operation_result || parsedResponse;
         
-        expect(parsedResponse.data || data).toHaveProperty('timestamp');
+        expect(data).toHaveProperty('ts'); // Changed from timestamp to ts
         expect(data.summary).toHaveProperty('processing_time_ms');
         expect(typeof data.summary.processing_time_ms).toBe('number');
       });

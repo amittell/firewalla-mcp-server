@@ -83,7 +83,7 @@ export class BulkDeleteAlarmsHandler extends BaseToolHandler {
 
       // Execute the bulk operation
       const startTime = Date.now();
-      
+
       const result = await manager.executeBulkOperation(
         bulkValidation.sanitizedIds,
         deleteOperation,

@@ -569,10 +569,10 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
       );
 
       // Apply geographic enrichment pipeline for IP addresses
-      processedFlows = await this.enrichGeoIfNeeded(
-        processedFlows,
-        ['source_ip', 'destination_ip']
-      );
+      processedFlows = await this.enrichGeoIfNeeded(processedFlows, [
+        'source_ip',
+        'destination_ip',
+      ]);
 
       // Create metadata for standardized response
       const metadata: SearchMetadata = {
@@ -833,10 +833,10 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
       );
 
       // Apply geographic enrichment pipeline for IP addresses in alarms
-      processedAlarms = await this.enrichGeoIfNeeded(
-        processedAlarms,
-        ['source_ip', 'destination_ip']
-      );
+      processedAlarms = await this.enrichGeoIfNeeded(processedAlarms, [
+        'source_ip',
+        'destination_ip',
+      ]);
 
       // Create metadata for standardized response
       const metadata: SearchMetadata = {
@@ -1219,25 +1219,22 @@ See the Data Normalization Guide for field details.`;
 
       // Process and enrich device data with geographic information
       const deviceData = await this.enrichGeoIfNeeded(
-        SafeAccess.safeArrayMap(
-          (result as any).results,
-          (device: Device) => ({
-            id: SafeAccess.getNestedValue(device as any, 'id', 'unknown'),
-            name: SafeAccess.getNestedValue(
-              device as any,
-              'name',
-              'Unknown Device'
-            ),
-            ip: SafeAccess.getNestedValue(device as any, 'ip', 'unknown'),
-            online: SafeAccess.getNestedValue(device as any, 'online', false),
-            macVendor: SafeAccess.getNestedValue(
-              device as any,
-              'macVendor',
-              'unknown'
-            ),
-            lastSeen: SafeAccess.getNestedValue(device as any, 'lastSeen', 0),
-          })
-        ),
+        SafeAccess.safeArrayMap((result as any).results, (device: Device) => ({
+          id: SafeAccess.getNestedValue(device as any, 'id', 'unknown'),
+          name: SafeAccess.getNestedValue(
+            device as any,
+            'name',
+            'Unknown Device'
+          ),
+          ip: SafeAccess.getNestedValue(device as any, 'ip', 'unknown'),
+          online: SafeAccess.getNestedValue(device as any, 'online', false),
+          macVendor: SafeAccess.getNestedValue(
+            device as any,
+            'macVendor',
+            'unknown'
+          ),
+          lastSeen: SafeAccess.getNestedValue(device as any, 'lastSeen', 0),
+        })),
         ['ip'] // Enrich the device IP addresses
       );
 

@@ -127,7 +127,7 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
       );
 
       const startTime = Date.now();
-      
+
       // Process device data with timestamps
       const processedDevices = normalizedDevices.map((device: any) => {
         // Apply timestamp normalization to device data
@@ -161,10 +161,9 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
       });
 
       // Apply geographic enrichment for IP addresses
-      const enrichedDevices = await this.enrichGeoIfNeeded(
-        processedDevices,
-        ['ip']
-      );
+      const enrichedDevices = await this.enrichGeoIfNeeded(processedDevices, [
+        'ip',
+      ]);
 
       const unifiedResponseData = {
         total_devices: SafeAccess.getNestedValue(
