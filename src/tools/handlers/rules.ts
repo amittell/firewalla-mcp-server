@@ -136,6 +136,22 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
     'Retrieve firewall rules and conditions including target domains, actions, and status. Requires limit parameter. Data is cached for 10 minutes for performance.';
   category = 'rule' as const;
 
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in network rules
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'network_rules',
+        entity_type: 'firewall_rules',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        supports_pagination: true,
+        supports_filtering: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
@@ -190,7 +206,9 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
         });
       }
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      const unifiedResponseData = {
         count: SafeAccess.getNestedValue(optimizedResponse, 'count', 0),
         summary_mode: summaryOnly,
         limit_applied: summaryOnly ? limit : undefined,
@@ -274,6 +292,11 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
           optimizedResponse.pagination_note && {
             pagination_note: optimizedResponse.pagination_note,
           }),
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
@@ -298,6 +321,20 @@ export class PauseRuleHandler extends BaseToolHandler {
   description =
     'Temporarily disable a specific firewall rule. Requires rule_id parameter. Optional duration parameter (default 60 minutes).';
   category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in rule operations
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'rule_operations',
+        entity_type: 'rule_pause_operation',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -389,7 +426,9 @@ export class PauseRuleHandler extends BaseToolHandler {
         this.name
       );
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      const unifiedResponseData = {
         success: SafeAccess.getNestedValue(result as any, 'success', false),
         message: SafeAccess.getNestedValue(
           result,
@@ -399,6 +438,11 @@ export class PauseRuleHandler extends BaseToolHandler {
         rule_id: ruleId,
         duration_minutes: duration,
         action: 'pause_rule',
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
@@ -476,6 +520,20 @@ export class ResumeRuleHandler extends BaseToolHandler {
     'Resume a previously paused firewall rule. Requires rule_id parameter.';
   category = 'rule' as const;
 
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in rule operations
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'rule_operations',
+        entity_type: 'rule_resume_operation',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
@@ -544,7 +602,9 @@ export class ResumeRuleHandler extends BaseToolHandler {
         this.name
       );
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      const unifiedResponseData = {
         success: SafeAccess.getNestedValue(result as any, 'success', false),
         message: SafeAccess.getNestedValue(
           result,
@@ -553,6 +613,11 @@ export class ResumeRuleHandler extends BaseToolHandler {
         ),
         rule_id: ruleId,
         action: 'resume_rule',
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
@@ -575,6 +640,20 @@ export class GetTargetListsHandler extends BaseToolHandler {
   description =
     'Access security target lists (CloudFlare, CrowdSec) with domains and IPs. Requires limit parameter. Data cached for 1 hour for performance.';
   category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in target lists metadata
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'target_lists',
+        entity_type: 'security_target_lists',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -621,7 +700,9 @@ export class GetTargetListsHandler extends BaseToolHandler {
     return withToolTimeout(async () => {
       const listsResponse = await firewalla.getTargetLists(listType, limit);
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      const unifiedResponseData = {
         total_lists: SafeAccess.safeArrayAccess(
           listsResponse.results,
           arr => arr.length,
@@ -677,6 +758,11 @@ export class GetTargetListsHandler extends BaseToolHandler {
             notes: SafeAccess.getNestedValue(list, 'notes', ''),
           })
         ),
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     }, this.name);
   }
@@ -687,6 +773,20 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
   description =
     'Get overview statistics and counts of network rules by category. Requires limit parameter. Data cached for 10 minutes for performance.';
   category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in rule summary statistics
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'rule_summary',
+        entity_type: 'rule_statistics',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -865,7 +965,9 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
         }
       }
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      const unifiedResponseData = {
         total_rules: allRules.length,
         limit_applied: limit,
         summary_timestamp: getCurrentTimestamp(),
@@ -898,6 +1000,11 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
           rule_type: ruleType || 'all',
           active_only: activeOnly,
         },
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
@@ -922,6 +1029,20 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
   description =
     'Get rules with highest hit counts for traffic analysis. Requires limit parameter. Optional min_hits parameter.';
   category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in rule hit analysis
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'rule_analysis',
+        entity_type: 'active_rule_statistics',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -1009,7 +1130,9 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
         })
         .slice(0, limit);
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      const unifiedResponseData = {
         total_rules_analyzed: SafeAccess.safeArrayAccess(
           allRulesResponse.results,
           arr => arr.length,
@@ -1070,6 +1193,11 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
               : 0,
           analysis_timestamp: getCurrentTimestamp(),
         },
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
@@ -1095,6 +1223,20 @@ export class GetRecentRulesHandler extends BaseToolHandler {
     'Get recently created or modified firewall rules. Requires limit parameter. Optional hours parameter (default 24 hours lookback).';
   category = 'rule' as const;
 
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in rule timeline analysis
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'rule_timeline',
+        entity_type: 'recent_rule_activity',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
@@ -1113,10 +1255,10 @@ export class GetRecentRulesHandler extends BaseToolHandler {
         args?.hours,
         'hours',
         {
-          min: 1,
+          min: 0.1,
           max: 168,
           defaultValue: 24,
-          integer: true,
+          integer: false,
         }
       );
 
@@ -1202,7 +1344,9 @@ export class GetRecentRulesHandler extends BaseToolHandler {
         }) // Sort by most recent activity
         .slice(0, limit);
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      const unifiedResponseData = {
         total_rules_analyzed: SafeAccess.safeArrayAccess(
           allRulesResponse.results,
           arr => arr.length,
@@ -1271,6 +1415,11 @@ export class GetRecentRulesHandler extends BaseToolHandler {
           }).length,
           analysis_timestamp: getCurrentTimestamp(),
         },
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {

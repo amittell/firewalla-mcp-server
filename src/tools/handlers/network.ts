@@ -44,6 +44,22 @@ export class GetFlowDataHandler extends BaseToolHandler {
     'Query network traffic flows with pagination. Data is cached for 15 seconds for performance. Use force_refresh=true to bypass cache for real-time data.';
   category = 'network' as const;
 
+  constructor() {
+    super({
+      enableGeoEnrichment: true,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'flows',
+        entity_type: 'network_flows',
+        supports_geographic_enrichment: true,
+        supports_field_normalization: true,
+        supports_streaming: true,
+        supports_pagination: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     rawArgs: unknown,
     firewalla: FirewallaClient
@@ -298,7 +314,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
       const executionTime = Date.now() - startTime;
 
       // Process flow data
-      const processedFlows = SafeAccess.safeArrayMap(
+      let processedFlows = SafeAccess.safeArrayMap(
         response.results,
         (flow: any) => ({
           timestamp: unixToISOStringOrNow(flow.ts),
@@ -329,6 +345,12 @@ export class GetFlowDataHandler extends BaseToolHandler {
           region: SafeAccess.getNestedValue(flow, 'region', null),
           category: SafeAccess.getNestedValue(flow, 'category', null),
         })
+      );
+
+      // Apply geographic enrichment for IP addresses
+      processedFlows = await this.enrichGeoIfNeeded(
+        processedFlows,
+        ['source_ip', 'destination_ip']
       );
 
       // Create metadata for standardized response
@@ -364,10 +386,14 @@ export class GetFlowDataHandler extends BaseToolHandler {
             standardResponse,
             this.name
           );
-        return this.createSuccessResponse(legacyResponse);
+        return this.createUnifiedResponse(legacyResponse, {
+          executionTimeMs: executionTime,
+        });
       }
 
-      return this.createSuccessResponse(standardResponse);
+      return this.createUnifiedResponse(standardResponse, {
+        executionTimeMs: executionTime,
+      });
     } catch (error: unknown) {
       // Handle timeout errors specifically
       if (error instanceof TimeoutError) {
@@ -394,6 +420,20 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
   description =
     'Get top bandwidth consuming devices by data usage. Requires limit and period parameters. Data is cached for 5 minutes for performance.';
   category = 'network' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: true,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'bandwidth_usage',
+        entity_type: 'device_bandwidth',
+        supports_geographic_enrichment: true,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -446,38 +486,54 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
       // Note: if we get fewer results than requested, this may be due to
       // insufficient data rather than an error
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      // Process bandwidth usage data
+      const bandwidthData = SafeAccess.safeArrayMap(results, (item: any) => ({
+        device_id: SafeAccess.getNestedValue(item, 'device_id', 'unknown'),
+        device_name: SafeAccess.getNestedValue(
+          item,
+          'device_name',
+          'Unknown Device'
+        ),
+        ip: SafeAccess.getNestedValue(item, 'ip', 'unknown'),
+        bytes_uploaded: SafeAccess.getNestedValue(item, 'bytes_uploaded', 0),
+        bytes_downloaded: SafeAccess.getNestedValue(
+          item,
+          'bytes_downloaded',
+          0
+        ),
+        total_bytes: SafeAccess.getNestedValue(item, 'total_bytes', 0),
+        total_mb:
+          Math.round(
+            ((SafeAccess.getNestedValue(item, 'total_bytes', 0) as number) /
+              (1024 * 1024)) *
+              100
+          ) / 100,
+        total_gb:
+          Math.round(
+            ((SafeAccess.getNestedValue(item, 'total_bytes', 0) as number) /
+              (1024 * 1024 * 1024)) *
+              100
+          ) / 100,
+      }));
+
+      // Apply geographic enrichment for IP addresses
+      const enrichedBandwidthData = await this.enrichGeoIfNeeded(
+        bandwidthData,
+        ['ip']
+      );
+
+      const unifiedResponseData = {
         period: periodValidation.sanitizedValue,
         top_devices: results.length,
         requested_limit: requestedLimit,
-        bandwidth_usage: SafeAccess.safeArrayMap(results, (item: any) => ({
-          device_id: SafeAccess.getNestedValue(item, 'device_id', 'unknown'),
-          device_name: SafeAccess.getNestedValue(
-            item,
-            'device_name',
-            'Unknown Device'
-          ),
-          ip: SafeAccess.getNestedValue(item, 'ip', 'unknown'),
-          bytes_uploaded: SafeAccess.getNestedValue(item, 'bytes_uploaded', 0),
-          bytes_downloaded: SafeAccess.getNestedValue(
-            item,
-            'bytes_downloaded',
-            0
-          ),
-          total_bytes: SafeAccess.getNestedValue(item, 'total_bytes', 0),
-          total_mb:
-            Math.round(
-              ((SafeAccess.getNestedValue(item, 'total_bytes', 0) as number) /
-                (1024 * 1024)) *
-                100
-            ) / 100,
-          total_gb:
-            Math.round(
-              ((SafeAccess.getNestedValue(item, 'total_bytes', 0) as number) /
-                (1024 * 1024 * 1024)) *
-                100
-            ) / 100,
-        })),
+        bandwidth_usage: enrichedBandwidthData,
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       // Handle timeout errors specifically
@@ -505,6 +561,20 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
   description =
     'Get all offline devices with last seen timestamps and detailed device information. Requires limit parameter. Data cached for 2 minutes for performance.';
   category = 'network' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: true,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'devices',
+        entity_type: 'offline_devices',
+        supports_geographic_enrichment: true,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -595,35 +665,51 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
       // Apply the requested limit
       const limitedOfflineDevices = offlineDevices.slice(0, limit);
 
-      return this.createSuccessResponse({
+      const responseStartTime = Date.now();
+      
+      // Process device data
+      const deviceData = SafeAccess.safeArrayMap(
+        limitedOfflineDevices,
+        (device: any) => ({
+          id: SafeAccess.getNestedValue(device, 'id', 'unknown'),
+          gid: SafeAccess.getNestedValue(device, 'gid', 'unknown'),
+          name: device.name, // Already normalized
+          ip: device.ip, // Already normalized
+          macVendor: device.macVendor, // Already normalized
+          online: device.online, // Already normalized to false for offline devices
+          lastSeen: SafeAccess.getNestedValue(device, 'lastSeen', 0),
+          lastSeenFormatted: safeUnixToISOString(
+            SafeAccess.getNestedValue(device, 'lastSeen', 0) as number,
+            'Never'
+          ),
+          ipReserved: SafeAccess.getNestedValue(device, 'ipReserved', false),
+          network: device.network, // Already normalized
+          group: device.group, // Already normalized
+          totalDownload: sanitizeByteCount(
+            SafeAccess.getNestedValue(device, 'totalDownload', 0)
+          ),
+          totalUpload: sanitizeByteCount(
+            SafeAccess.getNestedValue(device, 'totalUpload', 0)
+          ),
+        })
+      );
+
+      // Apply geographic enrichment for IP addresses
+      const enrichedDeviceData = await this.enrichGeoIfNeeded(
+        deviceData,
+        ['ip']
+      );
+
+      const unifiedResponseData = {
         total_offline_devices: offlineDevices.length,
         limit_applied: limit,
         returned_count: limitedOfflineDevices.length,
-        devices: SafeAccess.safeArrayMap(
-          limitedOfflineDevices,
-          (device: any) => ({
-            id: SafeAccess.getNestedValue(device, 'id', 'unknown'),
-            gid: SafeAccess.getNestedValue(device, 'gid', 'unknown'),
-            name: device.name, // Already normalized
-            ip: device.ip, // Already normalized
-            macVendor: device.macVendor, // Already normalized
-            online: device.online, // Already normalized to false for offline devices
-            lastSeen: SafeAccess.getNestedValue(device, 'lastSeen', 0),
-            lastSeenFormatted: safeUnixToISOString(
-              SafeAccess.getNestedValue(device, 'lastSeen', 0) as number,
-              'Never'
-            ),
-            ipReserved: SafeAccess.getNestedValue(device, 'ipReserved', false),
-            network: device.network, // Already normalized
-            group: device.group, // Already normalized
-            totalDownload: sanitizeByteCount(
-              SafeAccess.getNestedValue(device, 'totalDownload', 0)
-            ),
-            totalUpload: sanitizeByteCount(
-              SafeAccess.getNestedValue(device, 'totalUpload', 0)
-            ),
-          })
-        ),
+        devices: enrichedDeviceData,
+      };
+
+      const executionTime = Date.now() - responseStartTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       // Handle timeout errors specifically

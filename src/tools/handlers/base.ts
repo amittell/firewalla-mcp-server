@@ -15,6 +15,7 @@
  */
 
 import type { FirewallaClient } from '../../firewalla/client.js';
+import type { ToolResponseUnified } from '../../types.js';
 import {
   createErrorResponse,
   ErrorType,
@@ -23,6 +24,13 @@ import {
   validateAndSanitizeParameters,
   type SanitizationConfig,
 } from '../../validation/parameter-sanitizer.js';
+import { toSnakeCaseDeep } from '../../utils/field-normalizer.js';
+import {
+  enrichWithGeographicData,
+  getGlobalEnrichmentPipeline
+} from '../../utils/geographic-enrichment-pipeline.js';
+import { geoCache } from '../../utils/geographic.js';
+import { featureFlags } from '../../config/feature-flags.js';
 
 /**
  * Base arguments interface for MCP tool execution
@@ -222,10 +230,31 @@ export interface ToolHandler {
 }
 
 /**
+ * Configuration options for BaseToolHandler
+ */
+export interface BaseToolOptions {
+  /** Whether to enable geographic enrichment for IP addresses */
+  enableGeoEnrichment?: boolean;
+  /** Whether to enable field normalization to snake_case */
+  enableFieldNormalization?: boolean;
+  /** Additional metadata to include in responses */
+  additionalMeta?: Record<string, any>;
+}
+
+/**
+ * Generate a simple request ID for tracking
+ */
+function generateRequestId(): string {
+  return `req_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+}
+
+/**
  * Base class for tool handlers with common validation and error handling
  *
  * Provides standardized implementation patterns for MCP tools including:
- * - Consistent response formatting for success and error cases
+ * - Unified response formatting with consistent metadata
+ * - Automatic geographic enrichment for IP addresses
+ * - Field normalization to snake_case
  * - JSON serialization with proper error handling
  * - Tool metadata structure validation
  * - Common utility methods for response construction
@@ -252,6 +281,20 @@ export abstract class BaseToolHandler implements ToolHandler {
     | 'analytics'
     | 'search';
 
+  /** @description Configuration options for this handler */
+  protected options: BaseToolOptions;
+
+  /**
+   * Constructor with default configuration
+   */
+  constructor(options: BaseToolOptions = {}) {
+    this.options = {
+      enableGeoEnrichment: true, // Default to enabled for consistency
+      enableFieldNormalization: true, // Default to enabled for consistency
+      ...options,
+    };
+  }
+
   /**
    * Execute the tool logic - must be implemented by concrete classes
    *
@@ -265,11 +308,12 @@ export abstract class BaseToolHandler implements ToolHandler {
   ): Promise<ToolResponse>;
 
   /**
-   * Create a standardized success response with JSON-formatted data
+   * Create a legacy success response (DEPRECATED - Use createUnifiedResponse)
    *
    * @param data - The data to include in the response
    * @returns Formatted success response compliant with MCP protocol
    * @protected
+   * @deprecated Use createUnifiedResponse for new handlers
    */
   protected createSuccessResponse(data: any): ToolResponse {
     return {
@@ -280,6 +324,102 @@ export abstract class BaseToolHandler implements ToolHandler {
         },
       ],
     };
+  }
+
+  /**
+   * Create a unified success response with consistent formatting and enrichment
+   *
+   * @param data - The data to include in the response
+   * @param options - Additional options for response generation
+   * @returns Formatted success response with unified structure
+   * @protected
+   */
+  protected async createUnifiedResponse(
+    data: any,
+    options: {
+      executionTimeMs?: number;
+      requestId?: string;
+      additionalMeta?: Record<string, any>;
+    } = {}
+  ): Promise<ToolResponse> {
+    const startTime = Date.now();
+    let processedData = data;
+    const meta: Record<string, any> = {};
+
+    // Apply geographic enrichment if enabled
+    if (this.options.enableGeoEnrichment && featureFlags.GEOGRAPHIC_ENRICHMENT_ENABLED) {
+      try {
+        processedData = await enrichWithGeographicData(processedData, geoCache);
+        meta.geo_enriched = true;
+      } catch (error) {
+        // Geographic enrichment failure shouldn't break the response
+        meta.geo_enriched = false;
+        meta.geo_enrichment_error = error instanceof Error ? error.message : 'Unknown error';
+      }
+    }
+
+    // Apply field normalization if enabled
+    if (this.options.enableFieldNormalization) {
+      try {
+        processedData = toSnakeCaseDeep(processedData);
+        meta.field_normalized = true;
+      } catch (error) {
+        // Field normalization failure shouldn't break the response
+        meta.field_normalized = false;
+        meta.field_normalization_error = error instanceof Error ? error.message : 'Unknown error';
+      }
+    }
+
+    // Build unified response
+    const unifiedResponse: ToolResponseUnified = {
+      success: true,
+      data: processedData,
+      meta: {
+        request_id: options.requestId || generateRequestId(),
+        execution_time_ms: options.executionTimeMs || (Date.now() - startTime),
+        handler: this.name,
+        timestamp: new Date().toISOString(),
+        count: Array.isArray(processedData) ? processedData.length : undefined,
+        ...meta,
+        ...this.options.additionalMeta,
+        ...options.additionalMeta,
+      },
+    };
+
+    // Convert to MCP ToolResponse format
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(unifiedResponse, null, 2),
+        },
+      ],
+    };
+  }
+
+  /**
+   * Helper method for geographic enrichment that can be called by handlers
+   *
+   * @param payload - Data to enrich with geographic information
+   * @param ipFields - Array of IP field names to enrich (defaults to common fields)
+   * @returns Promise resolving to enriched data
+   * @protected
+   */
+  protected async enrichGeoIfNeeded<T>(
+    payload: T,
+    ipFields: string[] = ['source_ip', 'destination_ip', 'device_ip', 'ip']
+  ): Promise<T> {
+    if (!this.options.enableGeoEnrichment || !featureFlags.GEOGRAPHIC_ENRICHMENT_ENABLED) {
+      return payload;
+    }
+
+    try {
+      const pipeline = getGlobalEnrichmentPipeline(geoCache);
+      return await pipeline.enrichObject(payload as any, ipFields) as T;
+    } catch (error) {
+      // Return original payload if enrichment fails
+      return payload;
+    }
   }
 
   /**

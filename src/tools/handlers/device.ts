@@ -35,6 +35,22 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
     'Check online/offline status of all network devices with detailed information including MAC addresses, IP addresses, device types, and last seen timestamps. Requires limit parameter. Data is cached for 2 minutes for performance.';
   category = 'device' as const;
 
+  constructor() {
+    super({
+      enableGeoEnrichment: true,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'devices',
+        entity_type: 'network_devices',
+        supports_geographic_enrichment: true,
+        supports_field_normalization: true,
+        supports_pagination: true,
+        supports_filtering: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
@@ -110,7 +126,47 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
         { online: 0, offline: 0 }
       );
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      // Process device data with timestamps
+      const processedDevices = normalizedDevices.map((device: any) => {
+        // Apply timestamp normalization to device data
+        const timestampNormalized = normalizeTimestamps(device);
+        const finalDevice = timestampNormalized.data;
+
+        return {
+          id: SafeAccess.getNestedValue(finalDevice, 'id', 'unknown'),
+          gid: SafeAccess.getNestedValue(finalDevice, 'gid', 'unknown'),
+          name: finalDevice.name, // Already normalized
+          ip: finalDevice.ip, // Already normalized
+          macVendor: finalDevice.macVendor, // Already normalized
+          online: finalDevice.online, // Already normalized to boolean
+          lastSeen: unixToISOStringOrNow(
+            SafeAccess.getNestedValue(finalDevice, 'lastSeen', 0) as number
+          ),
+          ipReserved: SafeAccess.getNestedValue(
+            finalDevice,
+            'ipReserved',
+            false
+          ),
+          network: finalDevice.network, // Already normalized
+          group: finalDevice.group, // Already normalized
+          totalDownload: sanitizeByteCount(
+            SafeAccess.getNestedValue(finalDevice, 'totalDownload', 0)
+          ),
+          totalUpload: sanitizeByteCount(
+            SafeAccess.getNestedValue(finalDevice, 'totalUpload', 0)
+          ),
+        };
+      });
+
+      // Apply geographic enrichment for IP addresses
+      const enrichedDevices = await this.enrichGeoIfNeeded(
+        processedDevices,
+        ['ip']
+      );
+
+      const unifiedResponseData = {
         total_devices: SafeAccess.getNestedValue(
           devicesResponse,
           'total_count',
@@ -130,41 +186,17 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
           'has_more',
           false
         ),
-        devices: normalizedDevices.map((device: any) => {
-          // Apply timestamp normalization to device data
-          const timestampNormalized = normalizeTimestamps(device);
-          const finalDevice = timestampNormalized.data;
-
-          return {
-            id: SafeAccess.getNestedValue(finalDevice, 'id', 'unknown'),
-            gid: SafeAccess.getNestedValue(finalDevice, 'gid', 'unknown'),
-            name: finalDevice.name, // Already normalized
-            ip: finalDevice.ip, // Already normalized
-            macVendor: finalDevice.macVendor, // Already normalized
-            online: finalDevice.online, // Already normalized to boolean
-            lastSeen: unixToISOStringOrNow(
-              SafeAccess.getNestedValue(finalDevice, 'lastSeen', 0) as number
-            ),
-            ipReserved: SafeAccess.getNestedValue(
-              finalDevice,
-              'ipReserved',
-              false
-            ),
-            network: finalDevice.network, // Already normalized
-            group: finalDevice.group, // Already normalized
-            totalDownload: sanitizeByteCount(
-              SafeAccess.getNestedValue(finalDevice, 'totalDownload', 0)
-            ),
-            totalUpload: sanitizeByteCount(
-              SafeAccess.getNestedValue(finalDevice, 'totalUpload', 0)
-            ),
-          };
-        }),
+        devices: enrichedDevices,
         next_cursor: SafeAccess.getNestedValue(
           devicesResponse,
           'next_cursor',
           null
         ),
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       // Handle timeout errors specifically

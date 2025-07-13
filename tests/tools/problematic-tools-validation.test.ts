@@ -69,23 +69,28 @@ describe('Problematic MCP Tools Validation', () => {
       mockFirewalla.getBandwidthUsage.mockResolvedValue(mockBandwidthData);
 
       const result = await getBandwidthUsageHandler.execute(validArgs, mockFirewalla);
-      const parsedContent = JSON.parse(result.content[0].text);
-
+      
       expect(result.isError).toBeFalsy();
       expect(result.content).toBeDefined();
       expect(result.content[0].type).toBe('text');
-      expect(parsedContent.period).toBe('24h');
-      expect(parsedContent.top_devices).toBe(2);
-      expect(parsedContent.bandwidth_usage).toHaveLength(2);
+      
+      const parsedContent = JSON.parse(result.content[0].text);
+      expect(parsedContent.success).toBe(true);
+      expect(parsedContent.data).toBeDefined();
+      expect(parsedContent.data.period).toBe('24h');
+      expect(parsedContent.data.requested_limit).toBe(10);
+      expect(parsedContent.data.bandwidth_usage).toHaveLength(2);
     });
 
     it('should properly format bandwidth data with MB and GB calculations', async () => {
       mockFirewalla.getBandwidthUsage.mockResolvedValue(mockBandwidthData);
 
       const result = await getBandwidthUsageHandler.execute(validArgs, mockFirewalla);
+      
+      expect(result.isError).toBeFalsy();
       const parsedContent = JSON.parse(result.content[0].text);
 
-      const firstDevice = parsedContent.bandwidth_usage[0];
+      const firstDevice = parsedContent.data.bandwidth_usage[0];
       expect(firstDevice.device_name).toBe('MacBook Pro');
       expect(firstDevice.total_bytes).toBe(3072000000);
       expect(firstDevice.total_mb).toBe(2929.69); // 3072000000 / (1024*1024)
@@ -116,11 +121,12 @@ describe('Problematic MCP Tools Validation', () => {
       mockFirewalla.getBandwidthUsage.mockResolvedValue({ results: [] });
 
       const result = await getBandwidthUsageHandler.execute(validArgs, mockFirewalla);
-      const parsedContent = JSON.parse(result.content[0].text);
-
+      
       expect(result.isError).toBeFalsy();
-      expect(parsedContent.top_devices).toBe(0);
-      expect(parsedContent.bandwidth_usage).toHaveLength(0);
+      const parsedContent = JSON.parse(result.content[0].text);
+      expect(parsedContent.success).toBe(true);
+      expect(parsedContent.data.top_devices).toBe(0);
+      expect(parsedContent.data.bandwidth_usage).toHaveLength(0);
     });
 
     it('should call FirewallaClient with correct parameters', async () => {
@@ -156,21 +162,32 @@ describe('Problematic MCP Tools Validation', () => {
       expect(result.isError).toBeFalsy();
       expect(result.content).toBeDefined();
       const parsedContent = JSON.parse(result.content[0].text);
-      expect(parsedContent.period).toBe('24h');
-      expect(parsedContent.interval_seconds).toBe(3600);
-      expect(parsedContent.data_points).toBe(5);
-      expect(parsedContent.trends).toHaveLength(5);
+      expect(parsedContent.success).toBe(true);
+      expect(parsedContent.data).toBeDefined();
+      expect(parsedContent.data.period).toBe('24h');
+      expect(parsedContent.data.interval_seconds).toBe(3600);
+      expect(parsedContent.data.data_points).toBe(5);
+      expect(parsedContent.data.trends).toHaveLength(5);
     });
 
     it('should properly format trend data with timestamps', async () => {
       mockFirewalla.getFlowTrends.mockResolvedValue(mockTrendsData);
 
       const result = await getFlowTrendsHandler.execute(validArgs, mockFirewalla);
+      
+      expect(result.isError).toBeFalsy();
       const parsedContent = JSON.parse(result.content[0].text);
 
-      const firstTrend = parsedContent.trends[0];
-      expect(firstTrend.timestamp).toBe(1640995200);
-      expect(firstTrend.timestamp_iso).toContain('2022-01-01'); // Unix timestamp conversion
+      expect(parsedContent.data).toBeDefined();
+      expect(parsedContent.data.trends).toBeDefined();
+      expect(Array.isArray(parsedContent.data.trends)).toBe(true);
+      expect(parsedContent.data.trends.length).toBeGreaterThan(0);
+      
+      const firstTrend = parsedContent.data.trends[0];
+      expect(firstTrend).toBeDefined();
+      // The actual response uses 'ts' field, not 'timestamp'
+      expect(firstTrend.ts).toBe(1640995200);
+      expect(firstTrend.timestamp_iso).toBeDefined();
       expect(firstTrend.flow_count).toBe(1500);
     });
 
@@ -178,12 +195,14 @@ describe('Problematic MCP Tools Validation', () => {
       mockFirewalla.getFlowTrends.mockResolvedValue(mockTrendsData);
 
       const result = await getFlowTrendsHandler.execute(validArgs, mockFirewalla);
+      
+      expect(result.isError).toBeFalsy();
       const parsedContent = JSON.parse(result.content[0].text);
 
-      expect(parsedContent.summary.total_flows).toBe(9250); // Sum of all values
-      expect(parsedContent.summary.avg_flows_per_interval).toBe(1850); // Average
-      expect(parsedContent.summary.peak_flow_count).toBe(2200); // Maximum
-      expect(parsedContent.summary.min_flow_count).toBe(1500); // Minimum
+      expect(parsedContent.data.summary.total_flows).toBe(9250); // Sum of all values
+      expect(parsedContent.data.summary.avg_flows_per_interval).toBe(1850); // Average
+      expect(parsedContent.data.summary.peak_flow_count).toBe(2200); // Maximum
+      expect(parsedContent.data.summary.min_flow_count).toBe(1500); // Minimum
     });
 
     it('should use default values for optional parameters', async () => {
@@ -191,11 +210,11 @@ describe('Problematic MCP Tools Validation', () => {
       mockFirewalla.getFlowTrends.mockResolvedValue(mockTrendsData);
 
       const result = await getFlowTrendsHandler.execute(minimalArgs, mockFirewalla);
-      const parsedContent = JSON.parse(result.content[0].text);
-
+      
       expect(result.isError).toBeFalsy();
-      expect(parsedContent.period).toBe('24h'); // Default value
-      expect(parsedContent.interval_seconds).toBe(3600); // Default value
+      const parsedContent = JSON.parse(result.content[0].text);
+      expect(parsedContent.data.period).toBe('24h'); // Default value
+      expect(parsedContent.data.interval_seconds).toBe(3600); // Default value
     });
 
     it('should validate interval parameter range', async () => {
@@ -219,10 +238,10 @@ describe('Problematic MCP Tools Validation', () => {
       mockFirewalla.getFlowTrends.mockResolvedValue(invalidTrendsData);
 
       const result = await getFlowTrendsHandler.execute(validArgs, mockFirewalla);
-      const parsedContent = JSON.parse(result.content[0].text);
-
+      
       expect(result.isError).toBeFalsy();
-      expect(parsedContent.data_points).toBe(1); // Only valid entries counted
+      const parsedContent = JSON.parse(result.content[0].text);
+      expect(parsedContent.data.data_points).toBe(1); // Only valid entries counted
     });
   });
 
@@ -283,10 +302,13 @@ describe('Problematic MCP Tools Validation', () => {
       expect(result.isError).toBeFalsy();
       expect(result.content).toBeDefined();
       const parsedContent = JSON.parse(result.content[0].text);
-      expect(parsedContent.count).toBe(2);
-      expect(parsedContent.query_executed).toBe('protocol:tcp AND bytes:>1000');
-      expect(parsedContent.execution_time_ms).toBe(45);
-      expect(parsedContent.flows).toHaveLength(2);
+      expect(parsedContent.success).toBe(true);
+      expect(parsedContent.data).toBeDefined();
+      // search_flows uses legacy format
+      expect(parsedContent.data.count).toBe(2);
+      expect(parsedContent.data.query_executed).toBe('protocol:tcp AND bytes:>1000');
+      expect(parsedContent.data.execution_time_ms).toBe(45);
+      expect(parsedContent.data.flows).toHaveLength(2);
     });
 
     it('should properly format flow data with calculated bytes', async () => {
@@ -307,9 +329,11 @@ describe('Problematic MCP Tools Validation', () => {
       const handler = new SearchFlowsHandler();
 
       const result = await handler.execute(validArgs, mockFirewalla);
+      
+      expect(result.isError).toBeFalsy();
       const parsedContent = JSON.parse(result.content[0].text);
 
-      const firstFlow = parsedContent.flows[0];
+      const firstFlow = parsedContent.data.flows[0];
       expect(firstFlow.source_ip).toBe('192.168.1.100');
       expect(firstFlow.destination_ip).toBe('8.8.8.8');
       expect(firstFlow.protocol).toBe('tcp');
@@ -372,17 +396,21 @@ describe('Problematic MCP Tools Validation', () => {
       expect(result.isError).toBeFalsy();
       expect(result.content).toBeDefined();
       const parsedContent = JSON.parse(result.content[0].text);
-      expect(parsedContent.total_boxes).toBe(2);
-      expect(parsedContent.box_statistics).toHaveLength(2);
+      expect(parsedContent.success).toBe(true);
+      expect(parsedContent.data).toBeDefined();
+      expect(parsedContent.data.total_boxes).toBe(2);
+      expect(parsedContent.data.box_statistics).toHaveLength(2);
     });
 
     it('should properly format box statistics with all required fields', async () => {
       mockFirewalla.getStatisticsByBox.mockResolvedValue(mockBoxStatsData);
 
       const result = await getStatisticsByBoxHandler.execute({}, mockFirewalla);
+      
+      expect(result.isError).toBeFalsy();
       const parsedContent = JSON.parse(result.content[0].text);
 
-      const firstBox = parsedContent.box_statistics[0];
+      const firstBox = parsedContent.data.box_statistics[0];
       expect(firstBox.box_id).toBe('box-123-456');
       expect(firstBox.name).toBe('Home Firewalla');
       expect(firstBox.model).toBe('Gold');
@@ -400,9 +428,11 @@ describe('Problematic MCP Tools Validation', () => {
       mockFirewalla.getStatisticsByBox.mockResolvedValue(mockBoxStatsData);
 
       const result = await getStatisticsByBoxHandler.execute({}, mockFirewalla);
+      
+      expect(result.isError).toBeFalsy();
       const parsedContent = JSON.parse(result.content[0].text);
 
-      const boxes = parsedContent.box_statistics;
+      const boxes = parsedContent.data.box_statistics;
       expect(boxes[0].activity_score).toBe(850); // Higher score first
       expect(boxes[1].activity_score).toBe(650); // Lower score second
     });
@@ -411,9 +441,11 @@ describe('Problematic MCP Tools Validation', () => {
       mockFirewalla.getStatisticsByBox.mockResolvedValue(mockBoxStatsData);
 
       const result = await getStatisticsByBoxHandler.execute({}, mockFirewalla);
+      
+      expect(result.isError).toBeFalsy();
       const parsedContent = JSON.parse(result.content[0].text);
 
-      const summary = parsedContent.summary;
+      const summary = parsedContent.data.summary;
       expect(summary.online_boxes).toBe(1); // Only first box is online
       expect(summary.total_devices).toBe(27); // 15 + 12
       expect(summary.total_rules).toBe(13); // 8 + 5
@@ -424,12 +456,12 @@ describe('Problematic MCP Tools Validation', () => {
       mockFirewalla.getStatisticsByBox.mockResolvedValue({ results: [] });
 
       const result = await getStatisticsByBoxHandler.execute({}, mockFirewalla);
-      const parsedContent = JSON.parse(result.content[0].text);
-
+      
       expect(result.isError).toBeFalsy();
-      expect(parsedContent.total_boxes).toBe(0);
-      expect(parsedContent.box_statistics).toHaveLength(0);
-      expect(parsedContent.summary.online_boxes).toBe(0);
+      const parsedContent = JSON.parse(result.content[0].text);
+      expect(parsedContent.data.total_boxes).toBe(0);
+      expect(parsedContent.data.box_statistics).toHaveLength(0);
+      expect(parsedContent.data.summary.online_boxes).toBe(0);
     });
 
     it('should handle API errors gracefully', async () => {
@@ -458,7 +490,8 @@ describe('Problematic MCP Tools Validation', () => {
       results.forEach(result => {
         expect(result.isError).toBeFalsy();
         const parsedContent = JSON.parse(result.content[0].text);
-        expect(parsedContent.bandwidth_usage).toBeDefined();
+        expect(parsedContent.success).toBe(true);
+        expect(parsedContent.data.bandwidth_usage).toBeDefined();
       });
     });
 

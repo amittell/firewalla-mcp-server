@@ -162,6 +162,22 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
     'Retrieve active security alarms with optional severity filtering. Data is cached for 15 seconds for performance. Use force_refresh=true to bypass cache for real-time data.';
   category = 'security' as const;
 
+  constructor() {
+    super({
+      enableGeoEnrichment: true,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'alarms',
+        entity_type: 'security_alarms',
+        supports_geographic_enrichment: true,
+        supports_field_normalization: true,
+        supports_pagination: true,
+        supports_filtering: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
@@ -359,32 +375,43 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         };
       });
 
-      return this.createSuccessResponse({
-        count: SafeAccess.getNestedValue(response as any, 'count', 0),
-        alarms: SafeAccess.safeArrayMap(finalNormalizedAlarms, (alarm: any) => {
-          // Apply timestamp normalization to each alarm
-          const timestampNormalized = normalizeTimestamps(alarm);
-          const finalAlarm = timestampNormalized.data;
+      const startTime = Date.now();
+      
+      // Process alarm data with timestamps
+      const processedAlarms = SafeAccess.safeArrayMap(finalNormalizedAlarms, (alarm: any) => {
+        // Apply timestamp normalization to each alarm
+        const timestampNormalized = normalizeTimestamps(alarm);
+        const finalAlarm = timestampNormalized.data;
 
-          return {
-            aid: SafeAccess.getNestedValue(finalAlarm, 'aid', 0),
-            timestamp: unixToISOStringOrNow(finalAlarm.ts),
-            type: finalAlarm.type, // Already normalized
-            status: finalAlarm.status, // Already normalized
-            message: finalAlarm.message, // Already normalized
-            direction: finalAlarm.direction, // Already normalized
-            protocol: finalAlarm.protocol, // Already normalized
-            gid: SafeAccess.getNestedValue(finalAlarm, 'gid', 'unknown'),
-            severity: finalAlarm.severity, // Already normalized
-            // Include conditional properties if present (now normalized)
-            ...(finalAlarm.device && { device: finalAlarm.device }),
-            ...(finalAlarm.remote && { remote: finalAlarm.remote }),
-            ...(finalAlarm.src && { src: finalAlarm.src }),
-            ...(finalAlarm.dst && { dst: finalAlarm.dst }),
-            ...(finalAlarm.port && { port: finalAlarm.port }),
-            ...(finalAlarm.dport && { dport: finalAlarm.dport }),
-          };
-        }),
+        return {
+          aid: SafeAccess.getNestedValue(finalAlarm, 'aid', 0),
+          timestamp: unixToISOStringOrNow(finalAlarm.ts),
+          type: finalAlarm.type, // Already normalized
+          status: finalAlarm.status, // Already normalized
+          message: finalAlarm.message, // Already normalized
+          direction: finalAlarm.direction, // Already normalized
+          protocol: finalAlarm.protocol, // Already normalized
+          gid: SafeAccess.getNestedValue(finalAlarm, 'gid', 'unknown'),
+          severity: finalAlarm.severity, // Already normalized
+          // Include conditional properties if present (now normalized)
+          ...(finalAlarm.device && { device: finalAlarm.device }),
+          ...(finalAlarm.remote && { remote: finalAlarm.remote }),
+          ...(finalAlarm.src && { src: finalAlarm.src }),
+          ...(finalAlarm.dst && { dst: finalAlarm.dst }),
+          ...(finalAlarm.port && { port: finalAlarm.port }),
+          ...(finalAlarm.dport && { dport: finalAlarm.dport }),
+        };
+      });
+
+      // Apply geographic enrichment to IP fields in alarm data
+      const enrichedAlarms = await this.enrichGeoIfNeeded(
+        processedAlarms,
+        ['src', 'dst', 'device.ip', 'remote.ip']
+      );
+
+      const unifiedResponseData = {
+        count: SafeAccess.getNestedValue(response as any, 'count', 0),
+        alarms: enrichedAlarms,
         next_cursor: response.next_cursor,
         total_count: totalCount,
         pages_traversed: pagesTraversed,
@@ -399,6 +426,11 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
           from_cache: !forceRefreshValidation.sanitizedValue,
           last_updated: getCurrentTimestamp(),
         },
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
@@ -424,6 +456,20 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
   description =
     'Get detailed information for a specific alarm by alarm ID. Requires alarm_id parameter obtained from get_active_alarms.';
   category = 'security' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: true,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'specific_alarm',
+        entity_type: 'security_alarm_detail',
+        supports_geographic_enrichment: true,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -464,9 +510,22 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
         );
       }
 
-      return this.createSuccessResponse({
-        alarm: response,
+      const startTime = Date.now();
+      
+      // Apply geographic enrichment to the alarm data
+      const enrichedAlarm = await this.enrichGeoIfNeeded(
+        response,
+        ['src', 'dst', 'device.ip', 'remote.ip']
+      );
+
+      const unifiedResponseData = {
+        alarm: enrichedAlarm,
         retrieved_at: getCurrentTimestamp(),
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
@@ -506,6 +565,20 @@ export class DeleteAlarmHandler extends BaseToolHandler {
   description =
     'Delete/dismiss a specific security alarm by ID. Requires alarm_id parameter. Use with caution as this permanently removes the alarm.';
   category = 'security' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in delete response
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'alarm_deletion',
+        entity_type: 'alarm_operation',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -568,12 +641,19 @@ export class DeleteAlarmHandler extends BaseToolHandler {
       // Alarm exists, proceed with deletion
       const response = await firewalla.deleteAlarm(alarmId);
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      const unifiedResponseData = {
         success: true,
         alarm_id: alarmId,
         message: 'Alarm deleted successfully',
         deleted_at: getCurrentTimestamp(),
         details: response,
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     }, 'delete_alarm');
   }

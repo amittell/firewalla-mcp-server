@@ -322,6 +322,21 @@ PERFORMANCE TIPS:
 See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.md`;
   category = 'search' as const;
 
+  constructor() {
+    // Enable full standardization: geographic enrichment and field normalization for network flows
+    super({
+      enableGeoEnrichment: true, // Network flows have IP addresses that require geographic enrichment
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'flows',
+        entity_type: 'network_flows',
+        supports_geographic_enrichment: true,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
@@ -489,8 +504,8 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
       );
       const executionTime = Date.now() - startTime;
 
-      // Process flow data
-      const processedFlows = SafeAccess.safeArrayMap(
+      // Process flow data with enhanced standardization
+      let processedFlows = SafeAccess.safeArrayMap(
         (result as any).results,
         (flow: Flow) => ({
           timestamp: unixToISOStringOrNow(flow.ts),
@@ -553,6 +568,12 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
         })
       );
 
+      // Apply geographic enrichment pipeline for IP addresses
+      processedFlows = await this.enrichGeoIfNeeded(
+        processedFlows,
+        ['source_ip', 'destination_ip']
+      );
+
       // Create metadata for standardized response
       const metadata: SearchMetadata = {
         query: SafeAccess.getNestedValue(
@@ -577,22 +598,40 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
         ) as Record<string, any> | undefined,
       };
 
-      // Create standardized response
-      const standardResponse = ResponseStandardizer.toSearchResponse(
-        processedFlows,
-        metadata
-      );
+      // Create unified response with standardized metadata
+      const unifiedResponseData = {
+        flows: processedFlows,
+        metadata,
+        query_info: {
+          original_query: searchArgs.query,
+          final_query: finalQuery,
+          applied_filters: {
+            geographic: !!searchArgs.geographic_filters,
+            time_range: !!searchArgs.time_range,
+            analytics: !!searchArgs.include_analytics,
+          },
+        },
+      };
 
-      // Apply backward compatibility if needed
+      // Apply backward compatibility if needed (preserving legacy support)
       if (shouldUseLegacyFormat(this.name)) {
+        const standardResponse = ResponseStandardizer.toSearchResponse(
+          processedFlows,
+          metadata
+        );
         const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
           standardResponse,
           this.name
         );
-        return this.createSuccessResponse(legacyResponse);
+        return this.createUnifiedResponse(legacyResponse, {
+          executionTimeMs: executionTime,
+        });
       }
 
-      return this.createSuccessResponse(standardResponse);
+      // Return modern unified response
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
+      });
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(
@@ -681,6 +720,21 @@ ERROR RECOVERY:
 See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`;
   category = 'search' as const;
 
+  constructor() {
+    // Enable full standardization: geographic enrichment and field normalization for security alarms
+    super({
+      enableGeoEnrichment: true, // Security alarms often contain IP addresses that require geographic enrichment
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'alarms',
+        entity_type: 'security_alarms',
+        supports_geographic_enrichment: true,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
@@ -737,8 +791,8 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
       );
       const executionTime = Date.now() - startTime;
 
-      // Process alarm data
-      const processedAlarms = SafeAccess.safeArrayMap(
+      // Process alarm data with enhanced standardization
+      let processedAlarms = SafeAccess.safeArrayMap(
         (result as any).results,
         (alarm: Alarm) => ({
           timestamp: unixToISOStringOrNow(alarm.ts),
@@ -764,7 +818,24 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
             'severity',
             'unknown'
           ),
+          // Extract IP addresses for potential geographic enrichment
+          source_ip: SafeAccess.getNestedValue(
+            alarm as any,
+            'remote.ip',
+            SafeAccess.getNestedValue(alarm as any, 'source_ip', 'unknown')
+          ),
+          destination_ip: SafeAccess.getNestedValue(
+            alarm as any,
+            'destination.ip',
+            SafeAccess.getNestedValue(alarm as any, 'destination_ip', 'unknown')
+          ),
         })
+      );
+
+      // Apply geographic enrichment pipeline for IP addresses in alarms
+      processedAlarms = await this.enrichGeoIfNeeded(
+        processedAlarms,
+        ['source_ip', 'destination_ip']
       );
 
       // Create metadata for standardized response
@@ -791,22 +862,38 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
         ) as Record<string, any> | undefined,
       };
 
-      // Create standardized response
-      const standardResponse = ResponseStandardizer.toSearchResponse(
-        processedAlarms,
-        metadata
-      );
+      // Create unified response with standardized metadata
+      const unifiedResponseData = {
+        alarms: processedAlarms,
+        metadata,
+        query_info: {
+          original_query: searchArgs.query,
+          applied_filters: {
+            time_range: !!searchArgs.time_range,
+            force_refresh: !!searchArgs.force_refresh,
+          },
+        },
+      };
 
-      // Apply backward compatibility if needed
+      // Apply backward compatibility if needed (preserving legacy support)
       if (shouldUseLegacyFormat(this.name)) {
+        const standardResponse = ResponseStandardizer.toSearchResponse(
+          processedAlarms,
+          metadata
+        );
         const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
           standardResponse,
           this.name
         );
-        return this.createSuccessResponse(legacyResponse);
+        return this.createUnifiedResponse(legacyResponse, {
+          executionTimeMs: executionTime,
+        });
       }
 
-      return this.createSuccessResponse(standardResponse);
+      // Return modern unified response
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
+      });
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(this.name, error.duration, 10000);
@@ -854,6 +941,21 @@ PERFORMANCE NOTES:
 
 For rule management operations, see pause_rule and resume_rule tools.`;
   category = 'search' as const;
+
+  constructor() {
+    // Enable field normalization for firewall rules (no geographic enrichment needed)
+    super({
+      enableGeoEnrichment: false, // Firewall rules don't typically contain IP addresses
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'rules',
+        entity_type: 'firewall_rules',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -942,22 +1044,39 @@ For rule management operations, see pause_rule and resume_rule tools.`;
         ) as Record<string, any> | undefined,
       };
 
-      // Create standardized response
-      const standardResponse = ResponseStandardizer.toSearchResponse(
-        processedRules,
-        metadata
-      );
+      // Create unified response with standardized metadata
+      const unifiedResponseData = {
+        rules: processedRules,
+        metadata,
+        query_info: {
+          original_query: searchArgs.query,
+          applied_filters: {
+            grouping: !!searchArgs.group_by,
+            sorting: !!searchArgs.sort_by,
+            aggregation: !!searchArgs.aggregate,
+          },
+        },
+      };
 
-      // Apply backward compatibility if needed
+      // Apply backward compatibility if needed (preserving legacy support)
       if (shouldUseLegacyFormat(this.name)) {
+        const standardResponse = ResponseStandardizer.toSearchResponse(
+          processedRules,
+          metadata
+        );
         const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
           standardResponse,
           this.name
         );
-        return this.createSuccessResponse(legacyResponse);
+        return this.createUnifiedResponse(legacyResponse, {
+          executionTimeMs: executionTime,
+        });
       }
 
-      return this.createSuccessResponse(standardResponse);
+      // Return modern unified response
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
+      });
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(this.name, error.duration, 10000);
@@ -1098,19 +1217,9 @@ See the Data Normalization Guide for field details.`;
         this.name
       );
 
-      return this.createSuccessResponse({
-        count: SafeAccess.safeArrayAccess(
-          (result as any).results,
-          arr => arr.length,
-          0
-        ),
-        query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
-        execution_time_ms: SafeAccess.getNestedValue(
-          result as any,
-          'execution_time_ms',
-          0
-        ),
-        devices: SafeAccess.safeArrayMap(
+      // Process and enrich device data with geographic information
+      const deviceData = await this.enrichGeoIfNeeded(
+        SafeAccess.safeArrayMap(
           (result as any).results,
           (device: Device) => ({
             id: SafeAccess.getNestedValue(device as any, 'id', 'unknown'),
@@ -1129,12 +1238,36 @@ See the Data Normalization Guide for field details.`;
             lastSeen: SafeAccess.getNestedValue(device as any, 'lastSeen', 0),
           })
         ),
+        ['ip'] // Enrich the device IP addresses
+      );
+
+      const unifiedResponseData = {
+        devices: deviceData,
+        count: deviceData.length,
+        query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
+        execution_time_ms: SafeAccess.getNestedValue(
+          result as any,
+          'execution_time_ms',
+          0
+        ),
         aggregations: SafeAccess.getNestedValue(
           result as any,
           'aggregations',
           null
         ),
-      });
+        query_info: {
+          original_query: searchArgs.query,
+          applied_filters: {
+            time_range: !!searchArgs.time_range,
+            force_refresh: !!searchArgs.force_refresh,
+            cursor_pagination: !!searchArgs.cursor,
+            offset_pagination: !!searchArgs.offset,
+          },
+        },
+      };
+
+      // Return unified response
+      return this.createUnifiedResponse(unifiedResponseData);
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(this.name, error.duration, 10000);
@@ -1192,6 +1325,21 @@ FIELD NORMALIZATION:
 See the Target List Management guide for configuration details.`;
   category = 'search' as const;
 
+  constructor() {
+    // Enable field normalization for target lists (no geographic enrichment needed)
+    super({
+      enableGeoEnrichment: false, // Target lists don't typically contain IP addresses
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'target_lists',
+        entity_type: 'target_lists',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
@@ -1226,18 +1374,8 @@ See the Target List Management guide for configuration details.`;
         this.name
       );
 
-      return this.createSuccessResponse({
-        count: SafeAccess.safeArrayAccess(
-          (result as any).results,
-          arr => arr.length,
-          0
-        ),
-        query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
-        execution_time_ms: SafeAccess.getNestedValue(
-          result as any,
-          'execution_time_ms',
-          0
-        ),
+      // Create unified response with standardized target list data
+      const unifiedResponseData = {
         target_lists: SafeAccess.safeArrayMap(
           result.results,
           (list: TargetList) => ({
@@ -1260,12 +1398,34 @@ See the Target List Management guide for configuration details.`;
             ),
           })
         ),
+        count: SafeAccess.safeArrayAccess(
+          (result as any).results,
+          arr => arr.length,
+          0
+        ),
+        query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
+        execution_time_ms: SafeAccess.getNestedValue(
+          result as any,
+          'execution_time_ms',
+          0
+        ),
         aggregations: SafeAccess.getNestedValue(
           result as any,
           'aggregations',
           null
         ),
-      });
+        query_info: {
+          original_query: searchArgs.query,
+          applied_filters: {
+            grouping: !!searchArgs.group_by,
+            sorting: !!searchArgs.sort_by,
+            aggregation: !!searchArgs.aggregate,
+          },
+        },
+      };
+
+      // Return unified response
+      return this.createUnifiedResponse(unifiedResponseData);
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(this.name, error.duration, 10000);
@@ -1288,6 +1448,21 @@ export class SearchCrossReferenceHandler extends BaseToolHandler {
     'Multi-entity searches with correlation across different data types';
   category = 'search' as const;
 
+  constructor() {
+    // Enable field normalization for cross-reference searches (no geographic enrichment needed)
+    super({
+      enableGeoEnrichment: false, // Cross-reference tools work on metadata, not IP addresses directly
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'cross_reference',
+        entity_type: 'correlation_data',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
@@ -1306,7 +1481,8 @@ export class SearchCrossReferenceHandler extends BaseToolHandler {
         this.name
       );
 
-      return this.createSuccessResponse({
+      // Create unified response with standardized correlation data
+      const unifiedResponseData = {
         primary_query: SafeAccess.getNestedValue(result, 'primary.query', ''),
         primary_results: SafeAccess.getNestedValue(result, 'primary.count', 0),
         correlations: SafeAccess.safeArrayMap(
@@ -1331,7 +1507,15 @@ export class SearchCrossReferenceHandler extends BaseToolHandler {
           'execution_time_ms',
           0
         ),
-      });
+        query_info: {
+          primary_query: searchArgs.primary_query,
+          secondary_queries: searchArgs.secondary_queries,
+          correlation_field: searchArgs.correlation_field,
+        },
+      };
+
+      // Return unified response
+      return this.createUnifiedResponse(unifiedResponseData);
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(this.name, error.duration, 10000);
@@ -1351,6 +1535,21 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
   description =
     'Advanced multi-field correlation with temporal windows and network scoping';
   category = 'search' as const;
+
+  constructor() {
+    // Enable field normalization for enhanced cross-reference searches (no geographic enrichment needed)
+    super({
+      enableGeoEnrichment: false, // Enhanced cross-reference tools work on metadata and correlations
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'enhanced_cross_reference',
+        entity_type: 'enhanced_correlation_data',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -1504,7 +1703,8 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
         },
       };
 
-      return this.createSuccessResponse(simplifiedResponse);
+      // Return unified response with enhanced correlation data
+      return this.createUnifiedResponse(simplifiedResponse);
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(this.name, error.duration, 10000);
@@ -1666,6 +1866,21 @@ export class GetCorrelationSuggestionsHandler extends BaseToolHandler {
     'Get intelligent field combination recommendations for cross-reference searches';
   category = 'search' as const;
 
+  constructor() {
+    // Enable field normalization for correlation suggestions (no geographic enrichment needed)
+    super({
+      enableGeoEnrichment: false, // Correlation suggestions work on field analysis, not IP addresses
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'correlation_suggestions',
+        entity_type: 'field_recommendations',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
@@ -1682,7 +1897,8 @@ export class GetCorrelationSuggestionsHandler extends BaseToolHandler {
         this.name
       );
 
-      return this.createSuccessResponse({
+      // Create unified response with correlation suggestions
+      const unifiedResponseData = {
         entity_types: SafeAccess.getNestedValue(result, 'entity_types', []),
         suggested_combinations: SafeAccess.safeArrayMap(
           result.combinations,
@@ -1720,7 +1936,14 @@ export class GetCorrelationSuggestionsHandler extends BaseToolHandler {
           'execution_time_ms',
           0
         ),
-      });
+        query_info: {
+          primary_query: searchArgs.primary_query,
+          secondary_queries: searchArgs.secondary_queries,
+        },
+      };
+
+      // Return unified response
+      return this.createUnifiedResponse(unifiedResponseData);
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(this.name, error.duration, 10000);
@@ -1739,6 +1962,21 @@ export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
   name = 'search_alarms_by_geography';
   description = 'Geographic alarm search with location-based threat analysis';
   category = 'search' as const;
+
+  constructor() {
+    // Enable full standardization: geographic enrichment and field normalization for geographic alarms
+    super({
+      enableGeoEnrichment: true, // Geographic alarm searches specifically deal with IP addresses and locations
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'geographic_alarms',
+        entity_type: 'geographic_security_data',
+        supports_geographic_enrichment: true,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -1886,6 +2124,21 @@ export class GetGeographicStatisticsHandler extends BaseToolHandler {
   description =
     'Comprehensive geographic statistics and analytics for flows and alarms';
   category = 'search' as const;
+
+  constructor() {
+    // Enable field normalization for geographic statistics (no direct IP enrichment needed)
+    super({
+      enableGeoEnrichment: false, // Geographic statistics work on pre-computed geographic data
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'geographic_statistics',
+        entity_type: 'geographic_analytics',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,

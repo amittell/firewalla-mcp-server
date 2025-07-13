@@ -51,6 +51,20 @@ TROUBLESHOOTING:
 See the Box Management guide for configuration details.`;
   category = 'analytics' as const;
 
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in flow trends
+      enableFieldNormalization: false, // Disabled because we manually map fields
+      additionalMeta: {
+        data_source: 'flow_trends',
+        entity_type: 'historical_flow_data',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: false,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     _args: ToolArgs,
     firewalla: FirewallaClient
@@ -95,30 +109,46 @@ See the Box Management guide for configuration details.`;
         location: (v: any) => sanitizeFieldValue(v, 'unknown').value,
       });
 
-      return this.createSuccessResponse({
-        total_boxes: normalizedBoxes.length,
-        boxes: normalizedBoxes.map((box: any) => {
-          // Apply timestamp normalization
-          const timestampNormalized = normalizeTimestamps(box);
-          const finalBox = timestampNormalized.data;
+      const startTime = Date.now();
+      
+      // Process box data
+      const boxData = normalizedBoxes.map((box: any) => {
+        // Apply timestamp normalization
+        const timestampNormalized = normalizeTimestamps(box);
+        const finalBox = timestampNormalized.data;
 
-          return {
-            gid: SafeAccess.getNestedValue(finalBox, 'gid', 'unknown'),
-            name: finalBox.name, // Already normalized
-            model: finalBox.model, // Already normalized
-            mode: finalBox.mode, // Already normalized
-            version: finalBox.version, // Already normalized
-            online: SafeAccess.getNestedValue(finalBox, 'online', false),
-            last_seen: SafeAccess.getNestedValue(finalBox, 'lastSeen', 0),
-            license: SafeAccess.getNestedValue(finalBox, 'license', null),
-            public_ip: finalBox.publicIP || finalBox.public_ip || 'unknown', // Standardized field name
-            group: finalBox.group, // Already normalized
-            location: finalBox.location, // Already normalized
-            device_count: SafeAccess.getNestedValue(finalBox, 'deviceCount', 0),
-            rule_count: SafeAccess.getNestedValue(finalBox, 'ruleCount', 0),
-            alarm_count: SafeAccess.getNestedValue(finalBox, 'alarmCount', 0),
-          };
-        }),
+        return {
+          gid: SafeAccess.getNestedValue(finalBox, 'gid', 'unknown'),
+          name: finalBox.name, // Already normalized
+          model: finalBox.model, // Already normalized
+          mode: finalBox.mode, // Already normalized
+          version: finalBox.version, // Already normalized
+          online: SafeAccess.getNestedValue(finalBox, 'online', false),
+          last_seen: SafeAccess.getNestedValue(finalBox, 'lastSeen', 0),
+          license: SafeAccess.getNestedValue(finalBox, 'license', null),
+          public_ip: finalBox.publicIP || finalBox.public_ip || 'unknown', // Standardized field name
+          group: finalBox.group, // Already normalized
+          location: finalBox.location, // Already normalized
+          device_count: SafeAccess.getNestedValue(finalBox, 'deviceCount', 0),
+          rule_count: SafeAccess.getNestedValue(finalBox, 'ruleCount', 0),
+          alarm_count: SafeAccess.getNestedValue(finalBox, 'alarmCount', 0),
+        };
+      });
+
+      // Apply geographic enrichment for public IP addresses
+      const enrichedBoxData = await this.enrichGeoIfNeeded(
+        boxData,
+        ['public_ip']
+      );
+
+      const unifiedResponseData = {
+        total_boxes: normalizedBoxes.length,
+        boxes: enrichedBoxData,
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -171,6 +201,20 @@ ERROR HANDLING:
 This tool provides the foundation for network health monitoring and dashboard displays.`;
   category = 'analytics' as const;
 
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in statistics
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'statistics',
+        entity_type: 'network_statistics',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     _args: ToolArgs,
     firewalla: FirewallaClient
@@ -186,7 +230,9 @@ This tool provides the foundation for network health monitoring and dashboard di
         {}
       ) as any;
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      const unifiedResponseData = {
         statistics: {
           online_boxes: SafeAccess.getNestedValue(
             stats,
@@ -214,6 +260,12 @@ This tool provides the foundation for network health monitoring and dashboard di
           active_monitoring:
             (SafeAccess.getNestedValue(stats, 'onlineBoxes', 0) as number) > 0,
         },
+      };
+
+      const executionTime = Date.now() - startTime;
+      
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -282,6 +334,20 @@ export class GetStatisticsByRegionHandler extends BaseToolHandler {
   description =
     'Get flow statistics grouped by country/region for geographic analysis. No required parameters. Data cached for 1 hour for performance.';
   category = 'analytics' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // Already contains geographic data
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'regional_statistics',
+        entity_type: 'geographic_flow_statistics',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     _args: ToolArgs,
@@ -365,11 +431,18 @@ export class GetStatisticsByRegionHandler extends BaseToolHandler {
           flow_count: SafeAccess.getNestedValue(stat, 'value', 0),
         }));
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      const unifiedResponseData = {
         total_regions: stats.results.length,
         regional_statistics: regionalStatistics,
         top_regions: topRegions,
         total_flow_count: totalFlowCount,
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -387,6 +460,20 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
   description =
     'Get statistics for each Firewalla box with activity scores and health monitoring. No required parameters. Data cached for 1 hour for performance.';
   category = 'analytics' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in box statistics
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'box_statistics',
+        entity_type: 'firewalla_box_statistics',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     _args: ToolArgs,
@@ -504,7 +591,9 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
         0
       );
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      const unifiedResponseData = {
         total_boxes: stats.results.length,
         box_statistics: boxStatistics,
         summary: {
@@ -513,6 +602,11 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
           total_rules: totalRules,
           total_alarms: totalAlarms,
         },
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       logger.error(
@@ -543,6 +637,20 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
   description =
     'Get historical flow data trends over time with configurable intervals. Optional interval and period parameters. Data cached for 1 hour for performance.';
   category = 'analytics' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in flow trends
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'flow_trends',
+        entity_type: 'historical_flow_data',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     _args: ToolArgs,
@@ -615,11 +723,13 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
           typeof SafeAccess.getNestedValue(trend, 'value') === 'number'
       );
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      const unifiedResponseData = {
         period,
         interval_seconds: interval,
         data_points: validTrends.length,
-        trends: SafeAccess.safeArrayMap(validTrends, (trend: any) => ({
+        trends: validTrends.map((trend: any) => ({
           timestamp: SafeAccess.getNestedValue(trend, 'ts', 0),
           timestamp_iso: unixToISOString(
             SafeAccess.getNestedValue(trend, 'ts', 0) as number
@@ -678,6 +788,11 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
                 )
               : 0,
         },
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -701,6 +816,20 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
   description =
     'Get historical alarm data trends over time with configurable periods. Optional period parameter. Data cached for 1 hour for performance.';
   category = 'analytics' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in alarm trends
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'alarm_trends',
+        entity_type: 'historical_alarm_data',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     _args: ToolArgs,
@@ -765,7 +894,9 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
           (SafeAccess.getNestedValue(trend, 'value', 0) as number) >= 0
       );
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      const unifiedResponseData = {
         period,
         data_points: validTrends.length,
         trends: SafeAccess.safeArrayMap(validTrends, (trend: any) => ({
@@ -824,6 +955,11 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
                 )
               : 0,
         },
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -841,6 +977,20 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
   description =
     'Get historical rule activity trends over time with configurable periods. Optional period parameter. Data cached for 1 hour for performance.';
   category = 'analytics' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in rule trends
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'rule_trends',
+        entity_type: 'historical_rule_data',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     _args: ToolArgs,
@@ -894,7 +1044,9 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
           typeof SafeAccess.getNestedValue(trend, 'value') === 'number'
       );
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+      
+      const unifiedResponseData = {
         period,
         data_points: validTrends.length,
         trends: SafeAccess.safeArrayMap(validTrends, (trend: any) => ({
@@ -936,6 +1088,11 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
               : 0,
           rule_stability: this.calculateRuleStability(validTrends),
         },
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
       const errorMessage =

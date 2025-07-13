@@ -10,7 +10,6 @@ import {
 } from '../../validation/error-handler.js';
 import {
   BulkOperationManager,
-  createBulkOperationResponse,
   validateBulkOperationArgs,
   type BulkOperationFunction,
 } from '../../utils/bulk-operation-manager.js';
@@ -24,6 +23,20 @@ export class BulkDeleteAlarmsHandler extends BaseToolHandler {
   description =
     'Delete multiple security alarms in a single operation. Requires array of alarm IDs. Use with caution as this permanently removes alarms.';
   category = 'security' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in bulk operation results
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'bulk_alarms',
+        entity_type: 'bulk_alarm_deletion',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -69,6 +82,8 @@ export class BulkDeleteAlarmsHandler extends BaseToolHandler {
       };
 
       // Execute the bulk operation
+      const startTime = Date.now();
+      
       const result = await manager.executeBulkOperation(
         bulkValidation.sanitizedIds,
         deleteOperation,
@@ -76,7 +91,16 @@ export class BulkDeleteAlarmsHandler extends BaseToolHandler {
         'delete_alarms'
       );
 
-      return createBulkOperationResponse(result, this.name);
+      const unifiedResponseData = {
+        operation: this.name,
+        bulk_operation_result: result,
+        timestamp: new Date().toISOString(),
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
+      });
     } catch (error) {
       return createErrorResponse(
         this.name,

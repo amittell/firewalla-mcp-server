@@ -11,7 +11,6 @@ import {
 } from '../../validation/error-handler.js';
 import {
   BulkOperationManager,
-  createBulkOperationResponse,
   validateBulkOperationArgs,
   type BulkOperationFunction,
 } from '../../utils/bulk-operation-manager.js';
@@ -25,6 +24,20 @@ export class BulkPauseRulesHandler extends BaseToolHandler {
   description =
     'Pause multiple firewall rules in a single operation. Requires array of rule IDs. Optional duration parameter (default 60 minutes).';
   category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in bulk rule operations
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'bulk_rules',
+        entity_type: 'bulk_rule_pause',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -88,6 +101,8 @@ export class BulkPauseRulesHandler extends BaseToolHandler {
       };
 
       // Execute the bulk operation
+      const startTime = Date.now();
+      
       const result = await manager.executeBulkOperation(
         bulkValidation.sanitizedIds,
         pauseOperation,
@@ -95,25 +110,17 @@ export class BulkPauseRulesHandler extends BaseToolHandler {
         'pause_rules'
       );
 
-      // Add duration to the result for reference
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                operation: this.name,
-                pause_duration_minutes: duration,
-                ...result,
-                timestamp: new Date().toISOString(),
-              },
-              null,
-              2
-            ),
-          },
-        ],
-        isError: false,
+      const unifiedResponseData = {
+        operation: this.name,
+        pause_duration_minutes: duration,
+        bulk_operation_result: result,
+        timestamp: new Date().toISOString(),
       };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
+      });
     } catch (error) {
       return createErrorResponse(
         this.name,
@@ -132,6 +139,20 @@ export class BulkResumeRulesHandler extends BaseToolHandler {
   description =
     'Resume multiple paused firewall rules in a single operation. Requires array of rule IDs. Re-enables previously paused rules.';
   category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in bulk rule operations
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'bulk_rules',
+        entity_type: 'bulk_rule_resume',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -175,6 +196,8 @@ export class BulkResumeRulesHandler extends BaseToolHandler {
       };
 
       // Execute the bulk operation
+      const startTime = Date.now();
+      
       const result = await manager.executeBulkOperation(
         bulkValidation.sanitizedIds,
         resumeOperation,
@@ -182,7 +205,16 @@ export class BulkResumeRulesHandler extends BaseToolHandler {
         'resume_rules'
       );
 
-      return createBulkOperationResponse(result, this.name);
+      const unifiedResponseData = {
+        operation: this.name,
+        bulk_operation_result: result,
+        timestamp: new Date().toISOString(),
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
+      });
     } catch (error) {
       return createErrorResponse(
         this.name,

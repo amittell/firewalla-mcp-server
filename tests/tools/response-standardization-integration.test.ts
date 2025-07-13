@@ -54,14 +54,19 @@ describe('Response Standardization Integration Test', () => {
     const parsedContent = JSON.parse(result.content[0].text);
     console.log('Actual response:', JSON.stringify(parsedContent, null, 2));
     
-    // Should have legacy format
-    expect(parsedContent.flows).toBeDefined();
-    expect(parsedContent.count).toBe(2);
-    expect(parsedContent.query_executed).toBe('protocol:tcp AND bytes:>1000');
-    expect(parsedContent.execution_time_ms).toBe(45);
+    // Should have unified response structure
+    expect(parsedContent.success).toBe(true);
+    expect(parsedContent.data).toBeDefined();
+    expect(parsedContent.meta).toBeDefined();
     
-    // Should NOT have standard format fields
-    expect(parsedContent.results).toBeUndefined();
-    expect(parsedContent.entity_type).toBeUndefined();
+    // Should have legacy format in data field
+    expect(parsedContent.data.flows).toBeDefined();
+    expect(parsedContent.data.count).toBe(2);
+    expect(parsedContent.data.query_executed).toBe('protocol:tcp AND bytes:>1000');
+    expect(parsedContent.data.execution_time_ms).toBe(45);
+    
+    // Should NOT have standard format fields in data
+    expect(parsedContent.data.results).toBeUndefined();
+    expect(parsedContent.data.entity_type).toBeUndefined();
   });
 });

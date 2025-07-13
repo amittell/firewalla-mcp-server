@@ -64,14 +64,25 @@ describe('GetSimpleStatisticsHandler', () => {
       
       // Parse the JSON response
       const parsedData = JSON.parse(result.content[0].text);
-      expect(parsedData).toHaveProperty('statistics');
-      expect(parsedData).toHaveProperty('summary');
+      // Check unified response format
+      expect(parsedData).toHaveProperty('success');
+      expect(parsedData.success).toBe(true);
+      expect(parsedData).toHaveProperty('data');
+      expect(parsedData).toHaveProperty('meta');
+      expect(parsedData).toHaveProperty('data');
+      expect(parsedData.data).toHaveProperty('statistics');
+      expect(parsedData.data).toHaveProperty('summary');
     });
 
     test('should correctly calculate online/offline box statistics', async () => {
       const result = await handler.execute({}, mockFirewallaClient);
       const parsedData = JSON.parse(result.content[0].text);
-      const stats = parsedData.statistics;
+      // Check unified response format
+      expect(parsedData).toHaveProperty('success');
+      expect(parsedData.success).toBe(true);
+      expect(parsedData).toHaveProperty('data');
+      expect(parsedData).toHaveProperty('meta');
+      const stats = parsedData.data.statistics;
 
       expect(stats.online_boxes).toBe(2);
       expect(stats.offline_boxes).toBe(1);
@@ -82,7 +93,12 @@ describe('GetSimpleStatisticsHandler', () => {
     test('should correctly aggregate alarm and rule counts', async () => {
       const result = await handler.execute({}, mockFirewallaClient);
       const parsedData = JSON.parse(result.content[0].text);
-      const stats = parsedData.statistics;
+      // Check unified response format
+      expect(parsedData).toHaveProperty('success');
+      expect(parsedData.success).toBe(true);
+      expect(parsedData).toHaveProperty('data');
+      expect(parsedData).toHaveProperty('meta');
+      const stats = parsedData.data.statistics;
 
       expect(stats.total_alarms).toBe(5);
       expect(stats.total_rules).toBe(3);
@@ -91,7 +107,12 @@ describe('GetSimpleStatisticsHandler', () => {
     test('should calculate correct summary information', async () => {
       const result = await handler.execute({}, mockFirewallaClient);
       const parsedData = JSON.parse(result.content[0].text);
-      const summary = parsedData.summary;
+      // Check unified response format
+      expect(parsedData).toHaveProperty('success');
+      expect(parsedData.success).toBe(true);
+      expect(parsedData).toHaveProperty('data');
+      expect(parsedData).toHaveProperty('meta');
+      const summary = parsedData.data.summary;
 
       expect(summary.status).toBe('operational');
       expect(summary.active_monitoring).toBe(true);
@@ -115,8 +136,13 @@ describe('GetSimpleStatisticsHandler', () => {
 
       const result = await handler.execute({}, mockFirewallaClient);
       const parsedData = JSON.parse(result.content[0].text);
-      const stats = parsedData.statistics;
-      const summary = parsedData.summary;
+      // Check unified response format
+      expect(parsedData).toHaveProperty('success');
+      expect(parsedData.success).toBe(true);
+      expect(parsedData).toHaveProperty('data');
+      expect(parsedData).toHaveProperty('meta');
+      const stats = parsedData.data.statistics;
+      const summary = parsedData.data.summary;
 
       expect(stats.online_boxes).toBe(0);
       expect(stats.offline_boxes).toBe(2);
@@ -138,7 +164,12 @@ describe('GetSimpleStatisticsHandler', () => {
 
       const result = await handler.execute({}, mockFirewallaClient);
       const parsedData = JSON.parse(result.content[0].text);
-      const stats = parsedData.statistics;
+      // Check unified response format
+      expect(parsedData).toHaveProperty('success');
+      expect(parsedData.success).toBe(true);
+      expect(parsedData).toHaveProperty('data');
+      expect(parsedData).toHaveProperty('meta');
+      const stats = parsedData.data.statistics;
 
       expect(stats.online_boxes).toBe(0);
       expect(stats.offline_boxes).toBe(0);
@@ -157,6 +188,7 @@ describe('GetSimpleStatisticsHandler', () => {
 
       expect(result.isError).toBe(true);
       const parsedData = JSON.parse(result.content[0].text);
+      // Error responses don't use unified format
       expect(parsedData.error).toBe(true);
       expect(parsedData.message).toContain('Failed to get simple statistics');
     });
@@ -193,7 +225,13 @@ describe('GetSimpleStatisticsHandler', () => {
       
       // Should be able to parse as JSON
       const parsedData = JSON.parse(result.content[0].text);
-      expect(parsedData).toHaveProperty('statistics');
+      // Check unified response format
+      expect(parsedData).toHaveProperty('success');
+      expect(parsedData.success).toBe(true);
+      expect(parsedData).toHaveProperty('data');
+      expect(parsedData).toHaveProperty('meta');
+      expect(parsedData).toHaveProperty('data');
+      expect(parsedData.data).toHaveProperty('statistics');
     });
 
     test('should calculate health score correctly', async () => {
@@ -210,7 +248,12 @@ describe('GetSimpleStatisticsHandler', () => {
 
       const result = await handler.execute({}, mockFirewallaClient);
       const parsedData = JSON.parse(result.content[0].text);
-      const summary = parsedData.summary;
+      // Check unified response format
+      expect(parsedData).toHaveProperty('success');
+      expect(parsedData.success).toBe(true);
+      expect(parsedData).toHaveProperty('data');
+      expect(parsedData).toHaveProperty('meta');
+      const summary = parsedData.data.summary;
 
       // Health score calculation:
       // Start with 100

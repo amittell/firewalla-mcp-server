@@ -1,0 +1,514 @@
+/**
+ * Comprehensive Test Suite for Security MCP Tools
+ * Tests GetActiveAlarmsHandler, GetSpecificAlarmHandler, and DeleteAlarmHandler
+ */
+
+import {
+  GetActiveAlarmsHandler,
+  GetSpecificAlarmHandler,
+  DeleteAlarmHandler
+} from '../src/tools/handlers/security.js';
+import type { FirewallaClient } from '../src/firewalla/client.js';
+import { ErrorType } from '../src/validation/error-handler.js';
+
+// Mock Firewalla client with comprehensive mock responses
+const mockFirewallaClient = {
+  getActiveAlarms: jest.fn(),
+  getSpecificAlarm: jest.fn(),
+  deleteAlarm: jest.fn(),
+} as unknown as FirewallaClient;
+
+describe('Security MCP Tools Comprehensive Testing', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('GetActiveAlarmsHandler', () => {
+    const handler = new GetActiveAlarmsHandler();
+
+    it('should have correct tool properties', () => {
+      expect(handler.name).toBe('get_active_alarms');
+      expect(handler.category).toBe('security');
+      expect(handler.description).toContain('active security alarms');
+    });
+
+    describe('Parameter Validation', () => {
+      it('should require limit parameter', async () => {
+        const response = await handler.execute({}, mockFirewallaClient);
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.errorType).toBe(ErrorType.VALIDATION_ERROR);
+        expect(errorData.validation_errors).toContain('limit is required');
+      });
+
+      it('should validate limit parameter bounds', async () => {
+        const response = await handler.execute({ limit: 2000 }, mockFirewallaClient);
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.errorType).toBe(ErrorType.VALIDATION_ERROR);
+        expect(errorData.validation_errors[0]).toContain('limit is too large to control result set size');
+      });
+
+      it('should validate severity enum values', async () => {
+        const response = await handler.execute(
+          { limit: 10, severity: 'extreme' },
+          mockFirewallaClient
+        );
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.errorType).toBe(ErrorType.VALIDATION_ERROR);
+        expect(errorData.validation_errors[0]).toContain("severity must be one of: low, medium, high, critical, got 'extreme'");
+      });
+
+      it('should validate cursor format', async () => {
+        const response = await handler.execute(
+          { limit: 10, cursor: 'invalid!@#$%' },
+          mockFirewallaClient
+        );
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.errorType).toBe(ErrorType.VALIDATION_ERROR);
+        expect(errorData.details.provided_value).toBe('invalid!@#$%');
+      });
+    });
+
+    describe('Successful Execution', () => {
+      it('should process successful response with alarms', async () => {
+        const mockResponse = {
+          results: [
+            {
+              aid: 12345,
+              ts: 1698765432000,
+              type: 'MALWARE_FILE',
+              status: 'new',
+              message: 'Malware detected in download',
+              direction: 'in',
+              protocol: 'tcp',
+              gid: 'group123',
+              src: '192.168.1.100',
+              dst: '10.0.0.1',
+              port: 80,
+              dport: 8080,
+              device: {
+                name: 'Johns-MacBook',
+                ip: '192.168.1.100',
+                mac: '00:11:22:33:44:55'
+              }
+            }
+          ],
+          count: 1,
+          next_cursor: 'cursor123'
+        };
+
+        (mockFirewallaClient.getActiveAlarms as jest.Mock).mockResolvedValue(mockResponse);
+
+        const response = await handler.execute({ limit: 10 }, mockFirewallaClient);
+
+        expect(response.isError).toBeUndefined();
+        const responseData = JSON.parse(response.content[0].text);
+        
+        expect(responseData.success).toBe(true);
+        expect(responseData.data.count).toBe(1);
+        expect(responseData.data.alarms).toHaveLength(1);
+        
+        // Verify alarm structure and content
+        const alarm = responseData.data.alarms[0];
+        expect(alarm.type).toBe('MALWARE_FILE');
+        expect(alarm.status).toBe('new');
+        expect(alarm.message).toBe('Malware detected in download');
+        expect(alarm.severity).toBe('critical'); // Should derive from MALWARE_FILE
+        expect(alarm.device.name).toBe('Johns-MacBook');
+        
+        expect(responseData.data.next_cursor).toBe('cursor123');
+        expect(responseData.data.has_more).toBe(true);
+        expect(responseData.meta.handler).toBe('get_active_alarms');
+      });
+
+      it('should handle severity filtering', async () => {
+        const mockResponse = {
+          results: [
+            {
+              aid: 12345,
+              ts: 1698765432000,
+              type: 'DNS_ANOMALY',
+              status: 'new',
+              message: 'Unusual DNS query pattern',
+              severity: 'medium'
+            }
+          ],
+          count: 1
+        };
+
+        (mockFirewallaClient.getActiveAlarms as jest.Mock).mockResolvedValue(mockResponse);
+
+        const response = await handler.execute({ limit: 10, severity: 'medium' }, mockFirewallaClient);
+
+        expect(response.isError).toBeUndefined();
+        expect(mockFirewallaClient.getActiveAlarms).toHaveBeenCalledWith(
+          'severity:medium',
+          undefined,
+          'timestamp:desc',
+          10,
+          undefined,
+          false
+        );
+      });
+
+      it('should combine query and severity filters', async () => {
+        const mockResponse = { results: [], count: 0 };
+        (mockFirewallaClient.getActiveAlarms as jest.Mock).mockResolvedValue(mockResponse);
+
+        await handler.execute({ 
+          limit: 10, 
+          query: 'source_ip:192.168.*', 
+          severity: 'high' 
+        }, mockFirewallaClient);
+
+        expect(mockFirewallaClient.getActiveAlarms).toHaveBeenCalledWith(
+          '(source_ip:192.168.*) AND severity:high',
+          undefined,
+          'timestamp:desc',
+          10,
+          undefined,
+          false
+        );
+      });
+    });
+
+    describe('Error Handling', () => {
+      it('should handle API errors', async () => {
+        (mockFirewallaClient.getActiveAlarms as jest.Mock).mockRejectedValue(
+          new Error('Network connection failed')
+        );
+
+        const response = await handler.execute({ limit: 10 }, mockFirewallaClient);
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.errorType).toBe(ErrorType.API_ERROR);
+        expect(errorData.message).toContain('Failed to get active alarms');
+        expect(errorData.message).toContain('Network connection failed');
+      });
+    });
+  });
+
+  describe('GetSpecificAlarmHandler', () => {
+    const handler = new GetSpecificAlarmHandler();
+
+    it('should have correct tool properties', () => {
+      expect(handler.name).toBe('get_specific_alarm');
+      expect(handler.category).toBe('security');
+      expect(handler.description).toContain('specific alarm by alarm ID');
+    });
+
+    describe('Parameter Validation', () => {
+      it('should require alarm_id parameter', async () => {
+        const response = await handler.execute({}, mockFirewallaClient);
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.errorType).toBe(ErrorType.VALIDATION_ERROR);
+        expect(errorData.validation_errors).toContain('alarm_id is required');
+      });
+
+      it('should validate alarm_id format', async () => {
+        const response = await handler.execute(
+          { alarm_id: 'invalid!@#$%' },
+          mockFirewallaClient
+        );
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.errorType).toBe(ErrorType.VALIDATION_ERROR);
+        expect(errorData.validation_errors[0]).toContain('alarm_id must be a valid alarm identifier');
+      });
+
+      it('should reject null alarm_id', async () => {
+        const response = await handler.execute(
+          { alarm_id: null },
+          mockFirewallaClient
+        );
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.errorType).toBe(ErrorType.VALIDATION_ERROR);
+      });
+    });
+
+    describe('Successful Execution', () => {
+      it('should retrieve specific alarm details', async () => {
+        const mockResponse = {
+          results: [
+            {
+              aid: 12345,
+              ts: 1698765432000,
+              type: 'NETWORK_INTRUSION',
+              status: 'acknowledged',
+              message: 'Suspicious network activity detected',
+              direction: 'in',
+              protocol: 'tcp',
+              src: '10.0.0.1',
+              dst: '192.168.1.100',
+              port: 22,
+              dport: 2222,
+              severity: 'high'
+            }
+          ]
+        };
+
+        (mockFirewallaClient.getSpecificAlarm as jest.Mock).mockResolvedValue(mockResponse);
+
+        const response = await handler.execute({ alarm_id: '12345' }, mockFirewallaClient);
+
+        expect(response.isError).toBeUndefined();
+        const responseData = JSON.parse(response.content[0].text);
+        
+        expect(responseData.success).toBe(true);
+        expect(responseData.data.alarm).toBeDefined();
+        expect(responseData.data.retrieved_at).toBeDefined();
+        expect(responseData.meta.handler).toBe('get_specific_alarm');
+      });
+    });
+
+    describe('Error Handling', () => {
+      it('should handle alarm not found', async () => {
+        (mockFirewallaClient.getSpecificAlarm as jest.Mock).mockResolvedValue({
+          results: []
+        });
+
+        const response = await handler.execute({ alarm_id: '99999' }, mockFirewallaClient);
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.errorType).toBe(ErrorType.API_ERROR);
+        expect(errorData.message).toContain("Alarm with ID '99999' not found");
+        expect(errorData.details.alarm_id).toBe('99999');
+        expect(errorData.details.suggestion).toContain('Use get_active_alarms');
+      });
+
+      it('should handle API errors', async () => {
+        (mockFirewallaClient.getSpecificAlarm as jest.Mock).mockRejectedValue(
+          new Error('API timeout')
+        );
+
+        const response = await handler.execute({ alarm_id: '12345' }, mockFirewallaClient);
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.errorType).toBe(ErrorType.API_ERROR);
+        expect(errorData.message).toContain('Failed to get specific alarm');
+      });
+
+      it('should handle 404 errors specifically', async () => {
+        (mockFirewallaClient.getSpecificAlarm as jest.Mock).mockRejectedValue(
+          new Error('404 - Not Found')
+        );
+
+        const response = await handler.execute({ alarm_id: '12345' }, mockFirewallaClient);
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.message).toContain('Alarm not found');
+        expect(errorData.details.suggestion).toContain('Use get_active_alarms');
+      });
+    });
+  });
+
+  describe('DeleteAlarmHandler', () => {
+    const handler = new DeleteAlarmHandler();
+
+    it('should have correct tool properties', () => {
+      expect(handler.name).toBe('delete_alarm');
+      expect(handler.category).toBe('security');
+      expect(handler.description).toContain('Delete/dismiss a specific security alarm');
+    });
+
+    describe('Parameter Validation', () => {
+      it('should require alarm_id parameter', async () => {
+        const response = await handler.execute({}, mockFirewallaClient);
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.errorType).toBe(ErrorType.VALIDATION_ERROR);
+        expect(errorData.validation_errors).toContain('alarm_id is required');
+      });
+
+      it('should validate alarm_id format', async () => {
+        const response = await handler.execute(
+          { alarm_id: 'invalid!@#$%' },
+          mockFirewallaClient
+        );
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.errorType).toBe(ErrorType.VALIDATION_ERROR);
+      });
+    });
+
+    describe('Successful Execution', () => {
+      it('should delete alarm after verification', async () => {
+        // Mock alarm exists check
+        (mockFirewallaClient.getSpecificAlarm as jest.Mock).mockResolvedValue({
+          results: [{ aid: 12345, type: 'test_alarm' }]
+        });
+
+        // Mock successful deletion
+        (mockFirewallaClient.deleteAlarm as jest.Mock).mockResolvedValue({
+          success: true,
+          message: 'Alarm deleted successfully'
+        });
+
+        const response = await handler.execute({ alarm_id: '12345' }, mockFirewallaClient);
+
+        expect(response.isError).toBeUndefined();
+        const responseData = JSON.parse(response.content[0].text);
+        
+        expect(responseData.success).toBe(true);
+        expect(responseData.data.success).toBe(true);
+        expect(responseData.data.alarm_id).toBe('12345');
+        expect(responseData.data.message).toBe('Alarm deleted successfully');
+        expect(responseData.data.deleted_at).toBeDefined();
+        expect(responseData.meta.handler).toBe('delete_alarm');
+        
+        // Verify API calls
+        expect(mockFirewallaClient.getSpecificAlarm).toHaveBeenCalledWith('12345');
+        expect(mockFirewallaClient.deleteAlarm).toHaveBeenCalledWith('12345');
+      });
+    });
+
+    describe('Error Handling', () => {
+      it('should handle alarm not found during verification', async () => {
+        (mockFirewallaClient.getSpecificAlarm as jest.Mock).mockResolvedValue({
+          results: []
+        });
+
+        const response = await handler.execute({ alarm_id: '99999' }, mockFirewallaClient);
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.errorType).toBe(ErrorType.API_ERROR);
+        expect(errorData.message).toContain("Alarm with ID '99999' not found");
+        expect(errorData.validation_errors).toContain("Alarm ID '99999' does not exist or has already been deleted");
+        
+        // Should not attempt deletion
+        expect(mockFirewallaClient.deleteAlarm).not.toHaveBeenCalled();
+      });
+
+      it('should handle verification check errors', async () => {
+        (mockFirewallaClient.getSpecificAlarm as jest.Mock).mockRejectedValue(
+          new Error('404 - Not Found')
+        );
+
+        const response = await handler.execute({ alarm_id: '99999' }, mockFirewallaClient);
+
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        expect(errorData.message).toContain("Alarm with ID '99999' not found");
+        
+        // Should not attempt deletion
+        expect(mockFirewallaClient.deleteAlarm).not.toHaveBeenCalled();
+      });
+
+      it('should handle deletion API errors', async () => {
+        // Mock alarm exists
+        (mockFirewallaClient.getSpecificAlarm as jest.Mock).mockResolvedValue({
+          results: [{ aid: 12345 }]
+        });
+
+        // Mock deletion failure
+        (mockFirewallaClient.deleteAlarm as jest.Mock).mockRejectedValue(
+          new Error('Deletion failed')
+        );
+
+        // Should expect an error response from timeout wrapper
+        let responseError;
+        try {
+          await handler.execute({ alarm_id: '12345' }, mockFirewallaClient);
+        } catch (error) {
+          responseError = error;
+        }
+
+        // The timeout wrapper converts immediate failures to ValidationError
+        expect(responseError).toBeDefined();
+        expect(responseError.message).toContain('Deletion failed');
+      });
+    });
+  });
+
+  describe('Cross-Tool Integration', () => {
+    it('should have consistent error response formats', async () => {
+      const handlers = [
+        new GetActiveAlarmsHandler(),
+        new GetSpecificAlarmHandler(),
+        new DeleteAlarmHandler()
+      ];
+
+      const responses = await Promise.all([
+        handlers[0].execute({}, mockFirewallaClient),
+        handlers[1].execute({}, mockFirewallaClient),
+        handlers[2].execute({}, mockFirewallaClient)
+      ]);
+
+      responses.forEach((response, index) => {
+        expect(response.isError).toBe(true);
+        const errorData = JSON.parse(response.content[0].text);
+        
+        expect(errorData).toHaveProperty('error', true);
+        expect(errorData).toHaveProperty('message');
+        expect(errorData).toHaveProperty('tool', handlers[index].name);
+        expect(errorData).toHaveProperty('errorType', ErrorType.VALIDATION_ERROR);
+        expect(errorData).toHaveProperty('validation_errors');
+        expect(errorData).toHaveProperty('timestamp');
+      });
+    });
+
+    it('should all belong to security category', () => {
+      const handlers = [
+        new GetActiveAlarmsHandler(),
+        new GetSpecificAlarmHandler(),
+        new DeleteAlarmHandler()
+      ];
+
+      handlers.forEach(handler => {
+        expect(handler.category).toBe('security');
+      });
+    });
+  });
+
+  describe('Response Schema Validation', () => {
+    it('should return valid MCP tool response structure', async () => {
+      const handler = new GetActiveAlarmsHandler();
+      const response = await handler.execute({}, mockFirewallaClient);
+
+      // Validate MCP response structure
+      expect(response).toHaveProperty('content');
+      expect(Array.isArray(response.content)).toBe(true);
+      expect(response.content[0]).toHaveProperty('type', 'text');
+      expect(response.content[0]).toHaveProperty('text');
+      
+      // Validate that text is valid JSON
+      expect(() => JSON.parse(response.content[0].text)).not.toThrow();
+    });
+
+    it('should include proper metadata in successful responses', async () => {
+      const mockResponse = {
+        results: [{ aid: 1, type: 'test', ts: Date.now() }],
+        count: 1
+      };
+      (mockFirewallaClient.getActiveAlarms as jest.Mock).mockResolvedValue(mockResponse);
+
+      const handler = new GetActiveAlarmsHandler();
+      const response = await handler.execute({ limit: 10 }, mockFirewallaClient);
+      const responseData = JSON.parse(response.content[0].text);
+
+      expect(responseData.meta).toHaveProperty('request_id');
+      expect(responseData.meta).toHaveProperty('execution_time_ms');
+      expect(responseData.meta).toHaveProperty('handler', 'get_active_alarms');
+      expect(responseData.meta).toHaveProperty('timestamp');
+    });
+  });
+});

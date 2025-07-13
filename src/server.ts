@@ -176,9 +176,9 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Results per page (use cursor for more)',
+                  description: 'Maximum number of rules to return',
                   minimum: 1,
-                  maximum: 10000,
+                  maximum: 1000,
                 },
                 cursor: {
                   type: 'string',
@@ -207,7 +207,7 @@ export class FirewallaMCPServer {
                   type: 'number',
                   description: 'Maximum number of devices to return',
                   minimum: 1,
-                  maximum: 10000,
+                  maximum: 1000,
                 },
                 cursor: {
                   type: 'string',
@@ -278,7 +278,7 @@ export class FirewallaMCPServer {
                   type: 'number',
                   description: 'Maximum number of rules to return',
                   minimum: 1,
-                  maximum: 10000,
+                  maximum: 1000,
                 },
                 summary_only: {
                   type: 'boolean',
@@ -870,8 +870,8 @@ export class FirewallaMCPServer {
                 hours: {
                   type: 'number',
                   description:
-                    'Look back period in hours (default: 24, max: 168)',
-                  minimum: 1,
+                    'Look back period in hours (default: 24, max: 168, supports decimals like 0.5)',
+                  minimum: 0.1,
                   maximum: 168,
                 },
                 limit: {
