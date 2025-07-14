@@ -50,7 +50,7 @@ import {
   normalizeIP,
 } from '../utils/geographic.js';
 import { safeAccess, safeValue } from '../utils/data-normalizer.js';
-import { AlarmIdNormalizer } from '../utils/alarm-id-normalizer.js';
+import { validateAlarmId } from '../utils/alarm-id-validation.js';
 import {
   validateResponseStructure,
   normalizeTimestamps,
@@ -1499,8 +1499,7 @@ export class FirewallaClient {
   @optimizeResponse('alarms')
   async getSpecificAlarm(
     alarmId: string,
-    gid?: string,
-    alarmContext?: any
+    gid?: string
   ): Promise<{ count: number; results: Alarm[]; next_cursor?: string }> {
     try {
       // Enhanced input validation and sanitization
@@ -1515,59 +1514,12 @@ export class FirewallaClient {
         throw new Error('GID contains invalid characters');
       }
 
-      // Check if this is a composite ID
-      const compositeInfo = AlarmIdNormalizer.parseCompositeId(alarmId);
-      if (compositeInfo) {
-        // For composite IDs, we need to search using the components
-        logger.debug('Detected composite alarm ID', compositeInfo);
-
-        // Search for the alarm using its components
-        const searchQuery = `ts:${compositeInfo.ts} AND type:${compositeInfo.type}`;
-        const searchResponse = await this.getActiveAlarms(
-          searchQuery,
-          undefined,
-          'ts:desc',
-          100,
-          undefined,
-          true // force refresh to ensure we get latest data
-        );
-
-        // Find the matching alarm
-        const matchingAlarm = searchResponse.results.find((alarm: any) => {
-          const alarmTs = String(alarm.ts || alarm.timestamp || '0').replace(
-            /[^0-9]/g,
-            ''
-          );
-          const alarmType = String(alarm.type || alarm.alarm_type || 'unknown');
-          const alarmGid = String(
-            alarm.gid || alarm.device?.gid || alarm.device_id || 'unknown'
-          );
-
-          return (
-            alarmTs === compositeInfo.ts &&
-            alarmType === compositeInfo.type &&
-            (alarmGid === compositeInfo.gid || compositeInfo.gid === 'unknown')
-          );
-        });
-
-        if (matchingAlarm) {
-          return {
-            count: 1,
-            results: [matchingAlarm],
-            next_cursor: undefined,
-          };
-        }
-
-        // If not found via search, try the original aid
-        alarmId = compositeInfo.originalAid;
-      }
+      // Simple alarm ID validation
+      const validatedAlarmId = validateAlarmId(alarmId);
 
       // Get all possible alarm ID variations to try
-      const idVariations = AlarmIdNormalizer.getAllIdVariations(
-        alarmId,
-        alarmContext
-      );
-      const debugInfo = AlarmIdNormalizer.getDebugInfo(alarmId, alarmContext);
+      const idVariations = [validatedAlarmId]; // Just use the validated ID
+      const debugInfo = { originalId: alarmId };
 
       logger.debug('Attempting alarm ID resolution', {
         originalId: alarmId,
@@ -1596,7 +1548,7 @@ export class FirewallaClient {
 
           response = await this.request<any>(
             'GET',
-            `/v2/boxes/${validatedGid}/alarms/${validatedAlarmId}`
+            `/v2/alarms/${validatedGid}/${validatedAlarmId}`
           );
 
           // If we get here, the request succeeded
@@ -1758,11 +1710,7 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('alarms')
-  async deleteAlarm(
-    alarmId: string,
-    gid?: string,
-    alarmContext?: any
-  ): Promise<any> {
+  async deleteAlarm(alarmId: string, gid?: string): Promise<any> {
     try {
       // Enhanced input validation and sanitization
       const validatedGid = this.sanitizeInput(gid || this.config.boxId);
@@ -1781,50 +1729,12 @@ export class FirewallaClient {
         throw new Error('GID is too long (maximum 128 characters)');
       }
 
-      // Check if this is a composite ID
-      const compositeInfo = AlarmIdNormalizer.parseCompositeId(alarmId);
-      if (compositeInfo) {
-        // For composite IDs, we need to find the alarm first
-        logger.debug('Detected composite alarm ID for deletion', compositeInfo);
-
-        // Find the alarm using getSpecificAlarm which handles composite IDs
-        const alarmResult = await this.getSpecificAlarm(
-          alarmId,
-          gid,
-          alarmContext
-        );
-        if (
-          alarmResult &&
-          alarmResult.results &&
-          alarmResult.results.length > 0
-        ) {
-          const alarm = alarmResult.results[0];
-          // Try to use the original aid from the alarm if available
-          const aidValue = String(alarm.aid);
-          if (
-            alarm.aid &&
-            aidValue !== '0' &&
-            aidValue !== 'null' &&
-            aidValue !== 'undefined'
-          ) {
-            alarmId = aidValue;
-          } else {
-            // If still no valid ID, we can't delete it
-            throw new Error(
-              `Cannot delete alarm with non-unique ID: ${compositeInfo.originalAid}`
-            );
-          }
-        } else {
-          throw new Error(`Alarm not found for composite ID: ${alarmId}`);
-        }
-      }
+      // Simple alarm ID validation
+      const validatedAlarmId = validateAlarmId(alarmId);
 
       // Get all possible alarm ID variations to try
-      const idVariations = AlarmIdNormalizer.getAllIdVariations(
-        alarmId,
-        alarmContext
-      );
-      const debugInfo = AlarmIdNormalizer.getDebugInfo(alarmId, alarmContext);
+      const idVariations = [validatedAlarmId]; // Just use the validated ID
+      const debugInfo = { originalId: alarmId };
 
       logger.debug('Attempting alarm deletion with ID resolution', {
         originalId: alarmId,
@@ -1866,7 +1776,7 @@ export class FirewallaClient {
             status?: string;
           }>(
             'DELETE',
-            `/v2/boxes/${validatedGid}/alarms/${validatedAlarmId}`,
+            `/v2/alarms/${validatedGid}/${validatedAlarmId}`,
             undefined,
             false
           );

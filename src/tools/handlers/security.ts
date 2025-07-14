@@ -29,7 +29,7 @@ import {
   createTimeoutErrorResponse,
   TimeoutError,
 } from '../../utils/timeout-manager.js';
-import { AlarmIdNormalizer } from '../../utils/alarm-id-normalizer.js';
+import { validateAlarmId } from '../../utils/alarm-id-validation.js';
 
 /**
  * Map alarm types to severity levels
@@ -388,15 +388,8 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
 
           const rawAid = SafeAccess.getNestedValue(finalAlarm, 'aid', 0);
 
-          // Generate composite ID if the raw ID is non-unique
-          let finalAid = String(rawAid);
-          const aidStr = String(rawAid);
-          // Use composite ID for non-unique IDs (like "0")
-          if (aidStr === '0' || aidStr === 'null' || aidStr === 'undefined') {
-            finalAid = AlarmIdNormalizer.generateCompositeId(finalAlarm);
-          } else {
-            finalAid = AlarmIdNormalizer.normalizeAlarmId(aidStr, finalAlarm);
-          }
+          // Use the actual alarm ID directly
+          const finalAid = rawAid ? String(rawAid) : 'unknown';
 
           return {
             aid: finalAid,
@@ -509,7 +502,7 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
       }
 
       const rawAlarmId = alarmIdValidation.sanitizedValue as string;
-      const alarmId = AlarmIdNormalizer.normalizeAlarmId(rawAlarmId);
+      const alarmId = validateAlarmId(rawAlarmId);
 
       const response = await withToolTimeout(
         async () => firewalla.getSpecificAlarm(alarmId),
@@ -621,7 +614,7 @@ export class DeleteAlarmHandler extends BaseToolHandler {
     }
 
     const rawAlarmId = alarmIdValidation.sanitizedValue as string;
-    const alarmId = AlarmIdNormalizer.normalizeAlarmId(rawAlarmId);
+    const alarmId = validateAlarmId(rawAlarmId);
 
     // Use single timeout wrapper for the entire operation
     return withToolTimeout(async () => {

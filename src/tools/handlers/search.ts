@@ -35,7 +35,6 @@ import { SEARCH_FIELDS, type SearchParams } from '../../search/types.js';
 import type { ScoringCorrelationParams } from '../../validation/field-mapper.js';
 // ResponseStandardizer import removed - using direct response creation
 import { validateCountryCodes } from '../../utils/geographic.js';
-import { AlarmIdNormalizer } from '../../utils/alarm-id-normalizer.js';
 
 // Base search interface to reduce duplication
 export interface BaseSearchArgs extends ToolArgs {
@@ -833,13 +832,8 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
           // Generate composite ID if the raw ID is non-unique
           let finalAid = 'unknown';
           if (rawAid !== 'unknown') {
-            const aidStr = String(rawAid);
-            // Use composite ID for non-unique IDs (like "0")
-            if (aidStr === '0' || aidStr === 'null' || aidStr === 'undefined') {
-              finalAid = AlarmIdNormalizer.generateCompositeId(alarm);
-            } else {
-              finalAid = AlarmIdNormalizer.normalizeAlarmId(aidStr, alarm);
-            }
+            // Use the actual alarm ID directly
+            finalAid = String(rawAid);
           }
 
           return {

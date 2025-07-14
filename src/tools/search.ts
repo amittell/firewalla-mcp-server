@@ -9,7 +9,7 @@ import type { FilterContext } from '../search/filters/base.js';
 import type { SearchParams, SearchResult } from '../search/types.js';
 import type { SearchOptions } from '../types.js';
 import type { FirewallaClient } from '../firewalla/client.js';
-import { BooleanFieldTranslator } from '../search/boolean-field-translator.js';
+import { translateBooleanQuery } from '../utils/simple-boolean-translator.js';
 import { ParameterValidator, SafeAccess } from '../validation/error-handler.js';
 import { EnhancedQueryValidator } from '../validation/enhanced-query-validator.js';
 import {
@@ -996,10 +996,7 @@ export class SearchEngine {
       }
 
       // Apply boolean field translation before building query string
-      const translatedQuery = BooleanFieldTranslator.translateQuery(
-        params.query,
-        'flows'
-      );
+      const translatedQuery = translateBooleanQuery(params.query, 'flows');
 
       // Build query string with time range if provided
       let queryString = translatedQuery;
@@ -1079,7 +1076,7 @@ export class SearchEngine {
       };
 
       // Add boolean translation debug info if translation was applied
-      if (BooleanFieldTranslator.needsTranslation(params.query, 'flows')) {
+      if (translatedQuery !== params.query) {
         (result as any).boolean_translation = {
           original_query: params.query,
           translated_query: translatedQuery,
@@ -1141,10 +1138,7 @@ export class SearchEngine {
       }
 
       // Apply boolean field translation before building query string
-      const translatedQuery = BooleanFieldTranslator.translateQuery(
-        params.query,
-        'alarms'
-      );
+      const translatedQuery = translateBooleanQuery(params.query, 'alarms');
 
       // Build query string with optional severity filter
       let alarmQuery = translatedQuery;
@@ -1191,7 +1185,7 @@ export class SearchEngine {
       };
 
       // Add boolean translation debug info if translation was applied
-      if (BooleanFieldTranslator.needsTranslation(params.query, 'alarms')) {
+      if (translatedQuery !== params.query) {
         (result as any).boolean_translation = {
           original_query: params.query,
           translated_query: translatedQuery,
@@ -1374,13 +1368,12 @@ export class SearchEngine {
       });
 
       // Apply boolean field translation to queries
-      const translatedPrimaryQuery = BooleanFieldTranslator.translateQuery(
+      const translatedPrimaryQuery = translateBooleanQuery(
         params.primary_query,
         primaryType
       );
       const translatedSecondaryQueries = params.secondary_queries.map(
-        (query, index) =>
-          BooleanFieldTranslator.translateQuery(query, secondaryTypes[index])
+        (query, index) => translateBooleanQuery(query, secondaryTypes[index])
       );
 
       // Execute primary query
@@ -1555,13 +1548,12 @@ export class SearchEngine {
       });
 
       // Apply boolean field translation to queries
-      const translatedPrimaryQuery = BooleanFieldTranslator.translateQuery(
+      const translatedPrimaryQuery = translateBooleanQuery(
         params.primary_query,
         primaryType
       );
       const translatedSecondaryQueries = params.secondary_queries.map(
-        (query, index) =>
-          BooleanFieldTranslator.translateQuery(query, secondaryTypes[index])
+        (query, index) => translateBooleanQuery(query, secondaryTypes[index])
       );
 
       // Fetch primary data (no API-level correlation parameters)

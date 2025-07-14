@@ -6,6 +6,7 @@
   "main": "dist/server.js",
   "files": [
     "dist/**/*",
+    "docs/**/*",
     "README.md",
     "LICENSE"
   ],
@@ -63,7 +64,16 @@
     "firewalla",
     "firewall",
     "security",
-    "model-context-protocol"
+    "model-context-protocol",
+    "claude",
+    "network-monitoring",
+    "claude-desktop",
+    "claude-code",
+    "vscode",
+    "cursor",
+    "ai-tools",
+    "network-security",
+    "threat-detection"
   ],
   "author": {
     "name": "Alex Mittell",

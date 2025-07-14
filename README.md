@@ -2,6 +2,14 @@
 
 A Model Context Protocol (MCP) server that enables Claude to access and analyze your Firewalla firewall data in real-time.
 
+## Why Firewalla MCP Server?
+
+**🚀 Comprehensive Network Security Integration**
+- **34+ Advanced Tools** for complete network monitoring and analysis
+- **10 Sophisticated Search Tools** with complex query syntax
+- **Geographic Analysis & Correlation** capabilities
+- **Enterprise-Grade Architecture** with modular design
+
 ## Features
 
 - **Real-time Firewall Data**: Query security alerts, network flows, and device status  
@@ -10,6 +18,17 @@ A Model Context Protocol (MCP) server that enables Claude to access and analyze 
 - **Rule Management**: View and temporarily pause firewall rules  
 - **Target Lists**: Access CloudFlare and CrowdSec security intelligence
 - **Advanced Search**: Complex query syntax with filters, logical operators, and correlations
+
+## Client Setup Guides
+
+| Client | Quick Start | Full Guide |
+|--------|-------------|------------|
+| **Claude Desktop** | `npm i -g firewalla-mcp-server` → Configure MCP | [📖 Setup Guide](docs/clients/claude-desktop.md) |
+| **Claude Code** | `npm i -g firewalla-mcp-server` → CLI integration | [📖 Setup Guide](docs/clients/claude-code.md) |
+| **VS Code** | Install MCP extension → Configure server | [📖 Setup Guide](docs/clients/vscode.md) |
+| **Cursor** | Install Claude Code → VSIX method | [📖 Setup Guide](docs/clients/cursor.md) |
+| **Roocode** | Install MCP support → Configure server | [📖 Setup Guide](docs/clients/roocode.md) |
+| **Cline** | Configure in VS Code → Enable MCP | [📖 Setup Guide](docs/clients/cline.md) |
   
 
 ## Architecture
