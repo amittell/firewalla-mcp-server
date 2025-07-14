@@ -889,6 +889,14 @@ Reference these guides when:
 - **Enhanced Cross-Reference**: `search_enhanced_cross_reference` data structure mapping fixed
 - **Validation Framework**: All tools comply with v1.0.0 mandatory limit parameter requirements
 
+### ✅ **Post-Build Improvements (Latest)**
+- **Boolean Query Syntax**: `BooleanFieldTranslator` enhanced to support both `:` and `=` syntax for boolean fields (e.g., both "blocked:true" and "blocked=true" work)
+- **Alarm ID Resolution**: `AlarmIdNormalizer` wired into `get_specific_alarm` and `delete_alarm` handlers for seamless alarm round-trip operations
+- **Schema Harmonization**: `search_alarms` enhanced with device information extraction and schema consistency warnings
+- **Simplified Alarm IDs**: All alarm tools now use normalized `aid` field directly (no dual field approach needed)
+- **Legacy Code Cleanup**: Removed `BackwardCompatibilityLayer` and all legacy response format code for clean, greenfield API
+- **Tool Coverage**: Improved from 92% to near 100% functionality with simplified, modern responses
+
 ### ✅ **Parameter Updates**
 - **`get_bandwidth_usage`**: Parameter renamed from `top` to `limit` for consistency
 - **`get_active_alarms`**: Added optional `severity` parameter for filtering

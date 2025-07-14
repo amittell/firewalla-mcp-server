@@ -286,7 +286,10 @@ export class BulkOperationManager {
         failed,
         results,
         summary: {
-          success_rate: results.length > 0 ? successful / results.length : 0,
+          success_rate:
+            results.length > 0
+              ? Math.round((successful / results.length) * 100)
+              : 0,
           processing_time_ms: processingTime,
           errors_by_type: errorsByType,
         },

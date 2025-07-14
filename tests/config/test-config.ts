@@ -115,7 +115,7 @@ export const TEST_ENVIRONMENTS: Record<string, TestEnvironmentConfig> = {
       },
     },
     mocking: {
-      enableNetworkMocks: false,
+      enableNetworkMocks: true,
       enableTimeMocks: false,
       enableFilesystemMocks: false,
     },

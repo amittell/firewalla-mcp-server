@@ -42,71 +42,61 @@ export class BulkDeleteAlarmsHandler extends BaseToolHandler {
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
-    try {
-      // Validate bulk operation arguments
-      const validation = validateBulkOperationArgs(args);
-      if (!validation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Parameter validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          validation.errors
-        );
-      }
-
-      const { ids } = validation.sanitizedArgs;
-      const manager = BulkOperationManager.forAlarms();
-
-      // Validate the IDs array
-      const bulkValidation = manager.validateBulkParams(ids);
-      if (!bulkValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Bulk operation validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          bulkValidation.errors
-        );
-      }
-
-      // Define the delete operation for individual alarms
-      const deleteOperation: BulkOperationFunction = async (
-        alarmId: string
-      ) => {
-        return withToolTimeout(
-          async () => firewalla.deleteAlarm(alarmId),
-          `${this.name}_item`,
-          5000 // 5 second timeout per alarm
-        );
-      };
-
-      // Execute the bulk operation
-      const startTime = Date.now();
-
-      const result = await manager.executeBulkOperation(
-        bulkValidation.sanitizedIds,
-        deleteOperation,
-        firewalla,
-        'delete_alarms'
-      );
-
-      const unifiedResponseData = {
-        operation: this.name,
-        bulk_operation_result: result,
-        timestamp: new Date().toISOString(),
-      };
-
-      const executionTime = Date.now() - startTime;
-      return this.createUnifiedResponse(unifiedResponseData, {
-        executionTimeMs: executionTime,
-      });
-    } catch (error) {
+    // Validate bulk operation arguments
+    const validation = validateBulkOperationArgs(args);
+    if (!validation.isValid) {
       return createErrorResponse(
         this.name,
-        `Bulk alarm deletion failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        ErrorType.API_ERROR
+        'Parameter validation failed',
+        ErrorType.VALIDATION_ERROR,
+        undefined,
+        validation.errors
       );
     }
+
+    const { ids } = validation.sanitizedArgs;
+    const manager = BulkOperationManager.forAlarms();
+
+    // Validate the IDs array
+    const bulkValidation = manager.validateBulkParams(ids);
+    if (!bulkValidation.isValid) {
+      return createErrorResponse(
+        this.name,
+        'Bulk operation validation failed',
+        ErrorType.VALIDATION_ERROR,
+        undefined,
+        bulkValidation.errors
+      );
+    }
+
+    // Define the delete operation for individual alarms
+    const deleteOperation: BulkOperationFunction = async (alarmId: string) => {
+      return withToolTimeout(
+        async () => firewalla.deleteAlarm(alarmId),
+        `${this.name}_item`,
+        5000 // 5 second timeout per alarm
+      );
+    };
+
+    // Execute the bulk operation
+    const startTime = Date.now();
+
+    const result = await manager.executeBulkOperation(
+      bulkValidation.sanitizedIds,
+      deleteOperation,
+      firewalla,
+      'delete_alarms'
+    );
+
+    const unifiedResponseData = {
+      operation: this.name,
+      bulk_operation_result: result,
+      timestamp: new Date().toISOString(),
+    };
+
+    const executionTime = Date.now() - startTime;
+    return this.createUnifiedResponse(unifiedResponseData, {
+      executionTimeMs: executionTime,
+    });
   }
 }

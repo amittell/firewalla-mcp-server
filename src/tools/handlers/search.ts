@@ -33,12 +33,9 @@ import { createSearchTools } from '../search.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
 import { SEARCH_FIELDS, type SearchParams } from '../../search/types.js';
 import type { ScoringCorrelationParams } from '../../validation/field-mapper.js';
-import {
-  ResponseStandardizer,
-  BackwardCompatibilityLayer,
-} from '../../utils/response-standardizer.js';
-import { shouldUseLegacyFormat } from '../../config/response-config.js';
+// ResponseStandardizer import removed - using direct response creation
 import { validateCountryCodes } from '../../utils/geographic.js';
+import { AlarmIdNormalizer } from '../../utils/alarm-id-normalizer.js';
 
 // Base search interface to reduce duplication
 export interface BaseSearchArgs extends ToolArgs {
@@ -287,7 +284,7 @@ export class SearchFlowsHandler extends BaseToolHandler {
   name = 'search_flows';
   description = `Advanced network flow searching with powerful query syntax and enhanced reliability. Requires query and limit parameters. Data cached for 15 seconds, use force_refresh=true for real-time network analysis.
   
-Search through network traffic flows using complex queries with logical operators, wildcards, and field-specific filters.
+Search through network traffic flows using complex queries with logical operators, wildcards, and field-specific filters. Features automatic boolean query translation for improved compatibility.
 
 REQUIRED PARAMETERS:
 - query: Search query string using flow field syntax
@@ -301,12 +298,13 @@ OPTIONAL PARAMETERS:
 - group_by: Field to group results by for aggregation
 - aggregate: Enable aggregation statistics
 
-QUERY EXAMPLES:
-- Basic field queries: "protocol:tcp", "blocked:true", "source_ip:192.168.1.100"
-- Logical operators: "protocol:tcp AND blocked:false", "severity:high OR severity:critical"
+QUERY EXAMPLES (with automatic boolean translation):
+- Boolean fields (both syntaxes supported): "blocked:true" OR "blocked=true", "allowed:false" OR "allowed=false" (automatically converted to backend format)
+- Basic field queries: "protocol:tcp", "source_ip:192.168.1.100", "destination_port:443"
+- Logical operators: "protocol:tcp AND blocked:false", "blocked=true OR allowed=false"
 - Wildcards: "source_ip:192.168.*", "destination_domain:*.facebook.com"
 - Ranges: "bytes:[1000 TO 50000]", "timestamp:>=2024-01-01"
-- Complex queries: "(protocol:tcp OR protocol:udp) AND source_ip:192.168.* NOT blocked:true"
+- Complex queries: "(protocol:tcp OR protocol:udp) AND source_ip:192.168.* NOT blocked=true"
 
 CACHE CONTROL:
 - Default: 15-second cache for optimal performance
@@ -613,22 +611,7 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
         },
       };
 
-      // Apply backward compatibility if needed (preserving legacy support)
-      if (shouldUseLegacyFormat(this.name)) {
-        const standardResponse = ResponseStandardizer.toSearchResponse(
-          processedFlows,
-          metadata
-        );
-        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
-          standardResponse,
-          this.name
-        );
-        return this.createUnifiedResponse(legacyResponse, {
-          executionTimeMs: executionTime,
-        });
-      }
-
-      // Return modern unified response
+      // Return unified response
       return this.createUnifiedResponse(unifiedResponseData, {
         executionTimeMs: executionTime,
       });
@@ -681,7 +664,7 @@ export class SearchAlarmsHandler extends BaseToolHandler {
   name = 'search_alarms';
   description = `Security alarm searching with powerful filtering and enhanced reliability. Requires query and limit parameters. Data cached for 15 seconds, use force_refresh=true for real-time security data.
 
-Search through security alerts and alarms using flexible query syntax to identify threats and suspicious activities.
+Search through security alerts and alarms using flexible query syntax to identify threats and suspicious activities. Features automatic boolean query translation, enhanced schema harmonization with device information, and improved alarm ID resolution for seamless integration with get_specific_alarm and delete_alarm.
 
 REQUIRED PARAMETERS:
 - query: Search query string using alarm field syntax
@@ -693,11 +676,11 @@ OPTIONAL PARAMETERS:
 - sort_by: Field to sort results by
 - aggregate: Enable aggregation statistics
 
-QUERY EXAMPLES:
+QUERY EXAMPLES (with automatic boolean translation):
+- Boolean status (both syntaxes supported): "resolved:true" OR "resolved=true", "acknowledged:false" OR "acknowledged=false" (automatically converted to backend format)
 - Severity filtering: "severity:high", "severity:>=medium", "severity:critical"
 - IP-based searches: "source_ip:192.168.1.100", "destination_ip:10.0.*"
 - Type filtering: "type:intrusion_detection", "type:malware", "type:dns_anomaly"
-- Status queries: "resolved:false", "acknowledged:true"
 - Time-based: "timestamp:>=2024-01-01", "last_24_hours:true"
 - Complex combinations: "severity:high AND source_ip:192.168.* NOT resolved:true"
 
@@ -791,45 +774,125 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
       );
       const executionTime = Date.now() - startTime;
 
-      // Process alarm data with enhanced standardization
+      // Process alarm data with enhanced standardization and schema harmonization
       let processedAlarms = SafeAccess.safeArrayMap(
         (result as any).results,
-        (alarm: Alarm) => ({
-          timestamp: unixToISOStringOrNow(alarm.ts),
-          type: SafeAccess.getNestedValue(alarm as any, 'type', 'unknown'),
-          message: SafeAccess.getNestedValue(
-            alarm as any,
-            'message',
-            'No message'
-          ),
-          direction: SafeAccess.getNestedValue(
-            alarm as any,
-            'direction',
-            'unknown'
-          ),
-          protocol: SafeAccess.getNestedValue(
-            alarm as any,
-            'protocol',
-            'unknown'
-          ),
-          status: SafeAccess.getNestedValue(alarm as any, 'status', 'unknown'),
-          severity: SafeAccess.getNestedValue(
+        (alarm: Alarm) => {
+          // Try to extract device information from various possible locations
+          const deviceInfo = {
+            id: SafeAccess.getNestedValue(
+              alarm as any,
+              'device.id',
+              SafeAccess.getNestedValue(
+                alarm as any,
+                'deviceId',
+                SafeAccess.getNestedValue(alarm as any, 'mac', 'unknown')
+              )
+            ),
+            name: SafeAccess.getNestedValue(
+              alarm as any,
+              'device.name',
+              SafeAccess.getNestedValue(alarm as any, 'deviceName', 'unknown')
+            ),
+            ip: SafeAccess.getNestedValue(
+              alarm as any,
+              'device.ip',
+              SafeAccess.getNestedValue(
+                alarm as any,
+                'deviceIp',
+                SafeAccess.getNestedValue(alarm as any, 'ip', 'unknown')
+              )
+            ),
+            mac: SafeAccess.getNestedValue(
+              alarm as any,
+              'device.mac',
+              SafeAccess.getNestedValue(alarm as any, 'mac', 'unknown')
+            ),
+          };
+
+          // Enhanced severity mapping - try multiple field locations and type inference
+          let severity = SafeAccess.getNestedValue(
             alarm as any,
             'severity',
             'unknown'
-          ),
-          // Extract IP addresses for potential geographic enrichment
-          source_ip: SafeAccess.getNestedValue(
+          );
+          if (severity === 'unknown') {
+            severity = SafeAccess.getNestedValue(
+              alarm as any,
+              'priority',
+              'unknown'
+            );
+          }
+
+          const rawAid = SafeAccess.getNestedValue(
             alarm as any,
-            'remote.ip',
-            SafeAccess.getNestedValue(alarm as any, 'source_ip', 'unknown')
-          ),
-          destination_ip: SafeAccess.getNestedValue(
-            alarm as any,
-            'destination.ip',
-            SafeAccess.getNestedValue(alarm as any, 'destination_ip', 'unknown')
-          ),
-        })
+            'aid',
+            'unknown'
+          );
+
+          // Generate composite ID if the raw ID is non-unique
+          let finalAid = 'unknown';
+          if (rawAid !== 'unknown') {
+            const aidStr = String(rawAid);
+            // Use composite ID for non-unique IDs (like "0")
+            if (aidStr === '0' || aidStr === 'null' || aidStr === 'undefined') {
+              finalAid = AlarmIdNormalizer.generateCompositeId(alarm);
+            } else {
+              finalAid = AlarmIdNormalizer.normalizeAlarmId(aidStr, alarm);
+            }
+          }
+
+          return {
+            aid: finalAid,
+            timestamp: unixToISOStringOrNow(alarm.ts),
+            type: SafeAccess.getNestedValue(alarm as any, 'type', 'unknown'),
+            message: SafeAccess.getNestedValue(
+              alarm as any,
+              'message',
+              'No message'
+            ),
+            direction: SafeAccess.getNestedValue(
+              alarm as any,
+              'direction',
+              'unknown'
+            ),
+            protocol: SafeAccess.getNestedValue(
+              alarm as any,
+              'protocol',
+              'unknown'
+            ),
+            status: SafeAccess.getNestedValue(
+              alarm as any,
+              'status',
+              'unknown'
+            ),
+            severity,
+            // Enhanced device information (only include if meaningful data found)
+            device:
+              deviceInfo.id !== 'unknown' || deviceInfo.name !== 'unknown'
+                ? deviceInfo
+                : undefined,
+            // Extract IP addresses for potential geographic enrichment
+            source_ip: SafeAccess.getNestedValue(
+              alarm as any,
+              'remote.ip',
+              SafeAccess.getNestedValue(
+                alarm as any,
+                'source_ip',
+                SafeAccess.getNestedValue(alarm as any, 'src', 'unknown')
+              )
+            ),
+            destination_ip: SafeAccess.getNestedValue(
+              alarm as any,
+              'destination.ip',
+              SafeAccess.getNestedValue(
+                alarm as any,
+                'destination_ip',
+                SafeAccess.getNestedValue(alarm as any, 'dst', 'unknown')
+              )
+            ),
+          };
+        }
       );
 
       // Apply geographic enrichment pipeline for IP addresses in alarms
@@ -862,10 +925,24 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
         ) as Record<string, any> | undefined,
       };
 
+      // Add schema harmonization warning for search vs active alarms
+      const schemaNote = {
+        warning:
+          'Search endpoint returns limited fields compared to get_active_alarms',
+        recommendation:
+          'Use get_active_alarms for complete device and alarm information',
+        differences: [
+          'Device objects may not be fully populated in search results',
+          "Some severity and status fields may show 'unknown' values",
+          'Geographic enrichment is applied but original data may be limited',
+        ],
+      };
+
       // Create unified response with standardized metadata
       const unifiedResponseData = {
         alarms: processedAlarms,
         metadata,
+        schema_harmonization: schemaNote,
         query_info: {
           original_query: searchArgs.query,
           applied_filters: {
@@ -875,22 +952,7 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
         },
       };
 
-      // Apply backward compatibility if needed (preserving legacy support)
-      if (shouldUseLegacyFormat(this.name)) {
-        const standardResponse = ResponseStandardizer.toSearchResponse(
-          processedAlarms,
-          metadata
-        );
-        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
-          standardResponse,
-          this.name
-        );
-        return this.createUnifiedResponse(legacyResponse, {
-          executionTimeMs: executionTime,
-        });
-      }
-
-      // Return modern unified response
+      // Return unified response
       return this.createUnifiedResponse(unifiedResponseData, {
         executionTimeMs: executionTime,
       });
@@ -1058,22 +1120,7 @@ For rule management operations, see pause_rule and resume_rule tools.`;
         },
       };
 
-      // Apply backward compatibility if needed (preserving legacy support)
-      if (shouldUseLegacyFormat(this.name)) {
-        const standardResponse = ResponseStandardizer.toSearchResponse(
-          processedRules,
-          metadata
-        );
-        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
-          standardResponse,
-          this.name
-        );
-        return this.createUnifiedResponse(legacyResponse, {
-          executionTimeMs: executionTime,
-        });
-      }
-
-      // Return modern unified response
+      // Return unified response
       return this.createUnifiedResponse(unifiedResponseData, {
         executionTimeMs: executionTime,
       });

@@ -5,7 +5,7 @@
  * backward compatibility for existing tool integrations.
  */
 
-import { ResponseStandardizer, BackwardCompatibilityLayer, ResponseFormatUtils } from '../../src/utils/response-standardizer';
+import { ResponseStandardizer, ResponseFormatUtils } from '../../src/utils/response-standardizer';
 import type { 
   StandardSearchResponse, 
   StandardPaginatedResponse, 
@@ -140,111 +140,6 @@ describe('Response Format Standardization', () => {
         expect(result.statistics?.min).toBe(500000);
         expect(result.statistics?.max).toBe(1000000);
         expect(result.statistics?.average).toBe(750000);
-      });
-    });
-  });
-  
-  describe('BackwardCompatibilityLayer', () => {
-    
-    describe('toLegacySearchFormat', () => {
-      it('should convert search_flows to legacy format', () => {
-        const standardResponse: StandardSearchResponse<any> = {
-          results: [{ id: 1, protocol: 'tcp' }],
-          count: 1,
-          query_executed: 'protocol:tcp',
-          entity_type: 'flows',
-          execution_time_ms: 45,
-          cached: false
-        };
-        
-        const legacy = BackwardCompatibilityLayer.toLegacySearchFormat(standardResponse, 'search_flows');
-        
-        expect(legacy.flows).toEqual(standardResponse.results);
-        expect(legacy.count).toBe(1);
-        expect(legacy.query_executed).toBe('protocol:tcp');
-        expect(legacy.execution_time_ms).toBe(45);
-        expect(legacy.results).toBeUndefined(); // Should not have generic 'results' field
-      });
-      
-      it('should convert search_alarms to legacy format', () => {
-        const standardResponse: StandardSearchResponse<any> = {
-          results: [{ id: 1, severity: 'high' }],
-          count: 1,
-          query_executed: 'severity:high',
-          entity_type: 'alarms',
-          execution_time_ms: 30,
-          cached: true
-        };
-        
-        const legacy = BackwardCompatibilityLayer.toLegacySearchFormat(standardResponse, 'search_alarms');
-        
-        expect(legacy.alarms).toEqual(standardResponse.results);
-        expect(legacy.count).toBe(1);
-        expect(legacy.query_executed).toBe('severity:high');
-      });
-      
-      it('should return standard format for unknown tools', () => {
-        const standardResponse: StandardSearchResponse<any> = {
-          results: [{ id: 1 }],
-          count: 1,
-          query_executed: 'test',
-          entity_type: 'flows',
-          execution_time_ms: 20,
-          cached: false
-        };
-        
-        const result = BackwardCompatibilityLayer.toLegacySearchFormat(standardResponse, 'unknown_tool');
-        
-        expect(result).toEqual(standardResponse);
-      });
-    });
-    
-    describe('toLegacyPaginatedFormat', () => {
-      it('should convert get_flow_data to legacy format', () => {
-        const standardResponse: StandardPaginatedResponse<any> = {
-          results: [{ id: 1, protocol: 'tcp' }],
-          count: 1,
-          pagination: {
-            cursor: 'cursor123',
-            has_more: true,
-            limit_applied: 100
-          },
-          execution_time_ms: 50,
-          cached: false,
-          data_source: 'api',
-          query_parameters: { query: 'protocol:tcp' }
-        };
-        
-        const legacy = BackwardCompatibilityLayer.toLegacyPaginatedFormat(standardResponse, 'get_flow_data');
-        
-        expect(legacy.flows).toEqual(standardResponse.results);
-        expect(legacy.count).toBe(1);
-        expect(legacy.next_cursor).toBe('cursor123');
-        expect(legacy.query).toBe('protocol:tcp'); // From query_parameters
-      });
-    });
-    
-    describe('toLegacyStatisticalFormat', () => {
-      it('should convert get_bandwidth_usage to legacy format', () => {
-        const standardResponse: StandardStatisticalResponse<any> = {
-          results: [{ device: 'laptop', bytes: 1000000 }],
-          count: 1,
-          analysis: {
-            period: '24h',
-            total_analyzed: 100,
-            criteria: {}
-          },
-          execution_time_ms: 75,
-          cached: false
-        };
-        
-        const legacy = BackwardCompatibilityLayer.toLegacyStatisticalFormat(standardResponse, 'get_bandwidth_usage');
-        
-        expect(legacy.top_devices).toEqual(standardResponse.results);
-        expect(legacy.period).toBe('24h');
-        expect(legacy.count).toBe(1);
-        expect(legacy.execution_time_ms).toBe(75);
-        expect(legacy.results).toBeUndefined(); // Should not have generic 'results' field
       });
     });
   });

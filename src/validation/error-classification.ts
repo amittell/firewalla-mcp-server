@@ -76,22 +76,28 @@ export const ERROR_PATTERNS = {
     /memcached.*error/i,
   ],
 
-  // Correlation errors
+  // Correlation-specific errors (entity relationship and cross-reference issues)
   CORRELATION_ERRORS: [
     /correlation.*failed/i,
     /cross.*reference.*failed/i,
-    /mapping.*error/i,
+    /field.*mapping.*error/i,
+    /entity.*relationship.*error/i,
+    /correlation.*timeout/i,
+    /invalid.*correlation.*field/i,
+    /too.*many.*correlation.*fields/i,
   ],
 
-  // Search-specific errors
+  // Search-specific errors (query parsing and search execution issues)
   SEARCH_ERRORS: [
     /search.*failed/i,
     /query.*failed/i,
-    /index.*error/i,
-    /search.*timeout/i,
     /query.*syntax.*error/i,
     /invalid.*search.*field/i,
     /search.*limit.*exceeded/i,
+    /search.*timeout/i,
+    /index.*error/i,
+    /filter.*error/i,
+    /search.*parse.*error/i,
   ],
 } as const;
 

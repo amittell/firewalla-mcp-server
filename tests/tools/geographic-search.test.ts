@@ -380,7 +380,7 @@ describe('Geographic Search Tools', () => {
     });
   });
 
-  describe.skip('search_alarms_by_geography (API needs update - buildGeoQuery not implemented)', () => {
+  describe('search_alarms_by_geography', () => {
     const mockAlarmsWithGeoData = {
       results: [
         {
@@ -443,10 +443,10 @@ describe('Geographic Search Tools', () => {
       const result = await searchTools.search_alarms_by_geography(params);
 
       expect(mockFirewallaClient.getActiveAlarms).toHaveBeenCalledWith(
-        'severity:high AND geographic_risk_score:>=7',
+        'severity:high',
         undefined,
         'timestamp:desc',
-        100,
+        5000, // Client-side processing limit
         undefined
       );
       expect(result).toHaveProperty('geographic_threat_analysis');
@@ -466,10 +466,10 @@ describe('Geographic Search Tools', () => {
       const result = await searchTools.search_alarms_by_geography(params);
 
       expect(mockFirewallaClient.getActiveAlarms).toHaveBeenCalledWith(
-        '(country:RU OR country:CN OR country:KP)',
+        '*', // Base query without geographic filtering (client-side filtering)
         undefined,
         'timestamp:desc',
-        50,
+        5000, // Client-side processing limit
         undefined
       );
     });
@@ -485,10 +485,10 @@ describe('Geographic Search Tools', () => {
       const result = await searchTools.search_alarms_by_geography(params);
 
       expect(mockFirewallaClient.getActiveAlarms).toHaveBeenCalledWith(
-        'NOT is_cloud_provider:true AND NOT hosting_provider:*',
+        '*', // Base query without geographic filtering (client-side filtering)
         undefined,
         'timestamp:desc',
-        100,
+        5000, // Client-side processing limit
         undefined
       );
     });
@@ -598,7 +598,7 @@ describe('Geographic Search Tools', () => {
 
       expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
         '*',
-        'country',
+        undefined, // No group_by since we do client-side grouping
         'ts:desc',
         1000,
         undefined
@@ -627,9 +627,9 @@ describe('Geographic Search Tools', () => {
 
       expect(mockFirewallaClient.getActiveAlarms).toHaveBeenCalledWith(
         '*',
-        'continent',
+        undefined, // No group_by since we do client-side grouping
         'timestamp:desc',
-        500,
+        5000, // Client-side processing limit
         undefined
       );
       expect(result.entity_type).toBe('alarms');
@@ -655,7 +655,7 @@ describe('Geographic Search Tools', () => {
 
       expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
         `ts:${expectedStartTs}-${expectedEndTs}`,
-        'country',
+        undefined, // No group_by since we do client-side grouping
         'ts:desc',
         1000,
         undefined
@@ -735,7 +735,7 @@ describe('Geographic Search Tools', () => {
 
       expect(mockFirewallaClient.getFlowData).toHaveBeenCalledWith(
         '*',
-        'country',
+        undefined, // No group_by since we do client-side grouping
         'ts:desc',
         1000,
         undefined

@@ -19,6 +19,8 @@ export interface CursorValidationConfig {
   allowEmpty?: boolean;
   /** Whether to perform strict format validation */
   strictValidation?: boolean;
+  /** Whether to check for suspicious patterns (security-focused validation) */
+  checkSuspiciousPatterns?: boolean;
 }
 
 /**
@@ -33,6 +35,7 @@ const DEFAULT_CURSOR_CONFIG: Required<CursorValidationConfig> = {
   ],
   allowEmpty: false,
   strictValidation: true,
+  checkSuspiciousPatterns: true,
 };
 
 /**
@@ -182,56 +185,58 @@ export class CursorValidator {
         };
       }
 
-      // Check for suspicious patterns that might indicate issues
-      const suspiciousPatterns = [
-        /[<>'"&]/, // HTML/XML injection attempts
-        /\.\.\//, // Path traversal attempts
-        /\s/, // Whitespace (cursors shouldn't contain spaces)
-      ];
+      // Check for suspicious patterns that might indicate security issues (only if enabled)
+      if (finalConfig.checkSuspiciousPatterns) {
+        const suspiciousPatterns = [
+          /[<>'"&]/, // HTML/XML injection attempts
+          /\.\.\//, // Path traversal attempts
+          /\s/, // Whitespace (cursors shouldn't contain spaces)
+        ];
 
-      // Check for control characters separately to avoid ESLint no-control-regex rule
-      const hasControlChars = cursor.split('').some(char => {
-        const code = char.charCodeAt(0);
-        return (code >= 0 && code <= 31) || code === 127;
-      });
+        // Check for control characters separately to avoid ESLint no-control-regex rule
+        const hasControlChars = cursor.split('').some(char => {
+          const code = char.charCodeAt(0);
+          return (code >= 0 && code <= 31) || code === 127;
+        });
 
-      for (const pattern of suspiciousPatterns) {
-        if (pattern.test(cursor)) {
+        for (const pattern of suspiciousPatterns) {
+          if (pattern.test(cursor)) {
+            return {
+              isValid: false,
+              errors: [`${paramName} contains invalid characters`],
+              validationError: {
+                type: 'format',
+                message: 'Cursor contains suspicious or invalid characters',
+                providedValue: cursor,
+                expectedFormat: 'Clean alphanumeric cursor string',
+              },
+              suggestions: [
+                'Use only cursors returned by the API',
+                'Check for encoding or escaping issues',
+                'Verify cursor source and integrity',
+              ],
+            };
+          }
+        }
+
+        // Check for control characters
+        if (hasControlChars) {
           return {
             isValid: false,
-            errors: [`${paramName} contains invalid characters`],
+            errors: [`${paramName} contains control characters`],
             validationError: {
               type: 'format',
-              message: 'Cursor contains suspicious or invalid characters',
+              message: 'Cursor contains control characters',
               providedValue: cursor,
-              expectedFormat: 'Clean alphanumeric cursor string',
+              expectedFormat: 'Clean alphanumeric cursor string without control characters',
             },
             suggestions: [
               'Use only cursors returned by the API',
-              'Check for encoding or escaping issues',
+              'Check for encoding or character corruption',
               'Verify cursor source and integrity',
             ],
           };
         }
-      }
-
-      // Check for control characters
-      if (hasControlChars) {
-        return {
-          isValid: false,
-          errors: [`${paramName} contains control characters`],
-          validationError: {
-            type: 'format',
-            message: 'Cursor contains control characters',
-            providedValue: cursor,
-            expectedFormat: 'Clean alphanumeric cursor string without control characters',
-          },
-          suggestions: [
-            'Use only cursors returned by the API',
-            'Check for encoding or character corruption',
-            'Verify cursor source and integrity',
-          ],
-        };
       }
     }
 

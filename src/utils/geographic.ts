@@ -1123,6 +1123,178 @@ export function validateCountryCodes(countryCodes: string[]): {
 }
 
 /**
+ * Filter results by geographic criteria
+ * Works entirely client-side without API calls
+ */
+export function filterByGeography<T extends Record<string, any>>(
+  results: T[],
+  geoFilters: {
+    countries?: string[];
+    continents?: string[];
+    regions?: string[];
+    cities?: string[];
+    asns?: string[];
+    hosting_providers?: string[];
+    exclude_cloud?: boolean;
+    exclude_vpn?: boolean;
+    min_risk_score?: number;
+    high_risk_countries?: boolean;
+    exclude_known_providers?: boolean;
+  }
+): T[] {
+  if (!results || results.length === 0) {
+    return results;
+  }
+
+  // If no filters specified, return all results
+  if (!geoFilters || Object.keys(geoFilters).length === 0) {
+    return results;
+  }
+
+  return results.filter(result => {
+    // Check all IP fields for geographic data
+    const ipFields = ['source_ip', 'destination_ip', 'device_ip', 'ip'];
+    let hasMatchingGeo = false;
+
+    for (const field of ipFields) {
+      const ip = result[field];
+      if (!ip) {
+        continue;
+      }
+
+      // Get geographic data for this IP
+      const geoData = getEnhancedGeographicDataForIP(ip);
+      if (!geoData) {
+        continue;
+      }
+
+      // Check country filter (OR logic for multiple values)
+      if (geoFilters.countries && geoFilters.countries.length > 0) {
+        const countryMatch = geoFilters.countries.some(country => {
+          return (
+            geoData.country?.toLowerCase() === country.toLowerCase() ||
+            geoData.country_code?.toLowerCase() === country.toLowerCase()
+          );
+        });
+        if (!countryMatch) {
+          continue;
+        }
+      }
+
+      // Check continent filter (OR logic for multiple values)
+      if (geoFilters.continents && geoFilters.continents.length > 0) {
+        const continentMatch = geoFilters.continents.some(continent => {
+          return geoData.continent?.toLowerCase() === continent.toLowerCase();
+        });
+        if (!continentMatch) {
+          continue;
+        }
+      }
+
+      // Check region filter (OR logic for multiple values)
+      if (geoFilters.regions && geoFilters.regions.length > 0) {
+        const regionMatch = geoFilters.regions.some(region => {
+          return geoData.region?.toLowerCase() === region.toLowerCase();
+        });
+        if (!regionMatch) {
+          continue;
+        }
+      }
+
+      // Check city filter (OR logic for multiple values)
+      if (geoFilters.cities && geoFilters.cities.length > 0) {
+        const cityMatch = geoFilters.cities.some(city => {
+          return geoData.city?.toLowerCase() === city.toLowerCase();
+        });
+        if (!cityMatch) {
+          continue;
+        }
+      }
+
+      // Check ASN filter (OR logic for multiple values)
+      if (geoFilters.asns && geoFilters.asns.length > 0) {
+        const asnMatch = geoFilters.asns.some(asn => {
+          return geoData.asn?.toString() === asn.toString();
+        });
+        if (!asnMatch) {
+          continue;
+        }
+      }
+
+      // Check hosting provider filter (OR logic for multiple values)
+      if (
+        geoFilters.hosting_providers &&
+        geoFilters.hosting_providers.length > 0
+      ) {
+        const providerMatch = geoFilters.hosting_providers.some(provider => {
+          return (
+            geoData.isp?.toLowerCase().includes(provider.toLowerCase()) ||
+            geoData.organization?.toLowerCase().includes(provider.toLowerCase())
+          );
+        });
+        if (!providerMatch) {
+          continue;
+        }
+      }
+
+      // Check cloud provider exclusion
+      if (geoFilters.exclude_cloud && geoData.is_cloud_provider) {
+        continue;
+      }
+
+      // Check VPN exclusion
+      if (geoFilters.exclude_vpn && geoData.is_vpn) {
+        continue;
+      }
+
+      // Check minimum risk score
+      if (
+        geoFilters.min_risk_score !== undefined &&
+        geoFilters.min_risk_score > 0
+      ) {
+        const riskScore = geoData.geographic_risk_score || 0;
+        if (riskScore < geoFilters.min_risk_score) {
+          continue;
+        }
+      }
+
+      // Check high-risk countries flag
+      if (geoFilters.high_risk_countries) {
+        const riskScore = geoData.geographic_risk_score || 0;
+        if (riskScore < 8) {
+          continue;
+        } // High risk is 8+ on 0-10 scale
+      }
+
+      // Check known providers exclusion
+      if (geoFilters.exclude_known_providers) {
+        const knownProviders = [
+          'amazon',
+          'google',
+          'microsoft',
+          'cloudflare',
+          'akamai',
+        ];
+        const isKnownProvider = knownProviders.some(provider => {
+          const isp = geoData.isp?.toLowerCase() || '';
+          const org = geoData.organization?.toLowerCase() || '';
+          return isp.includes(provider) || org.includes(provider);
+        });
+        if (isKnownProvider) {
+          continue;
+        }
+      }
+
+      // If we made it here, this IP matches all filters
+      hasMatchingGeo = true;
+      break;
+    }
+
+    return hasMatchingGeo;
+  });
+}
+
+/**
  * Global geographic cache instance
  * Used across the application for consistent geographic data caching
  */

@@ -18,7 +18,7 @@ export interface RetryFailureError extends Error {
     attemptDetails: Array<{
       attempt: number;
       durationMs: number;
-      error?: string | unknown;
+      error?: string;
       delayMs?: number;
     }>;
   };
@@ -121,7 +121,7 @@ export class RetryManager {
       delayMs?: number;
     }> = [];
 
-    let lastError: unknown;
+    let lastError: unknown = new Error('No attempts were made');
 
     for (let attempt = 1; attempt <= finalConfig.maxAttempts; attempt++) {
       const attemptStartTime = Date.now();
@@ -272,7 +272,9 @@ export class RetryManager {
         attempt: detail.attempt,
         durationMs: detail.durationMs,
         error:
-          detail.error instanceof Error ? detail.error.message : detail.error,
+          detail.error instanceof Error
+            ? detail.error.message
+            : String(detail.error),
         delayMs: detail.delayMs,
       })),
     };

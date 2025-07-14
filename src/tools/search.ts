@@ -9,22 +9,18 @@ import type { FilterContext } from '../search/filters/base.js';
 import type { SearchParams, SearchResult } from '../search/types.js';
 import type { SearchOptions } from '../types.js';
 import type { FirewallaClient } from '../firewalla/client.js';
+import { BooleanFieldTranslator } from '../search/boolean-field-translator.js';
 import { ParameterValidator, SafeAccess } from '../validation/error-handler.js';
 import { EnhancedQueryValidator } from '../validation/enhanced-query-validator.js';
 import {
-  validateCrossReference,
   validateEnhancedCrossReference,
   suggestEntityType,
-  extractCorrelationValues,
-  filterByCorrelation,
-  performEnhancedMultiFieldCorrelation,
   getSupportedCorrelationCombinations,
   getFieldValue,
   FIELD_MAPPINGS,
   type EntityType,
   type CorrelationFieldName,
   type EnhancedCorrelationParams,
-  type ScoringCorrelationParams,
 } from '../validation/field-mapper.js';
 import { FieldValidator } from '../validation/field-validator.js';
 import { ErrorFormatter } from '../validation/error-formatter.js';
@@ -32,6 +28,7 @@ import {
   validateCountryCodes,
   enrichObjectWithGeo,
 } from '../utils/geographic.js';
+import { correlateResults } from '../validation/enhanced-correlation.js';
 
 /**
  * Configuration interface for risk thresholds and performance settings
@@ -211,9 +208,13 @@ export class SearchEngine {
   }
 
   /**
-   * Validate geographic filters if provided
+   * Validate geographic filters and return a sanitized (cloned) version.
+   * This avoids mutating the caller-supplied object which could lead to
+   * subtle side-effects elsewhere in the codebase.
    */
-  private validateGeographicFilters(geographic_filters: any): void {
+  private validateGeographicFilters<T extends Record<string, any> | undefined>(
+    geographic_filters: T
+  ): T {
     if (
       geographic_filters !== undefined &&
       (geographic_filters === null || typeof geographic_filters !== 'object')
@@ -222,23 +223,25 @@ export class SearchEngine {
     }
 
     if (!geographic_filters) {
-      return;
+      // undefined or null – nothing to validate, return as-is
+      return geographic_filters;
     }
 
-    // Validate country codes
-    if (geographic_filters.countries?.length) {
-      const countryValidation = validateCountryCodes(
-        geographic_filters.countries
-      );
+    // Work on a shallow clone so the original reference is untouched
+    const sanitized: any = { ...geographic_filters };
+
+    /* ---------- Country codes ---------- */
+    if (sanitized.countries?.length) {
+      const countryValidation = validateCountryCodes(sanitized.countries);
       if (countryValidation.invalid.length > 0) {
         throw new Error(
           `Country code validation failed: Invalid country codes: ${countryValidation.invalid.join(', ')}`
         );
       }
-      geographic_filters.countries = countryValidation.valid;
+      sanitized.countries = countryValidation.valid;
     }
 
-    // Validate array fields
+    /* ---------- Array fields ---------- */
     const arrayFields = [
       'continents',
       'regions',
@@ -247,12 +250,11 @@ export class SearchEngine {
       'hosting_providers',
     ];
     for (const field of arrayFields) {
-      if (geographic_filters[field] !== undefined) {
-        if (!Array.isArray(geographic_filters[field])) {
+      if (sanitized[field] !== undefined) {
+        if (!Array.isArray(sanitized[field])) {
           throw new Error(`${field} must be an array if provided`);
         }
-        // Validate non-empty strings in arrays
-        const invalidValues = geographic_filters[field].filter(
+        const invalidValues = sanitized[field].filter(
           (value: any) => typeof value !== 'string' || value.trim() === ''
         );
         if (invalidValues.length > 0) {
@@ -263,29 +265,60 @@ export class SearchEngine {
       }
     }
 
-    // Validate boolean fields
+    /* ---------- Boolean fields ---------- */
     const booleanFields = ['exclude_vpn', 'exclude_cloud'];
     for (const field of booleanFields) {
       if (
-        geographic_filters[field] !== undefined &&
-        typeof geographic_filters[field] !== 'boolean'
+        sanitized[field] !== undefined &&
+        typeof sanitized[field] !== 'boolean'
       ) {
         throw new Error(`${field} must be a boolean if provided`);
       }
     }
 
-    // Validate numeric fields
-    if (geographic_filters.min_risk_score !== undefined) {
+    /* ---------- Numeric fields ---------- */
+    if (sanitized.min_risk_score !== undefined) {
       if (
-        typeof geographic_filters.min_risk_score !== 'number' ||
-        geographic_filters.min_risk_score < 0 ||
-        geographic_filters.min_risk_score > 10
+        typeof sanitized.min_risk_score !== 'number' ||
+        sanitized.min_risk_score < 0 ||
+        sanitized.min_risk_score > 10
       ) {
         throw new Error(
           'min_risk_score must be a number between 0 and 10 if provided'
         );
       }
     }
+
+    return sanitized as T;
+  }
+
+  /**
+   * Helper function to extract and apply query filters from a query string
+   * Extracts common patterns like field:value and applies them to filter results
+   */
+  private applyQueryFilters<T>(
+    results: T[],
+    query: string,
+    fieldExtractors: Record<string, (items: T[], value: string) => T[]>
+  ): T[] {
+    if (!query || typeof query !== 'string') {
+      return results;
+    }
+
+    let filteredResults = results;
+
+    // Apply each field extractor to filter results
+    for (const [fieldPattern, filterFunction] of Object.entries(
+      fieldExtractors
+    )) {
+      const match = query.match(new RegExp(`${fieldPattern}:([^\\s]+)`, 'i'));
+      if (match) {
+        const extractedValue = match[1];
+        filteredResults = filterFunction(filteredResults, extractedValue);
+      }
+    }
+
+    return filteredResults;
   }
 
   /**
@@ -462,46 +495,39 @@ export class SearchEngine {
         return client.getNetworkRules(params.query, searchLimit);
       },
       processResults: (results, params) => {
-        let filteredResults = results;
-
-        // Client-side filtering to ensure results match query criteria
-        if (params.query && typeof params.query === 'string') {
-          // Extract action filter from query (e.g., "action:block")
-          const actionMatch = params.query.match(/action:(\w+)/i);
-          if (actionMatch) {
-            const expectedAction = actionMatch[1].toLowerCase();
-            filteredResults = results.filter(
-              rule => rule.action?.toLowerCase() === expectedAction
-            );
-          }
-
-          // Extract target filter from query (e.g., "target_value:*.facebook.com")
-          const targetMatch = params.query.match(/target_value:([^\s]+)/i);
-          if (targetMatch) {
-            const expectedTarget = targetMatch[1].toLowerCase();
-            // Support wildcard matching
-            if (expectedTarget.includes('*')) {
-              const pattern = expectedTarget.replace(/\*/g, '.*');
-              const regex = new RegExp(pattern, 'i');
-              filteredResults = filteredResults.filter(rule =>
-                regex.test(rule.target?.value?.toLowerCase() || '')
+        // Use the helper function to apply query filters
+        const filteredResults = this.applyQueryFilters(
+          results,
+          params.query || '',
+          {
+            action: (items, value) => {
+              const expectedAction = value.toLowerCase();
+              return items.filter(
+                rule => rule.action?.toLowerCase() === expectedAction
               );
-            } else {
-              filteredResults = filteredResults.filter(rule =>
+            },
+            target_value: (items, value) => {
+              const expectedTarget = value.toLowerCase();
+              // Support wildcard matching
+              if (expectedTarget.includes('*')) {
+                const pattern = expectedTarget.replace(/\*/g, '.*');
+                const regex = new RegExp(pattern, 'i');
+                return items.filter(rule =>
+                  regex.test(rule.target?.value?.toLowerCase() || '')
+                );
+              }
+              return items.filter(rule =>
                 rule.target?.value?.toLowerCase().includes(expectedTarget)
               );
-            }
+            },
+            status: (items, value) => {
+              const expectedStatus = value.toLowerCase();
+              return items.filter(
+                rule => rule.status?.toLowerCase() === expectedStatus
+              );
+            },
           }
-
-          // Extract status filter from query (e.g., "status:active")
-          const statusMatch = params.query.match(/status:(\w+)/i);
-          if (statusMatch) {
-            const expectedStatus = statusMatch[1].toLowerCase();
-            filteredResults = filteredResults.filter(
-              rule => rule.status?.toLowerCase() === expectedStatus
-            );
-          }
-        }
+        );
 
         if (params.limit) {
           return filteredResults.slice(0, params.limit);
@@ -561,6 +587,51 @@ export class SearchEngine {
   }
 
   /**
+   * Shared helper for validating limit parameter across all search methods
+   * @param limit - The limit value to validate
+   * @param entityType - The entity type for context-specific limits
+   * @param options - Additional validation options
+   */
+  private validateLimitParameter(
+    limit: number | undefined,
+    entityType: string,
+    options: {
+      required?: boolean;
+      defaultLimit?: number;
+      maxLimit?: number;
+    } = {}
+  ): {
+    isValid: boolean;
+    errors: string[];
+    validatedLimit: number;
+  } {
+    const {
+      required = true,
+      defaultLimit = 1000,
+      maxLimit = entityType === 'flows'
+        ? 1000
+        : entityType === 'cross_reference'
+          ? 5000
+          : 1000,
+    } = options;
+
+    const actualLimit = limit ?? defaultLimit;
+
+    const validation = ParameterValidator.validateNumber(actualLimit, 'limit', {
+      required,
+      min: 1,
+      max: maxLimit,
+      integer: true,
+    });
+
+    return {
+      isValid: validation.isValid,
+      errors: validation.errors,
+      validatedLimit: actualLimit,
+    };
+  }
+
+  /**
    * Standardized parameter validation for all search operations
    */
   private validateSearchParams(
@@ -597,15 +668,12 @@ export class SearchEngine {
 
     // Validate limit parameter with consistent boundary checking
     if (config.requireLimit !== false) {
-      const maxLimit = config.maxLimit || (entityType === 'flows' ? 1000 : 500);
-      const limitValidation = ParameterValidator.validateNumber(
+      const limitValidation = this.validateLimitParameter(
         params?.limit,
-        'limit',
+        entityType,
         {
           required: true,
-          min: 1,
-          max: maxLimit,
-          integer: true,
+          maxLimit: config.maxLimit || (entityType === 'flows' ? 1000 : 500),
         }
       );
 
@@ -927,8 +995,14 @@ export class SearchEngine {
         );
       }
 
+      // Apply boolean field translation before building query string
+      const translatedQuery = BooleanFieldTranslator.translateQuery(
+        params.query,
+        'flows'
+      );
+
       // Build query string with time range if provided
-      let queryString = params.query;
+      let queryString = translatedQuery;
       if (params.time_range?.start && params.time_range?.end) {
         const startDate = new Date(params.time_range.start);
         const endDate = new Date(params.time_range.end);
@@ -945,17 +1019,17 @@ export class SearchEngine {
 
         const startTs = Math.floor(startDate.getTime() / 1000);
         const endTs = Math.floor(endDate.getTime() / 1000);
-        queryString = `ts:${startTs}-${endTs} AND (${params.query})`;
+        queryString = `ts:${startTs}-${endTs} AND (${translatedQuery})`;
       }
 
       // Add geographic filters if provided
       if (params.geographic_filters) {
-        // Validate geographic filters
-        this.validateGeographicFilters(params.geographic_filters);
-
-        const geographicQuery = this.buildGeographicQuery(
+        // Validate and obtain a sanitized copy
+        const sanitizedGeoFilters = this.validateGeographicFilters(
           params.geographic_filters
         );
+
+        const geographicQuery = this.buildGeographicQuery(sanitizedGeoFilters);
         if (geographicQuery) {
           queryString = queryString
             ? `${queryString} AND ${geographicQuery}`
@@ -1003,6 +1077,15 @@ export class SearchEngine {
         execution_time_ms: Date.now() - startTime,
         next_cursor: response.next_cursor,
       };
+
+      // Add boolean translation debug info if translation was applied
+      if (BooleanFieldTranslator.needsTranslation(params.query, 'flows')) {
+        (result as any).boolean_translation = {
+          original_query: params.query,
+          translated_query: translatedQuery,
+          translation_applied: true,
+        };
+      }
 
       // Add optional fields
       if (geographicAnalysis) {
@@ -1057,8 +1140,14 @@ export class SearchEngine {
         );
       }
 
+      // Apply boolean field translation before building query string
+      const translatedQuery = BooleanFieldTranslator.translateQuery(
+        params.query,
+        'alarms'
+      );
+
       // Build query string with optional severity filter
-      let alarmQuery = params.query;
+      let alarmQuery = translatedQuery;
       if ((params as any).severity) {
         const sev = (params as any).severity;
         alarmQuery = alarmQuery
@@ -1091,7 +1180,7 @@ export class SearchEngine {
         results = results.slice(0, params.limit);
       }
 
-      return {
+      const result = {
         results,
         count: results.length,
         limit: params.limit,
@@ -1100,6 +1189,17 @@ export class SearchEngine {
         execution_time_ms: Date.now() - startTime,
         next_cursor: response.next_cursor,
       };
+
+      // Add boolean translation debug info if translation was applied
+      if (BooleanFieldTranslator.needsTranslation(params.query, 'alarms')) {
+        (result as any).boolean_translation = {
+          original_query: params.query,
+          translated_query: translatedQuery,
+          translation_applied: true,
+        };
+      }
+
+      return result;
     } catch (error) {
       throw new Error(
         `search_alarms failed: ${error instanceof Error ? error.message : String(error)}`
@@ -1183,14 +1283,12 @@ export class SearchEngine {
 
     try {
       // Validate limit parameter
-      const limit = params.limit || 1000;
-      const limitValidation = ParameterValidator.validateNumber(
-        limit,
-        'limit',
+      const limitValidation = this.validateLimitParameter(
+        params.limit,
+        'cross_reference',
         {
-          min: 1,
-          max: 5000,
-          integer: true,
+          defaultLimit: 1000,
+          maxLimit: 5000,
         }
       );
 
@@ -1199,6 +1297,8 @@ export class SearchEngine {
           `Parameter validation failed: ${limitValidation.errors.join(', ')}`
         );
       }
+
+      const limit = limitValidation.validatedLimit;
 
       // Validate correlation field count before other validations
       if (params.correlation_params.correlationFields) {
@@ -1273,10 +1373,20 @@ export class SearchEngine {
         );
       });
 
+      // Apply boolean field translation to queries
+      const translatedPrimaryQuery = BooleanFieldTranslator.translateQuery(
+        params.primary_query,
+        primaryType
+      );
+      const translatedSecondaryQueries = params.secondary_queries.map(
+        (query, index) =>
+          BooleanFieldTranslator.translateQuery(query, secondaryTypes[index])
+      );
+
       // Execute primary query
       const primaryResult = await this.executeSearchByType(
         primaryType,
-        params.primary_query,
+        translatedPrimaryQuery,
         limit
       );
 
@@ -1293,7 +1403,7 @@ export class SearchEngine {
       };
 
       for (let index = 0; index < params.secondary_queries.length; index++) {
-        const secondaryQuery = params.secondary_queries[index];
+        const secondaryQuery = translatedSecondaryQueries[index];
         const secondaryType = secondaryTypes[index];
 
         // Execute secondary query
@@ -1303,21 +1413,33 @@ export class SearchEngine {
           limit
         );
 
-        // Perform enhanced multi-field correlation with scoring enabled
-        const enhancedParams: ScoringCorrelationParams = {
-          ...params.correlation_params,
-          enableScoring: true,
-          enableFuzzyMatching: true,
-          minimumScore: 0.3, // Default minimum score threshold
-        };
-
-        const correlationResult = performEnhancedMultiFieldCorrelation(
+        // Perform in-memory correlation using correlateResults function
+        // Use the first correlation field from the enhanced parameters
+        const correlationField =
+          params.correlation_params.correlationFields?.[0] || 'source_ip';
+        const correlated = correlateResults(
           primaryResult.results,
           secondaryResult.results,
-          primaryType,
-          secondaryType,
-          enhancedParams
+          correlationField
         );
+
+        // Create correlation result structure to match expected format
+        const correlationResult = {
+          correlatedResults: correlated.map(c => c.secondary),
+          scoredResults: correlated.map(c => ({
+            entity: c.secondary,
+            score: c.correlationScore,
+            matchedFields: [correlationField],
+          })),
+          correlationStats: {
+            correlationRate:
+              (correlated.length / Math.max(primaryResult.results.length, 1)) *
+              100,
+          },
+          enhancedStats: {
+            totalCorrelated: correlated.length,
+          },
+        };
 
         // Map correlation results to include scoring information
         const mappedResults = correlationResult.scoredResults
@@ -1391,14 +1513,12 @@ export class SearchEngine {
 
     try {
       // Validate limit parameter
-      const limit = params.limit || 1000;
-      const limitValidation = ParameterValidator.validateNumber(
-        limit,
-        'limit',
+      const limitValidation = this.validateLimitParameter(
+        params.limit,
+        'cross_reference',
         {
-          min: 1,
-          max: 5000,
-          integer: true,
+          defaultLimit: 1000,
+          maxLimit: 5000,
         }
       );
 
@@ -1407,6 +1527,8 @@ export class SearchEngine {
           `Parameter validation failed: ${limitValidation.errors.join(', ')}`
         );
       }
+
+      const limit = limitValidation.validatedLimit;
 
       // Validate correlation field count for regular cross-reference (single field only)
       if (
@@ -1422,19 +1544,6 @@ export class SearchEngine {
         }
       }
 
-      // Validate cross-reference parameters
-      const validation = validateCrossReference(
-        params.primary_query,
-        params.secondary_queries,
-        params.correlation_field
-      );
-
-      if (!validation.isValid) {
-        throw new Error(
-          `Cross-reference validation failed: ${validation.errors.join(', ')}`
-        );
-      }
-
       // Determine entity types (use provided type or fall back to pattern matching)
       const primaryType =
         params.primary_entity_type ||
@@ -1445,21 +1554,70 @@ export class SearchEngine {
         return suggestEntityType(q) || 'alarms';
       });
 
-      // Execute primary query using generic method
-      const primaryResult = await this.executeSearchByType(
-        primaryType,
+      // Apply boolean field translation to queries
+      const translatedPrimaryQuery = BooleanFieldTranslator.translateQuery(
         params.primary_query,
-        limit
-      );
-
-      // Extract correlation values using proper field mapping
-      const correlationValues = extractCorrelationValues(
-        primaryResult.results,
-        params.correlation_field,
         primaryType
       );
+      const translatedSecondaryQueries = params.secondary_queries.map(
+        (query, index) =>
+          BooleanFieldTranslator.translateQuery(query, secondaryTypes[index])
+      );
 
-      // Execute secondary queries and correlate
+      // Fetch primary data (no API-level correlation parameters)
+      let primaryResult;
+      switch (primaryType) {
+        case 'flows':
+          primaryResult = await this.searchFlows({
+            query: translatedPrimaryQuery,
+            limit,
+          });
+          break;
+        case 'alarms':
+          primaryResult = await this.searchAlarms({
+            query: translatedPrimaryQuery,
+            limit,
+          });
+          break;
+        case 'rules':
+          primaryResult = await this.searchRules({
+            query: translatedPrimaryQuery,
+            limit,
+          });
+          break;
+        case 'devices':
+          primaryResult = await this.searchDevices({
+            query: translatedPrimaryQuery,
+            limit,
+          });
+          break;
+        case 'target_lists':
+          primaryResult = await this.searchTargetLists({
+            query: translatedPrimaryQuery,
+            limit,
+          });
+          break;
+        default:
+          primaryResult = await this.searchFlows({
+            query: translatedPrimaryQuery,
+            limit,
+          });
+      }
+
+      // Extract correlation values for client-side filtering
+      const correlationValues = new Set<string>();
+      primaryResult.results.forEach((item: any) => {
+        const value = this.extractFieldValue(
+          item,
+          params.correlation_field,
+          primaryType
+        );
+        if (value) {
+          correlationValues.add(String(value));
+        }
+      });
+
+      // Fetch secondary data separately and perform client-side correlation
       const correlatedResults: any = {
         primary: {
           query: params.primary_query,
@@ -1471,23 +1629,56 @@ export class SearchEngine {
       };
 
       for (let index = 0; index < params.secondary_queries.length; index++) {
-        const secondaryQuery = params.secondary_queries[index];
+        const secondaryQuery = translatedSecondaryQueries[index];
         const secondaryType = secondaryTypes[index];
 
-        // Execute secondary query using generic method
-        const secondaryResult = await this.executeSearchByType(
-          secondaryType,
-          secondaryQuery,
-          limit
-        );
+        // Fetch secondary data (no API-level correlation parameters)
+        let secondaryResult;
+        switch (secondaryType) {
+          case 'flows':
+            secondaryResult = await this.searchFlows({
+              query: secondaryQuery,
+              limit,
+            });
+            break;
+          case 'alarms':
+            secondaryResult = await this.searchAlarms({
+              query: secondaryQuery,
+              limit,
+            });
+            break;
+          case 'rules':
+            secondaryResult = await this.searchRules({
+              query: secondaryQuery,
+              limit,
+            });
+            break;
+          case 'devices':
+            secondaryResult = await this.searchDevices({
+              query: secondaryQuery,
+              limit,
+            });
+            break;
+          case 'target_lists':
+            secondaryResult = await this.searchTargetLists({
+              query: secondaryQuery,
+              limit,
+            });
+            break;
+          default:
+            secondaryResult = await this.searchAlarms({
+              query: secondaryQuery,
+              limit,
+            });
+        }
 
-        // Filter by correlation using improved field mapping
-        const correlatedItems = filterByCorrelation(
+        // Perform in-memory correlation using correlateResults function
+        const correlated = correlateResults(
+          primaryResult.results,
           secondaryResult.results,
-          params.correlation_field,
-          secondaryType,
-          correlationValues
+          params.correlation_field
         );
+        const correlatedItems = correlated.map(c => c.secondary);
 
         correlatedResults.correlations.push({
           query: secondaryQuery,
@@ -1525,6 +1716,39 @@ export class SearchEngine {
       throw new Error(
         `Cross-reference search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
+    }
+  }
+
+  /**
+   * Extract field value from item for correlation
+   */
+  private extractFieldValue(
+    item: any,
+    field: string,
+    _entityType: string
+  ): any {
+    // Handle common correlation fields across entity types
+    switch (field) {
+      case 'source_ip':
+        return item.source?.ip || item.device?.ip || item.source_ip || item.ip;
+      case 'destination_ip':
+        return (
+          item.destination?.ip ||
+          item.remote?.ip ||
+          item.destination_ip ||
+          item.target_ip
+        );
+      case 'device_ip':
+        return item.device?.ip || item.source?.ip || item.device_ip || item.ip;
+      case 'protocol':
+        return item.protocol;
+      case 'country':
+        return item.remote?.country || item.country;
+      case 'device_id':
+        return item.device?.id || item.device_id;
+      default:
+        // Try direct field access
+        return item[field];
     }
   }
 
@@ -2029,21 +2253,6 @@ export class SearchEngine {
   }
 
   /**
-   * Build geographic query string for alarms
-   */
-  private buildGeographicAlarmQuery(filters: {
-    countries?: string[];
-    continents?: string[];
-    regions?: string[];
-    high_risk_countries?: boolean;
-    exclude_known_providers?: boolean;
-    threat_analysis?: boolean;
-  }): string {
-    // Use FirewallaClient's buildGeoQuery method for proper API syntax
-    return this.firewalla.buildGeoQuery(filters);
-  }
-
-  /**
    * Advanced geographic search for alarms with location-based threat analysis.
    * Builds proper query strings for the Firewalla API.
    */
@@ -2083,39 +2292,45 @@ export class SearchEngine {
       }
 
       // Validate geographic filters if provided
+      let sanitizedGeoFilters = params.geographic_filters;
       if (params.geographic_filters) {
-        this.validateGeographicFilters(params.geographic_filters);
-      }
-
-      // Build complete query with geographic filters
-      let finalQuery = params.query || '*';
-
-      if (
-        params.geographic_filters &&
-        typeof params.geographic_filters === 'object' &&
-        params.geographic_filters !== null
-      ) {
-        const geographicQuery = this.buildGeographicAlarmQuery(
+        sanitizedGeoFilters = this.validateGeographicFilters(
           params.geographic_filters
         );
-        if (geographicQuery) {
-          if (finalQuery === '*') {
-            finalQuery = geographicQuery;
-          } else {
-            finalQuery = `${finalQuery} AND ${geographicQuery}`;
-          }
-        }
       }
 
-      // Execute search with combined query
-      const searchParams = {
-        query: finalQuery,
-        limit: params.limit,
+      // Fetch unfiltered results first (client-side geographic filtering)
+      const unfilteredResults = await this.searchAlarms({
+        query: params.query || '*',
+        limit: 5000, // Fetch larger set for client-side filtering (max allowed by searchAlarms)
         sort_by: params.sort_by,
         group_by: params.group_by,
-      };
+      });
 
-      const result = await this.searchAlarms(searchParams);
+      // Apply client-side geographic filtering if filters provided
+      let filteredResults = unfilteredResults.results;
+      if (
+        sanitizedGeoFilters &&
+        typeof sanitizedGeoFilters === 'object' &&
+        sanitizedGeoFilters !== null
+      ) {
+        const { filterByGeography } = await import('../utils/geographic.js');
+        filteredResults = filterByGeography(
+          unfilteredResults.results,
+          sanitizedGeoFilters
+        );
+      }
+
+      // Apply limit to filtered results
+      if (filteredResults.length > params.limit) {
+        filteredResults = filteredResults.slice(0, params.limit);
+      }
+
+      const result = {
+        ...unfilteredResults,
+        results: filteredResults,
+        count: filteredResults.length,
+      };
 
       // Add geographic threat analysis if requested
       let threatAnalysis;
@@ -2152,14 +2367,12 @@ export class SearchEngine {
     const startTime = Date.now();
 
     try {
-      const limit = params.limit || 1000;
-      const limitValidation = ParameterValidator.validateNumber(
-        limit,
-        'limit',
+      const limitValidation = this.validateLimitParameter(
+        params.limit,
+        'statistics',
         {
-          min: 1,
-          max: 1000,
-          integer: true,
+          defaultLimit: 1000,
+          maxLimit: 1000,
         }
       );
 
@@ -2168,6 +2381,8 @@ export class SearchEngine {
           `Parameter validation failed: ${limitValidation.errors.join(', ')}`
         );
       }
+
+      const limit = limitValidation.validatedLimit;
 
       // Build base query for geographic analysis
       let baseQuery = '*';
@@ -2184,35 +2399,52 @@ export class SearchEngine {
         baseQuery = `ts:${startTs}-${endTs}`;
       }
 
-      // Execute search based on entity type
-      const searchParams = {
-        query: baseQuery,
-        limit,
-        group_by: params.group_by || 'country',
-        aggregate: true,
-      };
-
+      // Fetch unfiltered results first (client-side geographic processing)
       let searchResult;
       if (params.entity_type === 'flows') {
-        searchResult = await this.searchFlows(searchParams);
+        searchResult = await this.searchFlows({
+          query: baseQuery,
+          limit: 1000, // Max allowed by searchFlows
+        });
       } else {
-        searchResult = await this.searchAlarms(searchParams);
+        searchResult = await this.searchAlarms({
+          query: baseQuery,
+          limit: 5000, // Max allowed by searchAlarms
+        });
       }
 
-      // Generate geographic statistics
+      // Process results with client-side geographic grouping
+      const processedResults = searchResult.results;
+
+      // Group results by specified field for statistics
+      const groupByField = params.group_by || 'country';
+      const groupedData = this.groupResultsByGeographicField(
+        processedResults,
+        groupByField
+      );
+
+      // Apply limit to grouped results
+      const limitedGroups = Object.entries(groupedData)
+        .sort(([, a], [, b]) => b.length - a.length)
+        .slice(0, limit);
+
+      const limitedGroupedData = Object.fromEntries(limitedGroups);
+
+      // Generate geographic statistics from grouped data
       const statistics = this.generateGeographicStatistics(
-        searchResult,
+        { results: processedResults, count: processedResults.length },
         params.analysis_type || 'summary',
-        params.group_by || 'country'
+        groupByField,
+        limitedGroupedData
       );
 
       return {
         entity_type: params.entity_type,
         time_range: params.time_range,
         analysis_type: params.analysis_type || 'summary',
-        group_by: params.group_by || 'country',
+        group_by: groupByField,
         statistics,
-        total_records: searchResult.count,
+        total_records: processedResults.length,
         execution_time_ms: Date.now() - startTime,
       };
     } catch (error) {
@@ -2404,26 +2636,88 @@ export class SearchEngine {
   }
 
   /**
+   * Group results by geographic field for client-side processing
+   */
+  private groupResultsByGeographicField(
+    results: any[],
+    groupByField: string
+  ): Record<string, any[]> {
+    const grouped: Record<string, any[]> = {};
+
+    results.forEach(result => {
+      let groupValue = 'Unknown';
+
+      // Extract geographic field value from result
+      if (result.remote) {
+        switch (groupByField) {
+          case 'country':
+            groupValue =
+              result.remote.country || result.remote.countryName || 'Unknown';
+            break;
+          case 'continent':
+            groupValue = result.remote.continent || 'Unknown';
+            break;
+          case 'region':
+            groupValue =
+              result.remote.region || result.remote.regionName || 'Unknown';
+            break;
+          case 'asn':
+            groupValue =
+              result.remote.asn ||
+              result.remote.autonomousSystemNumber ||
+              'Unknown';
+            break;
+          case 'provider':
+            groupValue =
+              result.remote.isp ||
+              result.remote.provider ||
+              result.remote.organization ||
+              'Unknown';
+            break;
+        }
+      }
+
+      if (!grouped[groupValue]) {
+        grouped[groupValue] = [];
+      }
+      grouped[groupValue].push(result);
+    });
+
+    return grouped;
+  }
+
+  /**
    * Generate detailed geographic statistics
    */
   private generateGeographicStatistics(
     searchResult: any,
     analysisType: string,
-    groupBy: string
+    groupBy: string,
+    groupedData?: Record<string, any[]>
   ): any {
+    // Use grouped data if provided, otherwise fall back to searchResult aggregations
+    const distribution = groupedData
+      ? Object.fromEntries(
+          Object.entries(groupedData).map(([key, values]) => [
+            key,
+            { count: values.length },
+          ])
+        )
+      : searchResult.aggregations || {};
+
     const stats = {
       summary: {
         total_records: searchResult.count || 0,
         grouped_by: groupBy,
         analysis_type: analysisType,
       },
-      distribution: searchResult.aggregations || {},
+      distribution,
       insights: [] as string[],
     };
 
     // Add insights based on analysis
-    if (searchResult.aggregations) {
-      const entries = Object.entries(searchResult.aggregations);
+    if (distribution && Object.keys(distribution).length > 0) {
+      const entries = Object.entries(distribution);
       const totalRecords = searchResult.count || 0;
 
       // Find top entries

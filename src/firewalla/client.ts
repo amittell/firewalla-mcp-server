@@ -50,6 +50,7 @@ import {
   normalizeIP,
 } from '../utils/geographic.js';
 import { safeAccess, safeValue } from '../utils/data-normalizer.js';
+import { AlarmIdNormalizer } from '../utils/alarm-id-normalizer.js';
 import {
   validateResponseStructure,
   normalizeTimestamps,
@@ -1497,24 +1498,131 @@ export class FirewallaClient {
 
   @optimizeResponse('alarms')
   async getSpecificAlarm(
-    alarmId: string
+    alarmId: string,
+    gid?: string,
+    alarmContext?: any
   ): Promise<{ count: number; results: Alarm[]; next_cursor?: string }> {
     try {
       // Enhanced input validation and sanitization
-      const validatedAlarmId = this.sanitizeInput(alarmId);
-      if (!validatedAlarmId || validatedAlarmId.length === 0) {
-        throw new Error('Invalid or empty alarm ID provided');
+      const validatedGid = this.sanitizeInput(gid || this.config.boxId);
+
+      if (!validatedGid || validatedGid.length === 0) {
+        throw new Error('Invalid or empty gid provided');
       }
 
-      // Additional validation for alarm ID format
-      if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
-        throw new Error('Alarm ID contains invalid characters');
+      // Additional validation for GID format
+      if (!/^[a-zA-Z0-9_-]+$/.test(validatedGid)) {
+        throw new Error('GID contains invalid characters');
       }
 
-      const response = await this.request<any>(
-        'GET',
-        `/v2/alarms/${this.config.boxId}/${validatedAlarmId}`
+      // Check if this is a composite ID
+      const compositeInfo = AlarmIdNormalizer.parseCompositeId(alarmId);
+      if (compositeInfo) {
+        // For composite IDs, we need to search using the components
+        logger.debug('Detected composite alarm ID', compositeInfo);
+
+        // Search for the alarm using its components
+        const searchQuery = `ts:${compositeInfo.ts} AND type:${compositeInfo.type}`;
+        const searchResponse = await this.getActiveAlarms(
+          searchQuery,
+          undefined,
+          'ts:desc',
+          100,
+          undefined,
+          true // force refresh to ensure we get latest data
+        );
+
+        // Find the matching alarm
+        const matchingAlarm = searchResponse.results.find((alarm: any) => {
+          const alarmTs = String(alarm.ts || alarm.timestamp || '0').replace(
+            /[^0-9]/g,
+            ''
+          );
+          const alarmType = String(alarm.type || alarm.alarm_type || 'unknown');
+          const alarmGid = String(
+            alarm.gid || alarm.device?.gid || alarm.device_id || 'unknown'
+          );
+
+          return (
+            alarmTs === compositeInfo.ts &&
+            alarmType === compositeInfo.type &&
+            (alarmGid === compositeInfo.gid || compositeInfo.gid === 'unknown')
+          );
+        });
+
+        if (matchingAlarm) {
+          return {
+            count: 1,
+            results: [matchingAlarm],
+            next_cursor: undefined,
+          };
+        }
+
+        // If not found via search, try the original aid
+        alarmId = compositeInfo.originalAid;
+      }
+
+      // Get all possible alarm ID variations to try
+      const idVariations = AlarmIdNormalizer.getAllIdVariations(
+        alarmId,
+        alarmContext
       );
+      const debugInfo = AlarmIdNormalizer.getDebugInfo(alarmId, alarmContext);
+
+      logger.debug('Attempting alarm ID resolution', {
+        originalId: alarmId,
+        variations: idVariations,
+        debugInfo,
+      });
+
+      let lastError: Error | null = null;
+      let response: any = null;
+
+      // Try each ID variation until one succeeds
+      for (const idVariation of idVariations) {
+        const validatedAlarmId = this.sanitizeInput(idVariation);
+
+        if (!validatedAlarmId || validatedAlarmId.length === 0) {
+          continue; // Skip invalid variations
+        }
+
+        // Additional validation for alarm ID format (relaxed for ID variations)
+        if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
+          continue; // Skip invalid format variations
+        }
+
+        try {
+          logger.debug(`Trying alarm ID variation: ${validatedAlarmId}`);
+
+          response = await this.request<any>(
+            'GET',
+            `/v2/boxes/${validatedGid}/alarms/${validatedAlarmId}`
+          );
+
+          // If we get here, the request succeeded
+          logger.debug(`Successfully found alarm with ID: ${validatedAlarmId}`);
+          break;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          logger.debug(`Failed to find alarm with ID ${validatedAlarmId}:`, {
+            error: lastError.message,
+          });
+
+          // Continue to next variation
+          continue;
+        }
+      }
+
+      // If no variation worked, throw the last error
+      if (!response) {
+        const errorMessage = `Alarm not found: tried ${idVariations.length} ID variations. Last error: ${lastError?.message || 'Unknown error'}`;
+        logger.warn('All alarm ID variations failed', {
+          originalId: alarmId,
+          variations: idVariations,
+          lastError: lastError?.message,
+        });
+        throw new Error(errorMessage);
+      }
 
       // Enhanced null/undefined checks for response
       if (!response || typeof response !== 'object') {
@@ -1650,39 +1758,150 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('alarms')
-  async deleteAlarm(alarmId: string): Promise<any> {
+  async deleteAlarm(
+    alarmId: string,
+    gid?: string,
+    alarmContext?: any
+  ): Promise<any> {
     try {
       // Enhanced input validation and sanitization
-      const validatedAlarmId = this.sanitizeInput(alarmId);
-      if (!validatedAlarmId || validatedAlarmId.length === 0) {
-        throw new Error('Invalid or empty alarm ID provided');
+      const validatedGid = this.sanitizeInput(gid || this.config.boxId);
+
+      if (!validatedGid || validatedGid.length === 0) {
+        throw new Error('Invalid or empty gid provided');
       }
 
-      // Additional validation for alarm ID format
-      if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
-        throw new Error('Alarm ID contains invalid characters');
+      // Additional validation for GID format
+      if (!/^[a-zA-Z0-9_-]+$/.test(validatedGid)) {
+        throw new Error('GID contains invalid characters');
       }
 
-      // Enhanced length validation
-      if (validatedAlarmId.length > 128) {
-        throw new Error('Alarm ID is too long (maximum 128 characters)');
+      // Enhanced length validation for GID
+      if (validatedGid.length > 128) {
+        throw new Error('GID is too long (maximum 128 characters)');
       }
 
-      const response = await this.request<{
-        success: boolean;
-        message: string;
-        deleted?: boolean;
-        status?: string;
-      }>(
-        'DELETE',
-        `/v2/alarms/${this.config.boxId}/${validatedAlarmId}`,
-        undefined,
-        false
+      // Check if this is a composite ID
+      const compositeInfo = AlarmIdNormalizer.parseCompositeId(alarmId);
+      if (compositeInfo) {
+        // For composite IDs, we need to find the alarm first
+        logger.debug('Detected composite alarm ID for deletion', compositeInfo);
+
+        // Find the alarm using getSpecificAlarm which handles composite IDs
+        const alarmResult = await this.getSpecificAlarm(
+          alarmId,
+          gid,
+          alarmContext
+        );
+        if (
+          alarmResult &&
+          alarmResult.results &&
+          alarmResult.results.length > 0
+        ) {
+          const alarm = alarmResult.results[0];
+          // Try to use the original aid from the alarm if available
+          const aidValue = String(alarm.aid);
+          if (
+            alarm.aid &&
+            aidValue !== '0' &&
+            aidValue !== 'null' &&
+            aidValue !== 'undefined'
+          ) {
+            alarmId = aidValue;
+          } else {
+            // If still no valid ID, we can't delete it
+            throw new Error(
+              `Cannot delete alarm with non-unique ID: ${compositeInfo.originalAid}`
+            );
+          }
+        } else {
+          throw new Error(`Alarm not found for composite ID: ${alarmId}`);
+        }
+      }
+
+      // Get all possible alarm ID variations to try
+      const idVariations = AlarmIdNormalizer.getAllIdVariations(
+        alarmId,
+        alarmContext
       );
+      const debugInfo = AlarmIdNormalizer.getDebugInfo(alarmId, alarmContext);
+
+      logger.debug('Attempting alarm deletion with ID resolution', {
+        originalId: alarmId,
+        variations: idVariations,
+        debugInfo,
+      });
+
+      let lastError: Error | null = null;
+      let response: any = null;
+      let successfulId: string | null = null;
+
+      // Try each ID variation until one succeeds
+      for (const idVariation of idVariations) {
+        const validatedAlarmId = this.sanitizeInput(idVariation);
+
+        if (!validatedAlarmId || validatedAlarmId.length === 0) {
+          continue; // Skip invalid variations
+        }
+
+        // Additional validation for alarm ID format
+        if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
+          continue; // Skip invalid format variations
+        }
+
+        // Enhanced length validation for alarm ID
+        if (validatedAlarmId.length > 128) {
+          continue; // Skip variations that are too long
+        }
+
+        try {
+          logger.debug(
+            `Trying to delete alarm with ID variation: ${validatedAlarmId}`
+          );
+
+          response = await this.request<{
+            success: boolean;
+            message: string;
+            deleted?: boolean;
+            status?: string;
+          }>(
+            'DELETE',
+            `/v2/boxes/${validatedGid}/alarms/${validatedAlarmId}`,
+            undefined,
+            false
+          );
+
+          // If we get here, the request succeeded
+          successfulId = validatedAlarmId;
+          logger.debug(
+            `Successfully deleted alarm with ID: ${validatedAlarmId}`
+          );
+          break;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          logger.debug(`Failed to delete alarm with ID ${validatedAlarmId}:`, {
+            error: lastError.message,
+          });
+
+          // Continue to next variation
+          continue;
+        }
+      }
+
+      // If no variation worked, throw the last error
+      if (!response || !successfulId) {
+        const errorMessage = `Alarm deletion failed: tried ${idVariations.length} ID variations. Last error: ${lastError?.message || 'Unknown error'}`;
+        logger.warn('All alarm ID variations failed for deletion', {
+          originalId: alarmId,
+          variations: idVariations,
+          lastError: lastError?.message,
+        });
+        throw new Error(errorMessage);
+      }
 
       // Handle various response formats - API may return empty body, status text, or object
       let isSuccess = true; // Default to success for 200 responses
-      let responseMessage = `Alarm ${validatedAlarmId} deleted successfully`;
+      let responseMessage = `Alarm ${successfulId} deleted successfully`;
 
       if (response && typeof response === 'object') {
         // Complex response object - check multiple success indicators
@@ -1706,7 +1925,7 @@ export class FirewallaClient {
 
       // Enhanced response object construction
       const result = {
-        id: validatedAlarmId,
+        id: successfulId,
         success: isSuccess,
         message: responseMessage,
         timestamp: getCurrentTimestamp(),

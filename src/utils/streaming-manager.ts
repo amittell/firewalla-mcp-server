@@ -4,7 +4,7 @@
  */
 
 import type { PaginationParams } from './pagination.js';
-import { webcrypto } from 'crypto';
+import { randomUUID } from 'crypto';
 
 /**
  * Configuration for streaming operations
@@ -22,6 +22,8 @@ export interface StreamingConfig {
   maxMemoryThreshold: number;
   /** Whether to include metadata in each chunk */
   includeMetadata: boolean;
+  /** Threshold for when to use streaming (number of items) */
+  streamingThreshold: number;
 }
 
 /**
@@ -34,6 +36,10 @@ const DEFAULT_STREAMING_CONFIG: StreamingConfig = {
   enableCompression: false, // Disabled for simplicity
   maxMemoryThreshold: 50 * 1024 * 1024, // 50MB
   includeMetadata: true,
+  streamingThreshold: parseInt(
+    process.env.FIREWALLA_STREAMING_THRESHOLD || '500',
+    10
+  ),
 };
 
 /**
@@ -359,13 +365,15 @@ export class StreamingManager {
    * Generate a unique session ID
    */
   private generateSessionId(): string {
-    // Use crypto.randomUUID if available, fallback to current implementation
-    if (webcrypto && webcrypto.randomUUID) {
-      return `stream_${webcrypto.randomUUID()}`;
+    // Use crypto.randomUUID for secure random ID generation
+    try {
+      return `stream_${randomUUID()}`;
+    } catch (_error) {
+      // Fallback to timestamp-based ID if crypto.randomUUID is not available
+      const timestamp = Date.now().toString(36);
+      const random = Math.random().toString(36).substring(2);
+      return `stream_${timestamp}_${random}`;
     }
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substring(2);
-    return `stream_${timestamp}_${random}`;
   }
 
   /**
@@ -408,12 +416,14 @@ export class StreamingManager {
         maxChunks: 0,
         sessionTimeoutMs: 600000, // 10 minutes
         maxMemoryThreshold: 100 * 1024 * 1024, // 100MB
+        streamingThreshold: 100, // Start streaming earlier for flow data
       },
       search_flows: {
         chunkSize: 75,
         maxChunks: 0,
         sessionTimeoutMs: 300000, // 5 minutes
         maxMemoryThreshold: 75 * 1024 * 1024, // 75MB
+        streamingThreshold: 150, // Start streaming for moderate result sets
       },
 
       // Device tools - medium datasets
@@ -422,12 +432,14 @@ export class StreamingManager {
         maxChunks: 0,
         sessionTimeoutMs: 180000, // 3 minutes
         maxMemoryThreshold: 50 * 1024 * 1024, // 50MB
+        streamingThreshold: 300, // Device lists can be large
       },
       search_devices: {
         chunkSize: 100,
         maxChunks: 0,
         sessionTimeoutMs: 180000,
         maxMemoryThreshold: 50 * 1024 * 1024,
+        streamingThreshold: 300,
       },
 
       // Alarm tools - smaller datasets, larger chunks
@@ -436,12 +448,14 @@ export class StreamingManager {
         maxChunks: 20, // Limit alarms to reasonable number
         sessionTimeoutMs: 120000, // 2 minutes
         maxMemoryThreshold: 25 * 1024 * 1024, // 25MB
+        streamingThreshold: 500, // Alarms typically have fewer results
       },
       search_alarms: {
         chunkSize: 150,
         maxChunks: 20,
         sessionTimeoutMs: 120000,
         maxMemoryThreshold: 25 * 1024 * 1024,
+        streamingThreshold: 500,
       },
 
       // Rule tools - medium datasets
@@ -450,6 +464,7 @@ export class StreamingManager {
         maxChunks: 50,
         sessionTimeoutMs: 180000,
         maxMemoryThreshold: 30 * 1024 * 1024, // 30MB
+        streamingThreshold: 400, // Rules are typically moderate in number
       },
     };
 
@@ -470,11 +485,8 @@ export class StreamingManager {
  */
 export const globalStreamingManager = new StreamingManager();
 
-// Default streaming threshold - can be overridden via environment variable
-const DEFAULT_STREAMING_THRESHOLD = parseInt(
-  process.env.FIREWALLA_STREAMING_THRESHOLD || '500',
-  10
-);
+// Default streaming threshold - can be overridden via environment variable or config
+const DEFAULT_STREAMING_THRESHOLD = DEFAULT_STREAMING_CONFIG.streamingThreshold;
 
 /**
  * Utility function to check if a tool should use streaming
@@ -483,10 +495,22 @@ export function shouldUseStreaming(
   toolName: string,
   requestedLimit: number,
   estimatedTotal?: number,
-  customThreshold?: number
+  customThreshold?: number | StreamingConfig
 ): boolean {
   // Use streaming for large requests or when total is estimated to be large
-  const streamingThreshold = customThreshold ?? DEFAULT_STREAMING_THRESHOLD;
+  let streamingThreshold: number;
+
+  if (typeof customThreshold === 'number') {
+    streamingThreshold = customThreshold;
+  } else if (customThreshold && 'streamingThreshold' in customThreshold) {
+    const { streamingThreshold: threshold } = customThreshold;
+    streamingThreshold = threshold;
+  } else {
+    // Get tool-specific config or use default
+    const toolConfig = StreamingManager.getConfigForTool(toolName);
+    streamingThreshold =
+      toolConfig.streamingThreshold ?? DEFAULT_STREAMING_THRESHOLD;
+  }
 
   if (requestedLimit > streamingThreshold) {
     return true;
@@ -496,16 +520,14 @@ export function shouldUseStreaming(
     return true;
   }
 
-  // Specific tools that benefit from streaming
-  const streamingTools = [
-    'get_flow_data',
-    'search_flows',
-    'get_device_status',
-    'search_devices',
-    'search_alarms',
-  ];
+  // Specific tools that benefit from streaming regardless of threshold
+  const alwaysStreamingTools = ['get_flow_data', 'search_flows'];
 
-  return streamingTools.includes(toolName);
+  if (alwaysStreamingTools.includes(toolName) && requestedLimit > 50) {
+    return true;
+  }
+
+  return false;
 }
 
 /**

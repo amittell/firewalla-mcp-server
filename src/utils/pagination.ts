@@ -677,6 +677,8 @@ export function validatePaginationParams(
 export function convertOffsetToCursorParams(params: {
   limit?: number;
   offset?: number;
+  sort_by?: string;
+  sort_order?: 'asc' | 'desc';
 }): {
   limit?: number;
   cursor?: string;
@@ -684,14 +686,32 @@ export function convertOffsetToCursorParams(params: {
 } {
   const warnings: string[] = [];
 
+  // If offset is provided and greater than 0, create a cursor
   if (params.offset && params.offset > 0) {
-    throw new Error(
-      'Offset-to-cursor conversion is not yet implemented. ' +
-        'Please use cursor-based pagination directly. ' +
-        'This conversion requires API-specific logic that depends on the underlying data structure and sorting requirements.'
+    warnings.push(
+      'Converting offset-based pagination to cursor-based. ' +
+        'Consider using cursor-based pagination directly for better performance.'
     );
+
+    // Create cursor data representing the offset
+    const cursorData: CursorData = {
+      offset: params.offset,
+      page_size: params.limit || getDefaultPageSize(),
+      sort_by: params.sort_by,
+      sort_order: params.sort_order || 'asc',
+    };
+
+    // Encode the cursor
+    const cursor = encodeCursor(cursorData);
+
+    return {
+      limit: params.limit,
+      cursor,
+      warnings,
+    };
   }
 
+  // No offset or offset is 0, no cursor needed
   return {
     limit: params.limit,
     cursor: undefined,

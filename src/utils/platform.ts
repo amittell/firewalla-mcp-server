@@ -365,16 +365,10 @@ export function platformLog(
   const prefix = `[${timestamp}] [${level.toUpperCase()}]`;
 
   if (level === 'error') {
-    // eslint-disable-next-line no-console
-    console.error(`${prefix} ${message}`);
+    logger.error(`${prefix} ${message}`);
   } else if (level === 'warn') {
-    logger.warn(`${prefix} ${message}`, {
-      prefix,
-      level: 'warn',
-      platform: getPlatform(),
-    });
+    logger.warn(`${prefix} ${message}`);
   } else {
-    // eslint-disable-next-line no-console
-    console.log(`${prefix} ${message}`);
+    logger.info(`${prefix} ${message}`);
   }
 }

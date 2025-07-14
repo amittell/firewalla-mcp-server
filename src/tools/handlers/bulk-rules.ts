@@ -43,91 +43,83 @@ export class BulkPauseRulesHandler extends BaseToolHandler {
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
-    try {
-      // Validate bulk operation arguments
-      const validation = validateBulkOperationArgs(args);
-      if (!validation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Parameter validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          validation.errors
-        );
-      }
-
-      const { ids, options } = validation.sanitizedArgs;
-      const manager = BulkOperationManager.forRules();
-
-      // Validate the IDs array
-      const bulkValidation = manager.validateBulkParams(ids);
-      if (!bulkValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Bulk operation validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          bulkValidation.errors
-        );
-      }
-
-      // Validate duration parameter if provided
-      let duration = 60; // Default 60 minutes
-      if (options?.duration !== undefined) {
-        const durationValidation = ParameterValidator.validateNumber(
-          options.duration,
-          'duration',
-          { min: 1, max: 1440, integer: true }
-        );
-        if (!durationValidation.isValid) {
-          return createErrorResponse(
-            this.name,
-            'Duration validation failed',
-            ErrorType.VALIDATION_ERROR,
-            undefined,
-            durationValidation.errors
-          );
-        }
-        duration = durationValidation.sanitizedValue as number;
-      }
-
-      // Define the pause operation for individual rules
-      const pauseOperation: BulkOperationFunction = async (ruleId: string) => {
-        return withToolTimeout(
-          async () => firewalla.pauseRule(ruleId, duration),
-          `${this.name}_item`,
-          5000 // 5 second timeout per rule
-        );
-      };
-
-      // Execute the bulk operation
-      const startTime = Date.now();
-
-      const result = await manager.executeBulkOperation(
-        bulkValidation.sanitizedIds,
-        pauseOperation,
-        firewalla,
-        'pause_rules'
-      );
-
-      const unifiedResponseData = {
-        operation: this.name,
-        pause_duration_minutes: duration,
-        bulk_operation_result: result,
-        timestamp: new Date().toISOString(),
-      };
-
-      const executionTime = Date.now() - startTime;
-      return this.createUnifiedResponse(unifiedResponseData, {
-        executionTimeMs: executionTime,
-      });
-    } catch (error) {
+    // Validate bulk operation arguments
+    const validation = validateBulkOperationArgs(args);
+    if (!validation.isValid) {
       return createErrorResponse(
         this.name,
-        `Bulk rule pause failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        ErrorType.API_ERROR
+        'Parameter validation failed',
+        ErrorType.VALIDATION_ERROR,
+        undefined,
+        validation.errors
       );
     }
+
+    const { ids, options } = validation.sanitizedArgs;
+    const manager = BulkOperationManager.forRules();
+
+    // Validate the IDs array
+    const bulkValidation = manager.validateBulkParams(ids);
+    if (!bulkValidation.isValid) {
+      return createErrorResponse(
+        this.name,
+        'Bulk operation validation failed',
+        ErrorType.VALIDATION_ERROR,
+        undefined,
+        bulkValidation.errors
+      );
+    }
+
+    // Validate duration parameter if provided
+    let duration = 60; // Default 60 minutes
+    if (options?.duration !== undefined) {
+      const durationValidation = ParameterValidator.validateNumber(
+        options.duration,
+        'duration',
+        { min: 1, max: 1440, integer: true }
+      );
+      if (!durationValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Duration validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          durationValidation.errors
+        );
+      }
+      duration = durationValidation.sanitizedValue as number;
+    }
+
+    // Define the pause operation for individual rules
+    const pauseOperation: BulkOperationFunction = async (ruleId: string) => {
+      return withToolTimeout(
+        async () => firewalla.pauseRule(ruleId, duration),
+        `${this.name}_item`,
+        5000 // 5 second timeout per rule
+      );
+    };
+
+    // Execute the bulk operation
+    const startTime = Date.now();
+
+    const result = await manager.executeBulkOperation(
+      bulkValidation.sanitizedIds,
+      pauseOperation,
+      firewalla,
+      'pause_rules'
+    );
+
+    const unifiedResponseData = {
+      operation: this.name,
+      pause_duration_minutes: duration,
+      bulk_operation_result: result,
+      timestamp: new Date().toISOString(),
+    };
+
+    const executionTime = Date.now() - startTime;
+    return this.createUnifiedResponse(unifiedResponseData, {
+      executionTimeMs: executionTime,
+    });
   }
 }
 
@@ -158,69 +150,61 @@ export class BulkResumeRulesHandler extends BaseToolHandler {
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
-    try {
-      // Validate bulk operation arguments
-      const validation = validateBulkOperationArgs(args);
-      if (!validation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Parameter validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          validation.errors
-        );
-      }
-
-      const { ids } = validation.sanitizedArgs;
-      const manager = BulkOperationManager.forRules();
-
-      // Validate the IDs array
-      const bulkValidation = manager.validateBulkParams(ids);
-      if (!bulkValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Bulk operation validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          bulkValidation.errors
-        );
-      }
-
-      // Define the resume operation for individual rules
-      const resumeOperation: BulkOperationFunction = async (ruleId: string) => {
-        return withToolTimeout(
-          async () => firewalla.resumeRule(ruleId),
-          `${this.name}_item`,
-          5000 // 5 second timeout per rule
-        );
-      };
-
-      // Execute the bulk operation
-      const startTime = Date.now();
-
-      const result = await manager.executeBulkOperation(
-        bulkValidation.sanitizedIds,
-        resumeOperation,
-        firewalla,
-        'resume_rules'
-      );
-
-      const unifiedResponseData = {
-        operation: this.name,
-        bulk_operation_result: result,
-        timestamp: new Date().toISOString(),
-      };
-
-      const executionTime = Date.now() - startTime;
-      return this.createUnifiedResponse(unifiedResponseData, {
-        executionTimeMs: executionTime,
-      });
-    } catch (error) {
+    // Validate bulk operation arguments
+    const validation = validateBulkOperationArgs(args);
+    if (!validation.isValid) {
       return createErrorResponse(
         this.name,
-        `Bulk rule resume failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        ErrorType.API_ERROR
+        'Parameter validation failed',
+        ErrorType.VALIDATION_ERROR,
+        undefined,
+        validation.errors
       );
     }
+
+    const { ids } = validation.sanitizedArgs;
+    const manager = BulkOperationManager.forRules();
+
+    // Validate the IDs array
+    const bulkValidation = manager.validateBulkParams(ids);
+    if (!bulkValidation.isValid) {
+      return createErrorResponse(
+        this.name,
+        'Bulk operation validation failed',
+        ErrorType.VALIDATION_ERROR,
+        undefined,
+        bulkValidation.errors
+      );
+    }
+
+    // Define the resume operation for individual rules
+    const resumeOperation: BulkOperationFunction = async (ruleId: string) => {
+      return withToolTimeout(
+        async () => firewalla.resumeRule(ruleId),
+        `${this.name}_item`,
+        5000 // 5 second timeout per rule
+      );
+    };
+
+    // Execute the bulk operation
+    const startTime = Date.now();
+
+    const result = await manager.executeBulkOperation(
+      bulkValidation.sanitizedIds,
+      resumeOperation,
+      firewalla,
+      'resume_rules'
+    );
+
+    const unifiedResponseData = {
+      operation: this.name,
+      bulk_operation_result: result,
+      timestamp: new Date().toISOString(),
+    };
+
+    const executionTime = Date.now() - startTime;
+    return this.createUnifiedResponse(unifiedResponseData, {
+      executionTimeMs: executionTime,
+    });
   }
 }

@@ -126,7 +126,6 @@ The system encounters various forms of "unknown" or missing data:
 const explicitUnknownPatterns = [
   'unknown',
   'n/a',
-  'N/A',
   'null',
   'undefined',
   '',

@@ -29,6 +29,7 @@ import {
   createTimeoutErrorResponse,
   TimeoutError,
 } from '../../utils/timeout-manager.js';
+import { AlarmIdNormalizer } from '../../utils/alarm-id-normalizer.js';
 
 /**
  * Map alarm types to severity levels
@@ -385,8 +386,20 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
           const timestampNormalized = normalizeTimestamps(alarm);
           const finalAlarm = timestampNormalized.data;
 
+          const rawAid = SafeAccess.getNestedValue(finalAlarm, 'aid', 0);
+
+          // Generate composite ID if the raw ID is non-unique
+          let finalAid = String(rawAid);
+          const aidStr = String(rawAid);
+          // Use composite ID for non-unique IDs (like "0")
+          if (aidStr === '0' || aidStr === 'null' || aidStr === 'undefined') {
+            finalAid = AlarmIdNormalizer.generateCompositeId(finalAlarm);
+          } else {
+            finalAid = AlarmIdNormalizer.normalizeAlarmId(aidStr, finalAlarm);
+          }
+
           return {
-            aid: SafeAccess.getNestedValue(finalAlarm, 'aid', 0),
+            aid: finalAid,
             timestamp: unixToISOStringOrNow(finalAlarm.ts),
             type: finalAlarm.type, // Already normalized
             status: finalAlarm.status, // Already normalized
@@ -459,7 +472,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
 export class GetSpecificAlarmHandler extends BaseToolHandler {
   name = 'get_specific_alarm';
   description =
-    'Get detailed information for a specific alarm by alarm ID. Requires alarm_id parameter obtained from get_active_alarms.';
+    'Get detailed information for a specific alarm by alarm ID. Requires alarm_id parameter obtained from get_active_alarms or search_alarms (aid field is automatically normalized). Features improved ID resolution that automatically tries multiple ID formats to handle API inconsistencies.';
   category = 'security' as const;
 
   constructor() {
@@ -495,7 +508,8 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
         );
       }
 
-      const alarmId = alarmIdValidation.sanitizedValue as string;
+      const rawAlarmId = alarmIdValidation.sanitizedValue as string;
+      const alarmId = AlarmIdNormalizer.normalizeAlarmId(rawAlarmId);
 
       const response = await withToolTimeout(
         async () => firewalla.getSpecificAlarm(alarmId),
@@ -570,7 +584,7 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
 export class DeleteAlarmHandler extends BaseToolHandler {
   name = 'delete_alarm';
   description =
-    'Delete/dismiss a specific security alarm by ID. Requires alarm_id parameter. Use with caution as this permanently removes the alarm.';
+    'Delete/dismiss a specific security alarm by ID. Requires alarm_id parameter obtained from get_active_alarms or search_alarms (aid field is automatically normalized). Use with caution as this permanently removes the alarm. Features improved ID resolution that automatically tries multiple ID formats to handle API inconsistencies.';
   category = 'security' as const;
 
   constructor() {
@@ -606,7 +620,8 @@ export class DeleteAlarmHandler extends BaseToolHandler {
       );
     }
 
-    const alarmId = alarmIdValidation.sanitizedValue as string;
+    const rawAlarmId = alarmIdValidation.sanitizedValue as string;
+    const alarmId = AlarmIdNormalizer.normalizeAlarmId(rawAlarmId);
 
     // Use single timeout wrapper for the entire operation
     return withToolTimeout(async () => {

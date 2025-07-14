@@ -15,6 +15,7 @@ This guide provides comprehensive documentation for the query syntax used across
 - [Common Query Patterns](#common-query-patterns)
 - [Query Validation](#query-validation)
 - [Best Practices](#best-practices)
+- [Supported vs Unsupported Syntax](#supported-vs-unsupported-syntax)
 - [Troubleshooting](#troubleshooting)
 
 ## Overview
@@ -60,7 +61,7 @@ category:social
 
 Field names are case-sensitive, but values are generally case-insensitive:
 
-```
+```text
 # Correct field names
 severity:HIGH
 protocol:TCP
@@ -80,7 +81,7 @@ Combine multiple conditions using logical operators to create more specific quer
 
 Use `AND` to require all conditions to be true:
 
-```
+```text
 # High severity alarms from specific IP range
 severity:high AND source_ip:192.168.1.*
 
@@ -98,7 +99,7 @@ online:true AND mac_vendor:Apple
 
 Use `OR` to match any of the specified conditions:
 
-```
+```text
 # High or critical severity alarms
 severity:high OR severity:critical
 
@@ -649,6 +650,244 @@ NOT source_ip:192.168.*
 severity:high OR severity:critical AND protocol:tcp AND NOT source_ip:192.168.*
 ```
 
+## Supported vs Unsupported Syntax
+
+Understanding what query syntax is supported versus unsupported helps avoid common mistakes and ensures reliable query results.
+
+### ✅ Fully Supported Syntax
+
+#### Field Queries with Automatic Mapping
+```text
+# These user-friendly fields are automatically mapped to API fields
+severity:high           # Maps to type:>=8
+source_ip:192.168.1.*   # Maps to source.ip, device.ip, or srcIP
+device_ip:10.0.0.100    # Maps to device.ip, ip, or ipAddress
+bytes:>1000000          # Maps to bytes, download, or upload fields
+online:true             # Maps to online or isOnline fields
+```
+
+#### Logical Operators
+```text
+# Standard boolean logic - fully supported
+severity:high AND protocol:tcp
+action:block OR action:timelimit
+NOT severity:low
+(severity:high OR severity:critical) AND protocol:tcp
+```
+
+#### Comparison Operators
+```text
+# All comparison operators work with numeric fields
+bytes:>1000000          # Greater than
+hit_count:<=100         # Less than or equal
+timestamp:>=1640995200  # Greater than or equal
+severity:>=medium       # Works with severity levels
+port:!=80               # Not equal
+```
+
+#### Wildcard Patterns
+```text
+# Asterisk wildcards are fully supported
+target_value:*facebook*     # Contains pattern
+source_ip:192.168.*        # Prefix pattern
+name:*iPhone               # Suffix pattern
+```
+
+#### Range Syntax
+```text
+# Inclusive ranges with TO keyword
+bytes:[1000000 TO 50000000]
+timestamp:[1640995200 TO 1641081600]
+port:[80 TO 443]
+```
+
+#### Geographic Fields
+```text
+# All geographic fields are supported with automatic mapping
+country:China              # Maps to multiple geo field paths
+continent:Asia             # Maps to various continent fields
+asn:AS15169               # Maps to ASN fields in different locations
+```
+
+### ⚠️ Partially Supported Syntax
+
+#### Direct API Field Names
+```text
+# These may work but are not guaranteed to be consistent
+device.ip:192.168.1.100    # May work but prefer device_ip:192.168.1.100
+source.geo.country:China   # May work but prefer country:China
+hit.count:>100             # May work but prefer hit_count:>100
+```
+
+**Recommendation**: Always use the standardized field names documented in [Field Mappings](field-mappings.md) for guaranteed compatibility.
+
+#### Complex Nested Paths
+```text
+# These work but may be fragile across API versions
+device.network.segment:DMZ
+geo.location.city:Beijing
+ssl.certificate.issuer:LetsEncrypt
+```
+
+**Recommendation**: Use simpler mapped field names where available (e.g., `city:Beijing` instead of `geo.location.city:Beijing`).
+
+### ❌ Unsupported Syntax
+
+#### SQL-Style Syntax
+```text
+# These SQL patterns are NOT supported
+SELECT * FROM flows WHERE protocol = 'tcp'
+field IN (value1, value2, value3)
+field LIKE '%pattern%'
+COUNT(*), SUM(bytes), AVG(duration)
+```
+
+**Alternative**: Use the native query syntax with OR operators:
+```text
+protocol:tcp
+field:value1 OR field:value2 OR field:value3
+target_value:*pattern*
+```
+
+#### Regular Expressions
+```text
+# Regex patterns are NOT supported in queries
+source_ip:/^192\.168\.\d+\.\d+$/
+name:/^[A-Za-z]+Phone$/
+protocol:/tcp|udp/
+```
+
+**Alternative**: Use wildcard patterns:
+```text
+source_ip:192.168.*
+name:*Phone
+protocol:tcp OR protocol:udp
+```
+
+#### Date/Time Expressions
+```text
+# These time expressions are NOT supported
+timestamp:TODAY
+timestamp:LAST_WEEK
+timestamp:NOW-1h
+created_at:YESTERDAY
+```
+
+**Alternative**: Use Unix timestamps or ISO dates:
+```text
+timestamp:>1640995200
+timestamp:[2024-01-01 TO 2024-01-31]
+```
+
+#### Advanced Mathematical Operations
+```text
+# Mathematical expressions are NOT supported
+bytes:(upload + download)
+ratio:(blocked / total)
+percentage:(hits * 100 / total)
+```
+
+**Alternative**: Use the available computed fields or perform calculations client-side after retrieving results.
+
+#### Case-Sensitive Field Names
+```text
+# Field names are case-sensitive - these will NOT work
+SOURCE_IP:192.168.1.100    # Should be source_ip
+Protocol:tcp               # Should be protocol
+SEVERITY:high              # Should be severity
+```
+
+**Alternative**: Always use lowercase field names as documented.
+
+#### Quoted Field Names
+```text
+# Field names should not be quoted
+"source_ip":192.168.1.100  # Will not work
+'protocol':tcp             # Will not work
+```
+
+**Alternative**: Only quote values, not field names:
+```text
+source_ip:"192.168.1.100"  # Correct if value needs quotes
+name:"John's iPhone"       # Correct for values with spaces
+```
+
+### 🔄 Field Name Conversions
+
+The system automatically handles these conversions:
+
+| User Field | API Field Mapping | Status |
+|------------|-------------------|---------|
+| `severity:high` | `type:>=8` | ✅ Fully Supported |
+| `device_ip:X` | `device.ip:X` OR `ip:X` | ✅ Automatic Mapping |
+| `bytes:X` | `bytes:X` OR `download:X` OR `upload:X` | ✅ Multi-path Mapping |
+| `online:true` | `online:true` OR `isOnline:true` | ✅ Boolean Conversion |
+| `country:X` | `destination.geo.country:X` OR `source.geo.country:X` | ✅ Geographic Mapping |
+
+### 📋 Query Validation Rules
+
+The server validates all queries against these rules:
+
+#### Syntax Requirements
+- Balanced parentheses: `(condition1 AND condition2)`
+- Proper quote matching: `name:"John's iPhone"`
+- Valid operator placement: `field:value` not `:field:value`
+- Maximum query length: 2000 characters
+
+#### Security Validation
+- No SQL injection patterns
+- No script injection attempts
+- No dangerous file path patterns
+- No system command patterns
+
+#### Field Validation
+- Field names must exist for the target entity type
+- Field names are case-sensitive
+- Field values must match expected data types
+- Comparison operators only work with numeric fields
+
+### 💡 Best Practices for Supported Syntax
+
+#### Use Mapped Field Names
+```text
+# Good: Use documented field mappings
+severity:high AND device_ip:192.168.1.*
+
+# Avoid: Direct API paths (may break)
+type:>=8 AND device.ip:192.168.1.*
+```
+
+#### Leverage Automatic Conversions
+```text
+# Good: Let the system handle conversions
+severity:>=medium
+online:false
+bytes:>1MB
+
+# The system converts these appropriately
+```
+
+#### Structure Complex Queries
+```text
+# Good: Well-structured with parentheses
+(severity:high OR severity:critical) AND 
+(protocol:tcp OR protocol:udp) AND 
+NOT source_ip:192.168.*
+
+# Avoid: Ambiguous precedence
+severity:high OR severity:critical AND protocol:tcp
+```
+
+#### Use Consistent Geographic Fields
+```text
+# Good: Use standard geographic field names
+country:China AND continent:Asia
+
+# These are mapped to appropriate API field paths automatically
+```
+
+For a complete reference of field mappings and supported field names, see [Field Mappings Documentation](field-mappings.md).
+
 ## Troubleshooting
 
 ### Common Issues
@@ -712,9 +951,11 @@ source_ip:* LIMIT 10000
 If you encounter issues with query syntax:
 
 1. Check the validation errors returned by the server
-2. Review the field-specific documentation for each search tool
-3. Use simple queries to verify your data and field names
-4. Consult the API reference documentation for exact field specifications
+2. Review the [Field Mappings Documentation](field-mappings.md) for correct field names and conversions
+3. Consult the [Supported vs Unsupported Syntax](#supported-vs-unsupported-syntax) section above
+4. Use simple queries to verify your data and field names
+5. Review the field-specific documentation for each search tool
+6. Consult the API reference documentation for exact field specifications
 
 ## Examples by Use Case
 

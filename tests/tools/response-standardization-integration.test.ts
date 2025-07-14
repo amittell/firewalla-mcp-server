@@ -59,11 +59,11 @@ describe('Response Standardization Integration Test', () => {
     expect(parsedContent.data).toBeDefined();
     expect(parsedContent.meta).toBeDefined();
     
-    // Should have legacy format in data field
+    // Should have current response format
     expect(parsedContent.data.flows).toBeDefined();
-    expect(parsedContent.data.count).toBe(2);
-    expect(parsedContent.data.query_executed).toBe('protocol:tcp AND bytes:>1000');
-    expect(parsedContent.data.execution_time_ms).toBe(45);
+    expect(parsedContent.data.flows).toHaveLength(2);
+    expect(parsedContent.data.metadata.query).toBe('protocol:tcp AND bytes:>1000');
+    expect(parsedContent.data.metadata.execution_time_ms).toBe(45);
     
     // Should NOT have standard format fields in data
     expect(parsedContent.data.results).toBeUndefined();

@@ -276,8 +276,11 @@ describe('Problematic MCP Tools Validation', () => {
           device: { name: 'iPhone' }
         }
       ],
-      query: 'protocol:tcp AND bytes:>1000',
-      execution_time_ms: 45
+      count: 2,
+      query_executed: 'protocol:tcp AND bytes:>1000',
+      entity_type: 'flows',
+      execution_time_ms: 45,
+      cached: false
     };
 
     it('should execute search without errors and return flow data', async () => {
@@ -302,13 +305,14 @@ describe('Problematic MCP Tools Validation', () => {
       expect(result.isError).toBeFalsy();
       expect(result.content).toBeDefined();
       const parsedContent = JSON.parse(result.content[0].text);
+      
       expect(parsedContent.success).toBe(true);
       expect(parsedContent.data).toBeDefined();
-      // search_flows uses legacy format
-      expect(parsedContent.data.count).toBe(2);
-      expect(parsedContent.data.query_executed).toBe('protocol:tcp AND bytes:>1000');
-      expect(parsedContent.data.execution_time_ms).toBe(45);
+      // search_flows actual response format
       expect(parsedContent.data.flows).toHaveLength(2);
+      expect(parsedContent.data.metadata.query).toBe('protocol:tcp AND bytes:>1000');
+      expect(parsedContent.data.metadata.execution_time_ms).toBe(45);
+      expect(parsedContent.data.metadata.entity_type).toBe('flows');
     });
 
     it('should properly format flow data with calculated bytes', async () => {

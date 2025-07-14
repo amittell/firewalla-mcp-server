@@ -19,11 +19,7 @@ import {
   batchNormalize,
   sanitizeByteCount,
 } from '../../utils/data-normalizer.js';
-import {
-  ResponseStandardizer,
-  BackwardCompatibilityLayer,
-} from '../../utils/response-standardizer.js';
-import { shouldUseLegacyFormat } from '../../config/response-config.js';
+import { ResponseStandardizer } from '../../utils/response-standardizer.js';
 import type { PaginationMetadata } from '../../types.js';
 import { getLimitValidationConfig } from '../../config/limits.js';
 import {
@@ -378,18 +374,6 @@ export class GetFlowDataHandler extends BaseToolHandler {
         processedFlows,
         metadata
       );
-
-      // Apply backward compatibility if needed
-      if (shouldUseLegacyFormat(this.name)) {
-        const legacyResponse =
-          BackwardCompatibilityLayer.toLegacyPaginatedFormat(
-            standardResponse,
-            this.name
-          );
-        return this.createUnifiedResponse(legacyResponse, {
-          executionTimeMs: executionTime,
-        });
-      }
 
       return this.createUnifiedResponse(standardResponse, {
         executionTimeMs: executionTime,
