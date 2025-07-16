@@ -165,40 +165,40 @@ These fields can be used for cross-reference searches between different entity t
 ## Supported Operators
 
 ### Exact Match
-```text
+```bash
 field:value
 severity:high
 protocol:tcp
-```text
+```
 
 ### Comparison Operators
-```text
+```bash
 field:>value    # Greater than
 field:<value    # Less than
 field:>=value   # Greater than or equal
 field:<=value   # Less than or equal
 field:!=value   # Not equal
-```text
+```
 
 ### Wildcard Operators
-```text
+```bash
 field:*value*   # Contains
 field:value*    # Starts with
 field:*value    # Ends with
-```text
+```
 
 ### Range Operators
-```text
+```bash
 field:[min TO max]    # Inclusive range
 bytes:[1000000 TO 50000000]
-```text
+```
 
 ### Logical Operators
-```text
+```bash
 field1:value1 AND field2:value2    # Both conditions
 field1:value1 OR field2:value2     # Either condition
 NOT field:value                    # Exclude condition
-```text
+```
 
 ## Type Conversions
 
@@ -222,7 +222,7 @@ NOT field:value                    # Exclude condition
 ## Example Queries
 
 ### Basic Field Queries
-```text
+```bash
 # Using user-friendly field names
 severity:high
 device_ip:192.168.1.100
@@ -234,10 +234,10 @@ online:false
 # device.ip:192.168.1.100 OR ip:192.168.1.100
 # block:true OR blocked:true
 # online:false OR isOnline:false
-```text
+```
 
 ### Cross-Reference Queries
-```text
+```bash
 # Find flows and alarms with same source IP
 primary_query: "source_ip:192.168.1.*"
 secondary_queries: ["severity:high"]
@@ -247,10 +247,10 @@ correlation_field: "source_ip"
 primary_query: "device_type:mobile"
 secondary_queries: ["bytes:>1000000"]
 correlation_field: "device_ip"
-```text
+```
 
 ### Geographic Queries
-```text
+```bash
 # Using mapped geographic fields
 country:China
 continent:Asia
@@ -260,10 +260,10 @@ asn:AS4134
 # destination.geo.country, source.geo.country, geo.country
 # destination.geo.continent, source.geo.continent
 # destination.geo.asn, source.geo.asn, geo.asn
-```text
+```
 
 ### Complex Field Mapping
-```text
+```bash
 # User query with multiple mapped fields
 source_ip:192.168.* AND bytes:>1000000 AND country:China
 
@@ -271,49 +271,49 @@ source_ip:192.168.* AND bytes:>1000000 AND country:China
 # (source.ip:192.168.* OR device.ip:192.168.*) AND
 # (bytes:>1000000 OR download:>1000000 OR upload:>1000000) AND
 # (destination.geo.country:china OR source.geo.country:china)
-```text
+```
 
 ## Best Practices
 
 ### Use Logical Field Names
-```text
+```bash
 # Good: Use logical user field names
 severity:high AND device_ip:192.168.1.*
 
 # Avoid: Direct API field names (may not work)
 type:>=8 AND device.ip:192.168.1.*
-```text
+```
 
 ### Leverage Field Mapping
-```text
+```bash
 # Good: Let the system handle field mapping
 bytes:>1000000
 
 # Good: The system checks multiple API paths
 # bytes, download, upload fields are all checked
-```text
+```
 
 ### Cross-Reference Compatibility
-```text
+```bash
 # Good: Use fields available in both entity types
 correlation_field: "device_ip"  # Available in flows, alarms, devices
 
 # Avoid: Using fields not available in target entities
 correlation_field: "hit_count"  # Only available in rules
-```text
+```
 
 ### Geographic Field Usage
-```text
+```bash
 # Good: Use consistent geographic field names
 country:United States
 continent:North America
 
 # The system handles various API field paths:
 # destination.geo.country, source.geo.country, remote.geo.country
-```text
+```
 
 ### Severity Field Usage
-```text
+```bash
 # Good: Use semantic severity levels
 severity:high OR severity:critical
 
@@ -323,6 +323,6 @@ severity:>=medium
 # The system automatically converts to type field:
 # type:>=8 OR type:>=12
 # type:>=4
-```text
+```
 
 This field mapping system ensures consistent and intuitive querying while handling the complexity of the underlying Firewalla API structure. Always use the user-facing field names documented here for the best compatibility and functionality.

@@ -18,11 +18,16 @@ Integrate Firewalla network security monitoring into Cursor IDE for real-time se
 # Install Claude Code globally
 npm install -g @anthropic-ai/claude-code
 
-# Locate the VSIX file
+# Locate the VSIX file (Linux/macOS)
 find ~/.claude -name "claude-code.vsix" 2>/dev/null
 
+# Alternative methods for VSIX discovery:
+# On Windows: dir /s %USERPROFILE%\.claude\*.vsix
+# Using fd (if available): fd claude-code.vsix ~/.claude
+# Manual check: ls ~/.claude/
+
 # In Cursor: Extensions → Install from VSIX → Select the .vsix file
-```text
+```
 
 **Method B: Manual Installation**
 1. Open Cursor Extensions panel (`Ctrl+Shift+X`)
@@ -33,7 +38,7 @@ find ~/.claude -name "claude-code.vsix" 2>/dev/null
 
 ```bash
 npm install -g firewalla-mcp-server
-```text
+```
 
 ### 3. Configure MCP Connection
 
@@ -55,14 +60,14 @@ Create MCP configuration in Cursor:
     }
   }
 }
-```text
+```
 
 ### 4. Verify Installation
 
 1. Open Cursor terminal (`Ctrl+Shift+``)
 2. Run: `/status` to check Claude Code connection
 3. Expected output:
-   ```
+   ```text
    ✔ Connected to Cursor extension
    ✔ Installed Cursor extension version 1.0.44
    ```
@@ -72,7 +77,7 @@ Create MCP configuration in Cursor:
 In Cursor, activate Claude Code and test:
 ```text
 "Check my Firewalla security status and show me any alerts"
-```text
+```
 
 ## Cursor-Specific Features
 
@@ -92,7 +97,7 @@ In Cursor, activate Claude Code and test:
 /model      # Select Sonnet model
 /ide        # Configure Cursor integration
 /status     # Check connection status
-```text
+```
 
 ## Troubleshooting
 
@@ -119,14 +124,14 @@ In Cursor, activate Claude Code and test:
 // While editing network-related code, ask:
 "Are there any firewall rules that might affect this API endpoint?"
 "What's the current bandwidth usage for our production servers?"
-```text
+```
 
 **Security-First Development**
 ```bash
 # Integrated security checks
 "Before deploying, check if any security alerts affect our target environment"
 "Analyze network flows for any suspicious patterns related to this service"
-```text
+```
 
 ## Key Benefits
 

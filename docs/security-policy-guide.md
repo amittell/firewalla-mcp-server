@@ -12,12 +12,12 @@ The Firewalla MCP Server implements a sophisticated RBAC system that maps conven
 
 #### Permission Hierarchy
 
-```text
+```typescript
 PermissionLevel.NONE (0)     - No access
 PermissionLevel.READ (1)     - Read-only operations
 PermissionLevel.WRITE (2)    - Read and write operations
 PermissionLevel.ADMIN (3)    - Full administrative access
-```text
+```
 
 #### Tool Categories
 
@@ -87,7 +87,7 @@ PermissionLevel.ADMIN (3)    - Full administrative access
     blockLoopback: true                // Block loopback addresses
   }
 }
-```text
+```
 
 ### 4. Environment Variables
 
@@ -106,9 +106,9 @@ PermissionLevel.ADMIN (3)    - Full administrative access
 #### Box ID Validation
 
 The system validates that `FIREWALLA_DEFAULT_BOX_ID` follows UUID format:
-```text
+```regex
 ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$
-```text
+```
 
 ## Audit Logging
 
@@ -136,7 +136,7 @@ Every operation generates a comprehensive audit log entry:
   },
   riskScore: number                  // Security risk score (0-100)
 }
-```text
+```
 
 ### 2. Correlation ID Tracking
 
@@ -242,7 +242,7 @@ Global scope operations generate warnings:
 ```text
 WARNING: block_ip will be applied globally to all devices.
 Consider using device-specific or group-specific scope for better security.
-```text
+```
 
 ### 2. Parameter Warnings
 

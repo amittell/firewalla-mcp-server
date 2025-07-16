@@ -50,7 +50,7 @@ interface FirewallaGeoData {
   lat?: number;              // 37.7749, 39.9042, null
   lng?: number;              // -122.4194, 116.4074, null
 }
-```text
+```
 
 #### 2. Enhanced Geographic Enrichment
 ```typescript
@@ -86,7 +86,7 @@ interface EnrichedGeoData {
     source: string;                // Data source identifier
   };
 }
-```text
+```
 
 ### Data Source Reliability
 
@@ -113,7 +113,7 @@ const geoDataReliability = {
     update_frequency: 'hourly'
   }
 }
-```text
+```
 
 ## Unknown Value Handling
 
@@ -133,7 +133,7 @@ const explicitUnknownPatterns = [
   '?',
   'unavailable'
 ];
-```text
+```
 
 #### 2. Null and Undefined Values
 ```typescript
@@ -145,7 +145,7 @@ const nullPatterns = {
   empty_string: '',
   whitespace_only: '   '
 };
-```text
+```
 
 #### 3. Invalid or Placeholder Data
 ```typescript
@@ -156,7 +156,7 @@ const invalidDataPatterns = {
   test_data: 'test',                              // Test environment data
   localhost_data: '127.0.0.1'                    // Local IP addresses
 };
-```text
+```
 
 ### Normalization Functions
 
@@ -206,7 +206,7 @@ const countryExamples = {
   normalizeCountry('CHINA') =>                 'China',
   normalizeCountry('russian federation') =>   'Russia'
 };
-```text
+```
 
 #### 2. ASN Normalization
 ```typescript
@@ -249,7 +249,7 @@ const asnExamples = {
   normalizeASN('15169') =>       'AS15169',
   normalizeASN('as4134') =>      'AS4134'
 };
-```text
+```
 
 #### 3. Coordinate Normalization
 ```typescript
@@ -277,7 +277,7 @@ function normalizeCoordinates(lat: any, lng: any): { lat: number | null, lng: nu
     lng: Math.round(parsedLng * 10000) / 10000
   };
 }
-```text
+```
 
 ## Data Normalization Patterns
 
@@ -336,7 +336,7 @@ function batchNormalizeGeoData(
 
   return results;
 }
-```text
+```
 
 ### Field-Specific Normalization
 
@@ -386,7 +386,7 @@ const geographicNormalization = {
     };
   }
 };
-```text
+```
 
 #### 2. Network Infrastructure Normalization
 ```typescript
@@ -426,7 +426,7 @@ const networkNormalization = {
     return { value: value.trim(), confidence: 'medium' };
   }
 };
-```text
+```
 
 ### Quality Score Calculation
 
@@ -470,7 +470,7 @@ function calculateDataQuality(normalizedData: NormalizedGeoData): number {
 
   return Math.round((score / maxScore) * 100) / 100; // Return 0.0-1.0
 }
-```text
+```
 
 ## Geographic Enrichment Process
 
@@ -555,7 +555,7 @@ class GeographicEnrichmentPipeline {
     return normalized;
   }
 }
-```text
+```
 
 ### Risk Score Calculation
 
@@ -596,7 +596,7 @@ function calculateGeographicRisk(geoData: any): number {
   // Cap at 1.0
   return Math.min(riskScore, 1.0);
 }
-```text
+```
 
 ## Caching and Performance
 
@@ -618,12 +618,13 @@ const geoCacheConfig: GeoCacheConfig = {
   compressionEnabled: true,
   persistToDisk: true
 };
-```text
+```
 
 ### Cache Performance Metrics
 
 ```typescript
 class GeographicCache {
+  private cache = new Map<string, NormalizedGeoData>();
   private hitCount = 0;
   private missCount = 0;
   private totalRequests = 0;
@@ -651,7 +652,7 @@ class GeographicCache {
     };
   }
 }
-```text
+```
 
 ### Cache Optimization Strategies
 
@@ -689,7 +690,7 @@ const cacheOptimization = {
     // Prioritize high-quality data
   }
 };
-```text
+```
 
 ## Quality Assurance
 
@@ -753,7 +754,7 @@ function generateQualityReport(enrichedData: NormalizedGeoData[]): DataQualityMe
     }
   };
 }
-```text
+```
 
 ### Quality Improvement Strategies
 
@@ -801,7 +802,7 @@ const qualityImprovementStrategies = {
     }
   }
 };
-```text
+```
 
 ## Error Handling
 
@@ -824,7 +825,7 @@ interface GeoDataError {
   details?: any;
   fallback_applied: boolean;
 }
-```text
+```
 
 ### Error Recovery Patterns
 
@@ -891,7 +892,7 @@ class GeoDataErrorHandler {
     };
   }
 }
-```text
+```
 
 ## Best Practices
 
@@ -926,7 +927,7 @@ const geographicQueryOptimization = {
     min_risk_score: 0.0                  // No filtering
   }
 };
-```text
+```
 
 ### Data Quality Guidelines
 
@@ -952,7 +953,7 @@ const dataQualityGuidelines = {
     }
   }
 };
-```text
+```
 
 ## Troubleshooting
 
@@ -973,7 +974,7 @@ const cacheHealthCheck = {
 // 2. Increase TTL for stable data
 // 3. Implement cache warming strategies
 // 4. Review query patterns for cacheable data
-```text
+```
 
 #### 2. Poor Data Quality
 ```typescript
@@ -992,7 +993,7 @@ const qualityIssues = {
 // 2. Check API data source reliability
 // 3. Implement additional fallback sources
 // 4. Improve normalization algorithms
-```text
+```
 
 #### 3. Performance Issues
 ```typescript
@@ -1009,7 +1010,7 @@ const performanceIssues = {
 // 2. Add circuit breaker for failing APIs
 // 3. Optimize normalization algorithms
 // 4. Scale geographic enrichment workers
-```text
+```
 
 ### Debugging Geographic Data Issues
 
@@ -1025,7 +1026,7 @@ DEBUG=firewalla:cache:performance npm run mcp:start
 
 # Full geographic debugging
 DEBUG=firewalla:geo:* npm run mcp:start
-```text
+```
 
 ### Performance Monitoring Commands
 
@@ -1041,6 +1042,6 @@ npm run geo:analyze:unknowns
 
 # Performance benchmark
 npm run geo:benchmark
-```text
+```
 
 This comprehensive guide provides the foundation for understanding and implementing robust geographic data handling in the Firewalla MCP Server, ensuring consistent, high-quality location intelligence while maintaining optimal performance.

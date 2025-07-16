@@ -54,7 +54,7 @@ interface CursorData {
   sort_by?: string;         // Sort field
   sort_order?: 'asc' | 'desc'; // Sort direction
 }
-```text
+```
 
 ### Example Cursor
 
@@ -66,12 +66,12 @@ interface CursorData {
   "sort_by": "timestamp",
   "sort_order": "desc"
 }
-```text
+```
 
 **Base64 Encoded:**
 ```text
 eyJvZmZzZXQiOjEwMCwicGFnZV9zaXplIjo1MCwidG90YWxfaXRlbXMiOjE1MDAsInNvcnRfYnkiOiJ0aW1lc3RhbXAiLCJzb3J0X29yZGVyIjoiZGVzYyJ9
-```text
+```
 
 ### Cursor Validation
 
@@ -92,7 +92,7 @@ Start pagination by making a request without a cursor:
   "query": "severity:high",
   "limit": 50
 }
-```text
+```
 
 **Response:**
 ```json
@@ -104,7 +104,7 @@ Start pagination by making a request without a cursor:
   "has_more": true,
   "execution_time_ms": 125
 }
-```text
+```
 
 ### Subsequent Requests
 
@@ -116,7 +116,7 @@ Use the `next_cursor` from the previous response:
   "limit": 50,
   "cursor": "eyJvZmZzZXQiOjUwLCJwYWdlX3NpemUiOjUwfQ=="
 }
-```text
+```
 
 **Response:**
 ```json
@@ -128,7 +128,7 @@ Use the `next_cursor` from the previous response:
   "has_more": true,
   "execution_time_ms": 98
 }
-```text
+```
 
 ### Final Page
 
@@ -143,7 +143,7 @@ When `has_more` is false and `next_cursor` is null:
   "has_more": false,
   "execution_time_ms": 87
 }
-```text
+```
 
 ## Advanced Pagination
 
@@ -158,7 +158,7 @@ Specify sorting parameters to maintain consistent order:
   "sort_by": "timestamp",
   "sort_order": "desc"
 }
-```text
+```
 
 **Response includes sort information in cursor:**
 ```json
@@ -166,7 +166,7 @@ Specify sorting parameters to maintain consistent order:
   "results": [...],
   "next_cursor": "eyJvZmZzZXQiOjUwLCJwYWdlX3NpemUiOjUwLCJzb3J0X2J5IjoidGltZXN0YW1wIiwic29ydF9vcmRlciI6ImRlc2MifQ=="
 }
-```text
+```
 
 ### Pagination with Aggregation
 
@@ -179,7 +179,7 @@ When using aggregation, pagination applies to aggregated results:
   "group_by": "source_ip",
   "aggregate": true
 }
-```text
+```
 
 **Response:**
 ```json
@@ -195,7 +195,7 @@ When using aggregation, pagination applies to aggregated results:
   "next_cursor": "...",
   "has_more": true
 }
-```text
+```
 
 ### Pagination with Time Ranges
 
@@ -212,7 +212,7 @@ Time-based pagination for temporal data:
   "sort_by": "timestamp",
   "sort_order": "asc"
 }
-```text
+```
 
 ## Pagination Parameters
 
@@ -246,7 +246,7 @@ The server validates pagination parameters:
   "sort_order": "desc",   // Valid
   "sort_order": "random"  // Invalid: not supported
 }
-```text
+```
 
 ## Response Format
 
@@ -265,7 +265,7 @@ interface PaginatedResponse<T> {
   execution_time_ms: number; // Query execution time
   aggregations?: Record<string, any>; // Aggregation results (if requested)
 }
-```text
+```
 
 ### Metadata Fields
 
@@ -287,7 +287,7 @@ Pagination errors follow the standard error format:
   "errorType": "validation_error",
   "validation_errors": ["Failed to decode cursor: Invalid cursor format"]
 }
-```text
+```
 
 ## Best Practices
 
@@ -313,7 +313,7 @@ Choose appropriate page sizes based on your use case:
   "limit": 1000, // Good for data export/analysis
   "cursor": "..."
 }
-```text
+```
 
 ### Cursor Storage
 
@@ -337,7 +337,7 @@ function isValidCursor(cursor: string): boolean {
     return false;
   }
 }
-```text
+```
 
 ### Consistent Sorting
 
@@ -357,7 +357,7 @@ Always use consistent sorting for predictable pagination:
   "query": "severity:high",
   "limit": 50
 }
-```text
+```
 
 ### Error Handling
 
@@ -377,7 +377,7 @@ async function paginateResults(query: string, limit: number, cursor?: string) {
     throw error;
   }
 }
-```text
+```
 
 ## Large Dataset Handling
 
@@ -409,7 +409,7 @@ for await (const batch of streamAllResults("severity:high", 500)) {
   // Process each batch of 500 results
   await processBatch(batch);
 }
-```text
+```
 
 ### Batch Processing
 
@@ -443,7 +443,7 @@ async function processAllResults(query: string) {
 
   console.log(`Completed processing ${processedCount} total items`);
 }
-```text
+```
 
 ### Memory Management
 
@@ -470,7 +470,7 @@ async function efficientProcessing(query: string) {
 
   } while (cursor);
 }
-```text
+```
 
 ## Performance Optimization
 
@@ -490,7 +490,7 @@ const bulkPageSize = 1000;
 
 // For memory-constrained environments
 const conservativePageSize = 50;
-```text
+```
 
 ### Caching Strategies
 
@@ -523,7 +523,7 @@ class PaginationCache {
     return results;
   }
 }
-```text
+```
 
 ### Parallel Processing
 
@@ -553,7 +553,7 @@ async function parallelProcessing(query: string, totalPages: number) {
 
   return results.flatMap(r => r.data);
 }
-```text
+```
 
 ## Troubleshooting
 
@@ -572,7 +572,7 @@ async function parallelProcessing(query: string, totalPages: number) {
 async function handleInvalidCursor(query: string, limit: number) {
   return await searchFlows({ query, limit }); // No cursor = start from beginning
 }
-```text
+```
 
 #### Performance Issues
 
@@ -588,7 +588,7 @@ async function handleInvalidCursor(query: string, limit: number) {
   "limit": 1000,   // More reasonable page size
   "query": "protocol:tcp"
 }
-```text
+```
 
 #### Memory Issues
 
@@ -611,7 +611,7 @@ do {
   await processBatch(response.results); // Process immediately
   cursor = response.next_cursor;
 } while (cursor);
-```text
+```
 
 ### Debug Techniques
 
@@ -633,7 +633,7 @@ function inspectCursor(cursor: string) {
 // Usage
 const cursorData = inspectCursor("eyJvZmZzZXQiOjEwMCwicGFnZV9zaXplIjo1MH0=");
 // Output: { offset: 100, page_size: 50 }
-```text
+```
 
 #### Progress Tracking
 
@@ -658,7 +658,7 @@ async function paginateWithProgress(query: string, pageSize: number) {
     cursor = response.next_cursor;
   } while (cursor);
 }
-```text
+```
 
 ## Examples by Tool
 
@@ -686,7 +686,7 @@ const flowPagination = async () => {
 
   return allFlows;
 };
-```text
+```
 
 ### Alarm Search Pagination
 
@@ -714,7 +714,7 @@ const alarmPagination = async () => {
 
   } while (cursor);
 };
-```text
+```
 
 ### Device Status Pagination
 
@@ -746,7 +746,7 @@ const devicePagination = async () => {
 
   return { online: onlineDevices, offline: offlineDevices };
 };
-```text
+```
 
 ### Rule Search Pagination
 
@@ -778,6 +778,6 @@ const rulePagination = async () => {
 
   return rulesByAction;
 };
-```text
+```
 
 This comprehensive pagination guide provides everything you need to efficiently handle large datasets in the Firewalla MCP Server. Remember to choose appropriate page sizes, handle errors gracefully, and process data in manageable chunks for optimal performance.

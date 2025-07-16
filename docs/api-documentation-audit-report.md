@@ -259,7 +259,7 @@ async function testPauseResume() {
 }
 
 testPauseResume().catch(console.error);
-```text
+```
 
 Run with: `node test-pause-resume.js`
 

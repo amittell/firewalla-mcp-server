@@ -19,7 +19,7 @@ npm install -g firewalla-mcp-server
 
 # Verify installation works
 npx firewalla-mcp-server --version
-```text
+```
 
 ### 2. Configure Cline MCP Integration
 
@@ -41,7 +41,7 @@ Update Cline's MCP configuration in VS Code settings:
     }
   }
 }
-```text
+```
 
 ### 3. Alternative Configuration Method
 
@@ -61,13 +61,13 @@ Create workspace-specific config in `.vscode/settings.json`:
     }
   }
 }
-```text
+```
 
 ### 4. Test Integration
 
 1. Open Cline panel in VS Code (`Ctrl+Shift+P` → "Cline: Start")
 2. Test connection:
-   ```
+   ```text
    "Can you check my Firewalla network status and show me any security alerts?"
    ```
 
@@ -83,7 +83,7 @@ Create workspace-specific config in `.vscode/settings.json`:
 // Ask Cline while coding:
 "Analyze my network security while I'm developing this API.
 Are there any firewall rules that might block this endpoint?"
-```text
+```
 
 **Automated Security Workflows**
 ```text
@@ -92,7 +92,7 @@ Are there any firewall rules that might block this endpoint?"
 2. Checks for offline devices
 3. Analyzes bandwidth anomalies
 4. Generates a summary report"
-```text
+```
 
 ## Advanced Cline Commands
 
@@ -104,7 +104,7 @@ Are there any firewall rules that might block this endpoint?"
 - Firewall rule effectiveness
 - Geographic threat analysis
 - Device connectivity status"
-```text
+```
 
 **Interactive Network Debugging**
 ```text
@@ -113,7 +113,7 @@ Are there any firewall rules that might block this endpoint?"
 2. Review any blocked traffic to/from this device
 3. Analyze recent network flows
 4. Suggest troubleshooting steps"
-```text
+```
 
 **Security Compliance Reporting**
 ```text
@@ -122,7 +122,7 @@ Are there any firewall rules that might block this endpoint?"
 - Network access control effectiveness
 - Bandwidth usage by department/device type
 - Recommendations for security improvements"
-```text
+```
 
 ## Troubleshooting
 
@@ -156,7 +156,7 @@ Are there any firewall rules that might block this endpoint?"
 - Any security alerts related to the ports I'm using
 - Bandwidth patterns that might indicate issues
 - Firewall rules that could affect deployment"
-```text
+```
 
 **Production Monitoring**
 ```text
@@ -165,7 +165,7 @@ Are there any firewall rules that might block this endpoint?"
 - Unusual bandwidth consumption
 - Device connectivity problems
 - Geographic-based threats"
-```text
+```
 
 ---
 

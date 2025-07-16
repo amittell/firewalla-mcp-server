@@ -40,7 +40,7 @@ search_alarms: { max: 5000 }      // Caused 8-15s response times
 search_flows: { max: 10000 }      // Caused memory exhaustion
 search_rules: { max: 3000 }       // Inconsistent with other tools
 search_devices: { max: 2000 }     // Performance degradation
-```text
+```
 
 **After (Performance-Optimized)**:
 ```typescript
@@ -49,7 +49,7 @@ search_alarms: { max: 1000 }      // 1-3s response times
 search_flows: { max: 1000 }       // Consistent memory usage
 search_rules: { max: 1000 }       // Standardized performance
 search_devices: { max: 1000 }     // Optimal device search
-```text
+```
 
 **Tool Description Enhancement**:
 ```typescript
@@ -75,7 +75,7 @@ search_devices: { max: 1000 }     // Optimal device search
     }
   }
 }
-```text
+```
 
 #### 2. Geographic Search Tools Inconsistency
 
@@ -86,14 +86,14 @@ search_devices: { max: 1000 }     // Optimal device search
 search_flows_by_geography: { max: 1000 }     // Reasonable limit
 search_alarms_by_geography: { max: 5000 }    // Caused timeout issues
 get_geographic_statistics: { max: 10000 }    // Excessive for summary data
-```text
+```
 
 **After**:
 ```typescript
 search_flows_by_geography: { max: 1000 }     // Consistent performance
 search_alarms_by_geography: { max: 1000 }    // Standardized for reliability
 get_geographic_statistics: { max: 1000 }     // Appropriate for statistical data
-```text
+```
 
 **Tool Description Enhancement**:
 ```typescript
@@ -123,7 +123,7 @@ get_geographic_statistics: { max: 1000 }     // Appropriate for statistical data
     }
   }
 }
-```text
+```
 
 #### 3. Bandwidth Analysis Over-sizing
 
@@ -132,12 +132,12 @@ get_geographic_statistics: { max: 1000 }     // Appropriate for statistical data
 **Before**:
 ```typescript
 get_bandwidth_usage: { max: 2000 }  // Caused 250-500MB memory usage
-```text
+```
 
 **After**:
 ```typescript
 get_bandwidth_usage: { max: 500 }   // Optimized for 50-100MB memory usage
-```text
+```
 
 **Tool Description Enhancement**:
 ```typescript
@@ -165,7 +165,7 @@ get_bandwidth_usage: { max: 500 }   // Optimized for 50-100MB memory usage
     }
   }
 }
-```text
+```
 
 #### 4. Rules Summary Excessive Limits
 
@@ -175,13 +175,13 @@ get_bandwidth_usage: { max: 500 }   // Optimized for 50-100MB memory usage
 ```typescript
 get_network_rules_summary: { max: 10000 }  // 15-30 second response times
 get_most_active_rules: { max: 5000 }       // Inconsistent with other rule tools
-```text
+```
 
 **After**:
 ```typescript
 get_network_rules_summary: { max: 2000 }   // 3-5 second response times
 get_most_active_rules: { max: 1000 }       // Consistent with standard tools
-```text
+```
 
 **Tool Description Enhancement**:
 ```typescript
@@ -213,7 +213,7 @@ get_most_active_rules: { max: 1000 }       // Consistent with standard tools
     }
   }
 }
-```text
+```
 
 #### 5. Cross-Reference Tools Optimization
 
@@ -223,13 +223,13 @@ get_most_active_rules: { max: 1000 }       // Consistent with standard tools
 ```typescript
 search_cross_reference: { max: 5000 }          // Often timed out
 search_enhanced_cross_reference: { max: 10000 } // Excessive processing time
-```text
+```
 
 **After**:
 ```typescript
 search_cross_reference: { max: 2000 }          // Reliable 3-5 second responses
 search_enhanced_cross_reference: { max: 2000 } // Consistent high-quality correlation
-```text
+```
 
 **Tool Description Enhancement**:
 ```typescript
@@ -271,7 +271,7 @@ search_enhanced_cross_reference: { max: 2000 } // Consistent high-quality correl
     }
   }
 }
-```text
+```
 
 ## Tool Description Enhancement Patterns
 
@@ -288,7 +288,7 @@ search_enhanced_cross_reference: { max: 2000 } // Consistent high-quality correl
 
   [Additional context about limits, optimization, or usage patterns]`
 }
-```text
+```
 
 **Example Implementation**:
 ```typescript
@@ -302,7 +302,7 @@ search_enhanced_cross_reference: { max: 2000 } // Consistent high-quality correl
   Supports complex queries with logical operators, wildcards, and ranges.
   Use pagination with cursor parameter for datasets larger than 1000 flows.`
 }
-```text
+```
 
 ### 2. Query Syntax Documentation
 
@@ -319,7 +319,7 @@ search_enhanced_cross_reference: { max: 2000 } // Consistent high-quality correl
   - [Complex logical query example]
   - [Field-specific examples]`
 }
-```text
+```
 
 **Example Implementation**:
 ```typescript
@@ -334,7 +334,7 @@ search_enhanced_cross_reference: { max: 2000 } // Consistent high-quality correl
   - blocked:true AND bytes:>10000000 AND country:China
   - timestamp:>NOW-24h AND NOT resolved:true`
 }
-```text
+```
 
 ### 3. Limit Justification
 
@@ -349,7 +349,7 @@ search_enhanced_cross_reference: { max: 2000 } // Consistent high-quality correl
     }
   }
 }
-```text
+```
 
 **Example Implementation**:
 ```typescript
@@ -363,7 +363,7 @@ search_enhanced_cross_reference: { max: 2000 } // Consistent high-quality correl
     }
   }
 }
-```text
+```
 
 ### 4. Usage Context Guidance
 
@@ -384,7 +384,7 @@ search_enhanced_cross_reference: { max: 2000 } // Consistent high-quality correl
   - [Query optimization tip]
   - [Result handling tip]`
 }
-```text
+```
 
 ### 5. Error Prevention Guidance
 
@@ -403,7 +403,7 @@ search_enhanced_cross_reference: { max: 2000 } // Consistent high-quality correl
   - If [condition]: [Solution]
   - For [scenario]: [Alternative approach]`
 }
-```text
+```
 
 ## Schema vs Implementation Alignment
 
@@ -427,13 +427,13 @@ search_enhanced_cross_reference: { max: 2000 } // Consistent high-quality correl
 ```typescript
 // Generic error with no context
 "limit must be between 1 and 5000"
-```text
+```
 
 **After**:
 ```typescript
 // Contextual error with guidance
 "limit must be between 1 and 1000. Higher limits cause performance issues. Use pagination with cursor parameter for larger datasets. See docs/limits-and-performance-guide.md for details."
-```text
+```
 
 ## Advanced Query Syntax Integration
 
@@ -459,7 +459,7 @@ Every search tool now includes comprehensive query syntax examples:
   - severity:>=medium
   - timestamp:>NOW-24h`
 }
-```text
+```
 
 #### Logical Operators
 ```typescript
@@ -476,7 +476,7 @@ Every search tool now includes comprehensive query syntax examples:
   - (severity:high OR severity:critical) AND source_ip:192.168.*
   - blocked:true AND NOT source_ip:192.168.*`
 }
-```text
+```
 
 #### Field-Specific Examples
 ```typescript
@@ -499,7 +499,7 @@ Every search tool now includes comprehensive query syntax examples:
   - last_seen:<NOW-24h
   - created:2024-01-01..2024-01-31`
 }
-```text
+```
 
 ### Geographic Query Integration
 
@@ -526,7 +526,7 @@ Geographic search tools include specialized geographic query syntax:
   - high_risk_countries:true                     # Known high-risk locations
   - threat_analysis:true                         # Enhanced threat intelligence`
 }
-```text
+```
 
 ## Error Context Enhancement
 
@@ -555,7 +555,7 @@ Tool descriptions now help users understand and prevent common errors:
   - Solution: Use documented field names (see query syntax guide)
   - Reference: docs/query-syntax-guide.md`
 }
-```text
+```
 
 #### Timeout Prevention Guidance
 ```typescript
@@ -574,7 +574,7 @@ Tool descriptions now help users understand and prevent common errors:
   - Use cursor pagination for large result sets
   - Apply filters before sorting when possible`
 }
-```text
+```
 
 ### Validation Message Enhancement
 
@@ -583,7 +583,7 @@ Tool descriptions now help users understand and prevent common errors:
 "limit is required"
 "query must be a string"
 "invalid cursor format"
-```text
+```
 
 **After**:
 ```typescript
@@ -592,7 +592,7 @@ Tool descriptions now help users understand and prevent common errors:
 "query must be a valid search string. Examples: 'severity:high', 'protocol:tcp AND source_ip:192.168.*'. See docs/query-syntax-guide.md for complete syntax."
 
 "cursor parameter has invalid format. Use cursor from previous response pagination.next_cursor field. Omit cursor for first page of results."
-```text
+```
 
 ## Performance Guidance Integration
 
@@ -620,7 +620,7 @@ Tool descriptions now include specific performance guidance:
   - Apply time-based filters to limit dataset scope
   - Consider multiple smaller queries vs one large query`
 }
-```text
+```
 
 ### Concurrent Usage Guidance
 
@@ -639,7 +639,7 @@ Tool descriptions now include specific performance guidance:
   - Burst capacity: Up to 20 requests per 10 seconds
   - Automatic retry with exponential backoff on rate limit errors`
 }
-```text
+```
 
 ## Best Practices
 

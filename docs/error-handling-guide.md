@@ -9,12 +9,14 @@ This guide provides comprehensive documentation for error handling patterns, res
 - [Error Types](#error-types)
 - [HTTP Status Codes](#http-status-codes)
 - [Validation Errors](#validation-errors)
+- [Timeout vs Validation Error Patterns](#timeout-vs-validation-error-patterns)
 - [Common Error Scenarios](#common-error-scenarios)
 - [Error Recovery Strategies](#error-recovery-strategies)
 - [Best Practices](#best-practices)
 - [Troubleshooting Guide](#troubleshooting-guide)
 - [Tool-Specific Errors](#tool-specific-errors)
 - [Debugging Techniques](#debugging-techniques)
+- [Specific Fix Scenarios](#specific-fix-scenarios)
 
 ## Overview
 
@@ -50,7 +52,7 @@ interface StandardError {
     requestId?: string;                 // Unique request identifier
   };
 }
-```text
+```
 
 ### Example Error Response
 
@@ -73,7 +75,7 @@ interface StandardError {
     "requestId": "req_7f8a9b2c"
   }
 }
-```text
+```
 
 ### MCP Protocol Wrapper
 
@@ -89,7 +91,7 @@ Error responses are wrapped in the MCP protocol format:
   ],
   "isError": true
 }
-```text
+```
 
 ## Error Types
 
@@ -110,7 +112,7 @@ enum ErrorType {
   SEARCH_ERROR = 'search_error',              // Search operation failures
   UNKNOWN_ERROR = 'unknown_error'             // Unexpected errors
 }
-```text
+```
 
 ### Error Type Examples
 
@@ -124,7 +126,7 @@ enum ErrorType {
   "validation_errors": ["limit is required"],
   "timestamp": "2024-01-15T10:30:45Z"
 }
-```text
+```
 
 #### Authentication Error
 ```json
@@ -138,7 +140,7 @@ enum ErrorType {
   },
   "timestamp": "2024-01-15T10:30:45Z"
 }
-```text
+```
 
 #### API Error
 ```json
@@ -153,7 +155,7 @@ enum ErrorType {
   },
   "timestamp": "2024-01-15T10:30:45Z"
 }
-```text
+```
 
 #### Rate Limit Error
 ```json
@@ -168,7 +170,7 @@ enum ErrorType {
   },
   "timestamp": "2024-01-15T10:30:45Z"
 }
-```text
+```
 
 ## HTTP Status Codes
 
@@ -202,7 +204,7 @@ The server maps HTTP status codes to appropriate error types and messages:
     "Unmatched parentheses in query"
   ]
 }
-```text
+```
 
 #### 401 Unauthorized
 ```json
@@ -215,7 +217,7 @@ The server maps HTTP status codes to appropriate error types and messages:
     "hint": "Verify FIREWALLA_MSP_TOKEN environment variable is set correctly"
   }
 }
-```text
+```
 
 #### 404 Not Found
 ```json
@@ -229,7 +231,7 @@ The server maps HTTP status codes to appropriate error types and messages:
     "hint": "Verify FIREWALLA_BOX_ID environment variable is correct"
   }
 }
-```text
+```
 
 ## Validation Errors
 
@@ -246,7 +248,7 @@ The server performs extensive parameter validation to ensure data integrity and 
   "errorType": "validation_error",
   "validation_errors": ["limit is required"]
 }
-```text
+```
 
 #### Invalid Parameter Type
 ```json
@@ -259,7 +261,7 @@ The server performs extensive parameter validation to ensure data integrity and 
     "limit must be a number, got string"
   ]
 }
-```text
+```
 
 #### Parameter Out of Range
 ```json
@@ -272,7 +274,7 @@ The server performs extensive parameter validation to ensure data integrity and 
     "limit exceeds system limits to control result set size and prevent memory issues (got 50000, maximum: 10000)"
   ]
 }
-```text
+```
 
 ### Query Validation
 
@@ -288,7 +290,7 @@ The server performs extensive parameter validation to ensure data integrity and 
     "Unmatched double quotes in query"
   ]
 }
-```text
+```
 
 #### Dangerous Query Content
 ```json
@@ -301,7 +303,7 @@ The server performs extensive parameter validation to ensure data integrity and 
     "Query contains potentially dangerous content"
   ]
 }
-```text
+```
 
 #### Invalid Field Name
 ```json
@@ -314,7 +316,7 @@ The server performs extensive parameter validation to ensure data integrity and 
     "Field 'invalid_field' is not allowed"
   ]
 }
-```text
+```
 
 ### Cursor Validation
 
@@ -329,7 +331,7 @@ The server performs extensive parameter validation to ensure data integrity and 
     "Failed to decode cursor: Invalid cursor format"
   ]
 }
-```text
+```
 
 #### Corrupted Cursor Data
 ```json
@@ -342,7 +344,7 @@ The server performs extensive parameter validation to ensure data integrity and 
     "Invalid cursor offset"
   ]
 }
-```text
+```
 
 ## Timeout vs Validation Error Patterns
 
@@ -388,7 +390,7 @@ Understanding when different error types occur is crucial for proper error handl
     "processing_time": 10001
   }
 }
-```text
+```
 
 **Prevention Patterns**:
 ```bash
@@ -401,7 +403,7 @@ get_bandwidth_usage period:"30d" limit:1000                     // Long time per
 search_flows query:"protocol:tcp AND timestamp:>NOW-1h" limit:500
 search_alarms query:"severity:>=medium" limit:500
 get_bandwidth_usage period:"24h" limit:500
-```text
+```
 
 #### 2. Network Timeout Patterns
 
@@ -429,7 +431,7 @@ get_bandwidth_usage period:"24h" limit:500
     "max_retries": 3
   }
 }
-```text
+```
 
 **Network Timeout Detection**:
 ```typescript
@@ -440,7 +442,7 @@ const timeoutPatterns = {
   read_timeout: '30s+',            // API processing issues
   processing_timeout: '10s',        // Server-side timeout (our limit)
 }
-```text
+```
 
 #### 3. Processing Timeout Patterns
 
@@ -465,7 +467,7 @@ const timeoutPatterns = {
     "suggestion": "Reduce result sets or use simpler correlation fields"
   }
 }
-```text
+```
 
 ### Validation Error Patterns
 
@@ -500,7 +502,7 @@ const timeoutPatterns = {
     "valid_range": "1-1000"
   }
 }
-```text
+```
 
 #### 2. Query Syntax Validation Errors
 
@@ -535,7 +537,7 @@ const querySyntaxErrors = {
     error: "Query contains potentially dangerous content"
   }
 }
-```text
+```
 
 #### 3. Business Logic Validation Errors
 
@@ -566,7 +568,7 @@ const querySyntaxErrors = {
     "time_diff": "-30 days"
   }
 }
-```text
+```
 
 ### Error Type Determination Flow
 
@@ -606,7 +608,7 @@ function classifyError(error: any, context: any): ErrorType {
   // Default to API error for other cases
   return ErrorType.API_ERROR;
 }
-```text
+```
 
 ### When Timeout Errors Occur
 
@@ -652,7 +654,7 @@ const timeoutPrevention = {
     subsequent_requests: { limit: 500, cursor: "from_previous_response" }
   }
 }
-```text
+```
 
 ### When Validation Errors Occur
 
@@ -708,7 +710,7 @@ const errorResponseTimes = {
     recovery: '60000ms+',                 // Wait time before retry
   }
 }
-```text
+```
 
 ## Common Error Scenarios
 
@@ -725,7 +727,7 @@ const errorResponseTimes = {
     "requiredVars": ["FIREWALLA_MSP_TOKEN", "FIREWALLA_MSP_ID", "FIREWALLA_BOX_ID"]
   }
 }
-```text
+```
 
 #### Invalid Box Configuration
 ```json
@@ -738,7 +740,7 @@ const errorResponseTimes = {
     "hint": "Box ID should be a UUID format like '1eb71e38-3a95-4371-8903-ace24c83ab49'"
   }
 }
-```text
+```
 
 ### Network and Connectivity
 
@@ -754,7 +756,7 @@ const errorResponseTimes = {
     "endpoint": "https://yourdomain.firewalla.net/v2/boxes/abc123/flows"
   }
 }
-```text
+```
 
 #### Network Unavailable
 ```json
@@ -768,7 +770,7 @@ const errorResponseTimes = {
     "host": "yourdomain.firewalla.net"
   }
 }
-```text
+```
 
 ### Data Processing Errors
 
@@ -783,7 +785,7 @@ const errorResponseTimes = {
     "suggestion": "Use more specific filters or smaller limit values"
   }
 }
-```text
+```
 
 #### Memory Limit Exceeded
 ```json
@@ -796,7 +798,7 @@ const errorResponseTimes = {
     "suggestion": "Reduce the time range or limit parameter"
   }
 }
-```text
+```
 
 ## Error Recovery Strategies
 
@@ -843,7 +845,7 @@ async function retryWithBackoff<T>(
 
   throw lastError!;
 }
-```text
+```
 
 ### Rate Limit Handling
 
@@ -864,7 +866,7 @@ async function handleRateLimit<T>(operation: () => Promise<T>): Promise<T> {
     throw error;
   }
 }
-```text
+```
 
 ### Cursor Reset Strategy
 
@@ -899,7 +901,7 @@ async function paginateWithCursorRecovery<T>(
 
   return allResults;
 }
-```text
+```
 
 ## Best Practices
 
@@ -935,7 +937,7 @@ async function robustSearch(query: string, limit: number) {
     }
   }
 }
-```text
+```
 
 ### Validation Before API Calls
 
@@ -974,7 +976,7 @@ async function safeSearch(params: SearchParams) {
 
   return await searchFlows(params);
 }
-```text
+```
 
 ### Graceful Degradation
 
@@ -1001,7 +1003,7 @@ async function getDeviceListWithFallback(limit: number = 100) {
     throw error;
   }
 }
-```text
+```
 
 ## Troubleshooting Guide
 
@@ -1017,7 +1019,7 @@ echo $FIREWALLA_BOX_ID
 // Test basic connectivity
 curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
      "https://$FIREWALLA_MSP_ID/v2/boxes/$FIREWALLA_BOX_ID/alarms?limit=1"
-```text
+```
 
 #### 2. Validate Parameters
 ```typescript
@@ -1030,7 +1032,7 @@ const testParams = {
 };
 
 console.log('Testing parameters:', JSON.stringify(testParams, null, 2));
-```text
+```
 
 #### 3. Test Simple Queries
 ```typescript
@@ -1044,7 +1046,7 @@ try {
 } catch (error) {
   console.error('Simple query failed:', error);
 }
-```text
+```
 
 #### 4. Check Network Connectivity
 ```typescript
@@ -1057,7 +1059,7 @@ async function testConnectivity() {
     console.error('MSP API unreachable:', error.message);
   }
 }
-```text
+```
 
 ### Common Debugging Scenarios
 
@@ -1088,7 +1090,7 @@ async function debugAuth() {
     console.warn('MSP ID should end with .firewalla.net');
   }
 }
-```text
+```
 
 #### Query Syntax Issues
 ```typescript
@@ -1117,7 +1119,7 @@ function debugQuery(query: string) {
 
   console.log('Query structure check passed');
 }
-```text
+```
 
 ## Tool-Specific Errors
 
@@ -1140,7 +1142,7 @@ function debugQuery(query: string) {
     }
   }
 }
-```text
+```
 
 #### Device Search Errors
 ```json
@@ -1153,7 +1155,7 @@ function debugQuery(query: string) {
     "networkId": "invalid-network-123"
   }
 }
-```text
+```
 
 ### Rule Management Errors
 
@@ -1168,7 +1170,7 @@ function debugQuery(query: string) {
     "ruleId": "nonexistent-rule-123"
   }
 }
-```text
+```
 
 #### Rule Resume Errors
 ```json
@@ -1182,7 +1184,7 @@ function debugQuery(query: string) {
     "currentStatus": "active"
   }
 }
-```text
+```
 
 ## Debugging Techniques
 
@@ -1205,7 +1207,7 @@ function logError(error: any, context: string) {
 
   console.error('ERROR:', JSON.stringify(errorLog, null, 2));
 }
-```text
+```
 
 ### Error Monitoring
 
@@ -1230,7 +1232,7 @@ class ErrorMonitor {
       .slice(0, limit);
   }
 }
-```text
+```
 
 ### Testing Error Scenarios
 
@@ -1268,7 +1270,7 @@ async function testErrorScenarios() {
     }
   }
 }
-```text
+```
 
 ## Specific Fix Scenarios
 
@@ -1285,7 +1287,7 @@ The following section documents specific fix scenarios that have been implemente
   "limit": undefined
 }
 // Result: Unpredictable behavior or unclear errors
-```text
+```
 
 **After Fix**:
 ```json
@@ -1299,7 +1301,7 @@ The following section documents specific fix scenarios that have been implemente
     "limit is required"
   ]
 }
-```text
+```
 
 **Prevention Strategy**:
 - All required parameters are validated before processing
@@ -1314,14 +1316,14 @@ The following section documents specific fix scenarios that have been implemente
 ```javascript
 // Only single country supported
 { countries: "China" }  // Limited functionality
-```text
+```
 
 **After Fix**:
 ```javascript
 // Multiple countries with OR logic
 { countries: ["China", "Russia", "Iran"] }
 // Generates: (country:China OR country:Russia OR country:Iran)
-```text
+```
 
 **Error Prevention**:
 ```json
@@ -1336,7 +1338,7 @@ The following section documents specific fix scenarios that have been implemente
     "suggestion": "Use array format: { countries: [\"China\", \"Russia\"] }"
   }
 }
-```text
+```
 
 ### Fix Scenario 3: Timeout vs Validation Error Classification
 
@@ -1350,7 +1352,7 @@ The following section documents specific fix scenarios that have been implemente
   "errorType": "timeout_error"
 }
 // When the real issue was a missing required parameter
-```text
+```
 
 **After Fix**:
 ```json
@@ -1366,7 +1368,7 @@ The following section documents specific fix scenarios that have been implemente
     "fix_required": true
   }
 }
-```text
+```
 
 **Classification Logic**:
 - Parameters validated in < 100ms → `validation_error`
@@ -1385,7 +1387,7 @@ The following section documents specific fix scenarios that have been implemente
 { country_code: null }       // Caused null reference errors
 { country_code: "" }         // Empty string accepted as valid
 { country_code: 123 }        // Number treated as valid
-```text
+```
 
 **After Fix**:
 ```javascript
@@ -1397,7 +1399,7 @@ ensureConsistentGeoData({ country_code: 123 });       // → { country_code: "UN
 
 // Valid codes are normalized to uppercase
 ensureConsistentGeoData({ country_code: "us" });      // → { country_code: "US" }
-```text
+```
 
 **Error Response for Invalid Codes**:
 ```json
@@ -1411,7 +1413,7 @@ ensureConsistentGeoData({ country_code: "us" });      // → { country_code: "US
     "valid_examples": ["US", "CN", "RU", "GB"]
   }
 }
-```text
+```
 
 ### Fix Scenario 5: Data Normalization Consistency
 
@@ -1427,7 +1429,7 @@ ensureConsistentGeoData({ country_code: "us" });      // → { country_code: "US
   "ip": null,                  // null value
   "Status": undefined          // undefined value
 }
-```text
+```
 
 **After Fix**:
 ```javascript
@@ -1439,7 +1441,7 @@ ensureConsistentGeoData({ country_code: "us" });      // → { country_code: "US
   "ip_address": "unknown",     // null → "unknown"
   "status": "unknown"          // undefined → "unknown"
 }
-```text
+```
 
 **Normalization Error Handling**:
 ```json
@@ -1464,7 +1466,7 @@ ensureConsistentGeoData({ country_code: "us" });      // → { country_code: "US
     "warnings": []
   }
 }
-```text
+```
 
 ### Fix Scenario 6: Performance Threshold Enforcement
 
@@ -1474,7 +1476,7 @@ ensureConsistentGeoData({ country_code: "us" });      // → { country_code: "US
 ```javascript
 // No limits - could cause system issues
 { query: "protocol:tcp", limit: 100000 }  // Too large
-```text
+```
 
 **After Fix**:
 ```json
@@ -1497,7 +1499,7 @@ ensureConsistentGeoData({ country_code: "us" });      // → { country_code: "US
     ]
   }
 }
-```text
+```
 
 ### Fix Scenario 7: Query Syntax Error Recovery
 
@@ -1510,7 +1512,7 @@ ensureConsistentGeoData({ country_code: "us" });      // → { country_code: "US
   "message": "Query syntax error",
   "errorType": "validation_error"
 }
-```text
+```
 
 **After Fix**:
 ```json
@@ -1538,7 +1540,7 @@ ensureConsistentGeoData({ country_code: "us" });      // → { country_code: "US
     ]
   }
 }
-```text
+```
 
 ### Common Error Pattern Prevention
 
@@ -1567,7 +1569,7 @@ async function validateAndExecute(tool: string, params: any) {
   // Stage 4: Execute with timeout protection
   return await executeWithTimeout(tool, params, 10000);
 }
-```text
+```
 
 #### 2. Error Classification Decision Tree
 ```typescript
@@ -1607,7 +1609,7 @@ function classifyError(error: any, context: any): ErrorType {
   // Default to API error
   return ErrorType.API_ERROR;
 }
-```text
+```
 
 #### 3. Progressive Error Recovery
 ```typescript
@@ -1636,6 +1638,6 @@ async function executeWithRecovery(operation: () => Promise<any>) {
     throw error;
   }
 }
-```text
+```
 
 This comprehensive error handling guide provides everything you need to understand, handle, and debug errors in the Firewalla MCP Server. The specific fix scenarios document real-world issues and their solutions, helping prevent regressions and improve error handling consistency. Always check error types and validation messages to understand the root cause and implement appropriate recovery strategies.

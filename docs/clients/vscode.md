@@ -23,7 +23,7 @@ In VS Code:
 ```bash
 # Install globally for easy access
 npm install -g firewalla-mcp-server
-```text
+```
 
 ### 3. Configure MCP Server
 
@@ -45,7 +45,7 @@ Create or edit VS Code MCP settings:
     }
   }
 }
-```text
+```
 
 ### 4. Environment Setup (Alternative)
 
@@ -65,7 +65,7 @@ Add to your VS Code `settings.json`:
     }
   }
 }
-```text
+```
 
 Then set environment variables in your shell.
 
@@ -92,7 +92,7 @@ Then set environment variables in your shell.
   "command": "npx",
   "args": ["firewalla-mcp-server", "--query", "high-severity-alarms"]
 }
-```text
+```
 
 **Debugging Network Issues**
 - Real-time network flow analysis

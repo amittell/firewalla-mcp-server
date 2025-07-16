@@ -18,7 +18,7 @@ npm install -g firewalla-mcp-server
 
 # Or install locally
 npm install firewalla-mcp-server
-```text
+```
 
 ### 2. Configure Claude Desktop
 
@@ -38,7 +38,7 @@ Open Claude Desktop settings and click **Developer → Edit Config** to modify `
     }
   }
 }
-```text
+```
 
 ### 3. Get Your Credentials
 
@@ -52,7 +52,7 @@ Restart Claude Desktop and try:
 
 ```text
 "Show me my Firewalla security alerts from the last hour"
-```text
+```
 
 ## Configuration Locations
 
@@ -78,7 +78,7 @@ Restart Claude Desktop and try:
 "Show me all high-severity security alerts"
 "Are there any offline devices I should know about?"
 "What firewall rules are currently blocking traffic?"
-```text
+```
 
 ## Features
 

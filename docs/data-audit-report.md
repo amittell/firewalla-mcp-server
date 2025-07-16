@@ -28,7 +28,7 @@ if (item.region) {
   flow.region = item.region;
 }
 // No fallback for missing region data
-```text
+```
 
 **Issues**:
 - No fallback processing when API returns null/undefined geographic data
@@ -47,7 +47,7 @@ if (!enrichedFlow.region || enrichedFlow.region === 'unknown') {
     enrichedFlow.country = geoData.country;
   }
 }
-```text
+```
 
 #### 1.2 Incomplete Geographic Enrichment
 **Location**: `/src/firewalla/client.ts` (lines 2334-2358)
@@ -69,13 +69,13 @@ private enrichAllWithGeographicData(items: any[]): any[] {
     return item;
   });
 }
-```text
+```
 
 #### 1.3 Geographic Cache Underutilization
 **Location**: `/src/utils/geographic-cache.ts` and client usage
 **Impact**: Medium - Performance impact from repeated IP lookups
 
-**Issue**: Geographic cache is implemented but cache statistics show low hit rates.
+**Issue**: Geographic cache is implemented, but cache statistics show low hit rates.
 
 **Recommendation**: Implement proactive geographic data caching and better cache utilization strategies.
 
@@ -103,7 +103,7 @@ device_count: number  // snake_case
 deviceCount: number   // camelCase
 last_seen: number     // snake_case
 lastSeen: number      // camelCase
-```text
+```
 
 **Recommendation**: Establish consistent naming convention:
 ```typescript
@@ -114,7 +114,7 @@ interface StandardizedBox {
   last_seen: number;
   alarm_count: number;
 }
-```text
+```
 
 #### 2.2 "Unknown" vs "unknown" vs null Inconsistency
 **Locations**: Throughout codebase
@@ -128,9 +128,9 @@ name: item.name || 'Unknown Box'   // uppercase
 gid: item.gid || 'unknown'         // lowercase
 license: item.license || null      // null
 location: item.location || null    // null
-```text
+```
 
-**Recommendation**: Implement consistent default value strategy:
+**Recommendation**: Implement a consistent default value strategy:
 ```typescript
 // Standardized default value patterns
 interface DefaultValueStrategy {
@@ -143,7 +143,7 @@ interface DefaultValueStrategy {
   // Use 0 for numeric counts
   counts: 0;
 }
-```text
+```
 
 #### 2.3 Field Transformation Inconsistencies
 **Location**: Multiple transformation functions in client.ts
@@ -166,7 +166,7 @@ class FieldStandardizer {
     };
   }
 }
-```text
+```
 
 ## 3. API Response Format Audit
 
@@ -182,7 +182,7 @@ class FieldStandardizer {
 // search_flows returns: { flows: [], count: number }
 // get_devices returns: { results: [], count: number }
 // get_bandwidth returns: { top_devices: [], count: number }
-```text
+```
 
 **Recommendation**: Implement unified response format with backward compatibility:
 ```typescript
@@ -193,7 +193,7 @@ interface StandardResponse<T> {
   // Tool-specific legacy fields for backward compatibility
   [key: string]: any;
 }
-```text
+```
 
 #### 3.2 Pagination Metadata Inconsistencies
 **Location**: Various tools with pagination
@@ -212,7 +212,7 @@ interface StandardPagination {
   limit_applied: number;
   total_count?: number;  // Optional for performance
 }
-```text
+```
 
 #### 3.3 Error Response Format Variations
 **Location**: Error handling across tools
@@ -220,7 +220,7 @@ interface StandardPagination {
 
 **Current Issues**: Different error response formats make automated error handling difficult.
 
-**Recommendation**: Enforce standardized error responses using existing `ErrorHandler` class consistently.
+**Recommendation**: Enforce standardized error responses using the existing `ErrorHandler` class consistently.
 
 ## 4. Null Safety Implementation Audit
 
@@ -253,7 +253,7 @@ interface StandardPagination {
 ```typescript
 // ESLint rule to enforce SafeAccess usage
 "no-unsafe-property-access": "error"
-```text
+```
 
 #### 4.2 Missing Null Checks in Geographic Processing
 **Location**: Geographic utility functions
@@ -267,7 +267,7 @@ export function getGeographicDataForIP(ip: string): GeographicData | null {
   }
   // ... rest of implementation
 }
-```text
+```
 
 ## 5. Timestamp Format Audit
 
@@ -290,7 +290,7 @@ export function getGeographicDataForIP(ip: string): GeographicData | null {
 alarm.ts = item.ts * 1000;                    // Unix milliseconds
 flow.timestamp = new Date(item.ts * 1000);    // Date object
 device.lastSeen = item.lastSeen;              // Raw value (inconsistent)
-```text
+```
 
 **Recommendation**: Standardize timestamp handling:
 ```typescript
@@ -300,7 +300,7 @@ interface StandardTimestamps {
   updated_at: string;  // ISO 8601
   last_seen: string;   // ISO 8601
 }
-```text
+```
 
 ## 6. Error Response Handling Audit
 
@@ -332,7 +332,7 @@ createErrorResponse(
   ErrorType.SEARCH_ERROR,  // Specific type
   { query: invalidQuery }
 );
-```text
+```
 
 #### 6.2 Missing Error Context
 **Impact**: Low - Reduced debugging capability
@@ -346,7 +346,7 @@ const context = {
   parameters: sanitizedParams,
   requestId: generateRequestId()
 };
-```text
+```
 
 ## 7. Recommendations by Priority
 
@@ -436,7 +436,7 @@ private async processFlowsWithGeography(flows: any[]): Promise<Flow[]> {
     return enriched;
   });
 }
-```text
+```
 
 ### Field Standardization Utility
 ```typescript
@@ -473,7 +473,7 @@ export class FieldStandardizer {
     return result as T;
   }
 }
-```text
+```
 
 ### Unified Response Format
 ```typescript
@@ -499,7 +499,7 @@ export class ResponseUnifier {
     return standard;
   }
 }
-```text
+```
 
 ## 10. Monitoring and Validation
 
@@ -524,7 +524,7 @@ const VALIDATION_RULES = {
     optionalFields: ['cached', 'pagination', 'metadata']
   }
 };
-```text
+```
 
 ## Conclusion
 

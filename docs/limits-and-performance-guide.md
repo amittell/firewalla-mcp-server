@@ -13,6 +13,7 @@ This guide provides comprehensive documentation on limit configurations, perform
 - [Performance Optimization Strategies](#performance-optimization-strategies)
 - [Monitoring and Tuning](#monitoring-and-tuning)
 - [Best Practices](#best-practices)
+- [Conclusion](#conclusion)
 
 ## Overview
 
@@ -48,7 +49,7 @@ export const STANDARD_LIMITS = {
   RULES_SUMMARY: 2000,         // Rule analysis operations
   STATISTICS: 100,             // Statistical operations (fixed results)
 }
-```text
+```
 
 ## Tool-Specific Limits
 
@@ -91,7 +92,7 @@ search_flows query:"severity:high AND protocol:tcp" limit:800
 
 # Complex search requiring full limit
 search_alarms query:"(severity:high OR severity:critical) AND source_ip:192.168.*" limit:1000
-```text
+```
 
 ### Geographic Search Operations (Limit: 1000)
 
@@ -134,7 +135,7 @@ const memoryUsageEstimate = {
   1000_devices: '250MB',  // Causes performance issues
   2000_devices: '500MB+'  // Risk of memory exhaustion
 }
-```text
+```
 
 ### Cross-Reference Operations (Limit: 2000)
 
@@ -160,7 +161,7 @@ const correlationQuality = {
   2000_results: 'Excellent correlation analysis',  // Current limit
   5000_results: 'Comprehensive but slow'
 }
-```text
+```
 
 ### Rules Summary Operations (Limit: 2000)
 
@@ -170,7 +171,7 @@ const correlationQuality = {
 - Rule summary operations analyze rule effectiveness and patterns
 - Higher limits provide better statistical analysis
 - Most organizations have <2000 active rules
-- Reduced from original 10000 limit for better performance
+- Reduced from the original 10000 limit for better performance
 
 **Performance Characteristics**:
 - Average response time: 1500-4000ms
@@ -185,7 +186,7 @@ const correlationQuality = {
 **Rationale**:
 - Offline device detection requires timestamp analysis
 - Results sorted by last-seen time
-- 1000 offline devices indicates significant network issues
+- 1000 offline devices indicate significant network issues
 - Consistent with other device operations
 
 **Performance Characteristics**:
@@ -202,7 +203,7 @@ const correlationQuality = {
 - Statistical operations return fixed-size summary data
 - Low limit prevents unnecessary API load
 - Results are aggregated summaries, not individual records
-- 100 statistical entries provide comprehensive overview
+- 100 statistical entries provide a comprehensive overview
 
 **Performance Characteristics**:
 - Average response time: 100-300ms
@@ -270,7 +271,7 @@ The server categorizes tools into performance tiers based on resource usage:
 
 Before the centralized limits system, the server had significant inconsistencies:
 
-#### Limit Discrepancies Found and Fixed:
+#### Limit Discrepancies Found and Fixed
 
 1. **Search Tools Inconsistency**:
    - **Before**: `search_alarms` (5000), `search_flows` (1000), `search_rules` (3000)
@@ -285,7 +286,7 @@ Before the centralized limits system, the server had significant inconsistencies
 3. **Rules Summary Over-limit**:
    - **Before**: `get_network_rules_summary` (10000)
    - **After**: Reduced to 2000
-   - **Impact**: Response time improved from 15-30 seconds to 3-5 seconds
+   - **Impact**: Response time improved from 15–30 seconds to 3–5 seconds
 
 4. **Device Search Variation**:
    - **Before**: `search_devices` (2000)
@@ -324,7 +325,7 @@ const performanceImprovements = {
     improvement: 'Response time: 67% faster, Memory: 50% reduction'
   }
 }
-```text
+```
 
 ## Performance Optimization Strategies
 
@@ -396,7 +397,7 @@ const performanceThresholds = {
     maximum: 50       // Maximum concurrent requests
   }
 }
-```text
+```
 
 ### Tuning Recommendations
 
@@ -418,7 +419,7 @@ DEBUG=validation,limits npm run mcp:start
 
 # Track memory usage patterns
 DEBUG=memory,gc npm run mcp:start
-```text
+```
 
 ## Best Practices
 

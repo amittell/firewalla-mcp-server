@@ -19,7 +19,7 @@ npm install -g firewalla-mcp-server
 
 # Verify installation
 npx firewalla-mcp-server --version
-```text
+```
 
 ### 2. Configure MCP in Roocode
 
@@ -41,7 +41,7 @@ Add MCP server configuration to Roocode settings:
     }
   }
 }
-```text
+```
 
 ### 3. Environment Variables (Alternative)
 
@@ -51,7 +51,7 @@ Set credentials in your environment:
 export FIREWALLA_MSP_TOKEN="your_msp_access_token_here"
 export FIREWALLA_MSP_ID="yourdomain.firewalla.net"
 export FIREWALLA_BOX_ID="your_box_gid_here"
-```text
+```
 
 ### 4. Enable MCP Extension
 
@@ -64,7 +64,7 @@ export FIREWALLA_BOX_ID="your_box_gid_here"
 In Roocode, test the connection:
 ```text
 "Show me my Firewalla network security overview"
-```text
+```
 
 ## Roocode Workflow Integration
 
@@ -80,7 +80,7 @@ In Roocode, test the connection:
 
 # Check for security issues
 "Are there any blocked connections that might affect my local development?"
-```text
+```
 
 **Real-time Network Analysis**
 - Device connectivity monitoring
@@ -94,14 +94,14 @@ In Roocode, test the connection:
 "What security alerts have triggered in the last hour?"
 "Show me top bandwidth consumers on my network"
 "Are there any offline devices I should know about?"
-```text
+```
 
 **Network Troubleshooting**
 ```text
 "Check firewall rules affecting port 3000"
 "Analyze network flows for my development server IP"
 "Show me any blocked traffic from external sources"
-```text
+```
 
 ## Troubleshooting
 

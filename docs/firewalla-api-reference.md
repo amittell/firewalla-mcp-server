@@ -7,13 +7,14 @@ This document provides comprehensive documentation for the Firewalla MSP (Manage
 **Base URL Pattern**: `https://{msp_domain}/v2/`
 
 **Authentication**: All requests require a personal access token in the Authorization header:
-```text
+```http
 Authorization: Token {your_personal_access_token}
-```text
+```
 
 ## Table of Contents
 
-1. [API Endpoints](#api-endpoints)
+1. [Overview](#overview)
+2. [API Endpoints](#api-endpoints)
    - [Alarm Management](#alarm-management)
    - [Box Management](#box-management)
    - [Device Management](#device-management)
@@ -22,10 +23,11 @@ Authorization: Token {your_personal_access_token}
    - [Statistics](#statistics)
    - [Target Lists](#target-lists)
    - [Trends](#trends)
-2. [Data Models](#data-models)
-3. [Search Functionality](#search-functionality)
-4. [Code Examples](#code-examples)
-5. [Error Handling](#error-handling)
+3. [Data Models](#data-models)
+4. [Search Functionality](#search-functionality)
+5. [Code Examples](#code-examples)
+6. [Error Handling](#error-handling)
+7. [Conclusion](#conclusion)
 
 ---
 
@@ -66,7 +68,7 @@ Retrieve alarms with filtering and pagination support.
   ],
   "next_cursor": "cursor_token_here"
 }
-```text
+```
 
 #### Get Specific Alarm
 Retrieve detailed information about a specific alarm.
@@ -120,7 +122,7 @@ Retrieve list of Firewalla boxes.
     "alarmCount": 3
   }
 ]
-```text
+```
 
 ### Device Management
 
@@ -157,7 +159,7 @@ Retrieve list of devices on the network.
     "totalUpload": 524288
   }
 ]
-```text
+```
 
 ### Flow Management
 
@@ -216,7 +218,7 @@ Retrieve network traffic flow information.
   ],
   "next_cursor": "cursor_token_here"
 }
-```text
+```
 
 ### Rule Management
 
@@ -254,7 +256,7 @@ Retrieve list of firewall rules.
     }
   ]
 }
-```text
+```
 
 #### Pause Rule
 Temporarily disable an active firewall rule for a specified duration.
@@ -270,7 +272,7 @@ Temporarily disable an active firewall rule for a specified duration.
   "duration": 60,
   "box": "box_gid_here"
 }
-```text
+```
 
 **Parameters**:
 - `duration` (number, optional): Duration in minutes to pause the rule (default: 60, range: 1-1440)
@@ -282,15 +284,15 @@ Temporarily disable an active firewall rule for a specified duration.
   "success": true,
   "message": "Rule rule_123 paused for 60 minutes"
 }
-```text
+```
 
 **Example Request**:
 ```bash
 curl -X POST "https://yourdomain.firewalla.net/v2/rules/rule_123/pause" \
-  -H "Authorization: Token your_token_here" \
+  -H "Authorization: Token <YOUR_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"duration": 30, "box": "box_gid_here"}'
-```text
+```
 
 #### Resume Rule
 Resume a previously paused firewall rule, restoring it to active state.
@@ -305,7 +307,7 @@ Resume a previously paused firewall rule, restoring it to active state.
 {
   "box": "box_gid_here"
 }
-```text
+```
 
 **Parameters**:
 - `box` (string, required): Box GID for context
@@ -316,15 +318,15 @@ Resume a previously paused firewall rule, restoring it to active state.
   "success": true,
   "message": "Rule rule_123 resumed successfully"
 }
-```text
+```
 
 **Example Request**:
 ```bash
 curl -X POST "https://yourdomain.firewalla.net/v2/rules/rule_123/resume" \
-  -H "Authorization: Token your_token_here" \
+  -H "Authorization: Token <YOUR_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{"box": "box_gid_here"}'
-```text
+```
 
 ### Statistics
 
@@ -355,7 +357,7 @@ Retrieve various statistics about your Firewalla deployment.
     "value": 1250
   }
 ]
-```text
+```
 
 #### Get Simple Statistics
 Retrieve basic statistics overview.
@@ -373,7 +375,7 @@ Retrieve basic statistics overview.
   "alarms": 42,
   "rules": 25
 }
-```text
+```
 
 ### Target Lists
 
@@ -399,7 +401,7 @@ Retrieve all target lists.
     "lastUpdated": 1641024000
   }
 ]
-```text
+```
 
 #### Get Specific Target List
 Retrieve a specific target list by ID.
@@ -428,7 +430,7 @@ Create a new target list.
   "category": "games",
   "notes": "Gaming platforms"
 }
-```text
+```
 
 **Response (200 Success)**: Returns created target list with generated ID
 
@@ -482,7 +484,7 @@ Retrieve trend data for various metrics.
     "value": 98
   }
 ]
-```text
+```
 
 ---
 
@@ -531,7 +533,7 @@ enum AlarmStatus {
   ACTIVE = 1,
   ARCHIVED = 2
 }
-```text
+```
 
 ### Box Model
 
@@ -552,7 +554,7 @@ interface Box {
   ruleCount: number;             // Number of rules on the box
   alarmCount: number;            // Number of alarms on the box
 }
-```text
+```
 
 ### Device Model
 
@@ -586,7 +588,7 @@ interface Group {
   id: string;                    // Group identifier
   name: string;                  // Group name
 }
-```text
+```
 
 ### Flow Model
 
@@ -620,7 +622,7 @@ interface Category {
   name: "ad" | "edu" | "games" | "gamble" | "intel" | "p2p" |
         "porn" | "private" | "social" | "shopping" | "video" | "vpn";
 }
-```text
+```
 
 ### Rule Model
 
@@ -651,7 +653,7 @@ interface Scope {
   type: string;                  // Scope type
   value: string;                 // Scope value
 }
-```text
+```
 
 ### Target List Model
 
@@ -666,7 +668,7 @@ interface TargetList {
   notes?: string;                // Additional description
   lastUpdated: number;           // Unix timestamp of last modification (immutable)
 }
-```text
+```
 
 ### Statistics Models
 
@@ -686,7 +688,7 @@ interface SimpleStatistics {
   alarms: number;                // Number of generated alarms
   rules: number;                 // Number of created rules
 }
-```text
+```
 
 ### Trend Model
 
@@ -695,7 +697,7 @@ interface Trend {
   ts: number;                    // Unix timestamp paired with the data
   value: number;                 // Data point in the time series
 }
-```text
+```
 
 ---
 
@@ -706,15 +708,15 @@ The Firewalla MSP API supports advanced search capabilities across multiple reso
 ### Search Query Syntax
 
 #### Basic Searches
-```text
+```bash
 # Field-specific searches
 box.name:"Gold Plus"
 mac:"AA:BB:CC:DD:EE:FF"
 protocol:tcp
-```text
+```
 
 #### Numeric Searches
-```text
+```bash
 # Comparison operators
 Total:>50MB
 bytes:>=1000000
@@ -722,22 +724,22 @@ count:<10
 
 # Range searches
 duration:[300 TO 600]
-```text
+```
 
 #### Wildcard Searches
-```text
+```bash
 # Use * for wildcards
 domain:*.facebook.com
 ip:192.168.*
 name:*laptop*
-```text
+```
 
 #### Quoted Searches
-```text
+```bash
 # Exact phrase matching
 message:"security threat detected"
 device.name:"John's iPhone"
-```text
+```
 
 ### Supported Units
 
@@ -788,7 +790,7 @@ GET /v2/flows?query=protocol:tcp&limit=100
 
 // Next page using cursor from response
 GET /v2/flows?query=protocol:tcp&limit=100&cursor=next_cursor_token
-```text
+```
 
 ---
 
@@ -812,7 +814,7 @@ const apiClient = axios.create({
     'Content-Type': 'application/json'
   }
 });
-```text
+```
 
 #### Get Active Alarms
 ```javascript
@@ -831,7 +833,7 @@ async function getActiveAlarms(limit = 100) {
     throw error;
   }
 }
-```text
+```
 
 #### Get Device Bandwidth Usage
 ```javascript
@@ -851,7 +853,7 @@ async function getTopBandwidthUsers(boxId, limit = 10) {
     throw error;
   }
 }
-```text
+```
 
 #### Block a Domain
 ```javascript
@@ -876,7 +878,7 @@ async function createBlockRule(domain, boxId) {
     throw error;
   }
 }
-```text
+```
 
 #### Search High-Risk Flows
 ```javascript
@@ -895,7 +897,7 @@ async function searchHighRiskFlows(boxId, timeframe = '1h') {
     throw error;
   }
 }
-```text
+```
 
 ### cURL Examples
 
@@ -904,21 +906,21 @@ async function searchHighRiskFlows(boxId, timeframe = '1h') {
 curl --request GET \
   --url "https://your-domain.firewalla.net/v2/boxes" \
   --header "Authorization: Token your_personal_access_token"
-```text
+```
 
 #### Get Offline Devices
 ```bash
 curl --request GET \
   --url "https://your-domain.firewalla.net/v2/devices?query=online:false" \
   --header "Authorization: Token your_personal_access_token"
-```text
+```
 
 #### Pause a Rule
 ```bash
 curl --request POST \
   --url "https://your-domain.firewalla.net/v2/rules/rule_id_here/pause" \
   --header "Authorization: Token your_personal_access_token"
-```text
+```
 
 #### Create Target List
 ```bash
@@ -933,7 +935,7 @@ curl --request POST \
     "category": "social",
     "notes": "Popular social media platforms"
   }'
-```text
+```
 
 ### Environment Configuration
 
@@ -946,14 +948,14 @@ export FIREWALLA_BOX_ID="your_box_gid_here"
 
 # Run your application
 node your_app.js
-```text
+```
 
 #### Configuration File (.env)
 ```env
 FIREWALLA_MSP_DOMAIN=your-domain.firewalla.net
 FIREWALLA_MSP_TOKEN=your_personal_access_token
 FIREWALLA_BOX_ID=your_box_gid_here
-```text
+```
 
 ---
 
@@ -977,7 +979,7 @@ FIREWALLA_BOX_ID=your_box_gid_here
     "details": "The provided token is expired or invalid"
   }
 }
-```text
+```
 
 ### Rate Limiting
 

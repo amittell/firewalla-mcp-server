@@ -18,7 +18,7 @@ npm install -g firewalla-mcp-server
 
 # Verify installation
 npx firewalla-mcp-server --version
-```text
+```
 
 ### 2. Configure MCP Connection
 
@@ -41,7 +41,7 @@ Create or update your Claude Code MCP configuration file:
     }
   }
 }
-```text
+```
 
 ### 3. Environment Variables (Alternative)
 
@@ -51,7 +51,7 @@ For convenience, set environment variables in your shell profile:
 export FIREWALLA_MSP_TOKEN="your_msp_access_token_here"
 export FIREWALLA_MSP_ID="yourdomain.firewalla.net"
 export FIREWALLA_BOX_ID="your_box_gid_here"
-```text
+```
 
 ### 4. Test Integration
 
@@ -61,24 +61,24 @@ Start a Claude Code session and test:
 claude-code
 # In Claude Code prompt:
 "Check my Firewalla status and show me any security alerts"
-```text
+```
 
 ## CLI Workflow Examples
 
 **Security Monitoring**
 ```bash
 claude-code "Analyze my network traffic from the last 2 hours and flag any suspicious activity"
-```text
+```
 
 **Bandwidth Investigation**
 ```bash
 claude-code "Who are my top bandwidth consumers today? Show me devices and data usage"
-```text
+```
 
 **Rule Management**
 ```bash
 claude-code "List all active firewall rules and show me which ones have blocked traffic recently"
-```text
+```
 
 ## Advanced CLI Usage
 
@@ -89,13 +89,13 @@ claude-code "Generate a comprehensive network security report" > security_report
 
 # Pipe to other tools
 claude-code "Get high-severity alarms as JSON" | jq '.alarms[] | select(.severity=="high")'
-```text
+```
 
 **Automated Monitoring**
 ```bash
 # Add to cron for daily reports
 0 9 * * * claude-code "Daily Firewalla security summary" | mail -s "Security Report" admin@company.com
-```text
+```
 
 ## Troubleshooting
 

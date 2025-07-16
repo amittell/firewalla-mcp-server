@@ -56,7 +56,7 @@ interface RateLimits {
     burstLimit: 2;              // 2 concurrent write requests
   };
 }
-```text
+```
 
 ### Server-Side Rate Limiting
 
@@ -75,7 +75,7 @@ interface ClientRateLimits {
   retryDelay: 1000;             // Base retry delay (ms)
   backoffMultiplier: 2;         // Exponential backoff multiplier
 }
-```text
+```
 
 ### Rate Limit Headers
 
@@ -86,7 +86,7 @@ X-RateLimit-Limit: 100
 X-RateLimit-Remaining: 95
 X-RateLimit-Reset: 1640995200
 X-RateLimit-Type: standard
-```text
+```
 
 ### Rate Limit Handling
 
@@ -97,11 +97,13 @@ class RateLimitManager {
   private activeRequests = 0;
   private lastRequestTime = 0;
 
+  constructor(private readonly limits: ClientRateLimits = defaultClientLimits) {}
+
   async makeRequest<T>(request: () => Promise<T>): Promise<T> {
     // Wait for minimum interval
     const now = Date.now();
     const timeSinceLastRequest = now - this.lastRequestTime;
-    const minimumInterval = 100; // 100ms
+    const minimumInterval = this.limits.minimumRequestInterval;
 
     if (timeSinceLastRequest < minimumInterval) {
       await new Promise(resolve =>
@@ -110,7 +112,7 @@ class RateLimitManager {
     }
 
     // Check concurrent request limit
-    if (this.activeRequests >= 5) {
+    if (this.activeRequests >= this.limits.maxConcurrentRequests) {
       await this.waitForRequestSlot();
     }
 
@@ -134,8 +136,20 @@ class RateLimitManager {
       this.activeRequests--;
     }
   }
+
+  private async waitForRequestSlot(): Promise<void> {
+    return new Promise(resolve => {
+      const check = () => {
+        if (this.activeRequests < this.limits.maxConcurrentRequests) {
+          return resolve();
+        }
+        setTimeout(check, 25);
+      };
+      check();
+    });
+  }
 }
-```text
+```
 
 ## Caching Strategies
 
@@ -183,7 +197,7 @@ interface CacheConfig {
     reason: "Target lists are relatively stable";
   };
 }
-```text
+```
 
 ### Intelligent Cache Keys
 
@@ -216,7 +230,7 @@ function generateCacheKey(
 
   return `${tool}:${JSON.stringify(sortedParams)}`;
 }
-```text
+```
 
 ### Cache Invalidation
 
@@ -254,7 +268,7 @@ class SmartCache {
     this.invalidateByPattern('get_bandwidth_usage');
   }
 }
-```text
+```
 
 ### Geographic Data Caching
 
@@ -314,7 +328,7 @@ class GeographicCache {
     return results;
   }
 }
-```text
+```
 
 ## Performance Optimization
 
@@ -344,7 +358,7 @@ async function batchGetDeviceStatus(
 
   return results;
 }
-```text
+```
 
 ### Query Optimization
 
@@ -383,7 +397,7 @@ class QueryOptimizer {
     return baseCost;
   }
 }
-```text
+```
 
 ### Connection Pooling
 
@@ -410,7 +424,7 @@ const axiosConfig = {
   maxContentLength: 50 * 1024 * 1024, // 50MB
   maxBodyLength: 50 * 1024 * 1024
 };
-```text
+```
 
 ### Memory Management
 
@@ -444,7 +458,7 @@ async function* processLargeDataset(
 
   } while (cursor);
 }
-```text
+```
 
 ## Request Management
 
@@ -496,7 +510,7 @@ class RequestQueue {
     this.processing = false;
   }
 }
-```text
+```
 
 ### Priority-Based Requests
 
@@ -523,7 +537,7 @@ await requestQueue.enqueue(
   () => getBandwidthUsage({ period: '7d', limit: 1000 }),
   RequestPriority.BACKGROUND
 );
-```text
+```
 
 ## Monitoring and Metrics
 
@@ -583,7 +597,7 @@ class PerformanceMonitor {
     return report;
   }
 }
-```text
+```
 
 ### Cache Performance Monitoring
 
@@ -626,7 +640,7 @@ class CacheMonitor {
     };
   }
 }
-```text
+```
 
 ## Best Practices
 
@@ -658,7 +672,7 @@ async function inefficientAlarmRetrieval() {
   // Don't do this - no caching, no limits
   return await getActiveAlarms({ limit: 10000 });
 }
-```text
+```
 
 ### Batch Processing
 
@@ -679,7 +693,7 @@ async function processManyDevices(deviceIds: string[]) {
 
   return results;
 }
-```text
+```
 
 ### Smart Query Construction
 
@@ -704,7 +718,7 @@ function buildOptimizedQuery(filters: QueryFilters): string {
 
   return parts.join(' AND ');
 }
-```text
+```
 
 ### Error Handling with Retry Logic
 
@@ -745,7 +759,7 @@ async function robustApiCall<T>(
 
   throw lastError!;
 }
-```text
+```
 
 ## Troubleshooting Performance Issues
 
@@ -790,7 +804,7 @@ async function diagnoseSlowResponse(tool: string, params: any) {
     throw error;
   }
 }
-```text
+```
 
 #### High Memory Usage
 
@@ -825,7 +839,7 @@ try {
 } finally {
   monitor.end();
 }
-```text
+```
 
 #### Rate Limit Breaches
 
@@ -860,7 +874,7 @@ class RateLimitPreventor {
     return this.windowSize - (Date.now() - oldestRequest);
   }
 }
-```text
+```
 
 ## Tool-Specific Guidelines
 
@@ -890,7 +904,7 @@ const searchOptimization = {
     cacheTime: 300000 // 5 minutes
   }
 };
-```text
+```
 
 ### Data Retrieval Tools
 
@@ -923,7 +937,7 @@ const retrievalOptimization = {
     filters: ['status:active'] // Default to active rules
   }
 };
-```text
+```
 
 ## Advanced Optimization Techniques
 
@@ -968,7 +982,7 @@ class PredictiveCache {
     }
   }
 }
-```text
+```
 
 ### Adaptive Query Optimization
 
@@ -1018,7 +1032,7 @@ class AdaptiveQueryOptimizer {
     return optimized;
   }
 }
-```text
+```
 
 ### Connection Pool Optimization
 
@@ -1068,6 +1082,6 @@ class DynamicConnectionPool {
     return 10;
   }
 }
-```text
+```
 
 This comprehensive rate limiting and performance guide provides everything you need to optimize the Firewalla MCP Server for maximum efficiency and reliability. Remember to monitor your usage patterns and adjust strategies based on your specific requirements and traffic patterns.
