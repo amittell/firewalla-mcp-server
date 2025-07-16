@@ -12,7 +12,7 @@ import {
 describe('limits configuration', () => {
   describe('getToolLimit', () => {
     it('should return correct limits for security tools', () => {
-      expect(getToolLimit('get_active_alarms')).toBe(STANDARD_LIMITS.BASIC_QUERY);
+      expect(getToolLimit('get_active_alarms')).toBe(500); // API documented maximum
     });
 
     it('should return correct limits for device tools', () => {
