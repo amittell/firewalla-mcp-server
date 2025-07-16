@@ -42,7 +42,7 @@ The Firewalla MCP Server implements sophisticated geographic data handling to en
 ```typescript
 interface FirewallaGeoData {
   country?: string;          // "United States", "China", null, "unknown"
-  region?: string;           // "California", "Beijing", null, "unknown"  
+  region?: string;           // "California", "Beijing", null, "unknown"
   city?: string;             // "San Francisco", "Beijing", null, "unknown"
   asn?: string;              // "AS15169", "AS4134", null, "unknown"
   org?: string;              // "Google LLC", "China Telecom", null, "unknown"
@@ -50,7 +50,7 @@ interface FirewallaGeoData {
   lat?: number;              // 37.7749, 39.9042, null
   lng?: number;              // -122.4194, 116.4074, null
 }
-```
+```text
 
 #### 2. Enhanced Geographic Enrichment
 ```typescript
@@ -61,7 +61,7 @@ interface EnrichedGeoData {
   continent: string;         // Derived from country
   region: string;            // State/province, normalized
   city: string;              // City name, normalized
-  
+
   // Network infrastructure
   asn: string;               // Autonomous System Number
   asn_name: string;          // AS organization name
@@ -69,7 +69,7 @@ interface EnrichedGeoData {
   is_cloud_provider: boolean;
   is_vpn: boolean;
   is_proxy: boolean;
-  
+
   // Risk and threat intelligence
   geographic_risk_score: number;  // 0.0-1.0 risk rating
   threat_intelligence: {
@@ -77,7 +77,7 @@ interface EnrichedGeoData {
     known_threat_source: boolean;
     malware_hosting: boolean;
   };
-  
+
   // Data quality metrics
   data_quality: {
     completeness_score: number;    // 0.0-1.0 completeness rating
@@ -86,7 +86,7 @@ interface EnrichedGeoData {
     source: string;                // Data source identifier
   };
 }
-```
+```text
 
 ### Data Source Reliability
 
@@ -98,14 +98,14 @@ const geoDataReliability = {
     accuracy: '92%',           // High accuracy for available data
     update_frequency: 'daily'
   },
-  
+
   maxmind_fallback: {
     availability: '99.9%',
     completeness: '95%',       // Higher completeness
     accuracy: '90%',           // Slightly lower accuracy
     update_frequency: 'weekly'
   },
-  
+
   threat_intelligence: {
     availability: '98%',
     completeness: '60%',       // Only for known threat sources
@@ -113,7 +113,7 @@ const geoDataReliability = {
     update_frequency: 'hourly'
   }
 }
-```
+```text
 
 ## Unknown Value Handling
 
@@ -133,7 +133,7 @@ const explicitUnknownPatterns = [
   '?',
   'unavailable'
 ];
-```
+```text
 
 #### 2. Null and Undefined Values
 ```typescript
@@ -145,7 +145,7 @@ const nullPatterns = {
   empty_string: '',
   whitespace_only: '   '
 };
-```
+```text
 
 #### 3. Invalid or Placeholder Data
 ```typescript
@@ -156,7 +156,7 @@ const invalidDataPatterns = {
   test_data: 'test',                              // Test environment data
   localhost_data: '127.0.0.1'                    // Local IP addresses
 };
-```
+```text
 
 ### Normalization Functions
 
@@ -164,27 +164,27 @@ const invalidDataPatterns = {
 ```typescript
 function normalizeCountry(rawCountry: any): string {
   // Handle null, undefined, empty values
-  if (!rawCountry || 
-      typeof rawCountry !== 'string' || 
+  if (!rawCountry ||
+      typeof rawCountry !== 'string' ||
       rawCountry.trim() === '') {
     return 'Unknown';
   }
-  
+
   // Handle explicit unknown patterns
   const normalized = rawCountry.trim().toLowerCase();
   if (explicitUnknownPatterns.includes(normalized)) {
     return 'Unknown';
   }
-  
+
   // Handle invalid country codes
   if (normalized.length === 2 && normalized === 'xx') {
     return 'Unknown';
   }
-  
+
   // Standardize country names
   const countryMappings = {
     'us': 'United States',
-    'usa': 'United States', 
+    'usa': 'United States',
     'united states of america': 'United States',
     'cn': 'China',
     'prc': 'China',
@@ -192,52 +192,52 @@ function normalizeCountry(rawCountry: any): string {
     'ru': 'Russia',
     'russian federation': 'Russia'
   };
-  
-  return countryMappings[normalized] || 
+
+  return countryMappings[normalized] ||
          rawCountry.charAt(0).toUpperCase() + rawCountry.slice(1).toLowerCase();
 }
 
 // Example usage and results
 const countryExamples = {
   normalizeCountry(null) =>                    'Unknown',
-  normalizeCountry('unknown') =>               'Unknown', 
+  normalizeCountry('unknown') =>               'Unknown',
   normalizeCountry('') =>                      'Unknown',
   normalizeCountry('us') =>                    'United States',
   normalizeCountry('CHINA') =>                 'China',
   normalizeCountry('russian federation') =>   'Russia'
 };
-```
+```text
 
 #### 2. ASN Normalization
 ```typescript
 function normalizeASN(rawASN: any): string {
-  if (!rawASN || 
-      typeof rawASN !== 'string' || 
+  if (!rawASN ||
+      typeof rawASN !== 'string' ||
       rawASN.trim() === '') {
     return 'Unknown';
   }
-  
+
   const cleaned = rawASN.trim().toLowerCase();
-  
+
   // Handle explicit unknown patterns
   if (explicitUnknownPatterns.includes(cleaned)) {
     return 'Unknown';
   }
-  
+
   // Handle invalid ASN patterns
   if (cleaned === 'as0' || cleaned === '0') {
     return 'Unknown';
   }
-  
+
   // Ensure proper ASN format
   if (/^as\d+$/i.test(cleaned)) {
     return cleaned.toUpperCase();
   }
-  
+
   if (/^\d+$/.test(cleaned)) {
     return `AS${cleaned}`;
   }
-  
+
   return 'Unknown';
 }
 
@@ -249,35 +249,35 @@ const asnExamples = {
   normalizeASN('15169') =>       'AS15169',
   normalizeASN('as4134') =>      'AS4134'
 };
-```
+```text
 
 #### 3. Coordinate Normalization
 ```typescript
 function normalizeCoordinates(lat: any, lng: any): { lat: number | null, lng: number | null } {
   const parsedLat = parseFloat(lat);
   const parsedLng = parseFloat(lng);
-  
+
   // Check for valid numeric values
   if (isNaN(parsedLat) || isNaN(parsedLng)) {
     return { lat: null, lng: null };
   }
-  
+
   // Check for placeholder coordinates (0,0 often indicates unknown)
   if (parsedLat === 0 && parsedLng === 0) {
     return { lat: null, lng: null };
   }
-  
+
   // Validate coordinate ranges
   if (parsedLat < -90 || parsedLat > 90 || parsedLng < -180 || parsedLng > 180) {
     return { lat: null, lng: null };
   }
-  
-  return { 
+
+  return {
     lat: Math.round(parsedLat * 10000) / 10000,    // 4 decimal precision
     lng: Math.round(parsedLng * 10000) / 10000
   };
 }
-```
+```text
 
 ## Data Normalization Patterns
 
@@ -303,28 +303,28 @@ function batchNormalizeGeoData(
     fallbacks_used: 0,
     validation_failures: 0
   };
-  
+
   for (const item of rawData) {
     try {
       const normalized = normalizeGeoDataItem(item, config);
       results.push(normalized);
       qualityStats.normalized++;
-      
+
       // Track fallback usage
       if (normalized._normalization_info?.fallbacks_used > 0) {
         qualityStats.fallbacks_used++;
       }
-      
+
     } catch (error) {
       qualityStats.validation_failures++;
-      
+
       // Create fallback item with minimal data
       results.push(createFallbackGeoData(item));
     }
   }
-  
+
   const processingTime = Date.now() - startTime;
-  
+
   // Log quality metrics
   if (config.qualityMetrics) {
     logger.info('Geographic data normalization completed', {
@@ -333,10 +333,10 @@ function batchNormalizeGeoData(
       success_rate: qualityStats.normalized / qualityStats.total
     });
   }
-  
+
   return results;
 }
-```
+```text
 
 ### Field-Specific Normalization
 
@@ -351,42 +351,42 @@ const geographicNormalization = {
       source: normalized === 'Unknown' ? 'fallback' : 'api'
     };
   },
-  
+
   region: (value: any) => {
     if (!value || typeof value !== 'string') {
       return { value: 'Unknown', confidence: 'low', source: 'fallback' };
     }
-    
+
     const cleaned = value.trim();
     if (explicitUnknownPatterns.includes(cleaned.toLowerCase())) {
       return { value: 'Unknown', confidence: 'low', source: 'fallback' };
     }
-    
+
     return {
       value: cleaned,
       confidence: 'medium',
       source: 'api'
     };
   },
-  
+
   city: (value: any) => {
     if (!value || typeof value !== 'string') {
       return { value: 'Unknown', confidence: 'low', source: 'fallback' };
     }
-    
+
     const cleaned = value.trim();
     if (explicitUnknownPatterns.includes(cleaned.toLowerCase())) {
       return { value: 'Unknown', confidence: 'low', source: 'fallback' };
     }
-    
+
     return {
       value: cleaned,
-      confidence: 'medium', 
+      confidence: 'medium',
       source: 'api'
     };
   }
 };
-```
+```text
 
 #### 2. Network Infrastructure Normalization
 ```typescript
@@ -399,14 +399,14 @@ const networkNormalization = {
       numeric: normalized !== 'Unknown' ? parseInt(normalized.replace('AS', '')) : null
     };
   },
-  
+
   hosting_provider: (value: any) => {
     if (!value || typeof value !== 'string') {
       return { value: null, confidence: 'low' };
     }
-    
+
     const cleaned = value.toLowerCase().trim();
-    
+
     // Map common hosting providers
     const providerMappings = {
       'google': 'Google',
@@ -416,17 +416,17 @@ const networkNormalization = {
       'alibaba': 'Alibaba Cloud',
       'tencent': 'Tencent Cloud'
     };
-    
+
     for (const [key, provider] of Object.entries(providerMappings)) {
       if (cleaned.includes(key)) {
         return { value: provider, confidence: 'high' };
       }
     }
-    
+
     return { value: value.trim(), confidence: 'medium' };
   }
 };
-```
+```text
 
 ### Quality Score Calculation
 
@@ -434,7 +434,7 @@ const networkNormalization = {
 function calculateDataQuality(normalizedData: NormalizedGeoData): number {
   let score = 0;
   let maxScore = 0;
-  
+
   // Core geographic fields (40% of total score)
   const coreFields = ['country', 'region', 'city'];
   for (const field of coreFields) {
@@ -443,7 +443,7 @@ function calculateDataQuality(normalizedData: NormalizedGeoData): number {
       score += 40 / coreFields.length;
     }
   }
-  
+
   // Network infrastructure (30% of total score)
   const networkFields = ['asn', 'hosting_provider'];
   for (const field of networkFields) {
@@ -452,25 +452,25 @@ function calculateDataQuality(normalizedData: NormalizedGeoData): number {
       score += 30 / networkFields.length;
     }
   }
-  
+
   // Coordinates (20% of total score)
   maxScore += 20;
-  if (normalizedData.coordinates && 
-      normalizedData.coordinates.lat !== null && 
+  if (normalizedData.coordinates &&
+      normalizedData.coordinates.lat !== null &&
       normalizedData.coordinates.lng !== null) {
     score += 20;
   }
-  
+
   // Threat intelligence (10% of total score)
   maxScore += 10;
-  if (normalizedData.threat_intelligence && 
+  if (normalizedData.threat_intelligence &&
       Object.keys(normalizedData.threat_intelligence).length > 0) {
     score += 10;
   }
-  
+
   return Math.round((score / maxScore) * 100) / 100; // Return 0.0-1.0
 }
-```
+```text
 
 ## Geographic Enrichment Process
 
@@ -480,53 +480,53 @@ function calculateDataQuality(normalizedData: NormalizedGeoData): number {
 class GeographicEnrichmentPipeline {
   async enrichFlowData(flows: NetworkFlow[]): Promise<EnrichedNetworkFlow[]> {
     const enriched: EnrichedNetworkFlow[] = [];
-    
+
     for (const flow of flows) {
       try {
         // 1. Extract IPs for enrichment
         const ipsToEnrich = this.extractIPsFromFlow(flow);
-        
+
         // 2. Check cache for existing data
         const cachedData = await this.getCachedGeoData(ipsToEnrich);
-        
+
         // 3. Enrich missing IPs
         const missingIPs = ipsToEnrich.filter(ip => !cachedData[ip]);
         const newGeoData = await this.enrichIPsWithGeoData(missingIPs);
-        
+
         // 4. Combine cached and new data
         const allGeoData = { ...cachedData, ...newGeoData };
-        
+
         // 5. Normalize all geographic data
         const normalizedGeoData = this.normalizeGeoDataBatch(allGeoData);
-        
+
         // 6. Calculate risk scores
         const riskEnrichedData = this.calculateRiskScores(normalizedGeoData);
-        
+
         // 7. Apply to flow
         const enrichedFlow = this.applyGeoDataToFlow(flow, riskEnrichedData);
-        
+
         enriched.push(enrichedFlow);
-        
+
         // 8. Update cache with new data
         await this.updateGeoDataCache(newGeoData);
-        
+
       } catch (error) {
         logger.warn('Geographic enrichment failed for flow', {
           flow_id: flow.id,
           error: error.message
         });
-        
+
         // Add flow with minimal geographic data
         enriched.push(this.createFallbackEnrichedFlow(flow));
       }
     }
-    
+
     return enriched;
   }
-  
+
   private normalizeGeoDataBatch(rawGeoData: Record<string, any>): Record<string, NormalizedGeoData> {
     const normalized: Record<string, NormalizedGeoData> = {};
-    
+
     for (const [ip, data] of Object.entries(rawGeoData)) {
       normalized[ip] = {
         country: normalizeCountry(data.country),
@@ -551,52 +551,52 @@ class GeographicEnrichmentPipeline {
         }
       };
     }
-    
+
     return normalized;
   }
 }
-```
+```text
 
 ### Risk Score Calculation
 
 ```typescript
 function calculateGeographicRisk(geoData: any): number {
   let riskScore = 0.0;
-  
+
   // Country-based risk scoring
   const highRiskCountries = ['China', 'Russia', 'Iran', 'North Korea'];
   const mediumRiskCountries = ['Brazil', 'India', 'Turkey', 'Pakistan'];
-  
+
   if (highRiskCountries.includes(geoData.country)) {
     riskScore += 0.4;
   } else if (mediumRiskCountries.includes(geoData.country)) {
     riskScore += 0.2;
   }
-  
+
   // ASN-based risk scoring
   const suspiciousASNs = ['AS4134', 'AS8075', 'AS9255']; // Known problematic ASNs
   if (suspiciousASNs.includes(geoData.asn)) {
     riskScore += 0.3;
   }
-  
+
   // Hosting provider risk
   if (geoData.is_vpn || geoData.is_proxy) {
     riskScore += 0.2;
   }
-  
+
   // Threat intelligence integration
   if (geoData.threat_intelligence?.known_threat_source) {
     riskScore += 0.5;
   }
-  
+
   if (geoData.threat_intelligence?.malware_hosting) {
     riskScore += 0.4;
   }
-  
+
   // Cap at 1.0
   return Math.min(riskScore, 1.0);
 }
-```
+```text
 
 ## Caching and Performance
 
@@ -618,7 +618,7 @@ const geoCacheConfig: GeoCacheConfig = {
   compressionEnabled: true,
   persistToDisk: true
 };
-```
+```text
 
 ### Cache Performance Metrics
 
@@ -627,20 +627,20 @@ class GeographicCache {
   private hitCount = 0;
   private missCount = 0;
   private totalRequests = 0;
-  
+
   async getGeoData(ip: string): Promise<NormalizedGeoData | null> {
     this.totalRequests++;
-    
+
     const cached = await this.cache.get(ip);
     if (cached) {
       this.hitCount++;
       return cached;
     }
-    
+
     this.missCount++;
     return null;
   }
-  
+
   getPerformanceMetrics() {
     return {
       hit_rate: this.hitCount / this.totalRequests,
@@ -651,7 +651,7 @@ class GeographicCache {
     };
   }
 }
-```
+```text
 
 ### Cache Optimization Strategies
 
@@ -665,23 +665,23 @@ const cacheOptimization = {
       '192.168.0.0/16',    // Private networks
       '10.0.0.0/8'         // Private networks
     ];
-    
+
     for (const range of commonRanges) {
       await preloadIPRange(range);
     }
   },
-  
+
   // Batch cache warming
   warmCacheFromLogs: async (logEntries: LogEntry[]) => {
     const uniqueIPs = extractUniqueIPs(logEntries);
     const batchSize = 100;
-    
+
     for (let i = 0; i < uniqueIPs.length; i += batchSize) {
       const batch = uniqueIPs.slice(i, i + batchSize);
       await enrichAndCacheIPBatch(batch);
     }
   },
-  
+
   // Smart eviction based on access patterns
   intelligentEviction: () => {
     // Keep frequently accessed IPs
@@ -689,7 +689,7 @@ const cacheOptimization = {
     // Prioritize high-quality data
   }
 };
-```
+```text
 
 ## Quality Assurance
 
@@ -704,18 +704,18 @@ interface DataQualityMetrics {
     asn: number;             // % of records with valid ASN
     coordinates: number;     // % of records with valid coordinates
   };
-  
+
   accuracy: {
     country_validation: number;     // % passing country validation
     coordinate_validation: number;  // % passing coordinate validation
     asn_validation: number;         // % passing ASN validation
   };
-  
+
   consistency: {
     country_region_match: number;   // % where country/region are consistent
     coordinate_country_match: number; // % where coordinates match country
   };
-  
+
   timeliness: {
     cache_hit_rate: number;         // % of requests served from cache
     average_enrichment_time: number; // Average ms for enrichment
@@ -725,7 +725,7 @@ interface DataQualityMetrics {
 
 function generateQualityReport(enrichedData: NormalizedGeoData[]): DataQualityMetrics {
   const total = enrichedData.length;
-  
+
   return {
     completeness: {
       country: calculateFieldCompleteness(enrichedData, 'country'),
@@ -734,18 +734,18 @@ function generateQualityReport(enrichedData: NormalizedGeoData[]): DataQualityMe
       asn: calculateFieldCompleteness(enrichedData, 'asn'),
       coordinates: calculateCoordinateCompleteness(enrichedData)
     },
-    
+
     accuracy: {
       country_validation: validateCountryData(enrichedData),
       coordinate_validation: validateCoordinateData(enrichedData),
       asn_validation: validateASNData(enrichedData)
     },
-    
+
     consistency: {
       country_region_match: validateCountryRegionConsistency(enrichedData),
       coordinate_country_match: validateCoordinateCountryConsistency(enrichedData)
     },
-    
+
     timeliness: {
       cache_hit_rate: getCurrentCacheHitRate(),
       average_enrichment_time: getAverageEnrichmentTime(),
@@ -753,7 +753,7 @@ function generateQualityReport(enrichedData: NormalizedGeoData[]): DataQualityMe
     }
   };
 }
-```
+```text
 
 ### Quality Improvement Strategies
 
@@ -764,23 +764,23 @@ const qualityImprovementStrategies = {
     // Fix common country name variations
     countryAliases: {
       'US': 'United States',
-      'UK': 'United Kingdom', 
+      'UK': 'United Kingdom',
       'UAE': 'United Arab Emirates'
     },
-    
+
     // Standardize region names
     regionStandardization: {
       'CA': 'California',
       'NY': 'New York',
       'TX': 'Texas'
     },
-    
+
     // Validate and clean ASN data
     asnValidation: (asn: string) => {
       return /^AS\d+$/.test(asn) ? asn : 'Unknown';
     }
   },
-  
+
   // Fallback data sources
   fallbackSources: [
     'maxmind_database',
@@ -788,20 +788,20 @@ const qualityImprovementStrategies = {
     'ipinfo_api',
     'local_geo_database'
   ],
-  
+
   // Data validation rules
   validationRules: {
     coordinates: (lat: number, lng: number) => {
       return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
     },
-    
+
     countryRegionConsistency: (country: string, region: string) => {
       const validRegions = getValidRegionsForCountry(country);
       return validRegions.includes(region);
     }
   }
 };
-```
+```text
 
 ## Error Handling
 
@@ -824,7 +824,7 @@ interface GeoDataError {
   details?: any;
   fallback_applied: boolean;
 }
-```
+```text
 
 ### Error Recovery Patterns
 
@@ -835,33 +835,33 @@ class GeoDataErrorHandler {
     ip: string,
     context: any
   ): Promise<NormalizedGeoData> {
-    
+
     switch (error.type) {
       case GeoDataErrorType.API_UNAVAILABLE:
         // Try fallback API or use cached data
-        return await this.tryFallbackSources(ip) || 
+        return await this.tryFallbackSources(ip) ||
                this.createMinimalGeoData(ip);
-      
+
       case GeoDataErrorType.INVALID_IP:
         // Handle private/local IPs
         return this.createPrivateIPGeoData(ip);
-      
+
       case GeoDataErrorType.NO_GEO_DATA:
         // Create unknown geo data with metadata
         return this.createUnknownGeoData(ip, 'no_data_available');
-      
+
       case GeoDataErrorType.NORMALIZATION_FAILED:
         // Log error and use raw data with basic normalization
         logger.warn('Geographic normalization failed', {
           ip, error: error.message
         });
         return this.applyBasicNormalization(ip, context.raw_data);
-      
+
       default:
         return this.createFallbackGeoData(ip);
     }
   }
-  
+
   private createMinimalGeoData(ip: string): NormalizedGeoData {
     return {
       country: 'Unknown',
@@ -891,7 +891,7 @@ class GeoDataErrorHandler {
     };
   }
 }
-```
+```text
 
 ## Best Practices
 
@@ -911,11 +911,11 @@ const geographicQueryOptimization = {
   // Use specific countries instead of wildcards
   preferred: 'country:China OR country:Russia',
   avoid: 'country:*',
-  
+
   // Combine geographic with other filters
   efficient: 'country:China AND severity:high AND timestamp:>NOW-1h',
   inefficient: 'country:China',
-  
+
   // Use geographic filters appropriately
   good: {
     countries: ['China', 'Russia'],      // Specific list
@@ -926,7 +926,7 @@ const geographicQueryOptimization = {
     min_risk_score: 0.0                  // No filtering
   }
 };
-```
+```text
 
 ### Data Quality Guidelines
 
@@ -939,7 +939,7 @@ const dataQualityGuidelines = {
     cache_hit_rate: 0.7,         // 70% cache hit rate
     enrichment_time: 500         // Max 500ms enrichment time
   },
-  
+
   // Monitoring and alerting
   monitoring: {
     quality_checks: 'every_hour',
@@ -952,7 +952,7 @@ const dataQualityGuidelines = {
     }
   }
 };
-```
+```text
 
 ## Troubleshooting
 
@@ -973,7 +973,7 @@ const cacheHealthCheck = {
 // 2. Increase TTL for stable data
 // 3. Implement cache warming strategies
 // 4. Review query patterns for cacheable data
-```
+```text
 
 #### 2. Poor Data Quality
 ```typescript
@@ -989,10 +989,10 @@ const qualityIssues = {
 
 // Solutions:
 // 1. Review IP address sources (private vs public)
-// 2. Check API data source reliability  
+// 2. Check API data source reliability
 // 3. Implement additional fallback sources
 // 4. Improve normalization algorithms
-```
+```text
 
 #### 3. Performance Issues
 ```typescript
@@ -1009,7 +1009,7 @@ const performanceIssues = {
 // 2. Add circuit breaker for failing APIs
 // 3. Optimize normalization algorithms
 // 4. Scale geographic enrichment workers
-```
+```text
 
 ### Debugging Geographic Data Issues
 
@@ -1025,7 +1025,7 @@ DEBUG=firewalla:cache:performance npm run mcp:start
 
 # Full geographic debugging
 DEBUG=firewalla:geo:* npm run mcp:start
-```
+```text
 
 ### Performance Monitoring Commands
 
@@ -1041,6 +1041,6 @@ npm run geo:analyze:unknowns
 
 # Performance benchmark
 npm run geo:benchmark
-```
+```text
 
 This comprehensive guide provides the foundation for understanding and implementing robust geographic data handling in the Firewalla MCP Server, ensuring consistent, high-quality location intelligence while maintaining optimal performance.

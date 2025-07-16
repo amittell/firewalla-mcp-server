@@ -48,7 +48,7 @@ export const STANDARD_LIMITS = {
   RULES_SUMMARY: 2000,         // Rule analysis operations
   STATISTICS: 100,             // Statistical operations (fixed results)
 }
-```
+```text
 
 ## Tool-Specific Limits
 
@@ -91,7 +91,7 @@ search_flows query:"severity:high AND protocol:tcp" limit:800
 
 # Complex search requiring full limit
 search_alarms query:"(severity:high OR severity:critical) AND source_ip:192.168.*" limit:1000
-```
+```text
 
 ### Geographic Search Operations (Limit: 1000)
 
@@ -134,7 +134,7 @@ const memoryUsageEstimate = {
   1000_devices: '250MB',  // Causes performance issues
   2000_devices: '500MB+'  // Risk of memory exhaustion
 }
-```
+```text
 
 ### Cross-Reference Operations (Limit: 2000)
 
@@ -160,7 +160,7 @@ const correlationQuality = {
   2000_results: 'Excellent correlation analysis',  // Current limit
   5000_results: 'Comprehensive but slow'
 }
-```
+```text
 
 ### Rules Summary Operations (Limit: 2000)
 
@@ -324,7 +324,7 @@ const performanceImprovements = {
     improvement: 'Response time: 67% faster, Memory: 50% reduction'
   }
 }
-```
+```text
 
 ## Performance Optimization Strategies
 
@@ -334,7 +334,7 @@ const performanceImprovements = {
    ```bash
    # Good: Specific query
    search_flows query:"protocol:tcp AND severity:high" limit:100
-   
+
    # Avoid: Broad query with high limit
    search_flows query:"protocol:tcp" limit:1000
    ```
@@ -343,7 +343,7 @@ const performanceImprovements = {
    ```bash
    # First request
    search_flows query:"timestamp:>NOW-24h" limit:500
-   
+
    # Subsequent requests with cursor
    search_flows query:"timestamp:>NOW-24h" limit:500 cursor:"eyJ0aW1lc3RhbXAi..."
    ```
@@ -352,10 +352,10 @@ const performanceImprovements = {
    ```bash
    # For quick overview
    get_active_alarms limit:50
-   
+
    # For detailed analysis
    get_active_alarms limit:500
-   
+
    # For comprehensive audit
    get_active_alarms limit:1000
    ```
@@ -396,7 +396,7 @@ const performanceThresholds = {
     maximum: 50       // Maximum concurrent requests
   }
 }
-```
+```text
 
 ### Tuning Recommendations
 
@@ -418,7 +418,7 @@ DEBUG=validation,limits npm run mcp:start
 
 # Track memory usage patterns
 DEBUG=memory,gc npm run mcp:start
-```
+```text
 
 ## Best Practices
 

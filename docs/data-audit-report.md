@@ -19,7 +19,7 @@ This comprehensive audit analyzed data processing consistency, geographic handli
 ### Critical Issues Identified
 
 #### 1.1 "Unknown" Geographic Data Prevalence
-**Location**: `/src/firewalla/client.ts` (lines 622-624, 706-712)  
+**Location**: `/src/firewalla/client.ts` (lines 622-624, 706-712)
 **Impact**: High - Many flows show "unknown" for geographic data
 
 **Current Implementation**:
@@ -28,7 +28,7 @@ if (item.region) {
   flow.region = item.region;
 }
 // No fallback for missing region data
-```
+```text
 
 **Issues**:
 - No fallback processing when API returns null/undefined geographic data
@@ -47,10 +47,10 @@ if (!enrichedFlow.region || enrichedFlow.region === 'unknown') {
     enrichedFlow.country = geoData.country;
   }
 }
-```
+```text
 
 #### 1.2 Incomplete Geographic Enrichment
-**Location**: `/src/firewalla/client.ts` (lines 2334-2358)  
+**Location**: `/src/firewalla/client.ts` (lines 2334-2358)
 **Impact**: Medium - Geographic enrichment methods exist but are not consistently used
 
 **Current Issue**: Geographic enrichment methods are implemented but only selectively applied to certain data types.
@@ -69,10 +69,10 @@ private enrichAllWithGeographicData(items: any[]): any[] {
     return item;
   });
 }
-```
+```text
 
 #### 1.3 Geographic Cache Underutilization
-**Location**: `/src/utils/geographic-cache.ts` and client usage  
+**Location**: `/src/utils/geographic-cache.ts` and client usage
 **Impact**: Medium - Performance impact from repeated IP lookups
 
 **Issue**: Geographic cache is implemented but cache statistics show low hit rates.
@@ -80,10 +80,10 @@ private enrichAllWithGeographicData(items: any[]): any[] {
 **Recommendation**: Implement proactive geographic data caching and better cache utilization strategies.
 
 ### 1.4 Geographic Constants Inconsistency
-**Location**: `/src/utils/geographic-constants.ts`  
+**Location**: `/src/utils/geographic-constants.ts`
 **Impact**: Low - Default values inconsistent with actual usage
 
-**Current**: Mixed use of "Unknown" vs "unknown" for default values  
+**Current**: Mixed use of "Unknown" vs "unknown" for default values
 **Recommendation**: Standardize on lowercase "unknown" for consistency with API patterns.
 
 ## 2. Field Consistency Audit
@@ -91,7 +91,7 @@ private enrichAllWithGeographicData(items: any[]): any[] {
 ### Critical Issues Identified
 
 #### 2.1 Mixed Naming Conventions
-**Locations**: Multiple tool handlers  
+**Locations**: Multiple tool handlers
 **Impact**: Medium - Confusing API responses
 
 **Issues Found**:
@@ -103,7 +103,7 @@ device_count: number  // snake_case
 deviceCount: number   // camelCase
 last_seen: number     // snake_case
 lastSeen: number      // camelCase
-```
+```text
 
 **Recommendation**: Establish consistent naming convention:
 ```typescript
@@ -114,10 +114,10 @@ interface StandardizedBox {
   last_seen: number;
   alarm_count: number;
 }
-```
+```text
 
 #### 2.2 "Unknown" vs "unknown" vs null Inconsistency
-**Locations**: Throughout codebase  
+**Locations**: Throughout codebase
 **Impact**: Medium - Data processing inconsistencies
 
 **Current Mixed Usage**:
@@ -128,7 +128,7 @@ name: item.name || 'Unknown Box'   // uppercase
 gid: item.gid || 'unknown'         // lowercase
 license: item.license || null      // null
 location: item.location || null    // null
-```
+```text
 
 **Recommendation**: Implement consistent default value strategy:
 ```typescript
@@ -143,10 +143,10 @@ interface DefaultValueStrategy {
   // Use 0 for numeric counts
   counts: 0;
 }
-```
+```text
 
 #### 2.3 Field Transformation Inconsistencies
-**Location**: Multiple transformation functions in client.ts  
+**Location**: Multiple transformation functions in client.ts
 **Impact**: Medium - Unpredictable field availability
 
 **Issues**:
@@ -166,14 +166,14 @@ class FieldStandardizer {
     };
   }
 }
-```
+```text
 
 ## 3. API Response Format Audit
 
 ### Critical Issues Identified
 
 #### 3.1 Inconsistent Response Structures
-**Locations**: Tool handlers return different formats  
+**Locations**: Tool handlers return different formats
 **Impact**: High - Client integration complexity
 
 **Current Inconsistencies**:
@@ -182,7 +182,7 @@ class FieldStandardizer {
 // search_flows returns: { flows: [], count: number }
 // get_devices returns: { results: [], count: number }
 // get_bandwidth returns: { top_devices: [], count: number }
-```
+```text
 
 **Recommendation**: Implement unified response format with backward compatibility:
 ```typescript
@@ -193,10 +193,10 @@ interface StandardResponse<T> {
   // Tool-specific legacy fields for backward compatibility
   [key: string]: any;
 }
-```
+```text
 
 #### 3.2 Pagination Metadata Inconsistencies
-**Location**: Various tools with pagination  
+**Location**: Various tools with pagination
 **Impact**: Medium - Inconsistent pagination behavior
 
 **Issues**:
@@ -212,10 +212,10 @@ interface StandardPagination {
   limit_applied: number;
   total_count?: number;  // Optional for performance
 }
-```
+```text
 
 #### 3.3 Error Response Format Variations
-**Location**: Error handling across tools  
+**Location**: Error handling across tools
 **Impact**: Medium - Inconsistent error processing
 
 **Current Issues**: Different error response formats make automated error handling difficult.
@@ -227,16 +227,16 @@ interface StandardPagination {
 ### Strengths Identified
 
 #### 4.1 Comprehensive SafeAccess Class
-**Location**: `/src/validation/error-handler.ts` (lines 443-543)  
-**Status**: Well-implemented  
+**Location**: `/src/validation/error-handler.ts` (lines 443-543)
+**Status**: Well-implemented
 **Features**:
 - Robust nested property access
 - Safe array operations with filtering
 - Proper null/undefined checking
 
 #### 4.2 Enhanced Parameter Validation
-**Location**: `/src/validation/error-handler.ts` (lines 140-438)  
-**Status**: Comprehensive  
+**Location**: `/src/validation/error-handler.ts` (lines 140-438)
+**Status**: Comprehensive
 **Features**:
 - Type-safe parameter validation
 - Contextual error messages
@@ -253,10 +253,10 @@ interface StandardPagination {
 ```typescript
 // ESLint rule to enforce SafeAccess usage
 "no-unsafe-property-access": "error"
-```
+```text
 
 #### 4.2 Missing Null Checks in Geographic Processing
-**Location**: Geographic utility functions  
+**Location**: Geographic utility functions
 **Impact**: Low - Potential runtime errors
 
 **Recommendation**: Add comprehensive null checking to geographic processing:
@@ -267,15 +267,15 @@ export function getGeographicDataForIP(ip: string): GeographicData | null {
   }
   // ... rest of implementation
 }
-```
+```text
 
 ## 5. Timestamp Format Audit
 
 ### Findings
 
 #### 5.1 Advanced Timestamp Handling
-**Location**: `/src/utils/timestamp.ts`  
-**Status**: Well-implemented  
+**Location**: `/src/utils/timestamp.ts`
+**Status**: Well-implemented
 **Strengths**:
 - Comprehensive format detection (Unix seconds, milliseconds, ISO strings)
 - Confidence scoring for format detection
@@ -290,7 +290,7 @@ export function getGeographicDataForIP(ip: string): GeographicData | null {
 alarm.ts = item.ts * 1000;                    // Unix milliseconds
 flow.timestamp = new Date(item.ts * 1000);    // Date object
 device.lastSeen = item.lastSeen;              // Raw value (inconsistent)
-```
+```text
 
 **Recommendation**: Standardize timestamp handling:
 ```typescript
@@ -300,20 +300,20 @@ interface StandardTimestamps {
   updated_at: string;  // ISO 8601
   last_seen: string;   // ISO 8601
 }
-```
+```text
 
 ## 6. Error Response Handling Audit
 
 ### Strengths Identified
 
 #### 6.1 Comprehensive Error Classification
-**Location**: `/src/validation/error-handler.ts` (lines 14-25)  
-**Status**: Well-designed  
+**Location**: `/src/validation/error-handler.ts` (lines 14-25)
+**Status**: Well-designed
 **Features**: Detailed error type enumeration with specific categories
 
 #### 6.2 Enhanced Error Context
-**Location**: `/src/validation/error-handler.ts` (lines 30-44)  
-**Status**: Comprehensive  
+**Location**: `/src/validation/error-handler.ts` (lines 30-44)
+**Status**: Comprehensive
 **Features**: Rich error context with request metadata
 
 ### Issues Identified
@@ -332,7 +332,7 @@ createErrorResponse(
   ErrorType.SEARCH_ERROR,  // Specific type
   { query: invalidQuery }
 );
-```
+```text
 
 #### 6.2 Missing Error Context
 **Impact**: Low - Reduced debugging capability
@@ -346,7 +346,7 @@ const context = {
   parameters: sanitizedParams,
   requestId: generateRequestId()
 };
-```
+```text
 
 ## 7. Recommendations by Priority
 
@@ -422,7 +422,7 @@ private async processFlowsWithGeography(flows: any[]): Promise<Flow[]> {
   return flows.map(flow => {
     // Apply geographic enrichment
     const enriched = this.enrichWithGeographicData(flow);
-    
+
     // Fallback processing for missing data
     if (!enriched.region || enriched.region === 'unknown') {
       const geoData = this.getGeographicDataFromCache(flow.destination?.ip);
@@ -432,11 +432,11 @@ private async processFlowsWithGeography(flows: any[]): Promise<Flow[]> {
         enriched.continent = geoData.continent;
       }
     }
-    
+
     return enriched;
   });
 }
-```
+```text
 
 ### Field Standardization Utility
 ```typescript
@@ -444,36 +444,36 @@ export class FieldStandardizer {
   private static readonly FIELD_MAPPINGS = {
     // ID fields -> 'unknown'
     id: (raw: any) => raw.id || raw.gid || raw._id || 'unknown',
-    
+
     // Name fields -> 'Unknown [Type]'
-    name: (raw: any, type: string) => 
+    name: (raw: any, type: string) =>
       raw.name || raw.hostname || raw.deviceName || `Unknown ${type}`,
-    
+
     // IP fields -> 'unknown'
-    ip: (raw: any) => 
+    ip: (raw: any) =>
       raw.ip || raw.ipAddress || raw.localIP || 'unknown',
-    
+
     // Metadata fields -> null
     metadata: (raw: any, field: string) => raw[field] || null,
-    
+
     // Count fields -> 0
     count: (raw: any, field: string) => Number(raw[field]) || 0
   };
-  
+
   static standardizeResponse<T>(
-    raw: any, 
+    raw: any,
     schema: FieldMappingSchema
   ): T {
     const result: any = {};
-    
+
     for (const [field, mapping] of Object.entries(schema)) {
       result[field] = this.FIELD_MAPPINGS[mapping.type](raw, mapping.context);
     }
-    
+
     return result as T;
   }
 }
-```
+```text
 
 ### Unified Response Format
 ```typescript
@@ -490,16 +490,16 @@ export class ResponseUnifier {
       cached: metadata.cached || false,
       // Additional standard fields...
     };
-    
+
     // Add legacy fields for backward compatibility
     if (legacyFormat === 'search_flows') {
       return { ...standard, flows: data };
     }
-    
+
     return standard;
   }
 }
-```
+```text
 
 ## 10. Monitoring and Validation
 
@@ -524,7 +524,7 @@ const VALIDATION_RULES = {
     optionalFields: ['cached', 'pagination', 'metadata']
   }
 };
-```
+```text
 
 ## Conclusion
 

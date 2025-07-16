@@ -12,12 +12,12 @@ The Firewalla MCP Server implements a sophisticated RBAC system that maps conven
 
 #### Permission Hierarchy
 
-```
+```text
 PermissionLevel.NONE (0)     - No access
 PermissionLevel.READ (1)     - Read-only operations
-PermissionLevel.WRITE (2)    - Read and write operations  
+PermissionLevel.WRITE (2)    - Read and write operations
 PermissionLevel.ADMIN (3)    - Full administrative access
-```
+```text
 
 #### Tool Categories
 
@@ -49,7 +49,7 @@ PermissionLevel.ADMIN (3)    - Full administrative access
 - **Risk Level**: Low
 - **Max Scope**: Global
 
-#### Operator Role  
+#### Operator Role
 - **Permissions**: Alarm management and basic rule operations
 - **Use Cases**: SOC operations, incident response, rule management
 - **Risk Level**: Medium
@@ -87,7 +87,7 @@ PermissionLevel.ADMIN (3)    - Full administrative access
     blockLoopback: true                // Block loopback addresses
   }
 }
-```
+```text
 
 ### 4. Environment Variables
 
@@ -106,9 +106,9 @@ PermissionLevel.ADMIN (3)    - Full administrative access
 #### Box ID Validation
 
 The system validates that `FIREWALLA_DEFAULT_BOX_ID` follows UUID format:
-```
+```text
 ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$
-```
+```text
 
 ## Audit Logging
 
@@ -136,7 +136,7 @@ Every operation generates a comprehensive audit log entry:
   },
   riskScore: number                  // Security risk score (0-100)
 }
-```
+```text
 
 ### 2. Correlation ID Tracking
 
@@ -202,7 +202,7 @@ Risk scores (0-100) are calculated based on:
 
 #### Permission Risk Factors
 - **Admin permissions**: +30 points
-- **Write permissions**: +20 points  
+- **Write permissions**: +20 points
 - **Read permissions**: +5 points
 - **Sensitive operations**: +20 points
 
@@ -239,10 +239,10 @@ Risk scores (0-100) are calculated based on:
 ### 1. Scope Warnings
 
 Global scope operations generate warnings:
-```
-WARNING: block_ip will be applied globally to all devices. 
+```text
+WARNING: block_ip will be applied globally to all devices.
 Consider using device-specific or group-specific scope for better security.
-```
+```text
 
 ### 2. Parameter Warnings
 
@@ -401,8 +401,8 @@ To add security to existing convenience tools:
    ```typescript
    // Before
    export class MyHandler extends BaseToolHandler {
-   
-   // After  
+
+   // After
    export class MyHandler extends SecureConvenienceHandler {
    ```
 
@@ -410,9 +410,9 @@ To add security to existing convenience tools:
    ```typescript
    // Before
    async execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse> {
-   
+
    // After
-   protected async executeSecure(args: ToolArgs, firewalla: FirewallaClient, 
+   protected async executeSecure(args: ToolArgs, firewalla: FirewallaClient,
                                  securityContext: SecurityContext): Promise<ToolResponse> {
    ```
 
@@ -420,7 +420,7 @@ To add security to existing convenience tools:
    ```typescript
    // Before
    return this.createSuccessResponse(data);
-   
+
    // After
    return this.createSecureSuccessResponse(data, securityContext);
    ```

@@ -1,6 +1,6 @@
 # Firewalla API Documentation Audit Report
 
-**Date**: 2025-07-14  
+**Date**: 2025-07-14
 **Purpose**: Comprehensive comparison between official Firewalla API documentation and local API reference
 
 ## Executive Summary
@@ -58,7 +58,7 @@ This discrepancy requires immediate testing to verify actual API behavior
 
 **Issue**: Inconsistent parameter notation
 
-**Official Documentation**: Uses `:parameter` notation (e.g., `/v2/alarms/:gid/:aid`)  
+**Official Documentation**: Uses `:parameter` notation (e.g., `/v2/alarms/:gid/:aid`)
 **Local Documentation**: Uses `{parameter}` notation (e.g., `/v2/alarms/{gid}/{aid}`)
 
 **Impact**: Low - Both notations are understood, but consistency would be better
@@ -259,7 +259,7 @@ async function testPauseResume() {
 }
 
 testPauseResume().catch(console.error);
-```
+```text
 
 Run with: `node test-pause-resume.js`
 

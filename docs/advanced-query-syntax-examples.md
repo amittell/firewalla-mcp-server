@@ -41,7 +41,7 @@ online:true
 # Case-insensitive matching
 country:china        # Matches "China", "CHINA", "china"
 device_name:laptop   # Matches various laptop naming patterns
-```
+```text
 
 ### Wildcard Patterns
 
@@ -51,14 +51,14 @@ source_ip:192.168.*
 device_name:iPhone*
 target_value:*.facebook.com
 
-# Suffix matching  
+# Suffix matching
 mac_address:*:aa:bb:cc
 application:*browser
 
 # Contains matching
 device_name:*laptop*
 user_agent:*Chrome*
-```
+```text
 
 ### Range Queries
 
@@ -78,7 +78,7 @@ created:[NOW-7d TO NOW-1d]
 bytes:>1000000         # Greater than 1MB
 timestamp:<NOW-1h      # Older than 1 hour
 severity_score:>=0.8   # High severity
-```
+```text
 
 ### Comparison Operators
 
@@ -93,7 +93,7 @@ priority:<=2           # Priority 2 or lower
 timestamp:>NOW-24h     # Within last 24 hours
 last_seen:<NOW-1h      # Not seen in last hour
 created:>=2024-01-01   # Created this year or later
-```
+```text
 
 ## Logical Operators
 
@@ -108,7 +108,7 @@ blocked:true AND country:China
 # Multiple field AND
 severity:high AND protocol:tcp AND source_ip:192.168.*
 device_type:laptop AND online:true AND last_seen:>NOW-1h
-```
+```text
 
 ### OR Operations
 
@@ -121,7 +121,7 @@ country:China OR country:Russia
 # Multiple value OR
 (severity:high OR severity:critical OR severity:medium) AND protocol:tcp
 device_type:phone OR device_type:tablet OR device_type:laptop
-```
+```text
 
 ### NOT Operations
 
@@ -134,7 +134,7 @@ NOT severity:low
 # Combined with other operators
 severity:high AND NOT source_ip:192.168.*
 protocol:tcp AND NOT blocked:true AND NOT destination_port:80
-```
+```text
 
 ### Complex Grouping
 
@@ -146,7 +146,7 @@ protocol:tcp AND NOT blocked:true AND NOT destination_port:80
 
 # Nested grouping
 ((severity:high AND protocol:tcp) OR (severity:critical AND protocol:udp)) AND NOT source_ip:192.168.*
-```
+```text
 
 ## Field-Specific Queries
 
@@ -171,7 +171,7 @@ bytes:>1000000
 duration:[10 TO 300]
 packet_count:>100
 bandwidth_usage:>50000000
-```
+```text
 
 ### Security Fields
 
@@ -195,7 +195,7 @@ resolved:false
 acknowledged:true
 priority:urgent
 status:active
-```
+```text
 
 ### Device Fields
 
@@ -219,7 +219,7 @@ os_type:iOS
 browser:Chrome
 user_agent:*Safari*
 hostname:*MacBook*
-```
+```text
 
 ### Geographic Fields
 
@@ -242,7 +242,7 @@ is_vpn:false
 geographic_risk_score:>0.7
 high_risk_country:true
 known_threat_source:true
-```
+```text
 
 ### Temporal Fields
 
@@ -260,7 +260,7 @@ last_modified:>=2024-01-15T10:00:00Z
 
 # Time range combinations
 (timestamp:>NOW-24h AND timestamp:<NOW-1h) AND severity:high
-```
+```text
 
 ## Tool-Specific Query Examples
 
@@ -281,7 +281,7 @@ search_flows query:"application:torrent OR application:p2p OR destination_port:[
 
 # Geographic threat analysis
 search_flows query:"(country:China OR country:Russia OR country:Iran) AND severity:>=medium"
-```
+```text
 
 ### Alarm Search Queries (`search_alarms`)
 
@@ -300,7 +300,7 @@ search_alarms query:"type:network_anomaly AND bytes:>50000000 AND protocol:tcp"
 
 # False positive filtering
 search_alarms query:"severity:high AND NOT (source_ip:192.168.* OR source_ip:10.0.*)"
-```
+```text
 
 ### Device Search Queries (`search_devices`)
 
@@ -319,7 +319,7 @@ search_devices query:"device_type:unknown OR mac_vendor:unknown OR hostname:*unk
 
 # Performance monitoring
 search_devices query:"bandwidth_usage:>100000000 AND connection_type:wifi"
-```
+```text
 
 ### Rule Search Queries (`search_rules`)
 
@@ -338,7 +338,7 @@ search_rules query:"schedule:* AND action:timelimit"
 
 # High-impact rules
 search_rules query:"hit_count:>1000 AND action:block"
-```
+```text
 
 ### Target List Queries (`search_target_lists`)
 
@@ -354,7 +354,7 @@ search_target_lists query:"category:social_media AND target_count:>1000"
 
 # Custom rule lists
 search_target_lists query:"owner:custom AND last_updated:>NOW-7d"
-```
+```text
 
 ## Geographic Query Patterns
 
@@ -364,12 +364,12 @@ search_target_lists query:"owner:custom AND last_updated:>NOW-7d"
 # High-risk country analysis
 search_flows_by_geography query:"blocked:true" geographic_filters:"{countries:[\"China\",\"Russia\",\"Iran\"],min_risk_score:0.8}"
 
-# Continental traffic analysis  
+# Continental traffic analysis
 search_flows_by_geography query:"bytes:>10000000" geographic_filters:"{continents:[\"Asia\",\"Europe\"]}"
 
 # Regional threat hunting
 search_alarms_by_geography query:"severity:>=medium" geographic_filters:"{regions:[\"Eastern Europe\",\"Middle East\"]}"
-```
+```text
 
 ### Infrastructure-Based Queries
 
@@ -382,7 +382,7 @@ search_flows_by_geography query:"blocked:true" geographic_filters:"{asns:[\"AS41
 
 # VPN/Proxy detection
 search_flows_by_geography query:"bytes:>50000000" geographic_filters:"{exclude_vpn:true,exclude_cloud:true}"
-```
+```text
 
 ### Risk-Based Geographic Filtering
 
@@ -392,7 +392,7 @@ search_alarms_by_geography query:"severity:high" geographic_filters:"{high_risk_
 
 # Geographic risk scoring
 search_flows_by_geography query:"duration:>300" geographic_filters:"{min_risk_score:0.9}"
-```
+```text
 
 ## Performance-Optimized Queries
 
@@ -407,7 +407,7 @@ search_alarms query:"timestamp:[NOW-24h TO NOW-1h] AND severity:critical" limit:
 
 # Avoid broad time ranges (slow)
 # search_flows query:"timestamp:>NOW-30d" limit:2000  # Can timeout
-```
+```text
 
 ### Field-Specific Optimizations
 
@@ -420,7 +420,7 @@ search_devices query:"device_type:laptop AND mac_vendor:Apple AND online:true" l
 
 # Avoid broad wildcards (slow)
 # search_flows query:"source_ip:*" limit:2000  # Can be very slow
-```
+```text
 
 ### Limit Optimization Patterns
 
@@ -434,7 +434,7 @@ search_flows query:"severity:high" limit:500
 
 # Use pagination for large datasets
 search_flows query:"severity:high" limit:500 cursor:"eyJ0aW1l..."
-```
+```text
 
 ## Complex Correlation Queries
 
@@ -446,7 +446,7 @@ search_cross_reference primary_query:"blocked:true AND country:China" secondary_
 
 # Network behavior correlation
 search_enhanced_cross_reference primary_query:"bytes:>100000000" secondary_queries:"[\"device_type:laptop\",\"application:torrent\"]" correlation_params:"{correlationFields:[\"device_ip\",\"application\"],correlationType:\"AND\"}" limit:500
-```
+```text
 
 ### Multi-Entity Analysis
 
@@ -456,7 +456,7 @@ search_enhanced_cross_reference primary_query:"online:false" secondary_queries:"
 
 # Geographic and security correlation
 search_enhanced_cross_reference primary_query:"country:China OR country:Russia" secondary_queries:"[\"malware_detected:true\",\"intrusion_attempt:true\"]" correlation_params:"{correlationFields:[\"source_ip\",\"country\"],networkScope:{includeSubnets:true}}" limit:300
-```
+```text
 
 ## Common Query Patterns
 
@@ -475,7 +475,7 @@ search_devices query:"device_ip:$SUSPICIOUS_IP OR last_seen:<NOW-1h" limit:10
 
 # 4. Review applicable rules
 search_rules query:"target_value:*$SUSPICIOUS_DOMAIN* OR source_ip:$SUSPICIOUS_IP" limit:20
-```
+```text
 
 ### Network Performance Analysis
 
@@ -489,7 +489,7 @@ search_flows query:"bytes:>100000000 AND timestamp:>NOW-24h" limit:500
 
 # 3. Performance impact devices
 search_devices query:"bandwidth_usage:>50000000 AND connection_type:wifi" limit:200
-```
+```text
 
 ### Compliance and Audit Patterns
 
@@ -506,7 +506,7 @@ search_rules query:"last_modified:>NOW-7d" limit:200
 
 # 4. Rule summary analysis
 get_network_rules_summary limit:2000
-```
+```text
 
 ## Troubleshooting Query Issues
 
@@ -519,7 +519,7 @@ search_flows query:"severity:high AND (protocol:tcp"
 
 # Correct
 search_flows query:"severity:high AND (protocol:tcp)"
-```
+```text
 
 #### 2. Unmatched Quotes
 ```bash
@@ -530,7 +530,7 @@ search_alarms query:"severity:\"high AND protocol:tcp"
 search_alarms query:"severity:high AND protocol:tcp"
 # Or with proper escaping
 search_alarms query:"message:\"threat detected\" AND severity:high"
-```
+```text
 
 #### 3. Invalid Field Names
 ```bash
@@ -539,7 +539,7 @@ search_flows query:"invalid_field:value"
 
 # Correct - use documented field names
 search_flows query:"source_ip:192.168.1.1"
-```
+```text
 
 #### 4. Range Syntax Errors
 ```bash
@@ -548,7 +548,7 @@ search_flows query:"bytes:1000-50000"
 
 # Correct range syntax
 search_flows query:"bytes:[1000 TO 50000]"
-```
+```text
 
 ### Performance Troubleshooting
 
@@ -562,7 +562,7 @@ search_devices query:"online:true" limit:5000
 # Optimized alternatives
 search_flows query:"timestamp:>NOW-24h AND severity:high" limit:1000
 search_devices query:"online:true AND device_type:laptop" limit:1000
-```
+```text
 
 #### Memory Usage Optimization
 
@@ -572,7 +572,7 @@ get_bandwidth_usage period:"30d" limit:1000
 
 # Optimized for memory usage
 get_bandwidth_usage period:"24h" limit:500
-```
+```text
 
 ### Query Validation Checklist
 

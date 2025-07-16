@@ -5,7 +5,7 @@ Connect Firewalla network security data to VS Code for integrated security monit
 ## Prerequisites
 
 - VS Code with MCP extension support
-- Node.js 18+ and npm installed  
+- Node.js 18+ and npm installed
 - Active Firewalla MSP account
 - MCP extension for VS Code installed
 
@@ -23,7 +23,7 @@ In VS Code:
 ```bash
 # Install globally for easy access
 npm install -g firewalla-mcp-server
-```
+```text
 
 ### 3. Configure MCP Server
 
@@ -45,7 +45,7 @@ Create or edit VS Code MCP settings:
     }
   }
 }
-```
+```text
 
 ### 4. Environment Setup (Alternative)
 
@@ -59,13 +59,13 @@ Add to your VS Code `settings.json`:
       "args": ["firewalla-mcp-server"],
       "env": {
         "FIREWALLA_MSP_TOKEN": "${env:FIREWALLA_MSP_TOKEN}",
-        "FIREWALLA_MSP_ID": "${env:FIREWALLA_MSP_ID}", 
+        "FIREWALLA_MSP_ID": "${env:FIREWALLA_MSP_ID}",
         "FIREWALLA_BOX_ID": "${env:FIREWALLA_BOX_ID}"
       }
     }
   }
 }
-```
+```text
 
 Then set environment variables in your shell.
 
@@ -88,11 +88,11 @@ Then set environment variables in your shell.
 // In tasks.json - automated security checks
 {
   "label": "Security Check",
-  "type": "shell", 
+  "type": "shell",
   "command": "npx",
   "args": ["firewalla-mcp-server", "--query", "high-severity-alarms"]
 }
-```
+```text
 
 **Debugging Network Issues**
 - Real-time network flow analysis

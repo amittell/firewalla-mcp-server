@@ -19,7 +19,7 @@ npm install -g firewalla-mcp-server
 
 # Verify installation works
 npx firewalla-mcp-server --version
-```
+```text
 
 ### 2. Configure Cline MCP Integration
 
@@ -41,7 +41,7 @@ Update Cline's MCP configuration in VS Code settings:
     }
   }
 }
-```
+```text
 
 ### 3. Alternative Configuration Method
 
@@ -61,7 +61,7 @@ Create workspace-specific config in `.vscode/settings.json`:
     }
   }
 }
-```
+```text
 
 ### 4. Test Integration
 
@@ -81,48 +81,48 @@ Create workspace-specific config in `.vscode/settings.json`:
 **Code Integration**
 ```typescript
 // Ask Cline while coding:
-"Analyze my network security while I'm developing this API. 
+"Analyze my network security while I'm developing this API.
 Are there any firewall rules that might block this endpoint?"
-```
+```text
 
 **Automated Security Workflows**
-```
+```text
 "Set up a daily security check routine that:
 1. Reviews high-severity alerts
-2. Checks for offline devices  
+2. Checks for offline devices
 3. Analyzes bandwidth anomalies
 4. Generates a summary report"
-```
+```text
 
 ## Advanced Cline Commands
 
 **Comprehensive Security Analysis**
-```
+```text
 "Perform a complete network security audit covering:
 - All security alerts from the last 24 hours
 - Bandwidth usage patterns and anomalies
 - Firewall rule effectiveness
 - Geographic threat analysis
 - Device connectivity status"
-```
+```text
 
 **Interactive Network Debugging**
-```
+```text
 "Help me debug a network connectivity issue:
 1. Check if device 192.168.1.100 is online
 2. Review any blocked traffic to/from this device
 3. Analyze recent network flows
 4. Suggest troubleshooting steps"
-```
+```text
 
 **Security Compliance Reporting**
-```
+```text
 "Generate a security compliance report for management including:
 - Summary of all threats detected and blocked
-- Network access control effectiveness  
+- Network access control effectiveness
 - Bandwidth usage by department/device type
 - Recommendations for security improvements"
-```
+```text
 
 ## Troubleshooting
 
@@ -151,21 +151,21 @@ Are there any firewall rules that might block this endpoint?"
 ## Integration Workflow
 
 **Development Security**
-```
+```text
 "While I'm coding this network service, monitor for:
 - Any security alerts related to the ports I'm using
 - Bandwidth patterns that might indicate issues
 - Firewall rules that could affect deployment"
-```
+```text
 
-**Production Monitoring**  
-```
+**Production Monitoring**
+```text
 "Set up continuous monitoring that alerts me to:
 - High-severity security events
 - Unusual bandwidth consumption
 - Device connectivity problems
 - Geographic-based threats"
-```
+```text
 
 ---
 

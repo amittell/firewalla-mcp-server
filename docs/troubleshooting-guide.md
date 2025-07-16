@@ -99,7 +99,7 @@ The MCP server categorizes errors into specific types to help with troubleshooti
   "tool": "search_flows",
   "errorType": "validation_error"
 }
-```
+```text
 
 **Solution Steps**:
 1. **Identify Missing Parameter**: Check the error message for the specific parameter name
@@ -113,7 +113,7 @@ The MCP server categorizes errors into specific types to help with troubleshooti
 
 // ✅ Correct - includes required limit
 { query: "severity:high", limit: 100 }
-```
+```text
 
 ### Invalid Parameter Types
 
@@ -126,7 +126,7 @@ The MCP server categorizes errors into specific types to help with troubleshooti
   "message": "limit must be a number, got string",
   "errorType": "validation_error"
 }
-```
+```text
 
 **Solution Steps**:
 1. **Check Parameter Type**: Verify you're passing the correct data type
@@ -140,7 +140,7 @@ The MCP server categorizes errors into specific types to help with troubleshooti
 
 // ✅ Correct - proper number type
 { query: "severity:high", limit: 100 }
-```
+```text
 
 ### Parameter Range Violations
 
@@ -166,7 +166,7 @@ The MCP server categorizes errors into specific types to help with troubleshooti
 
 // ✅ Alternative - use pagination
 { query: "severity:high", limit: 1000, cursor: "page_token" }
-```
+```text
 
 ### Null/Undefined Parameter Handling
 
@@ -190,7 +190,7 @@ The MCP server categorizes errors into specific types to help with troubleshooti
 // ✅ Correct - valid values or omitted
 { query: "severity:high", limit: 100 }
 // cursor omitted since it's optional
-```
+```text
 
 ## Authentication and Connection Issues
 
@@ -208,7 +208,7 @@ The MCP server categorizes errors into specific types to help with troubleshooti
 curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
      "https://$FIREWALLA_MSP_ID/v2/boxes" \
      -w "HTTP Status: %{http_code}\n"
-```
+```text
 
 **Solutions**:
 1. **Regenerate Token**: Create new token in Firewalla MSP portal
@@ -229,7 +229,7 @@ curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
 curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
      "https://$FIREWALLA_MSP_ID/v2/boxes/$FIREWALLA_BOX_ID" \
      -w "HTTP Status: %{http_code}\n"
-```
+```text
 
 **Solutions**:
 1. **Get Correct Box ID**: Find the correct box ID from MSP portal
@@ -252,7 +252,7 @@ nslookup $FIREWALLA_MSP_ID
 # Test HTTPS connectivity
 curl -I "https://$FIREWALLA_MSP_ID" \
      -w "HTTP Status: %{http_code}\n"
-```
+```text
 
 **Solutions**:
 1. **Verify Domain**: Check correct MSP domain in portal
@@ -280,7 +280,7 @@ curl -I "https://$FIREWALLA_MSP_ID" \
 
 // ✅ Add time filter
 { query: "protocol:tcp AND timestamp:>NOW-1h", limit: 2000 }
-```
+```text
 
 #### 2. Use More Specific Filters
 ```javascript
@@ -289,7 +289,7 @@ curl -I "https://$FIREWALLA_MSP_ID" \
 
 // ✅ More specific
 { query: "severity:high AND source_ip:192.168.*", limit: 1000 }
-```
+```text
 
 #### 3. Reduce Limit and Use Pagination
 ```javascript
@@ -299,7 +299,7 @@ curl -I "https://$FIREWALLA_MSP_ID" \
 // ✅ Smaller limit with pagination
 { query: "severity:high", limit: 500, cursor: null }
 // Then use returned cursor for next page
-```
+```text
 
 #### 4. Split Complex Queries
 ```javascript
@@ -324,7 +324,7 @@ search_enhanced_cross_reference({
   },
   limit: 1000
 })
-```
+```text
 
 ### Network Timeouts
 
@@ -339,7 +339,7 @@ search_enhanced_cross_reference({
 # Test network connectivity with timing
 time curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
           "https://$FIREWALLA_MSP_ID/v2/boxes/$FIREWALLA_BOX_ID/alarms?limit=1"
-```
+```text
 
 **Solutions**:
 1. **Retry with Backoff**: Implement exponential backoff retry logic
@@ -364,7 +364,7 @@ get_bandwidth_usage({ period: "30d", limit: 1000 })
 
 // ✅ Optimized approach
 get_bandwidth_usage({ period: "24h", limit: 100 })
-```
+```text
 
 #### 2. Geographic Search Optimization
 ```javascript
@@ -385,7 +385,7 @@ search_flows_by_geography({
   },
   limit: 500
 })
-```
+```text
 
 ## Geographic Filtering Issues
 
@@ -407,7 +407,7 @@ const countries = ["China", null, "", undefined, "Russia"];
 
 // ✅ Clean filter array
 const countries = ["China", "Russia"].filter(c => c && c.trim().length > 0);
-```
+```text
 
 #### 2. Use Proper Country Codes
 ```javascript
@@ -418,7 +418,7 @@ const countries = ["China", "Russia"].filter(c => c && c.trim().length > 0);
 { countries: ["United States", "China", "Russia"] }
 // OR
 { countries: ["US", "CN", "RU"] }
-```
+```text
 
 #### 3. Handle Empty Filters
 ```javascript
@@ -433,18 +433,18 @@ function buildGeoFilters(userSelection) {
 // ✅ Handle empty/null arrays
 function buildGeoFilters(userSelection) {
   const filters = {};
-  
+
   if (userSelection.countries && userSelection.countries.length > 0) {
     filters.countries = userSelection.countries.filter(c => c && c.trim());
   }
-  
+
   if (userSelection.regions && userSelection.regions.length > 0) {
     filters.regions = userSelection.regions.filter(r => r && r.trim());
   }
-  
+
   return filters;
 }
-```
+```text
 
 ### Country Code Validation Issues
 
@@ -469,28 +469,28 @@ function validateCountryCode(code) {
 
 // Usage
 const countryCode = validateCountryCode(userInput); // Ensures valid format
-```
+```text
 
 #### 2. Normalize Geographic Data
 ```javascript
 function normalizeGeoFilters(filters) {
   const normalized = {};
-  
+
   if (filters.countries) {
     normalized.countries = filters.countries
       .filter(c => c && typeof c === 'string' && c.trim().length > 0)
       .map(c => c.trim());
   }
-  
+
   if (filters.continents) {
     normalized.continents = filters.continents
       .filter(c => c && typeof c === 'string' && c.trim().length > 0)
       .map(c => c.trim());
   }
-  
+
   return normalized;
 }
-```
+```text
 
 ### Geographic Query Construction Issues
 
@@ -512,18 +512,18 @@ const query = `country:${countries.join(",")}`; // Wrong!
 // ✅ Correct OR logic
 function buildCountryQuery(countries) {
   if (!countries || countries.length === 0) return '';
-  
+
   if (countries.length === 1) {
     return `country:${countries[0]}`;
   }
-  
-  const countryQueries = countries.map(country => 
+
+  const countryQueries = countries.map(country =>
     country.includes(' ') ? `country:"${country}"` : `country:${country}`
   );
-  
+
   return `(${countryQueries.join(' OR ')})`;
 }
-```
+```text
 
 #### 2. Handle Special Characters
 ```javascript
@@ -538,7 +538,7 @@ function escapeGeoValue(value) {
 // Usage
 const cityQuery = `city:${escapeGeoValue("New York")}`;  // city:"New York"
 const countryQuery = `country:${escapeGeoValue("China")}`;  // country:China
-```
+```text
 
 ## Data Processing and Normalization Issues
 
@@ -564,7 +564,7 @@ function getDeviceName(device) {
 function getDeviceName(device) {
   return (device?.name || 'unknown').toString().toUpperCase();
 }
-```
+```text
 
 #### 2. Consistent Field Normalization
 ```javascript
@@ -578,7 +578,7 @@ function normalizeDeviceData(device) {
     last_seen: device?.lastSeen || device?.last_seen || null
   };
 }
-```
+```text
 
 #### 3. Handle Geographic Data Inconsistencies
 ```javascript
@@ -592,7 +592,7 @@ function normalizeGeoData(geoData) {
       region: 'unknown'
     };
   }
-  
+
   return {
     country: normalizeString(geoData.country || geoData.Country),
     country_code: normalizeCountryCode(geoData.country_code || geoData.countryCode),
@@ -613,7 +613,7 @@ function normalizeCountryCode(code) {
   const normalized = code.toUpperCase().trim();
   return normalized.length === 2 && /^[A-Z]{2}$/.test(normalized) ? normalized : 'UN';
 }
-```
+```text
 
 ### Performance Issues with Large Datasets
 
@@ -625,21 +625,21 @@ function normalizeCountryCode(code) {
 ```javascript
 async function processLargeDataset(data, batchSize = 1000) {
   const results = [];
-  
+
   for (let i = 0; i < data.length; i += batchSize) {
     const batch = data.slice(i, i + batchSize);
     const processedBatch = batch.map(item => normalizeData(item));
     results.push(...processedBatch);
-    
+
     // Allow event loop to process other tasks
     if (i % (batchSize * 10) === 0) {
       await new Promise(resolve => setTimeout(resolve, 0));
     }
   }
-  
+
   return results;
 }
-```
+```text
 
 #### 2. Memory-Efficient Processing
 ```javascript
@@ -653,7 +653,7 @@ function* processDataStream(data) {
 const results = [];
 for (const processedItem of processDataStream(largeDataset)) {
   results.push(processedItem);
-  
+
   // Process in chunks to avoid memory issues
   if (results.length >= 1000) {
     // Handle batch
@@ -661,7 +661,7 @@ for (const processedItem of processDataStream(largeDataset)) {
     results.length = 0; // Clear array
   }
 }
-```
+```text
 
 ## Network and Connectivity Issues
 
@@ -677,7 +677,7 @@ nslookup $FIREWALLA_MSP_ID
 # Test with different DNS servers
 nslookup $FIREWALLA_MSP_ID 8.8.8.8
 nslookup $FIREWALLA_MSP_ID 1.1.1.1
-```
+```text
 
 **Solutions**:
 1. **Update DNS Settings**: Use reliable DNS servers (8.8.8.8, 1.1.1.1)
@@ -695,7 +695,7 @@ openssl s_client -connect $FIREWALLA_MSP_ID:443 -servername $FIREWALLA_MSP_ID
 
 # Check certificate validity
 curl -vI "https://$FIREWALLA_MSP_ID"
-```
+```text
 
 **Solutions**:
 1. **Update System Time**: Ensure system clock is accurate
@@ -716,7 +716,7 @@ curl -v "https://$FIREWALLA_MSP_ID" --proxy ""
 
 # Test with proxy if required
 curl -v "https://$FIREWALLA_MSP_ID" --proxy "http://proxy:port"
-```
+```text
 
 **Solutions**:
 1. **Configure Proxy**: Set proxy environment variables if needed
@@ -737,7 +737,7 @@ DEBUG=firewalla:* npm run mcp:start
 DEBUG=cache,performance,api npm run mcp:start
 DEBUG=validation,error-handler npm run mcp:start
 DEBUG=query,optimization npm run mcp:start
-```
+```text
 
 ### Error Log Analysis
 
@@ -755,7 +755,7 @@ grep "authentication" logs/error.log | tail -10
 
 # Check timeout errors
 grep "timeout" logs/error.log | tail -10
-```
+```text
 
 ### Performance Monitoring
 
@@ -773,7 +773,7 @@ try {
   const endTime = Date.now();
   console.log(`Operation failed after ${endTime - startTime}ms:`, error.message);
 }
-```
+```text
 
 ### Memory Usage Monitoring
 
@@ -794,7 +794,7 @@ function checkMemoryUsage(label) {
 checkMemoryUsage('Before operation');
 await largeDataOperation();
 checkMemoryUsage('After operation');
-```
+```text
 
 ## Performance Optimization
 
@@ -807,7 +807,7 @@ checkMemoryUsage('After operation');
 
 // ✅ Recent data only
 { query: "severity:high AND timestamp:>NOW-1h", limit: 1000 }
-```
+```text
 
 #### 2. Combine Related Filters
 ```javascript
@@ -822,7 +822,7 @@ const results = await searchCrossReference({
   correlation_field: "source_ip",
   limit: 500
 });
-```
+```text
 
 #### 3. Use Appropriate Limits
 ```javascript
@@ -831,7 +831,7 @@ const results = await searchCrossReference({
 
 // ✅ Reasonable limit with pagination
 { query: "severity:high", limit: 100, cursor: null }
-```
+```text
 
 ### Caching Optimization
 
@@ -845,7 +845,7 @@ const query = `${baseQuery} AND timestamp:>${Date.now()}`;
 
 // ✅ Cache-friendly query
 const query = `${baseQuery} AND timestamp:>NOW-1h`;
-```
+```text
 
 #### 2. Batch Related Requests
 ```javascript
@@ -857,7 +857,7 @@ const rules = await getNetworkRules({ limit: 100 });
 // ✅ Use tools that fetch related data together
 const dashboard = await getSimpleStatistics();
 // Includes summary data for devices, alarms, and rules
-```
+```text
 
 ### Error Prevention Strategies
 
@@ -865,26 +865,26 @@ const dashboard = await getSimpleStatistics();
 ```javascript
 function validateSearchParams(params) {
   const errors = [];
-  
+
   // Required parameters
   if (!params.query || typeof params.query !== 'string') {
     errors.push('query parameter is required and must be a string');
   }
-  
+
   if (!params.limit || typeof params.limit !== 'number') {
     errors.push('limit parameter is required and must be a number');
   }
-  
+
   // Range validation
   if (params.limit < 1 || params.limit > 10000) {
     errors.push('limit must be between 1 and 10000');
   }
-  
+
   // Query length validation
   if (params.query && params.query.length > 2000) {
     errors.push('query must be 2000 characters or less');
   }
-  
+
   return errors;
 }
 
@@ -894,47 +894,47 @@ async function safeSearchFlows(params) {
   if (validationErrors.length > 0) {
     throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
   }
-  
+
   return await searchFlows(params);
 }
-```
+```text
 
 #### 2. Graceful Error Handling
 ```javascript
 async function resilientOperation(operation, maxRetries = 3) {
   let lastError;
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       return await operation();
     } catch (error) {
       lastError = error;
-      
+
       // Don't retry validation errors
       if (error.errorType === 'validation_error') {
         throw error;
       }
-      
+
       // Don't retry authentication errors
       if (error.errorType === 'authentication_error') {
         throw error;
       }
-      
+
       // Retry network and timeout errors with backoff
-      if (attempt < maxRetries && 
+      if (attempt < maxRetries &&
           (error.errorType === 'network_error' || error.errorType === 'timeout_error')) {
         const delay = Math.pow(2, attempt - 1) * 1000; // Exponential backoff
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
-      
+
       throw error;
     }
   }
-  
+
   throw lastError;
 }
-```
+```text
 
 #### 3. Progressive Enhancement
 ```javascript
@@ -957,6 +957,6 @@ const results = await getDataWithFallback(
   { query: "protocol:tcp AND timestamp:>NOW-24h", limit: 1000 }, // Optimal
   { query: "protocol:tcp AND timestamp:>NOW-1h", limit: 100 }    // Fallback
 );
-```
+```text
 
 This comprehensive troubleshooting guide provides solutions for the most common issues encountered with the Firewalla MCP Server. Always start with the quick diagnostic checklist before proceeding to specific troubleshooting sections. For issues not covered in this guide, check the error handling documentation and enable debug mode for detailed error analysis.

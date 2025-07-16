@@ -18,7 +18,7 @@ npm install -g firewalla-mcp-server
 
 # Or install locally
 npm install firewalla-mcp-server
-```
+```text
 
 ### 2. Configure Claude Desktop
 
@@ -38,21 +38,21 @@ Open Claude Desktop settings and click **Developer → Edit Config** to modify `
     }
   }
 }
-```
+```text
 
 ### 3. Get Your Credentials
 
 1. **MSP Token**: Log into your Firewalla MSP portal → API Settings → Generate Token
-2. **MSP ID**: Your full domain (e.g., `company.firewalla.net`)  
+2. **MSP ID**: Your full domain (e.g., `company.firewalla.net`)
 3. **Box ID**: Device settings → Copy the Box GID (long UUID format)
 
 ### 4. Test the Connection
 
 Restart Claude Desktop and try:
 
-```
+```text
 "Show me my Firewalla security alerts from the last hour"
-```
+```text
 
 ## Configuration Locations
 
@@ -73,12 +73,12 @@ Restart Claude Desktop and try:
 
 ## Example Queries
 
-```
+```text
 "What are my top 10 bandwidth users this week?"
 "Show me all high-severity security alerts"
 "Are there any offline devices I should know about?"
 "What firewall rules are currently blocking traffic?"
-```
+```text
 
 ## Features
 

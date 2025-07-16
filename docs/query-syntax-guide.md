@@ -40,7 +40,7 @@ The simplest query format is `field:value`, which searches for exact matches on 
 
 ### Simple Field Matching
 
-```
+```text
 # Find flows with TCP protocol
 protocol:tcp
 
@@ -55,7 +55,7 @@ action:block
 
 # Find target lists by category
 category:social
-```
+```text
 
 ### Case Sensitivity
 
@@ -71,7 +71,7 @@ action:BLOCK
 SEVERITY:high
 Protocol:tcp
 ACTION:block
-```
+```text
 
 ## Logical Operators
 
@@ -93,7 +93,7 @@ status:active AND action:block
 
 # Online devices from Apple
 online:true AND mac_vendor:Apple
-```
+```text
 
 ### OR Operator
 
@@ -111,13 +111,13 @@ action:block OR action:timelimit
 
 # Devices that are either offline or have low activity
 online:false OR activity_level:low
-```
+```text
 
 ### NOT Operator
 
 Use `NOT` to exclude specific conditions:
 
-```
+```text
 # All protocols except TCP
 NOT protocol:tcp
 
@@ -129,13 +129,13 @@ NOT mac_vendor:Apple
 
 # All alarms except low severity
 NOT severity:low
-```
+```text
 
 ### Combining Operators
 
 Use parentheses to group conditions and create complex logic:
 
-```
+```text
 # High severity alarms that are either TCP or UDP, but not from internal network
 severity:high AND (protocol:tcp OR protocol:udp) AND NOT source_ip:192.168.*
 
@@ -144,7 +144,7 @@ severity:high AND (protocol:tcp OR protocol:udp) AND NOT source_ip:192.168.*
 
 # Rules targeting social media or gaming, but not entertainment
 (target_value:*facebook* OR target_value:*gaming*) AND NOT category:entertainment
-```
+```text
 
 ## Wildcards and Patterns
 
@@ -154,7 +154,7 @@ Use wildcards to match patterns and partial values.
 
 The `*` wildcard matches zero or more characters:
 
-```
+```text
 # Any Facebook-related domains
 target_value:*facebook*
 
@@ -169,11 +169,11 @@ target_value:*social*
 
 # Devices with names containing "laptop"
 name:*laptop*
-```
+```text
 
 ### Pattern Matching Examples
 
-```
+```text
 # Internal network ranges
 source_ip:192.168.* OR source_ip:10.*
 
@@ -185,7 +185,7 @@ target_value:*gaming* OR target_value:*steam* OR target_value:*xbox*
 
 # Mobile devices
 mac_vendor:*Apple* OR mac_vendor:*Samsung* OR device_type:mobile
-```
+```text
 
 ## Ranges and Comparisons
 
@@ -202,7 +202,7 @@ Use comparison operators to filter by numeric values and ranges.
 
 ### Numeric Comparisons
 
-```
+```text
 # Large flows (over 100MB)
 bytes:>100000000
 
@@ -217,13 +217,13 @@ hit_count:>=100
 
 # Low severity scores
 severity_score:<=3
-```
+```text
 
 ### Range Syntax
 
 Use `[min TO max]` for inclusive ranges:
 
-```
+```text
 # Medium-sized flows (1MB to 50MB)
 bytes:[1000000 TO 50000000]
 
@@ -235,11 +235,11 @@ port:[80 TO 443]
 
 # Severity score ranges
 severity_score:[5 TO 8]
-```
+```text
 
 ### Date and Time Ranges
 
-```
+```text
 # Timestamp ranges (Unix epoch)
 timestamp:[1640995200 TO 1641081600]
 
@@ -248,7 +248,7 @@ timestamp:>NOW-1h
 
 # Activity within date range
 ts:[2024-01-01 TO 2024-01-31]
-```
+```text
 
 ## Complex Nested Queries
 
@@ -256,28 +256,28 @@ Build sophisticated queries using nested conditions and complex logic.
 
 ### Multi-Level Grouping
 
-```
+```text
 # Complex security analysis
-(severity:high OR severity:critical) AND 
-(protocol:tcp OR protocol:udp) AND 
-source_ip:192.168.* AND 
+(severity:high OR severity:critical) AND
+(protocol:tcp OR protocol:udp) AND
+source_ip:192.168.* AND
 NOT destination_ip:10.*
 
 # Advanced threat detection
-(type:intrusion OR type:malware) AND 
-(bytes:>10000000 OR hit_count:>50) AND 
+(type:intrusion OR type:malware) AND
+(bytes:>10000000 OR hit_count:>50) AND
 NOT status:resolved
 
 # Comprehensive rule analysis
-(action:block OR action:timelimit) AND 
-(direction:inbound OR direction:bidirection) AND 
-target_value:*social* AND 
+(action:block OR action:timelimit) AND
+(direction:inbound OR direction:bidirection) AND
+target_value:*social* AND
 hit_count:>10
-```
+```text
 
 ### Geographic Queries
 
-```
+```text
 # Suspicious activity from high-risk countries
 country:China OR country:Russia AND severity:>=medium
 
@@ -286,11 +286,11 @@ is_cloud:true AND bytes:>1000000
 
 # VPN traffic analysis
 is_vpn:true AND (protocol:tcp OR protocol:udp)
-```
+```text
 
 ### Device and Network Analysis
 
-```
+```text
 # Offline devices with recent activity
 online:false AND last_seen:>NOW-24h
 
@@ -299,7 +299,7 @@ online:false AND last_seen:>NOW-24h
 
 # Gaming traffic analysis
 application:gaming AND bytes:>50000000 AND protocol:udp
-```
+```text
 
 ## Field-Specific Syntax
 
@@ -307,7 +307,7 @@ Different data types support different fields. Here are the most commonly used f
 
 ### Flow Search Fields
 
-```
+```text
 # Network identifiers
 source_ip:192.168.1.100
 destination_ip:8.8.8.8
@@ -331,11 +331,11 @@ country:United States
 continent:North America
 asn:AS15169
 is_cloud:true
-```
+```text
 
 ### Alarm Search Fields
 
-```
+```text
 # Alarm classification
 type:intrusion
 severity:high
@@ -356,11 +356,11 @@ message:*brute*force*
 remote_country:China
 remote_continent:Asia
 geo_risk_score:>0.8
-```
+```text
 
 ### Rule Search Fields
 
-```
+```text
 # Rule identification
 id:rule123
 name:*social*media*
@@ -380,11 +380,11 @@ category:social
 hit_count:>100
 last_hit:>NOW-24h
 enabled:true
-```
+```text
 
 ### Device Search Fields
 
-```
+```text
 # Device identification
 id:device123
 name:Johns-iPhone
@@ -401,11 +401,11 @@ os:iOS
 last_seen:>NOW-1h
 bandwidth_usage:>100000000
 connection_count:>50
-```
+```text
 
 ### Target List Search Fields
 
-```
+```text
 # List identification
 id:list123
 name:*social*
@@ -421,7 +421,7 @@ last_updated:>NOW-7d
 enabled:true
 source:global
 list_type:whitelist
-```
+```text
 
 ## Cache Control and Real-Time Data
 
@@ -431,12 +431,12 @@ The Firewalla MCP Server uses intelligent caching to provide fast responses whil
 
 Different types of data have different cache durations based on how frequently they change:
 
-```
+```text
 # Real-time security data (15 seconds)
 get_active_alarms
 search_alarms
 
-# Real-time network data (15 seconds)  
+# Real-time network data (15 seconds)
 get_flow_data
 search_flows
 
@@ -449,13 +449,13 @@ search_rules
 # Statistical data (longer cache)
 get_simple_statistics
 get_flow_trends
-```
+```text
 
 ### Force Refresh Parameter
 
 For time-sensitive operations, you can bypass the cache using the `force_refresh` parameter:
 
-```
+```text
 # Get the absolute latest security alarms (bypasses cache)
 get_active_alarms force_refresh:true limit:50
 
@@ -464,7 +464,7 @@ search_flows query:"severity:high" force_refresh:true limit:100
 
 # Check device status without cache delay
 get_device_status force_refresh:true limit:25
-```
+```text
 
 ### Cache Information in Responses
 
@@ -478,7 +478,7 @@ Tools that support caching return cache metadata in their responses:
     "last_updated": "2024-01-15T10:30:45Z"
   }
 }
-```
+```text
 
 **Cache Fields Explained:**
 - `ttl_seconds`: How long this data will be cached (0 means not cached)
@@ -490,22 +490,22 @@ Tools that support caching return cache metadata in their responses:
 Use `force_refresh=true` in these scenarios:
 
 **Security Incident Response:**
-```
+```text
 # Get the latest threats immediately
 get_active_alarms force_refresh:true severity:critical limit:20
 
 # Real-time investigation of suspicious activity
 search_flows query:"source_ip:suspicious_ip" force_refresh:true limit:100
-```
+```text
 
 **Real-Time Monitoring:**
-```
+```text
 # Live bandwidth monitoring
 get_bandwidth_usage force_refresh:true limit:10
 
 # Current device status during troubleshooting
 search_devices query:"online:false" force_refresh:true limit:50
-```
+```text
 
 **Performance Considerations:**
 - Force refresh bypasses cache, so responses may be slower
@@ -519,7 +519,7 @@ Here are frequently used query patterns for different scenarios.
 
 ### Security Analysis
 
-```
+```text
 # High-priority security threats
 severity:critical OR (severity:high AND NOT status:resolved)
 
@@ -531,11 +531,11 @@ type:intrusion AND message:*brute*force* AND source_ip:NOT 192.168.*
 
 # Malware communications
 type:malware OR (application:*trojan* OR application:*backdoor*)
-```
+```text
 
 ### Network Performance
 
-```
+```text
 # High bandwidth consumers
 bytes:>100000000 OR bandwidth_usage:>50000000
 
@@ -547,11 +547,11 @@ application:gaming OR (protocol:udp AND port:[27000 TO 28000])
 
 # Video streaming
 application:youtube OR application:netflix OR target_value:*streaming*
-```
+```text
 
 ### Device Management
 
-```
+```text
 # Offline devices
 online:false AND last_seen:>NOW-24h
 
@@ -563,11 +563,11 @@ device_type:mobile OR mac_vendor:Apple OR mac_vendor:Samsung
 
 # Recently connected devices
 last_seen:>NOW-1h AND NOT name:*known*
-```
+```text
 
 ### Rule Management
 
-```
+```text
 # Active blocking rules
 action:block AND status:active AND enabled:true
 
@@ -579,7 +579,7 @@ target_value:*facebook* OR target_value:*twitter* OR category:social
 
 # Recently modified rules
 modified:>NOW-7d AND status:active
-```
+```text
 
 ## Query Validation
 
@@ -595,7 +595,7 @@ The server performs extensive validation on all queries to ensure safety and cor
 
 ### Common Validation Errors
 
-```
+```text
 # Unmatched parentheses
 severity:high AND (protocol:tcp OR protocol:udp
 # Error: Unmatched parentheses in query
@@ -611,7 +611,7 @@ severity:>high
 # Dangerous content
 source_ip:'; DROP TABLE flows; --
 # Error: Query contains potentially dangerous content
-```
+```text
 
 ## Best Practices
 
@@ -624,7 +624,7 @@ source_ip:'; DROP TABLE flows; --
 
 ### Performance Tips
 
-```
+```text
 # Good: Specific field first
 severity:high AND source_ip:192.168.*
 
@@ -636,19 +636,19 @@ bytes:[1000000 TO 50000000]
 
 # Less optimal: Multiple conditions
 bytes:>1000000 AND bytes:<50000000
-```
+```text
 
 ### Readable Queries
 
-```
+```text
 # Good: Clear and structured
-(severity:high OR severity:critical) AND 
-protocol:tcp AND 
+(severity:high OR severity:critical) AND
+protocol:tcp AND
 NOT source_ip:192.168.*
 
 # Less readable: All on one line
 severity:high OR severity:critical AND protocol:tcp AND NOT source_ip:192.168.*
-```
+```text
 
 ## Supported vs Unsupported Syntax
 
@@ -664,7 +664,7 @@ source_ip:192.168.1.*   # Maps to source.ip, device.ip, or srcIP
 device_ip:10.0.0.100    # Maps to device.ip, ip, or ipAddress
 bytes:>1000000          # Maps to bytes, download, or upload fields
 online:true             # Maps to online or isOnline fields
-```
+```text
 
 #### Logical Operators
 ```text
@@ -673,7 +673,7 @@ severity:high AND protocol:tcp
 action:block OR action:timelimit
 NOT severity:low
 (severity:high OR severity:critical) AND protocol:tcp
-```
+```text
 
 #### Comparison Operators
 ```text
@@ -683,7 +683,7 @@ hit_count:<=100         # Less than or equal
 timestamp:>=1640995200  # Greater than or equal
 severity:>=medium       # Works with severity levels
 port:!=80               # Not equal
-```
+```text
 
 #### Wildcard Patterns
 ```text
@@ -691,7 +691,7 @@ port:!=80               # Not equal
 target_value:*facebook*     # Contains pattern
 source_ip:192.168.*        # Prefix pattern
 name:*iPhone               # Suffix pattern
-```
+```text
 
 #### Range Syntax
 ```text
@@ -699,7 +699,7 @@ name:*iPhone               # Suffix pattern
 bytes:[1000000 TO 50000000]
 timestamp:[1640995200 TO 1641081600]
 port:[80 TO 443]
-```
+```text
 
 #### Geographic Fields
 ```text
@@ -707,7 +707,7 @@ port:[80 TO 443]
 country:China              # Maps to multiple geo field paths
 continent:Asia             # Maps to various continent fields
 asn:AS15169               # Maps to ASN fields in different locations
-```
+```text
 
 ### ⚠️ Partially Supported Syntax
 
@@ -717,7 +717,7 @@ asn:AS15169               # Maps to ASN fields in different locations
 device.ip:192.168.1.100    # May work but prefer device_ip:192.168.1.100
 source.geo.country:China   # May work but prefer country:China
 hit.count:>100             # May work but prefer hit_count:>100
-```
+```text
 
 **Recommendation**: Always use the standardized field names documented in [Field Mappings](field-mappings.md) for guaranteed compatibility.
 
@@ -727,7 +727,7 @@ hit.count:>100             # May work but prefer hit_count:>100
 device.network.segment:DMZ
 geo.location.city:Beijing
 ssl.certificate.issuer:LetsEncrypt
-```
+```text
 
 **Recommendation**: Use simpler mapped field names where available (e.g., `city:Beijing` instead of `geo.location.city:Beijing`).
 
@@ -740,14 +740,14 @@ SELECT * FROM flows WHERE protocol = 'tcp'
 field IN (value1, value2, value3)
 field LIKE '%pattern%'
 COUNT(*), SUM(bytes), AVG(duration)
-```
+```text
 
 **Alternative**: Use the native query syntax with OR operators:
 ```text
 protocol:tcp
 field:value1 OR field:value2 OR field:value3
 target_value:*pattern*
-```
+```text
 
 #### Regular Expressions
 ```text
@@ -755,14 +755,14 @@ target_value:*pattern*
 source_ip:/^192\.168\.\d+\.\d+$/
 name:/^[A-Za-z]+Phone$/
 protocol:/tcp|udp/
-```
+```text
 
 **Alternative**: Use wildcard patterns:
 ```text
 source_ip:192.168.*
 name:*Phone
 protocol:tcp OR protocol:udp
-```
+```text
 
 #### Date/Time Expressions
 ```text
@@ -771,13 +771,13 @@ timestamp:TODAY
 timestamp:LAST_WEEK
 timestamp:NOW-1h
 created_at:YESTERDAY
-```
+```text
 
 **Alternative**: Use Unix timestamps or ISO dates:
 ```text
 timestamp:>1640995200
 timestamp:[2024-01-01 TO 2024-01-31]
-```
+```text
 
 #### Advanced Mathematical Operations
 ```text
@@ -785,7 +785,7 @@ timestamp:[2024-01-01 TO 2024-01-31]
 bytes:(upload + download)
 ratio:(blocked / total)
 percentage:(hits * 100 / total)
-```
+```text
 
 **Alternative**: Use the available computed fields or perform calculations client-side after retrieving results.
 
@@ -795,7 +795,7 @@ percentage:(hits * 100 / total)
 SOURCE_IP:192.168.1.100    # Should be source_ip
 Protocol:tcp               # Should be protocol
 SEVERITY:high              # Should be severity
-```
+```text
 
 **Alternative**: Always use lowercase field names as documented.
 
@@ -804,13 +804,13 @@ SEVERITY:high              # Should be severity
 # Field names should not be quoted
 "source_ip":192.168.1.100  # Will not work
 'protocol':tcp             # Will not work
-```
+```text
 
 **Alternative**: Only quote values, not field names:
 ```text
 source_ip:"192.168.1.100"  # Correct if value needs quotes
 name:"John's iPhone"       # Correct for values with spaces
-```
+```text
 
 ### 🔄 Field Name Conversions
 
@@ -855,7 +855,7 @@ severity:high AND device_ip:192.168.1.*
 
 # Avoid: Direct API paths (may break)
 type:>=8 AND device.ip:192.168.1.*
-```
+```text
 
 #### Leverage Automatic Conversions
 ```text
@@ -865,18 +865,18 @@ online:false
 bytes:>1MB
 
 # The system converts these appropriately
-```
+```text
 
 #### Structure Complex Queries
 ```text
 # Good: Well-structured with parentheses
-(severity:high OR severity:critical) AND 
-(protocol:tcp OR protocol:udp) AND 
+(severity:high OR severity:critical) AND
+(protocol:tcp OR protocol:udp) AND
 NOT source_ip:192.168.*
 
 # Avoid: Ambiguous precedence
 severity:high OR severity:critical AND protocol:tcp
-```
+```text
 
 #### Use Consistent Geographic Fields
 ```text
@@ -884,7 +884,7 @@ severity:high OR severity:critical AND protocol:tcp
 country:China AND continent:Asia
 
 # These are mapped to appropriate API field paths automatically
-```
+```text
 
 For a complete reference of field mappings and supported field names, see [Field Mappings Documentation](field-mappings.md).
 
@@ -899,14 +899,14 @@ For a complete reference of field mappings and supported field names, see [Field
 3. **Simplify Query**: Start with a simple query and add conditions incrementally
 4. **Check Wildcards**: Ensure wildcard patterns are correct
 
-```
+```text
 # Start simple
 severity:high
 
 # Add conditions gradually
 severity:high AND protocol:tcp
 severity:high AND protocol:tcp AND source_ip:192.168.*
-```
+```text
 
 #### Syntax Errors
 
@@ -914,7 +914,7 @@ severity:high AND protocol:tcp AND source_ip:192.168.*
 2. **Quote Strings**: Use quotes around values containing spaces or special characters
 3. **Escape Special Characters**: Use backslashes to escape special characters when needed
 
-```
+```text
 # Good: Quoted string with spaces
 name:"John's iPhone"
 
@@ -923,7 +923,7 @@ target_value:example\.com
 
 # Bad: Unquoted string with spaces
 name:John's iPhone
-```
+```text
 
 #### Performance Issues
 
@@ -931,13 +931,13 @@ name:John's iPhone
 2. **Use Appropriate Limits**: Set reasonable limits to avoid large result sets
 3. **Avoid Complex Wildcards**: Minimize the use of leading wildcards
 
-```
+```text
 # Good: Specific and limited
 severity:high AND source_ip:192.168.1.* LIMIT 100
 
 # Problematic: Too broad
 source_ip:* LIMIT 10000
-```
+```text
 
 ### Debug Techniques
 
@@ -961,7 +961,7 @@ If you encounter issues with query syntax:
 
 ### Security Monitoring
 
-```
+```text
 # Monitor for critical threats
 severity:critical AND NOT status:resolved
 
@@ -973,11 +973,11 @@ type:intrusion AND source_ip:NOT 192.168.* AND hit_count:>10
 
 # Geographic threat analysis
 (country:China OR country:Russia) AND severity:>=medium
-```
+```text
 
 ### Network Optimization
 
-```
+```text
 # Identify bandwidth hogs
 bytes:>100000000 AND device_type:computer
 
@@ -989,11 +989,11 @@ application:youtube OR application:netflix OR target_value:*video*
 
 # Analyze gaming traffic
 protocol:udp AND port:[27000 TO 28000] AND bytes:>10000000
-```
+```text
 
 ### Compliance and Auditing
 
-```
+```text
 # Review blocking rules
 action:block AND status:active AND hit_count:>0
 
@@ -1005,6 +1005,6 @@ application:*torrent* OR protocol:bittorrent OR port:6881
 
 # Review administrative access
 port:22 OR port:3389 OR application:ssh OR application:rdp
-```
+```text
 
 This comprehensive guide should help you build effective queries for all your Firewalla MCP Server search needs. Remember to start simple and build complexity gradually, always validating your results as you refine your queries.

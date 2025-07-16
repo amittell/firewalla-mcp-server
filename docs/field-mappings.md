@@ -47,7 +47,7 @@ Based on the alarm type, severity is automatically derived using these mappings:
 - `BRUTE_FORCE_ATTACK`, `KNOWN_VULNERABILITY_EXPLOIT`
 - `PHISHING`, `TROJAN`, `SPYWARE`
 
-#### High Severity Alarms  
+#### High Severity Alarms
 - `SUSPICIOUS_ACTIVITY`, `NETWORK_INTRUSION`, `PORT_SCAN`
 - `DGA_DOMAIN`, `SUSPICIOUS_DNS`, `TOR_CONNECTION`
 - `PROXY_DETECTED`, `VPN_DETECTED`, `UNUSUAL_TRAFFIC`
@@ -145,7 +145,7 @@ These fields can be used for cross-reference searches between different entity t
 
 ### Universal Fields
 - `device_ip` - Available in flows, alarms, devices
-- `device_id` - Available in flows, alarms, devices  
+- `device_id` - Available in flows, alarms, devices
 - `protocol` - Available in flows, alarms, rules
 - `timestamp` - Available in flows, alarms, rules
 - `gid` - Available in flows, alarms, rules, devices
@@ -165,40 +165,40 @@ These fields can be used for cross-reference searches between different entity t
 ## Supported Operators
 
 ### Exact Match
-```
+```text
 field:value
 severity:high
 protocol:tcp
-```
+```text
 
 ### Comparison Operators
-```
+```text
 field:>value    # Greater than
-field:<value    # Less than  
+field:<value    # Less than
 field:>=value   # Greater than or equal
 field:<=value   # Less than or equal
 field:!=value   # Not equal
-```
+```text
 
 ### Wildcard Operators
-```
+```text
 field:*value*   # Contains
 field:value*    # Starts with
 field:*value    # Ends with
-```
+```text
 
 ### Range Operators
-```
+```text
 field:[min TO max]    # Inclusive range
 bytes:[1000000 TO 50000000]
-```
+```text
 
 ### Logical Operators
-```
+```text
 field1:value1 AND field2:value2    # Both conditions
 field1:value1 OR field2:value2     # Either condition
 NOT field:value                    # Exclude condition
-```
+```text
 
 ## Type Conversions
 
@@ -222,7 +222,7 @@ NOT field:value                    # Exclude condition
 ## Example Queries
 
 ### Basic Field Queries
-```
+```text
 # Using user-friendly field names
 severity:high
 device_ip:192.168.1.100
@@ -234,10 +234,10 @@ online:false
 # device.ip:192.168.1.100 OR ip:192.168.1.100
 # block:true OR blocked:true
 # online:false OR isOnline:false
-```
+```text
 
 ### Cross-Reference Queries
-```
+```text
 # Find flows and alarms with same source IP
 primary_query: "source_ip:192.168.1.*"
 secondary_queries: ["severity:high"]
@@ -247,10 +247,10 @@ correlation_field: "source_ip"
 primary_query: "device_type:mobile"
 secondary_queries: ["bytes:>1000000"]
 correlation_field: "device_ip"
-```
+```text
 
 ### Geographic Queries
-```
+```text
 # Using mapped geographic fields
 country:China
 continent:Asia
@@ -260,60 +260,60 @@ asn:AS4134
 # destination.geo.country, source.geo.country, geo.country
 # destination.geo.continent, source.geo.continent
 # destination.geo.asn, source.geo.asn, geo.asn
-```
+```text
 
 ### Complex Field Mapping
-```
+```text
 # User query with multiple mapped fields
 source_ip:192.168.* AND bytes:>1000000 AND country:China
 
 # Maps to multiple API field paths:
-# (source.ip:192.168.* OR device.ip:192.168.*) AND 
+# (source.ip:192.168.* OR device.ip:192.168.*) AND
 # (bytes:>1000000 OR download:>1000000 OR upload:>1000000) AND
 # (destination.geo.country:china OR source.geo.country:china)
-```
+```text
 
 ## Best Practices
 
 ### Use Logical Field Names
-```
+```text
 # Good: Use logical user field names
 severity:high AND device_ip:192.168.1.*
 
 # Avoid: Direct API field names (may not work)
 type:>=8 AND device.ip:192.168.1.*
-```
+```text
 
 ### Leverage Field Mapping
-```
+```text
 # Good: Let the system handle field mapping
 bytes:>1000000
 
 # Good: The system checks multiple API paths
 # bytes, download, upload fields are all checked
-```
+```text
 
 ### Cross-Reference Compatibility
-```
+```text
 # Good: Use fields available in both entity types
 correlation_field: "device_ip"  # Available in flows, alarms, devices
 
 # Avoid: Using fields not available in target entities
 correlation_field: "hit_count"  # Only available in rules
-```
+```text
 
 ### Geographic Field Usage
-```
+```text
 # Good: Use consistent geographic field names
 country:United States
 continent:North America
 
 # The system handles various API field paths:
 # destination.geo.country, source.geo.country, remote.geo.country
-```
+```text
 
 ### Severity Field Usage
-```
+```text
 # Good: Use semantic severity levels
 severity:high OR severity:critical
 
@@ -323,6 +323,6 @@ severity:>=medium
 # The system automatically converts to type field:
 # type:>=8 OR type:>=12
 # type:>=4
-```
+```text
 
 This field mapping system ensures consistent and intuitive querying while handling the complexity of the underlying Firewalla API structure. Always use the user-facing field names documented here for the best compatibility and functionality.
