@@ -1,0 +1,933 @@
+{
+  "totalFiles": 84,
+  "toolFiles": [
+    {
+      "file": "src/tools/convenience/block-domain.ts",
+      "lines": 1,
+      "size": 12420,
+      "issues": [
+        {
+          "level": "medium",
+          "type": "missing_validation",
+          "message": "No parameter validation found",
+          "line": "unknown"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class BlockDomainHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { logger } from '../../monitoring/logger.js';"
+      ]
+    },
+    {
+      "file": "src/tools/convenience/block-ip.ts",
+      "lines": 1,
+      "size": 10370,
+      "issues": [
+        {
+          "level": "medium",
+          "type": "missing_validation",
+          "message": "No parameter validation found",
+          "line": "unknown"
+        },
+        {
+          "level": "low",
+          "type": "hardcoded_ip",
+          "message": "Hardcoded IP addresses found: \"192.168.1.100\", \"8.8.8.8\", \"192.168.1.100\", \"8.8.8.8\", \"10.0.0.1\", \"192.168.1.100\", \"8.8.8.8\", '192.168.1.100', '8.8.8.8', '10.0.0.1', '192.168.1.100', '8.8.8.8', '10.0.0.1', '172.16.0.1'",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class BlockIpHandler extends SecureConvenienceHandler {"
+      ],
+      "imports": [
+        "import type { ToolArgs, ToolResponse } from '../handlers/base.js';",
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { logger } from '../../monitoring/logger.js';"
+      ]
+    },
+    {
+      "file": "src/tools/convenience/get-active-alarms.ts",
+      "lines": 1,
+      "size": 6530,
+      "issues": [
+        {
+          "level": "medium",
+          "type": "missing_validation",
+          "message": "No parameter validation found",
+          "line": "unknown"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export interface GetActiveAlarmsArgs extends ToolArgs {",
+        "export class GetActiveAlarmsHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { logger } from '../../monitoring/logger.js';",
+        "import { getCurrentTimestamp } from '../../utils/timestamp.js';"
+      ]
+    },
+    {
+      "file": "src/tools/convenience/get-bandwidth-usage.ts",
+      "lines": 1,
+      "size": 10242,
+      "issues": [
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export interface GetBandwidthUsageArgs extends ToolArgs {",
+        "export class GetBandwidthUsageHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { logger } from '../../monitoring/logger.js';",
+        "import { getCurrentTimestamp } from '../../utils/timestamp.js';"
+      ]
+    },
+    {
+      "file": "src/tools/convenience/get-offline-devices.ts",
+      "lines": 1,
+      "size": 7940,
+      "issues": [
+        {
+          "level": "medium",
+          "type": "missing_validation",
+          "message": "No parameter validation found",
+          "line": "unknown"
+        },
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class GetOfflineDevicesHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { logger } from '../../monitoring/logger.js';"
+      ]
+    },
+    {
+      "file": "src/tools/convenience/get-online-devices.ts",
+      "lines": 1,
+      "size": 6873,
+      "issues": [
+        {
+          "level": "medium",
+          "type": "missing_validation",
+          "message": "No parameter validation found",
+          "line": "unknown"
+        },
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class GetOnlineDevicesHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { logger } from '../../monitoring/logger.js';"
+      ]
+    },
+    {
+      "file": "src/tools/convenience/index.ts",
+      "lines": 1,
+      "size": 1935,
+      "issues": [
+        {
+          "level": "medium",
+          "type": "missing_validation",
+          "message": "No parameter validation found",
+          "line": "unknown"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export convenience wrapper handlers for registry",
+        "export { GetActiveAlarmsHandler } from './get-active-alarms.js';",
+        "export { GetBandwidthUsageHandler } from './get-bandwidth-usage.js';",
+        "export { PauseRuleHandler } from './pause-rule.js';",
+        "export { ResumeRuleHandler } from './resume-rule.js';",
+        "export { GetOnlineDevicesHandler } from './get-online-devices.js';",
+        "export { GetOfflineDevicesHandler } from './get-offline-devices.js';",
+        "export { BlockIpHandler } from './block-ip.js';",
+        "export { BlockDomainHandler } from './block-domain.js';"
+      ],
+      "imports": []
+    },
+    {
+      "file": "src/tools/convenience/pause-rule.ts",
+      "lines": 1,
+      "size": 14680,
+      "issues": [
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export interface PauseRuleArgs extends ToolArgs {",
+        "export class PauseRuleHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { logger } from '../../monitoring/logger.js';",
+        "import { getCurrentTimestamp } from '../../utils/timestamp.js';"
+      ]
+    },
+    {
+      "file": "src/tools/convenience/resume-rule.ts",
+      "lines": 1,
+      "size": 13924,
+      "issues": [
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export interface ResumeRuleArgs extends ToolArgs {",
+        "export class ResumeRuleHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { logger } from '../../monitoring/logger.js';",
+        "import { getCurrentTimestamp } from '../../utils/timestamp.js';"
+      ]
+    },
+    {
+      "file": "src/tools/convenience/secure-base.ts",
+      "lines": 1,
+      "size": 13328,
+      "issues": [
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export interface SecurityContext {",
+        "export interface SecurityValidationResult {",
+        "export abstract class SecureConvenienceHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { SecurityManager } from '../../config/security.js';",
+        "import { rbacManager, type UserContext } from '../../security/rbac.js';",
+        "import { ParameterValidator } from '../../validation/error-handler.js'; // Not used",
+        "import { logger } from '../../monitoring/logger.js';",
+        "import { getCurrentTimestamp } from '../../utils/timestamp.js';"
+      ]
+    },
+    {
+      "file": "src/tools/core/crud.ts",
+      "lines": 1,
+      "size": 52396,
+      "issues": [
+        {
+          "level": "low",
+          "type": "hardcoded_ip",
+          "message": "Hardcoded IP addresses found: \"192.168.1.100\", \"8.8.8.8\", \"192.168.1.100\", \"10.0.0.50\", \"203.0.113.1\"",
+          "line": "multiple"
+        },
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class CreateRuleHandler extends BaseToolHandler {",
+        "export class UpdateRuleHandler extends BaseToolHandler {",
+        "export class DeleteRuleHandler extends BaseToolHandler {",
+        "export class CreateTargetListHandler extends BaseToolHandler {",
+        "export capabilities`;",
+        "export class UpdateTargetListHandler extends BaseToolHandler {",
+        "export class DeleteTargetListHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { getCurrentTimestamp } from '../../utils/timestamp.js';"
+      ]
+    },
+    {
+      "file": "src/tools/core/index.ts",
+      "lines": 1,
+      "size": 2066,
+      "issues": [
+        {
+          "level": "medium",
+          "type": "missing_error_handling",
+          "message": "No try-catch blocks found",
+          "line": "unknown"
+        },
+        {
+          "level": "medium",
+          "type": "missing_validation",
+          "message": "No parameter validation found",
+          "line": "unknown"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export * from './search.js';",
+        "export * from './crud.js';",
+        "export * from './management.js';"
+      ],
+      "imports": []
+    },
+    {
+      "file": "src/tools/core/management.ts",
+      "lines": 1,
+      "size": 47485,
+      "issues": [
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class ManageAlarmsHandler extends BaseToolHandler {",
+        "export class ManageRuleStateHandler extends BaseToolHandler {",
+        "export class BulkOperationsHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { getCurrentTimestamp } from '../../utils/timestamp.js';",
+        "import { URLSearchParams } from 'url';"
+      ]
+    },
+    {
+      "file": "src/tools/core/search.ts",
+      "lines": 1,
+      "size": 12799,
+      "issues": [
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class SearchCorrelateHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { createSearchTools } from '../search.js';",
+        "import type { ScoringCorrelationParams } from '../../validation/field-mapper.js';"
+      ]
+    },
+    {
+      "file": "src/tools/handlers/analytics.ts",
+      "lines": 1,
+      "size": 37859,
+      "issues": [
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class GetBoxesHandler extends BaseToolHandler {",
+        "export class GetSimpleStatisticsHandler extends BaseToolHandler {",
+        "export class GetStatisticsByRegionHandler extends BaseToolHandler {",
+        "export class GetStatisticsByBoxHandler extends BaseToolHandler {",
+        "export class GetFlowTrendsHandler extends BaseToolHandler {",
+        "export class GetAlarmTrendsHandler extends BaseToolHandler {",
+        "export class GetRuleTrendsHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';",
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { unixToISOString } from '../../utils/timestamp.js';",
+        "import { logger } from '../../monitoring/logger.js';",
+        "import { withToolTimeout } from '../../utils/timeout-manager.js';",
+        "import { normalizeTimestamps } from '../../utils/data-validator.js';"
+      ]
+    },
+    {
+      "file": "src/tools/handlers/base.ts",
+      "lines": 1,
+      "size": 16697,
+      "issues": [
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export interface BaseToolArgs {",
+        "export interface QueryArgs {",
+        "export interface TimeRangeArgs {",
+        "export interface DeviceArgs {",
+        "export interface GeographicArgs {",
+        "export interface CorrelationArgs {",
+        "export interface BoxArgs {",
+        "export interface ToolArgs",
+        "export interface ToolResponse {",
+        "export interface ToolHandler {",
+        "export interface BaseToolOptions {",
+        "export abstract class BaseToolHandler implements ToolHandler {"
+      ],
+      "imports": [
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import type { ToolResponseUnified } from '../../types.js';",
+        "import { toSnakeCaseDeep } from '../../utils/field-normalizer.js';",
+        "import { geoCache } from '../../utils/geographic.js';",
+        "import { featureFlags } from '../../config/feature-flags.js';"
+      ]
+    },
+    {
+      "file": "src/tools/handlers/bulk-alarms.ts",
+      "lines": 1,
+      "size": 3747,
+      "issues": [
+        {
+          "level": "medium",
+          "type": "missing_error_handling",
+          "message": "No try-catch blocks found",
+          "line": "unknown"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class BulkDeleteAlarmsHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';",
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { withToolTimeout } from '../../utils/timeout-manager.js';"
+      ]
+    },
+    {
+      "file": "src/tools/handlers/bulk-rules.ts",
+      "lines": 1,
+      "size": 6922,
+      "issues": [
+        {
+          "level": "medium",
+          "type": "missing_error_handling",
+          "message": "No try-catch blocks found",
+          "line": "unknown"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class BulkPauseRulesHandler extends BaseToolHandler {",
+        "export class BulkResumeRulesHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';",
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { withToolTimeout } from '../../utils/timeout-manager.js';"
+      ]
+    },
+    {
+      "file": "src/tools/handlers/device.ts",
+      "lines": 1,
+      "size": 7156,
+      "issues": [
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class GetDeviceStatusHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';",
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { unixToISOStringOrNow } from '../../utils/timestamp.js';",
+        "import { getLimitValidationConfig } from '../../config/limits.js';"
+      ]
+    },
+    {
+      "file": "src/tools/handlers/network.ts",
+      "lines": 1,
+      "size": 25183,
+      "issues": [
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class GetFlowDataHandler extends BaseToolHandler {",
+        "export class GetBandwidthUsageHandler extends BaseToolHandler {",
+        "export class GetOfflineDevicesHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';",
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { ResponseStandardizer } from '../../utils/response-standardizer.js';",
+        "import type { PaginationMetadata } from '../../types.js';",
+        "import { getLimitValidationConfig } from '../../config/limits.js';"
+      ]
+    },
+    {
+      "file": "src/tools/handlers/rules.ts",
+      "lines": 1,
+      "size": 46812,
+      "issues": [
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class GetNetworkRulesHandler extends BaseToolHandler {",
+        "export class PauseRuleHandler extends BaseToolHandler {",
+        "export class ResumeRuleHandler extends BaseToolHandler {",
+        "export class GetTargetListsHandler extends BaseToolHandler {",
+        "export class GetNetworkRulesSummaryHandler extends BaseToolHandler {",
+        "export class GetMostActiveRulesHandler extends BaseToolHandler {",
+        "export class GetRecentRulesHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';",
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { validateRuleExists } from '../../validation/resource-validator.js';",
+        "import { logger } from '../../monitoring/logger.js';"
+      ]
+    },
+    {
+      "file": "src/tools/handlers/search.ts",
+      "lines": 1,
+      "size": 77918,
+      "issues": [
+        {
+          "level": "low",
+          "type": "todo_comment",
+          "message": "1 TODO/FIXME comments found",
+          "line": "multiple"
+        },
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export interface BaseSearchArgs extends ToolArgs {",
+        "export interface SearchFlowsArgs extends BaseSearchArgs {",
+        "export interface SearchAlarmsArgs extends BaseSearchArgs {",
+        "export interface SearchRulesArgs extends BaseSearchArgs {}",
+        "export interface SearchDevicesArgs extends BaseSearchArgs {",
+        "export interface SearchTargetListsArgs extends BaseSearchArgs {}",
+        "export interface SearchCrossReferenceArgs extends ToolArgs {",
+        "export interface SearchEnhancedCrossReferenceArgs extends ToolArgs {",
+        "export interface GetCorrelationSuggestionsArgs extends ToolArgs {",
+        "export interface SearchAlarmsByGeographyArgs extends ToolArgs {",
+        "export interface GetGeographicStatisticsArgs extends ToolArgs {",
+        "export class SearchFlowsHandler extends BaseToolHandler {",
+        "export class SearchAlarmsHandler extends BaseToolHandler {",
+        "export class SearchRulesHandler extends BaseToolHandler {",
+        "export class SearchDevicesHandler extends BaseToolHandler {",
+        "export class SearchTargetListsHandler extends BaseToolHandler {",
+        "export class SearchCrossReferenceHandler extends BaseToolHandler {",
+        "export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {",
+        "export class GetCorrelationSuggestionsHandler extends BaseToolHandler {",
+        "export class SearchAlarmsByGeographyHandler extends BaseToolHandler {",
+        "export class GetGeographicStatisticsHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';",
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { getLimitValidationConfig } from '../../config/limits.js';",
+        "import { createSearchTools } from '../search.js';",
+        "import { unixToISOStringOrNow } from '../../utils/timestamp.js';",
+        "import { SEARCH_FIELDS, type SearchParams } from '../../search/types.js';",
+        "import type { ScoringCorrelationParams } from '../../validation/field-mapper.js';",
+        "import { validateCountryCodes } from '../../utils/geographic.js';"
+      ]
+    },
+    {
+      "file": "src/tools/handlers/security.ts",
+      "lines": 1,
+      "size": 23362,
+      "issues": [
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class GetActiveAlarmsHandler extends BaseToolHandler {",
+        "export class GetSpecificAlarmHandler extends BaseToolHandler {",
+        "export class DeleteAlarmHandler extends BaseToolHandler {"
+      ],
+      "imports": [
+        "import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';",
+        "import type { FirewallaClient } from '../../firewalla/client.js';",
+        "import { getLimitValidationConfig } from '../../config/limits.js';",
+        "import { validateAlarmId } from '../../utils/alarm-id-validation.js';"
+      ]
+    },
+    {
+      "file": "src/tools/index.ts",
+      "lines": 1,
+      "size": 6750,
+      "issues": [
+        {
+          "level": "medium",
+          "type": "missing_validation",
+          "message": "No parameter validation found",
+          "line": "unknown"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export function setupTools(server: Server, firewalla: FirewallaClient): void {"
+      ],
+      "imports": [
+        "import type { Server } from '@modelcontextprotocol/sdk/server/index.js';",
+        "import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';",
+        "import type { FirewallaClient } from '../firewalla/client.js';",
+        "import { createErrorResponse, ErrorType } from '../validation/error-handler.js';",
+        "import { logger } from '../monitoring/logger.js';",
+        "import { ToolRegistry } from './registry.js';",
+        "import { getCurrentTimestamp } from '../utils/timestamp.js';",
+        "import { featureFlags } from '../config/feature-flags.js';",
+        "import { metrics } from '../monitoring/metrics.js';"
+      ]
+    },
+    {
+      "file": "src/tools/registry.ts",
+      "lines": 2,
+      "size": 12189,
+      "issues": [
+        {
+          "level": "medium",
+          "type": "missing_validation",
+          "message": "No parameter validation found",
+          "line": "unknown"
+        },
+        {
+          "level": "low",
+          "type": "todo_comment",
+          "message": "2 TODO/FIXME comments found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export class ToolRegistry {"
+      ],
+      "imports": [
+        "import type { ToolHandler } from './handlers/base.js';",
+        "import { GetDeviceStatusHandler } from './handlers/device.js';",
+        "import { BulkDeleteAlarmsHandler } from './handlers/bulk-alarms.js';"
+      ]
+    },
+    {
+      "file": "src/tools/search.ts",
+      "lines": 8,
+      "size": 87954,
+      "issues": [
+        {
+          "level": "low",
+          "type": "weak_typing",
+          "message": "Use of any type found",
+          "line": "multiple"
+        }
+      ],
+      "tools": [],
+      "exports": [
+        "export interface SearchConfig {",
+        "export function updateSearchConfig(newConfig: Partial<SearchConfig>): void {",
+        "export function getSearchConfig(): SearchConfig {",
+        "export class SearchEngine {",
+        "export function createSearchTools(firewalla: FirewallaClient): SearchTools {"
+      ],
+      "imports": [
+        "import { queryParser } from '../search/parser.js';",
+        "import { filterFactory } from '../search/filters/index.js';",
+        "import type { FilterContext } from '../search/filters/base.js';",
+        "import type { SearchParams, SearchResult } from '../search/types.js';",
+        "import type { SearchOptions } from '../types.js';",
+        "import type { FirewallaClient } from '../firewalla/client.js';",
+        "import { translateBooleanQuery } from '../utils/simple-boolean-translator.js';",
+        "import { ParameterValidator, SafeAccess } from '../validation/error-handler.js';",
+        "import { EnhancedQueryValidator } from '../validation/enhanced-query-validator.js';",
+        "import { FieldValidator } from '../validation/field-validator.js';",
+        "import { ErrorFormatter } from '../validation/error-formatter.js';",
+        "import { correlateResults } from '../validation/enhanced-correlation.js';"
+      ]
+    }
+  ],
+  "registeredTools": [
+    "get_active_alarms",
+    "get_specific_alarm",
+    "delete_alarm",
+    "get_flow_data",
+    "get_bandwidth_usage",
+    "get_device_status",
+    "get_network_rules",
+    "pause_rule",
+    "resume_rule",
+    "get_target_lists",
+    "get_network_rules_summary",
+    "get_most_active_rules",
+    "get_recent_rules",
+    "get_boxes",
+    "get_simple_statistics",
+    "get_statistics_by_region",
+    "get_statistics_by_box",
+    "get_flow_trends",
+    "get_alarm_trends",
+    "get_rule_trends",
+    "search_flows",
+    "search_alarms",
+    "search_rules",
+    "search_devices",
+    "search_target_lists",
+    "search_cross_reference",
+    "search_enhanced_cross_reference",
+    "get_correlation_suggestions",
+    "search_alarms_by_geography",
+    "get_geographic_statistics",
+    "bulk_delete_alarms",
+    "bulk_pause_rules",
+    "bulk_resume_rules",
+    "search_correlate",
+    "create_rule",
+    "update_rule",
+    "delete_rule",
+    "create_target_list",
+    "update_target_list",
+    "delete_target_list",
+    "manage_alarms",
+    "manage_rule_state",
+    "bulk_operations",
+    "convenience_get_active_alarms",
+    "convenience_get_bandwidth_usage",
+    "convenience_pause_rule",
+    "convenience_resume_rule",
+    "get_online_devices",
+    "get_offline_devices",
+    "block_ip",
+    "block_domain"
+  ],
+  "handlerFiles": [],
+  "codeIssues": [],
+  "securityConcerns": [
+    {
+      "level": "high",
+      "type": "potential_xss",
+      "file": "src/config/limits.ts",
+      "message": "Potential XSS vulnerability detected"
+    },
+    {
+      "level": "high",
+      "type": "potential_xss",
+      "file": "src/firewalla/client.ts",
+      "message": "Potential XSS vulnerability detected"
+    },
+    {
+      "level": "medium",
+      "type": "weak_random",
+      "file": "src/firewalla/client.ts",
+      "message": "Weak random number generation for security-sensitive operations"
+    },
+    {
+      "level": "high",
+      "type": "potential_xss",
+      "file": "src/prompts/index.ts",
+      "message": "Potential XSS vulnerability detected"
+    },
+    {
+      "level": "high",
+      "type": "potential_xss",
+      "file": "src/search/index.ts",
+      "message": "Potential XSS vulnerability detected"
+    },
+    {
+      "level": "medium",
+      "type": "weak_random",
+      "file": "src/server.ts",
+      "message": "Weak random number generation for security-sensitive operations"
+    },
+    {
+      "level": "high",
+      "type": "potential_xss",
+      "file": "src/tools/handlers/rules.ts",
+      "message": "Potential XSS vulnerability detected"
+    },
+    {
+      "level": "high",
+      "type": "potential_xss",
+      "file": "src/types.ts",
+      "message": "Potential XSS vulnerability detected"
+    },
+    {
+      "level": "medium",
+      "type": "weak_random",
+      "file": "src/utils/retry-manager.ts",
+      "message": "Weak random number generation for security-sensitive operations"
+    },
+    {
+      "level": "medium",
+      "type": "weak_random",
+      "file": "src/utils/streaming-manager.ts",
+      "message": "Weak random number generation for security-sensitive operations"
+    },
+    {
+      "level": "medium",
+      "type": "weak_random",
+      "file": "src/utils/timeout-manager.ts",
+      "message": "Weak random number generation for security-sensitive operations"
+    },
+    {
+      "level": "high",
+      "type": "potential_xss",
+      "file": "src/validation/error-handler.ts",
+      "message": "Potential XSS vulnerability detected"
+    },
+    {
+      "level": "high",
+      "type": "potential_xss",
+      "file": "src/validation/field-mapper.ts",
+      "message": "Potential XSS vulnerability detected"
+    }
+  ],
+  "performanceIssues": [
+    {
+      "level": "low",
+      "type": "missing_caching",
+      "file": "src/firewalla/client.ts",
+      "message": "HTTP requests without caching"
+    },
+    {
+      "level": "low",
+      "type": "missing_caching",
+      "file": "src/tools/core/management.ts",
+      "message": "HTTP requests without caching"
+    },
+    {
+      "level": "low",
+      "type": "missing_caching",
+      "file": "src/tools/handlers/network.ts",
+      "message": "HTTP requests without caching"
+    },
+    {
+      "level": "low",
+      "type": "missing_caching",
+      "file": "src/tools/handlers/rules.ts",
+      "message": "HTTP requests without caching"
+    },
+    {
+      "level": "low",
+      "type": "missing_caching",
+      "file": "src/utils/pagination.ts",
+      "message": "HTTP requests without caching"
+    },
+    {
+      "level": "low",
+      "type": "missing_caching",
+      "file": "src/validation/error-handler.ts",
+      "message": "HTTP requests without caching"
+    }
+  ],
+  "architecturalFindings": [
+    {
+      "level": "medium",
+      "type": "commented_tools",
+      "file": "src/tools/registry.ts",
+      "message": "18 commented out tool registrations found",
+      "details": [
+        "// this.register(new SearchCorrelateHandler());",
+        "// this.register(new CreateRuleHandler());",
+        "// this.register(new UpdateRuleHandler());",
+        "// this.register(new DeleteRuleHandler());",
+        "// this.register(new CreateTargetListHandler());",
+        "// this.register(new UpdateTargetListHandler());",
+        "// this.register(new DeleteTargetListHandler());",
+        "// this.register(new ManageAlarmsHandler());",
+        "// this.register(new ManageRuleStateHandler());",
+        "// this.register(new BulkOperationsHandler());",
+        "// this.register(new ConvenienceGetActiveAlarmsHandler());",
+        "// this.register(new ConvenienceGetBandwidthUsageHandler());",
+        "// this.register(new ConveniencePauseRuleHandler());",
+        "// this.register(new ConvenienceResumeRuleHandler());",
+        "// this.register(new GetOnlineDevicesHandler());",
+        "// this.register(new GetOfflineDevicesHandler());",
+        "// this.register(new BlockIpHandler());",
+        "// this.register(new BlockDomainHandler());"
+      ]
+    },
+    {
+      "level": "high",
+      "type": "tool_count_mismatch",
+      "file": "src/tools/registry.ts",
+      "message": "Registered tools (51) doesn't match documented count (49)"
+    }
+  ],
+  "summary": {
+    "totalFiles": 84,
+    "toolFiles": 26,
+    "registeredTools": 51,
+    "totalIssues": 21,
+    "criticalIssues": 0,
+    "highIssues": 9,
+    "mediumIssues": 6,
+    "lowIssues": 6
+  }
+}

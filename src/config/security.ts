@@ -1,5 +1,72 @@
 import crypto from 'crypto';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
+import { logger } from '../monitoring/logger.js';
+
+/**
+ * Security policy configuration for Firewalla MCP Server
+ */
+export interface SecurityPolicy {
+  /** Enable RBAC enforcement */
+  enableRBAC: boolean;
+  /** Enable audit logging */
+  enableAuditLogging: boolean;
+  /** Enable input sanitization */
+  enableInputSanitization: boolean;
+  /** Enable rate limiting */
+  enableRateLimit: boolean;
+  /** Enable origin validation */
+  enableOriginValidation: boolean;
+  /** Default box ID for convenience tools */
+  defaultBoxId?: string;
+  /** Require explicit box ID (no defaults) */
+  requireExplicitBoxId: boolean;
+  /** Maximum risk score for operations */
+  maxRiskScore: number;
+  /** Enable security warnings for broad-scope operations */
+  enableScopeWarnings: boolean;
+  /** Rate limit configuration */
+  rateLimits: {
+    default: number;
+    sensitive: number;
+    admin: number;
+  };
+  /** IP and domain validation settings */
+  validation: {
+    /** Validate IP addresses */
+    validateIPs: boolean;
+    /** Validate domain names */
+    validateDomains: boolean;
+    /** Block private IP ranges in certain contexts */
+    blockPrivateIPs: boolean;
+    /** Block localhost/loopback addresses */
+    blockLoopback: boolean;
+  };
+}
+
+/**
+ * Default security policy - secure by default
+ */
+const DEFAULT_SECURITY_POLICY: SecurityPolicy = {
+  enableRBAC: true,
+  enableAuditLogging: true,
+  enableInputSanitization: true,
+  enableRateLimit: true,
+  enableOriginValidation: true,
+  requireExplicitBoxId: false, // Allow default for convenience
+  maxRiskScore: 80,
+  enableScopeWarnings: true,
+  rateLimits: {
+    default: 100,
+    sensitive: 10,
+    admin: 5,
+  },
+  validation: {
+    validateIPs: true,
+    validateDomains: true,
+    blockPrivateIPs: false, // Allow private IPs for local network management
+    blockLoopback: true,
+  },
+};
 
 export class SecurityManager {
   private static readonly ALLOWED_ORIGINS = [
@@ -18,13 +85,33 @@ export class SecurityManager {
     { count: number; resetTime: number }
   >();
   private cleanupInterval: ReturnType<typeof setInterval>;
+  private securityPolicy: SecurityPolicy;
 
-  constructor() {
+  constructor(policy?: Partial<SecurityPolicy>) {
+    // Merge provided policy with defaults
+    this.securityPolicy = { ...DEFAULT_SECURITY_POLICY, ...policy };
+
+    // Initialize default box ID from environment if not provided
+    if (!this.securityPolicy.defaultBoxId) {
+      this.securityPolicy.defaultBoxId = process.env.FIREWALLA_DEFAULT_BOX_ID;
+    }
+
     // Clean up old entries every 5 minutes
     this.cleanupInterval = setInterval(
       () => this.cleanupRateLimits(),
       5 * 60 * 1000
     );
+
+    // Log security policy initialization
+    logger.info('SecurityManager initialized', {
+      rbac_enabled: this.securityPolicy.enableRBAC,
+      audit_enabled: this.securityPolicy.enableAuditLogging,
+      input_sanitization: this.securityPolicy.enableInputSanitization,
+      rate_limiting: this.securityPolicy.enableRateLimit,
+      origin_validation: this.securityPolicy.enableOriginValidation,
+      has_default_box_id: !!this.securityPolicy.defaultBoxId,
+      max_risk_score: this.securityPolicy.maxRiskScore,
+    });
   }
 
   destroy(): void {
@@ -163,8 +250,13 @@ export class SecurityManager {
     return `${start}${middle}${end}`;
   }
 
-  validateEnvironmentVars(): { valid: boolean; errors: string[] } {
+  validateEnvironmentVars(): {
+    valid: boolean;
+    errors: string[];
+    warnings: string[];
+  } {
     const errors: string[] = [];
+    const warnings: string[] = [];
     const required = ['FIREWALLA_MSP_TOKEN', 'FIREWALLA_BOX_ID'];
 
     for (const envVar of required) {
@@ -181,7 +273,26 @@ export class SecurityManager {
       errors.push('FIREWALLA_MSP_TOKEN contains invalid characters');
     }
 
-    return { valid: errors.length === 0, errors };
+    // Check for FIREWALLA_DEFAULT_BOX_ID if convenience tools are used
+    if (!process.env.FIREWALLA_DEFAULT_BOX_ID) {
+      warnings.push(
+        'FIREWALLA_DEFAULT_BOX_ID not set - convenience tools will require explicit box_id parameters'
+      );
+    } else {
+      // Validate default box ID format
+      const defaultBoxId = process.env.FIREWALLA_DEFAULT_BOX_ID;
+      if (
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(
+          defaultBoxId
+        )
+      ) {
+        warnings.push(
+          'FIREWALLA_DEFAULT_BOX_ID does not appear to be a valid UUID format'
+        );
+      }
+    }
+
+    return { valid: errors.length === 0, errors, warnings };
   }
 
   createSecureHeaders(): Record<string, string> {
@@ -224,5 +335,160 @@ export class SecurityManager {
     }
 
     return sanitized;
+  }
+
+  /**
+   * Get current security policy
+   */
+  getSecurityPolicy(): SecurityPolicy {
+    return { ...this.securityPolicy };
+  }
+
+  /**
+   * Update security policy
+   */
+  updateSecurityPolicy(updates: Partial<SecurityPolicy>): void {
+    this.securityPolicy = { ...this.securityPolicy, ...updates };
+    logger.info('Security policy updated', updates);
+  }
+
+  /**
+   * Validate IP address format and check against security policy
+   */
+  validateIPAddress(ip: string): {
+    valid: boolean;
+    error?: string;
+    warning?: string;
+  } {
+    if (!this.securityPolicy.validation.validateIPs) {
+      return { valid: true };
+    }
+
+    // Basic IPv4 format validation
+    const ipv4Regex =
+      /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    if (!ipv4Regex.test(ip)) {
+      return { valid: false, error: 'Invalid IPv4 address format' };
+    }
+
+    // Check for private IP ranges if blocked
+    if (this.securityPolicy.validation.blockPrivateIPs) {
+      const privateRanges = [
+        /^10\./,
+        /^172\.(1[6-9]|2[0-9]|3[01])\./,
+        /^192\.168\./,
+      ];
+
+      if (privateRanges.some(range => range.test(ip))) {
+        return { valid: false, error: 'Private IP addresses are not allowed' };
+      }
+    }
+
+    // Check for loopback addresses if blocked
+    if (this.securityPolicy.validation.blockLoopback) {
+      if (ip === '127.0.0.1' || ip.startsWith('127.') || ip === '::1') {
+        return { valid: false, error: 'Loopback addresses are not allowed' };
+      }
+    }
+
+    // Warning for broadcast addresses
+    if (ip.endsWith('.255') || ip === '255.255.255.255') {
+      return {
+        valid: true,
+        warning: 'Broadcast address detected - verify this is intentional',
+      };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Validate domain name format and check against security policy
+   */
+  validateDomainName(domain: string): {
+    valid: boolean;
+    error?: string;
+    warning?: string;
+  } {
+    if (!this.securityPolicy.validation.validateDomains) {
+      return { valid: true };
+    }
+
+    // Basic domain format validation
+    const domainRegex =
+      /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
+    if (!domainRegex.test(domain)) {
+      return { valid: false, error: 'Invalid domain name format' };
+    }
+
+    // Check domain length
+    if (domain.length > 253) {
+      return {
+        valid: false,
+        error: 'Domain name too long (max 253 characters)',
+      };
+    }
+
+    // Warning for localhost domains
+    if (domain === 'localhost' || domain.endsWith('.localhost')) {
+      return {
+        valid: true,
+        warning: 'Localhost domain detected - verify this is intentional',
+      };
+    }
+
+    // Warning for wildcard domains
+    if (domain.startsWith('*.')) {
+      return {
+        valid: true,
+        warning:
+          'Wildcard domain detected - ensure proper validation is in place',
+      };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Check if an operation is allowed based on security policy and risk score
+   */
+  isOperationAllowed(riskScore: number): { allowed: boolean; reason?: string } {
+    if (riskScore > this.securityPolicy.maxRiskScore) {
+      return {
+        allowed: false,
+        reason: `Operation risk score (${riskScore}) exceeds maximum allowed (${this.securityPolicy.maxRiskScore})`,
+      };
+    }
+
+    return { allowed: true };
+  }
+
+  /**
+   * Generate security warning for broad-scope operations
+   */
+  generateScopeWarning(scope: string, operation: string): string | null {
+    if (!this.securityPolicy.enableScopeWarnings) {
+      return null;
+    }
+
+    if (scope === 'global') {
+      return `WARNING: ${operation} will be applied globally to all devices. Consider using device-specific or group-specific scope for better security.`;
+    }
+
+    return null;
+  }
+
+  /**
+   * Get default box ID for convenience tools
+   */
+  getDefaultBoxId(): string | undefined {
+    return this.securityPolicy.defaultBoxId;
+  }
+
+  /**
+   * Check if explicit box ID is required
+   */
+  requiresExplicitBoxId(): boolean {
+    return this.securityPolicy.requireExplicitBoxId;
   }
 }

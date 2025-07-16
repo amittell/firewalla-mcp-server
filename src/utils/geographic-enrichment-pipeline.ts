@@ -24,7 +24,6 @@ import {
   COUNTRY_TO_CONTINENT,
   type GeographicCache,
 } from './geographic.js';
-import { featureFlags } from '../config/feature-flags.js';
 import { logger } from '../monitoring/logger.js';
 
 /**
@@ -140,8 +139,8 @@ export class GeographicEnrichmentPipeline {
 
   constructor(geoCache: GeographicCache) {
     this.geoCache = geoCache;
-    this.performanceBudgetMs = featureFlags.GEOGRAPHIC_ENRICHMENT_BUDGET_MS;
-    this.successTarget = featureFlags.GEOGRAPHIC_ENRICHMENT_SUCCESS_TARGET;
+    this.performanceBudgetMs = 5000; // 5 seconds budget
+    this.successTarget = 0.95; // 95% success target
 
     this.stats = {
       totalRequests: 0,
@@ -198,7 +197,8 @@ export class GeographicEnrichmentPipeline {
       }
 
       // Secondary provider: IP range mapping
-      if (featureFlags.GEOGRAPHIC_FALLBACK_ENABLED) {
+      // Fallback always enabled in OSS version
+      {
         const secondaryResult = this.trySecondaryProvider(normalizedIP);
         if (secondaryResult) {
           try {
@@ -264,16 +264,7 @@ export class GeographicEnrichmentPipeline {
   ): Promise<Map<string, EnrichmentResult>> {
     const results = new Map<string, EnrichmentResult>();
 
-    if (!featureFlags.shouldEnrichRequest()) {
-      // Feature flag disabled or rollout sampling excluded this request
-      for (const request of requests) {
-        results.set(
-          request.ip,
-          this.createResult(null, 'failed', process.hrtime.bigint(), false)
-        );
-      }
-      return results;
-    }
+    // Always enrich in OSS version - feature flags removed
 
     const batchStartTime = process.hrtime.bigint();
     const uniqueIPs = [...new Set(requests.map(r => r.ip))];
@@ -544,9 +535,7 @@ export async function enrichWithGeographicData<T extends Record<string, any>>(
   geoCache: GeographicCache,
   ipFields?: string[]
 ): Promise<T> {
-  if (!featureFlags.GEOGRAPHIC_ENRICHMENT_ENABLED) {
-    return obj;
-  }
+  // Geographic enrichment is always enabled in OSS version
 
   const pipeline = getGlobalEnrichmentPipeline(geoCache);
   return pipeline.enrichObject(obj, ipFields);
@@ -558,7 +547,7 @@ export async function enrichWithGeographicData<T extends Record<string, any>>(
 export async function enrichArrayWithGeographicData<
   T extends Record<string, any>,
 >(objects: T[], geoCache: GeographicCache, ipFields?: string[]): Promise<T[]> {
-  if (!featureFlags.GEOGRAPHIC_ENRICHMENT_ENABLED || objects.length === 0) {
+  if (objects.length === 0) {
     return objects;
   }
 

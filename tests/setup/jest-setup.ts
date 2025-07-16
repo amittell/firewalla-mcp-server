@@ -252,8 +252,11 @@ export async function measurePerformance<T>(operation: () => Promise<T>): Promis
   }
 }
 
-// Environment info logging
-if (testConfig.logging.enableVerbose) {
+// Environment info logging (opt-in via env var to avoid noisy CI output)
+if (
+  testConfig.logging.enableVerbose &&
+  process.env.SHOW_JEST_SETUP_INFO === 'true'
+) {
   console.log(`Test Environment: ${testConfig.name}`);
   console.log(`Max Workers: ${testConfig.concurrency.maxWorkers}`);
   console.log(`Coverage Enabled: ${testConfig.coverage.enabled}`);

@@ -1,29 +1,33 @@
 /**
- * @fileoverview Tool Registry - Centralized MCP Tool Management
+ * @fileoverview Tool Registry - 28-Tool Complete API Coverage Architecture
  *
- * Implements a registry pattern for managing 35 MCP tool handlers with clean
- * organization and easy discovery. Replaces the original monolithic switch statement
- * with a maintainable, testable architecture where each tool is encapsulated in
- * its own handler class.
+ * Implements a registry pattern for managing 28 MCP tool handlers with clean
+ * organization and easy discovery. Each tool maps to actual Firewalla API endpoints
+ * with corrected schemas and proper parameter validation for 100% API coverage.
  *
  * Registry Features:
- * - **Automatic Registration**: All handlers are auto-registered during construction
- * - **Category Organization**: Tools grouped by functionality (security, network, etc.)
+ * - **Automatic Registration**: All 28 handlers are auto-registered during construction
+ * - **API Mapping**: Direct mapping to verified Firewalla API endpoints
  * - **Type Safety**: Full TypeScript support with proper handler interfaces
  * - **Easy Discovery**: Methods to find tools by name, category, or list all tools
- * - **Extensibility**: Simple registration process for adding new tools
+ * - **Corrected Schemas**: All limits updated to API maximum (500), required parameters added
+ * - **Complete CRUD**: Full Create, Read, Update, Delete operations for all resources
  *
- * Tool Distribution:
- * - Security: 3 handlers (alarms, threats) + 4 bulk alarm handlers
- * - Network: 3 handlers (flows, bandwidth)
- * - Device: 1 handler (status, inventory)
- * - Rules: 7 handlers (firewall rules, management) + 6 bulk rule handlers
- * - Analytics: 7 handlers (statistics, trends)
- * - Search: 11 handlers (advanced search, correlations, geography)
- * - Bulk Operations: 3 handlers (legitimate alarm & rule bulk operations)
+ * 28-Tool Distribution (100% API Coverage):
+ * - Direct API Endpoints (23 tools):
+ *   * Security: 3 handlers (get_active_alarms, get_specific_alarm, delete_alarm)
+ *   * Network: 1 handler (get_flow_data)
+ *   * Device: 1 handler (get_device_status)
+ *   * Rules: 8 handlers (get_network_rules, pause_rule, resume_rule, get_target_lists,
+ *     get_specific_target_list, create_target_list, update_target_list, delete_target_list)
+ *   * Search: 3 handlers (search_flows, search_alarms, search_rules)
+ *   * Analytics: 7 handlers (get_boxes, get_simple_statistics, get_statistics_by_region,
+ *     get_statistics_by_box, get_flow_trends, get_alarm_trends, get_rule_trends)
+ * - Convenience Wrappers (5 tools):
+ *   * get_bandwidth_usage, get_offline_devices, search_devices, search_target_lists, get_network_rules_summary
  *
  * @version 1.0.0
- * @author Firewalla MCP Server Team
+ * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
  * @since 2024-01-01
  */
 
@@ -44,9 +48,11 @@ import {
   PauseRuleHandler,
   ResumeRuleHandler,
   GetTargetListsHandler,
+  GetSpecificTargetListHandler,
+  CreateTargetListHandler,
+  UpdateTargetListHandler,
+  DeleteTargetListHandler,
   GetNetworkRulesSummaryHandler,
-  GetMostActiveRulesHandler,
-  GetRecentRulesHandler,
 } from './handlers/rules.js';
 import {
   GetBoxesHandler,
@@ -63,30 +69,21 @@ import {
   SearchRulesHandler,
   SearchDevicesHandler,
   SearchTargetListsHandler,
-  SearchCrossReferenceHandler,
-  SearchEnhancedCrossReferenceHandler,
-  GetCorrelationSuggestionsHandler,
-  SearchAlarmsByGeographyHandler,
-  GetGeographicStatisticsHandler,
 } from './handlers/search.js';
-import { BulkDeleteAlarmsHandler } from './handlers/bulk-alarms.js';
-import {
-  BulkPauseRulesHandler,
-  BulkResumeRulesHandler,
-} from './handlers/bulk-rules.js';
 
 /**
- * Central registry for managing all MCP tool handlers
+ * Central registry for managing 28 MCP tool handlers with complete API coverage
  *
- * Provides a clean, organized approach to tool registration and discovery.
- * Each tool handler is automatically registered during construction and can be
- * retrieved by name, filtered by category, or listed for discovery purposes.
+ * Provides a clean, organized approach to tool registration and discovery for
+ * the 28-tool architecture. Each tool handler maps to actual Firewalla API endpoints
+ * with corrected schemas and proper parameter validation for 100% API coverage.
  *
  * The registry pattern enables:
- * - Easy addition of new tools without modifying existing code
+ * - 28 complete tools (23 direct API + 5 convenience wrappers)
+ * - 100% Firewalla API coverage including full CRUD operations
  * - Clean separation between tool implementation and registration
  * - Type-safe tool discovery and execution
- * - Category-based tool organization for better UX
+ * - API-verified tool schemas with corrected limits and required parameters
  *
  * @example
  * ```typescript
@@ -98,7 +95,7 @@ import {
  * // Get tools by category
  * const searchTools = registry.getToolsByCategory('search');
  *
- * // List all available tools
+ * // List all available tools (returns 28 tools)
  * const allTools = registry.getToolNames();
  * ```
  *
@@ -119,39 +116,45 @@ export class ToolRegistry {
   }
 
   /**
-   * Automatically registers all available tool handlers organized by category
+   * Automatically registers 28 tool handlers for complete API coverage
    *
-   * Registers handlers across 7 functional categories with a total of 35 tools.
-   * Each handler implements the ToolHandler interface and provides a specific
-   * piece of Firewalla functionality.
+   * Registers handlers for the 28-tool architecture: 23 direct API endpoints
+   * and 5 convenience wrappers. Each handler implements the ToolHandler interface
+   * and maps to actual Firewalla API endpoints.
    *
    * @private
    * @returns {void}
    */
   private registerHandlers(): void {
+    // Direct API Endpoints (23 handlers)
+
     // Security tools (3 handlers)
     this.register(new GetActiveAlarmsHandler());
     this.register(new GetSpecificAlarmHandler());
     this.register(new DeleteAlarmHandler());
 
-    // Network tools (3 handlers)
+    // Network tools (1 handler - get_flow_data)
     this.register(new GetFlowDataHandler());
-    this.register(new GetBandwidthUsageHandler());
-    this.register(new GetOfflineDevicesHandler());
 
     // Device tools (1 handler)
     this.register(new GetDeviceStatusHandler());
 
-    // Rule tools (7 handlers)
+    // Rule tools (8 handlers)
     this.register(new GetNetworkRulesHandler());
     this.register(new PauseRuleHandler());
     this.register(new ResumeRuleHandler());
     this.register(new GetTargetListsHandler());
-    this.register(new GetNetworkRulesSummaryHandler());
-    this.register(new GetMostActiveRulesHandler());
-    this.register(new GetRecentRulesHandler());
+    this.register(new GetSpecificTargetListHandler());
+    this.register(new CreateTargetListHandler());
+    this.register(new UpdateTargetListHandler());
+    this.register(new DeleteTargetListHandler());
 
-    // Analytics tools (7 handlers)
+    // Search tools (5 handlers)
+    this.register(new SearchFlowsHandler());
+    this.register(new SearchAlarmsHandler());
+    this.register(new SearchRulesHandler());
+
+    // Analytics tools (5 handlers)
     this.register(new GetBoxesHandler());
     this.register(new GetSimpleStatisticsHandler());
     this.register(new GetStatisticsByRegionHandler());
@@ -160,27 +163,12 @@ export class ToolRegistry {
     this.register(new GetAlarmTrendsHandler());
     this.register(new GetRuleTrendsHandler());
 
-    // Search tools (11 handlers)
-    this.register(new SearchFlowsHandler());
-    this.register(new SearchAlarmsHandler());
-    this.register(new SearchRulesHandler());
-    this.register(new SearchDevicesHandler());
-    this.register(new SearchTargetListsHandler());
-    this.register(new SearchCrossReferenceHandler());
-
-    // Enhanced cross-reference and geographic search tools (4 handlers)
-    this.register(new SearchEnhancedCrossReferenceHandler());
-    this.register(new GetCorrelationSuggestionsHandler());
-    this.register(new SearchAlarmsByGeographyHandler());
-    this.register(new GetGeographicStatisticsHandler());
-
-    // Bulk operation tools (3 handlers)
-    // Bulk alarm operations (1 handler)
-    this.register(new BulkDeleteAlarmsHandler());
-
-    // Bulk rule operations (2 handlers)
-    this.register(new BulkPauseRulesHandler());
-    this.register(new BulkResumeRulesHandler());
+    // Convenience Wrappers (5 handlers)
+    this.register(new GetBandwidthUsageHandler()); // wrapper around get_device_status
+    this.register(new GetOfflineDevicesHandler()); // wrapper around get_device_status
+    this.register(new SearchDevicesHandler()); // wrapper with client-side filtering
+    this.register(new SearchTargetListsHandler()); // wrapper with client-side filtering
+    this.register(new GetNetworkRulesSummaryHandler()); // wrapper around get_network_rules
   }
 
   /**

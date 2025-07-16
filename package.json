@@ -1,23 +1,49 @@
 {
   "name": "firewalla-mcp-server",
   "version": "1.0.0",
-  "type": "module",
   "description": "A Model Context Protocol (MCP) server that enables Claude to access and analyze your Firewalla firewall data in real-time.",
+  "keywords": [
+    "mcp",
+    "firewalla",
+    "firewall",
+    "security",
+    "model-context-protocol",
+    "claude",
+    "network-monitoring",
+    "claude-desktop",
+    "claude-code",
+    "vscode",
+    "cursor",
+    "ai-tools",
+    "network-security",
+    "threat-detection"
+  ],
+  "homepage": "https://github.com/amittell/firewalla-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/amittell/firewalla-mcp-server/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amittell/firewalla-mcp-server.git"
+  },
+  "license": "MIT",
+  "author": "Alex Mittell <mittell@me.com> (https://github.com/amittell)",
+  "type": "module",
   "main": "dist/server.js",
+  "types": "./dist/server.d.ts",
+  "bin": {
+    "firewalla-mcp-server": "dist/server.js"
+  },
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
   "files": [
     "dist/**/*",
     "docs/**/*",
     "README.md",
     "LICENSE"
   ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/amittell/firewalla-mcp-server.git"
-  },
-  "bugs": {
-    "url": "https://github.com/amittell/firewalla-mcp-server/issues"
-  },
-  "homepage": "https://github.com/amittell/firewalla-mcp-server#readme",
   "scripts": {
     "build": "tsc",
     "build:clean": "rimraf dist && npm run build",
@@ -59,28 +85,6 @@
     "test:regression:performance": "cross-env NODE_ENV=test jest tests/regression/performance.test.ts",
     "test:regression:all": "npm run test:regression:wave0 && npm run test:regression:wave1 && npm run test:regression:wave2 && npm run test:regression:contracts && npm run test:regression:performance"
   },
-  "keywords": [
-    "mcp",
-    "firewalla",
-    "firewall",
-    "security",
-    "model-context-protocol",
-    "claude",
-    "network-monitoring",
-    "claude-desktop",
-    "claude-code",
-    "vscode",
-    "cursor",
-    "ai-tools",
-    "network-security",
-    "threat-detection"
-  ],
-  "author": {
-    "name": "Alex Mittell",
-    "email": "mittell@me.com",
-    "url": "https://github.com/amittell"
-  },
-  "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",
     "@types/geoip-lite": "^1.4.4",
@@ -97,11 +101,18 @@
     "cross-env": "^7.0.3",
     "eslint": "^9.29.0",
     "jest": "^30.0.2",
+    "nock": "^14.0.5",
     "nodemon": "^3.1.10",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -22,7 +22,7 @@
  * - Comprehensive logging and monitoring integration
  *
  * @version 1.0.0
- * @author Firewalla MCP Server Team
+ * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
  * @since 2024-01-01
  */
 
@@ -34,7 +34,6 @@ import { logger } from '../monitoring/logger.js';
 import { ToolRegistry } from './registry.js';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
 
-import { featureFlags } from '../config/feature-flags.js';
 import { metrics } from '../monitoring/metrics.js';
 
 /**
@@ -75,29 +74,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
   server.setRequestHandler(CallToolRequestSchema, async request => {
     const { name, arguments: args } = request.params;
 
-    // <add WAVE-0 safety-net and telemetry>
-    // Global safety-net: disable all tools when WAVE-0 flag off
-    if (!featureFlags.WAVE0_ENABLED) {
-      return createErrorResponse(
-        name,
-        'MCP server running in safe-mode, tools disabled',
-        ErrorType.SERVICE_UNAVAILABLE,
-        { timestamp: getCurrentTimestamp() }
-      );
-    }
-
-    // Per-tool disable list
-    if (featureFlags.disabledTools.includes(name)) {
-      return createErrorResponse(
-        name,
-        `Tool '${name}' is temporarily disabled`,
-        ErrorType.TOOL_DISABLED,
-        { timestamp: getCurrentTimestamp() }
-      );
-    }
-
     const startTime = Date.now();
-    // </add>
 
     try {
       // Get handler from the registry

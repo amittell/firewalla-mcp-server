@@ -1,27 +1,27 @@
 #!/usr/bin/env node
 
 /**
- * @fileoverview Firewalla MCP Server - Main server implementation for Model Context Protocol
+ * @fileoverview Firewalla MCP Server - 28-Tool Complete API Coverage
  *
  * This file implements the primary MCP server class that provides Claude with access to
- * Firewalla firewall data through standardized tools, resources, and prompts. The server
- * uses stdio transport for communication with Claude Code and supports advanced search
- * capabilities, security monitoring, and network analytics.
+ * Firewalla firewall data through 28 tools covering 100% of the Firewalla API.
+ * All tools are mapped to actual Firewalla API endpoints with proper parameter validation.
+ *
+ * Architecture:
+ * - 23 Direct API Endpoints (100% coverage)
+ * - 5 Convenience Wrappers
+ * - All limits corrected to API maximum (500)
+ * - Required parameters added for proper API calls
+ * - Complete CRUD operations for all resources
  *
  * @version 1.0.0
- * @author Firewalla MCP Server Team
+ * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
  * @since 2024-01-01
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { featureFlags } from './config/feature-flags.js';
-import { metrics } from './monitoring/metrics.js';
-import {
-  ListToolsRequestSchema,
-  ListResourcesRequestSchema,
-  ListPromptsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { config } from './config/config.js';
 import { FirewallaClient } from './firewalla/client.js';
 import { setupTools } from './tools/index.js';
@@ -29,55 +29,12 @@ import { setupResources } from './resources/index.js';
 import { setupPrompts } from './prompts/index.js';
 
 /**
- * Main MCP Server class for Firewalla integration
- *
- * Provides Claude with comprehensive access to Firewalla firewall data through:
- * - **Tools**: Interactive functions for querying data, managing rules, and device operations
- * - **Resources**: Read-only data sources for firewall status, metrics, and topology
- * - **Prompts**: Intelligent analysis prompts for security reports and threat investigation
- *
- * The server communicates with Claude using the Model Context Protocol over stdio transport,
- * making it compatible with Claude Code and other MCP-enabled applications.
- *
- * @example
- * ```typescript
- * // Create and start the MCP server
- * const server = new FirewallaMCPServer();
- * await server.start();
- * ```
- *
- * @example
- * ```typescript
- * // Access through Claude Code
- * // "What security alerts do I have?"
- * // "Show me top bandwidth users"
- * // "Generate a security report for the last 24 hours"
- * ```
- *
- * @class
- * @public
+ * Main MCP Server class for Firewalla integration with 28-tool architecture
  */
 export class FirewallaMCPServer {
-  /** @private The MCP server instance handling protocol communication */
   private server: Server;
-
-  /** @private The Firewalla API client for accessing firewall data */
   private firewalla: FirewallaClient;
 
-  /**
-   * Creates a new Firewalla MCP Server instance
-   *
-   * Initializes the MCP server with Firewalla integration capabilities including:
-   * - Tool handlers for interactive queries and operations
-   * - Resource endpoints for structured data access
-   * - Prompt templates for intelligent analysis
-   *
-   * The server uses stdio transport for local Claude Code communication and
-   * automatically configures authentication using environment variables.
-   *
-   * @throws {Error} If required environment variables are missing
-   * @throws {Error} If Firewalla client initialization fails
-   */
   constructor() {
     this.server = new Server(
       {
@@ -98,24 +55,14 @@ export class FirewallaMCPServer {
   }
 
   /**
-   * Sets up MCP protocol request handlers for tools, resources, and prompts
-   *
-   * Configures the server to respond to MCP protocol requests by registering handlers for:
-   * - **ListToolsRequest**: Returns available interactive tools with input schemas
-   * - **ListResourcesRequest**: Returns available data resources with URIs
-   * - **ListPromptsRequest**: Returns intelligent analysis prompt templates
-   *
-   * Each handler provides complete metadata including input validation schemas,
-   * descriptions, and parameter requirements for proper MCP client integration.
-   *
-   * @private
-   * @returns {void}
+   * Sets up MCP protocol request handlers for 28-tool architecture
    */
   private setupHandlers(): void {
-    // List available tools
+    // List available tools - 28-Tool Complete API Coverage
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
+          // Direct API Endpoints (23 tools)
           {
             name: 'get_active_alarms',
             description:
@@ -125,7 +72,8 @@ export class FirewallaMCPServer {
               properties: {
                 query: {
                   type: 'string',
-                  description: 'Search query for filtering alarms',
+                  description:
+                    'Search query for filtering alarms (default: status:1 for active). Supports region:US for geographic filtering, severity:high, type:1-16, source_ip:*, etc.',
                 },
                 groupBy: {
                   type: 'string',
@@ -142,207 +90,17 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Results per page (use cursor for more)',
-                  minimum: 1,
-                  maximum: 1000,
-                },
-                cursor: {
-                  type: 'string',
-                  description: 'Pagination cursor from previous response',
-                },
-                include_total_count: {
-                  type: 'boolean',
-                  description:
-                    'Calculate true total count by traversing all pages (slower)',
-                },
-              },
-              required: ['limit'],
-            },
-          },
-          {
-            name: 'get_flow_data',
-            description:
-              'Query network traffic flows from Firewalla firewall with pagination',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                start_time: {
-                  type: 'string',
-                  description: 'Start time for query (ISO 8601 format)',
-                },
-                end_time: {
-                  type: 'string',
-                  description: 'End time for query (ISO 8601 format)',
-                },
-                limit: {
-                  type: 'number',
-                  description: 'Maximum number of rules to return',
-                  minimum: 1,
-                  maximum: 1000,
-                },
-                cursor: {
-                  type: 'string',
-                  description: 'Pagination cursor from previous response',
-                },
-              },
-              required: ['limit'],
-            },
-          },
-          {
-            name: 'get_device_status',
-            description:
-              'Check online/offline status of devices on Firewalla network',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                box_id: {
-                  type: 'string',
-                  description: 'Filter devices under a specific Firewalla box',
-                },
-                group_id: {
-                  type: 'string',
-                  description: 'Filter devices under a specific device group',
-                },
-                limit: {
-                  type: 'number',
-                  description: 'Maximum number of devices to return',
-                  minimum: 1,
-                  maximum: 1000,
-                },
-                cursor: {
-                  type: 'string',
-                  description: 'Pagination cursor from previous response',
-                },
-              },
-              required: ['limit'],
-            },
-          },
-          {
-            name: 'get_offline_devices',
-            description:
-              'Get all offline devices on Firewalla network with last seen timestamps',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                limit: {
-                  type: 'number',
-                  description: 'Maximum number of offline devices to return',
-                  minimum: 1,
-                  maximum: 1000,
-                },
-                sort_by_last_seen: {
-                  type: 'boolean',
-                  description: 'Sort devices by last seen time (default: true)',
-                },
-              },
-              required: ['limit'],
-            },
-          },
-          {
-            name: 'get_bandwidth_usage',
-            description:
-              'Get top bandwidth consuming devices on Firewalla network',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                period: {
-                  type: 'string',
-                  enum: ['1h', '24h', '7d', '30d'],
-                  description: 'Time period for analysis',
-                },
-                limit: {
-                  type: 'number',
-                  description: 'Number of top devices to return',
+                  description: 'Results per page (API maximum: 500)',
                   minimum: 1,
                   maximum: 500,
+                  default: 200,
                 },
-              },
-              required: ['period', 'limit'],
-            },
-          },
-          {
-            name: 'get_network_rules',
-            description: 'Retrieve firewall rules and conditions',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                rule_type: {
+                cursor: {
                   type: 'string',
-                  description: 'Filter by rule type',
-                },
-                active_only: {
-                  type: 'boolean',
-                  description: 'Only return active rules (default: true)',
-                },
-                limit: {
-                  type: 'number',
-                  description: 'Maximum number of rules to return',
-                  minimum: 1,
-                  maximum: 1000,
-                },
-                summary_only: {
-                  type: 'boolean',
-                  description:
-                    'Return minimal rule information to reduce token usage (default: false)',
+                  description: 'Pagination cursor from previous response',
                 },
               },
-              required: ['limit'],
-            },
-          },
-          {
-            name: 'pause_rule',
-            description: 'Temporarily disable a specific firewall rule',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                rule_id: {
-                  type: 'string',
-                  description: 'Rule identifier to pause',
-                },
-                duration: {
-                  type: 'number',
-                  description: 'Pause duration in minutes (default: 60)',
-                  minimum: 1,
-                  maximum: 1440,
-                },
-              },
-              required: ['rule_id'],
-            },
-          },
-          {
-            name: 'get_target_lists',
-            description:
-              'Access Firewalla security target lists (CloudFlare, CrowdSec)',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                list_type: {
-                  type: 'string',
-                  enum: ['cloudflare', 'crowdsec', 'all'],
-                  description: 'Type of target list to retrieve',
-                },
-                limit: {
-                  type: 'number',
-                  description: 'Maximum number of target lists to return',
-                  minimum: 1,
-                  maximum: 10000,
-                },
-              },
-              required: ['limit'],
-            },
-          },
-          {
-            name: 'resume_rule',
-            description: 'Resume a previously paused firewall rule',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                rule_id: {
-                  type: 'string',
-                  description: 'Rule identifier to resume',
-                },
-              },
-              required: ['rule_id'],
+              required: [],
             },
           },
           {
@@ -352,12 +110,16 @@ export class FirewallaMCPServer {
             inputSchema: {
               type: 'object',
               properties: {
-                alarm_id: {
+                gid: {
                   type: 'string',
-                  description: 'Alarm identifier to retrieve',
+                  description: 'Box ID (required for API call)',
+                },
+                aid: {
+                  type: 'string',
+                  description: 'Alarm ID (required for API call)',
                 },
               },
-              required: ['alarm_id'],
+              required: ['gid', 'aid'],
             },
           },
           {
@@ -366,931 +128,644 @@ export class FirewallaMCPServer {
             inputSchema: {
               type: 'object',
               properties: {
-                alarm_id: {
+                gid: {
                   type: 'string',
-                  description: 'Alarm identifier to delete',
+                  description: 'Box ID (required for API call)',
+                },
+                aid: {
+                  type: 'string',
+                  description: 'Alarm ID (required for API call)',
                 },
               },
-              required: ['alarm_id'],
+              required: ['gid', 'aid'],
             },
           },
           {
-            name: 'get_boxes',
-            description: 'List all managed Firewalla boxes',
+            name: 'get_flow_data',
+            description: 'Query network traffic flows from Firewalla firewall',
             inputSchema: {
               type: 'object',
               properties: {
-                group_id: {
+                query: {
                   type: 'string',
-                  description: 'Filter boxes by group ID (optional)',
+                  description:
+                    'Search query for flows. Supports region:US for geographic filtering, protocol:tcp, blocked:true, domain:*, category:social, etc.',
+                },
+                groupBy: {
+                  type: 'string',
+                  description:
+                    'Group flows by specified values (e.g., "domain,box")',
+                },
+                sortBy: {
+                  type: 'string',
+                  description: 'Sort flows (default: "ts:desc")',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum results (API maximum: 500)',
+                  minimum: 1,
+                  maximum: 500,
+                  default: 200,
+                },
+                cursor: {
+                  type: 'string',
+                  description: 'Pagination cursor from previous response',
                 },
               },
+              required: [],
             },
           },
           {
-            name: 'get_simple_statistics',
+            name: 'get_device_status',
             description:
-              'Get basic Firewalla statistics about boxes, alarms, and rules',
-            inputSchema: {
-              type: 'object',
-              properties: {},
-            },
-          },
-          {
-            name: 'get_statistics_by_region',
-            description:
-              'Get Firewalla flow statistics grouped by country/region',
-            inputSchema: {
-              type: 'object',
-              properties: {},
-            },
-          },
-          {
-            name: 'get_statistics_by_box',
-            description:
-              'Get statistics for each Firewalla box with activity scores',
-            inputSchema: {
-              type: 'object',
-              properties: {},
-            },
-          },
-          {
-            name: 'get_flow_trends',
-            description: 'Get historical Firewalla flow data trends over time',
+              'Check online/offline status of devices on Firewalla network',
             inputSchema: {
               type: 'object',
               properties: {
-                period: {
+                box: {
                   type: 'string',
-                  enum: ['1h', '24h', '7d', '30d'],
-                  description: 'Time period for trend analysis (default: 24h)',
+                  description:
+                    'Get devices under a specific Firewalla box (requires box ID)',
                 },
-                interval: {
+                group: {
+                  type: 'string',
+                  description:
+                    'Get devices under a specific box group (requires group ID)',
+                },
+              },
+              required: [],
+            },
+          },
+          {
+            name: 'get_network_rules',
+            description: 'Retrieve firewall rules and conditions',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Search conditions for filtering rules',
+                },
+              },
+              required: [],
+            },
+          },
+          {
+            name: 'pause_rule',
+            description:
+              'Temporarily disable an active firewall rule for a specified duration',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                rule_id: {
+                  type: 'string',
+                  description: 'Rule ID to pause',
+                },
+                duration: {
                   type: 'number',
                   description:
-                    'Interval between data points in seconds (default: 3600)',
-                  minimum: 60,
-                  maximum: 86400,
+                    'Duration in minutes to pause the rule (default: 60, range: 1-1440)',
+                  minimum: 1,
+                  maximum: 1440,
+                  default: 60,
                 },
-              },
-            },
-          },
-          {
-            name: 'get_alarm_trends',
-            description: 'Get historical Firewalla alarm data trends over time',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                period: {
+                box: {
                   type: 'string',
-                  enum: ['1h', '24h', '7d', '30d'],
-                  description: 'Time period for trend analysis (default: 24h)',
+                  description: 'Box GID for context (required by API)',
                 },
               },
+              required: ['rule_id', 'box'],
             },
           },
           {
-            name: 'get_rule_trends',
+            name: 'resume_rule',
             description:
-              'Get historical Firewalla rule activity trends over time',
+              'Resume a previously paused firewall rule, restoring it to active state',
             inputSchema: {
               type: 'object',
               properties: {
-                period: {
+                rule_id: {
                   type: 'string',
-                  enum: ['1h', '24h', '7d', '30d'],
-                  description: 'Time period for trend analysis (default: 24h)',
+                  description: 'Rule ID to resume',
+                },
+                box: {
+                  type: 'string',
+                  description: 'Box GID for context (required by API)',
                 },
               },
+              required: ['rule_id', 'box'],
+            },
+          },
+          {
+            name: 'get_target_lists',
+            description: 'Retrieve all target lists from Firewalla',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+              required: [],
+            },
+          },
+          {
+            name: 'get_specific_target_list',
+            description: 'Retrieve a specific target list by ID',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'string',
+                  description: 'Target list ID (required)',
+                },
+              },
+              required: ['id'],
+            },
+          },
+          {
+            name: 'create_target_list',
+            description: 'Create a new target list',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                name: {
+                  type: 'string',
+                  description: 'Target list name (required, max 24 chars)',
+                  maxLength: 24,
+                },
+                owner: {
+                  type: 'string',
+                  description: 'Owner: "global" or box GID (required)',
+                },
+                targets: {
+                  type: 'array',
+                  items: {
+                    type: 'string',
+                  },
+                  description:
+                    'Array of domains, IPs, or CIDR ranges (required)',
+                },
+                category: {
+                  type: 'string',
+                  enum: [
+                    'ad',
+                    'edu',
+                    'games',
+                    'gamble',
+                    'intel',
+                    'p2p',
+                    'porn',
+                    'private',
+                    'social',
+                    'shopping',
+                    'video',
+                    'vpn',
+                  ],
+                  description: 'Content category (optional)',
+                },
+                notes: {
+                  type: 'string',
+                  description: 'Additional description (optional)',
+                },
+              },
+              required: ['name', 'owner', 'targets'],
+            },
+          },
+          {
+            name: 'update_target_list',
+            description: 'Update an existing target list',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'string',
+                  description: 'Target list ID (required)',
+                },
+                name: {
+                  type: 'string',
+                  description: 'Updated target list name (max 24 chars)',
+                  maxLength: 24,
+                },
+                targets: {
+                  type: 'array',
+                  items: {
+                    type: 'string',
+                  },
+                  description: 'Updated array of domains, IPs, or CIDR ranges',
+                },
+                category: {
+                  type: 'string',
+                  enum: [
+                    'ad',
+                    'edu',
+                    'games',
+                    'gamble',
+                    'intel',
+                    'p2p',
+                    'porn',
+                    'private',
+                    'social',
+                    'shopping',
+                    'video',
+                    'vpn',
+                  ],
+                  description: 'Updated content category',
+                },
+                notes: {
+                  type: 'string',
+                  description: 'Updated description',
+                },
+              },
+              required: ['id'],
+            },
+          },
+          {
+            name: 'delete_target_list',
+            description: 'Delete a target list',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'string',
+                  description: 'Target list ID to delete (required)',
+                },
+              },
+              required: ['id'],
             },
           },
           {
             name: 'search_flows',
             description:
-              'Advanced Firewalla flow searching with complex query syntax',
+              'Search network flows with advanced query filters. Supports all flow fields including geographic filtering.',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using advanced syntax (e.g., "protocol:tcp AND device_ip:192.168.*", "blocked:true AND bytes:>1000000")',
+                    'Search query using Firewalla syntax. Supported fields: protocol:tcp/udp, direction:inbound/outbound/local, blocked:true/false, bytes:>1MB, domain:*.example.com, region:US (country code), category:social/games/porn/etc, gid:box_id, device.ip:192.168.*, source_ip:*, destination_ip:*. Examples: "region:US AND protocol:tcp", "blocked:true AND bytes:>1MB", "category:social OR category:games"',
+                },
+                groupBy: {
+                  type: 'string',
+                  description:
+                    'Group flows by specified values (e.g., "domain,box")',
+                },
+                sortBy: {
+                  type: 'string',
+                  description: 'Sort flows (default: "ts:desc")',
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results',
+                  description: 'Maximum results (API maximum: 500)',
                   minimum: 1,
-                  maximum: 10000,
+                  maximum: 500,
+                  default: 200,
                 },
-                offset: {
-                  type: 'number',
-                  description: 'Results offset for pagination (default: 0)',
-                  minimum: 0,
-                },
-                time_range: {
-                  type: 'object',
-                  properties: {
-                    start: {
-                      type: 'string',
-                      description: 'Start time (ISO 8601)',
-                    },
-                    end: { type: 'string', description: 'End time (ISO 8601)' },
-                  },
-                  description: 'Optional time range filter',
-                },
-                include_blocked: {
-                  type: 'boolean',
-                  description: 'Include blocked flows (default: true)',
-                },
-                min_bytes: {
-                  type: 'number',
-                  description: 'Minimum flow size in bytes',
-                },
-                group_by: {
+                cursor: {
                   type: 'string',
-                  enum: ['source', 'destination', 'protocol', 'device'],
-                  description: 'Group results by field',
-                },
-                aggregate: {
-                  type: 'boolean',
-                  description:
-                    'Include aggregation statistics (default: false)',
-                },
-                geographic_filters: {
-                  type: 'object',
-                  properties: {
-                    countries: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description:
-                        'Filter by specific countries (ISO 3166-1 alpha-2)',
-                    },
-                    continents: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Filter by continents',
-                    },
-                    regions: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Filter by geographic regions',
-                    },
-                    cities: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Filter by specific cities',
-                    },
-                    asns: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Filter by ASN numbers',
-                    },
-                    hosting_providers: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Filter by hosting providers',
-                    },
-                    exclude_cloud: {
-                      type: 'boolean',
-                      description: 'Exclude cloud provider traffic',
-                    },
-                    exclude_vpn: {
-                      type: 'boolean',
-                      description: 'Exclude VPN/proxy traffic',
-                    },
-                    min_risk_score: {
-                      type: 'number',
-                      minimum: 0,
-                      maximum: 1,
-                      description: 'Minimum geographic risk score',
-                    },
-                  },
-                  description: 'Optional geographic filtering options',
-                },
-                include_analytics: {
-                  type: 'boolean',
-                  description:
-                    'Include geographic analysis summary (default: false)',
+                  description: 'Pagination cursor from previous response',
                 },
               },
-              required: ['query', 'limit'],
+              required: [],
             },
           },
           {
             name: 'search_alarms',
             description:
-              'Advanced Firewalla alarm searching with severity, time, and IP filters',
+              'Search alarms using full-text or field filters. Supports all alarm fields including geographic filtering.',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
                   description:
-                    'Search query (e.g., "severity:high AND status:1", "type:1 AND device_ip:192.168.*")',
+                    'Search query using Firewalla syntax. Supported fields: type:1-16 (alarm type), severity:low/medium/high/critical, resolved:true/false, status:1/2 (active/archived), source_ip:192.168.*, region:US (country code), gid:box_id, device.name:*, message:"text search". Examples: "severity:high AND region:CN", "type:1 AND status:1", "source_ip:192.168.* AND NOT resolved:true"',
+                },
+                groupBy: {
+                  type: 'string',
+                  description:
+                    'Group alarms by specified fields (comma-separated)',
+                },
+                sortBy: {
+                  type: 'string',
+                  description: 'Sort alarms (default: ts:desc)',
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results',
+                  description: 'Maximum results (API maximum: 500)',
                   minimum: 1,
-                  maximum: 10000,
+                  maximum: 500,
+                  default: 200,
                 },
-                offset: {
-                  type: 'number',
-                  description: 'Results offset for pagination (default: 0)',
-                  minimum: 0,
-                },
-                include_resolved: {
-                  type: 'boolean',
-                  description: 'Include resolved alarms (default: false)',
-                },
-                min_severity: {
+                cursor: {
                   type: 'string',
-                  enum: ['low', 'medium', 'high', 'critical'],
-                  description: 'Minimum severity level',
-                },
-                time_window: {
-                  type: 'string',
-                  description: 'Time window for search (e.g., "24h", "7d")',
-                },
-                aggregate: {
-                  type: 'boolean',
-                  description:
-                    'Include aggregation statistics (default: false)',
+                  description: 'Pagination cursor from previous response',
                 },
               },
-              required: ['query', 'limit'],
+              required: [],
             },
           },
           {
             name: 'search_rules',
             description:
-              'Advanced Firewalla rule searching with target, action, and status filters',
+              'Search firewall rules by target, action or status. Supports all rule fields.',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
                   description:
-                    'Search query (e.g., "action:block AND target_value:*.facebook.com")',
+                    'Search query using Firewalla syntax. Supported fields: action:allow/block/timelimit, target.type:domain/ip/device, target.value:*.facebook.com, status:active/paused, direction:bidirection/inbound/outbound, protocol:tcp/udp, gid:box_id, scope.type:device/network, notes:"description text". Examples: "action:block AND target.value:*.social.com", "status:paused", "target.type:domain AND action:block"',
+                },
+              },
+              required: [],
+            },
+          },
+          {
+            name: 'get_boxes',
+            description: 'Retrieve list of Firewalla boxes',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                group: {
+                  type: 'string',
+                  description:
+                    'Get boxes within a specific group (requires group ID)',
+                },
+              },
+              required: [],
+            },
+          },
+          {
+            name: 'get_simple_statistics',
+            description: 'Retrieve basic statistics overview',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                group: {
+                  type: 'string',
+                  description: 'Get statistics for specific box group',
+                },
+              },
+              required: [],
+            },
+          },
+          {
+            name: 'get_statistics_by_region',
+            description:
+              'Retrieve statistics by region (top regions by blocked flows)',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                group: {
+                  type: 'string',
+                  description: 'Get statistics for specific box group',
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results',
+                  description: 'Maximum number of results (default: 5)',
                   minimum: 1,
-                  maximum: 10000,
-                },
-                offset: {
-                  type: 'number',
-                  description: 'Results offset for pagination (default: 0)',
-                  minimum: 0,
-                },
-                include_paused: {
-                  type: 'boolean',
-                  description: 'Include paused rules (default: true)',
-                },
-                actions: {
-                  type: 'array',
-                  items: {
-                    type: 'string',
-                    enum: ['allow', 'block', 'timelimit'],
-                  },
-                  description: 'Filter by rule actions',
-                },
-                directions: {
-                  type: 'array',
-                  items: {
-                    type: 'string',
-                    enum: ['bidirection', 'inbound', 'outbound'],
-                  },
-                  description: 'Filter by traffic directions',
-                },
-                aggregate: {
-                  type: 'boolean',
-                  description:
-                    'Include aggregation statistics (default: false)',
+                  default: 5,
                 },
               },
-              required: ['query', 'limit'],
+              required: [],
+            },
+          },
+          {
+            name: 'get_statistics_by_box',
+            description:
+              'Get statistics for each Firewalla box (top boxes by blocked flows or security alarms)',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                type: {
+                  type: 'string',
+                  enum: ['topBoxesByBlockedFlows', 'topBoxesBySecurityAlarms'],
+                  description: 'Statistics type to retrieve',
+                  default: 'topBoxesByBlockedFlows',
+                },
+                group: {
+                  type: 'string',
+                  description: 'Get statistics for specific box group',
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of results (default: 5)',
+                  minimum: 1,
+                  default: 5,
+                },
+              },
+              required: [],
+            },
+          },
+          {
+            name: 'get_flow_trends',
+            description:
+              'Get historical flow trend data (blocked flows per day)',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                group: {
+                  type: 'string',
+                  description: 'Get trends for a specific box group',
+                },
+              },
+              required: [],
+            },
+          },
+          {
+            name: 'get_alarm_trends',
+            description:
+              'Get historical alarm trend data (alarms generated per day)',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                group: {
+                  type: 'string',
+                  description: 'Get trends for a specific box group',
+                },
+              },
+              required: [],
+            },
+          },
+          {
+            name: 'get_rule_trends',
+            description:
+              'Get historical rule trend data (rules created per day)',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                group: {
+                  type: 'string',
+                  description: 'Get trends for a specific box group',
+                },
+              },
+              required: [],
+            },
+          },
+          // Convenience Wrappers (5 tools)
+          {
+            name: 'get_bandwidth_usage',
+            description:
+              'Get top bandwidth consuming devices (convenience wrapper around get_device_status)',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                limit: {
+                  type: 'number',
+                  description: 'Number of top devices to return',
+                  minimum: 1,
+                  maximum: 500,
+                  default: 10,
+                },
+                box: {
+                  type: 'string',
+                  description: 'Filter devices under a specific Firewalla box',
+                },
+              },
+              required: [],
+            },
+          },
+          {
+            name: 'get_offline_devices',
+            description:
+              'Get all offline devices (convenience wrapper around get_device_status)',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of offline devices to return',
+                  minimum: 1,
+                  maximum: 500,
+                  default: 100,
+                },
+                sort_by_last_seen: {
+                  type: 'boolean',
+                  description: 'Sort devices by last seen time (default: true)',
+                  default: true,
+                },
+                box: {
+                  type: 'string',
+                  description: 'Filter devices under a specific Firewalla box',
+                },
+              },
+              required: [],
             },
           },
           {
             name: 'search_devices',
             description:
-              'Advanced Firewalla device searching with network, status, and usage filters',
+              'Search devices by name, IP, MAC or status (convenience wrapper with client-side filtering)',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
                   description:
-                    'Search query (e.g., "online:true AND mac_vendor:Apple")',
+                    'Search query using Firewalla syntax. Supported fields: mac:AA:BB:CC:DD:EE:FF, ip:192.168.1.*, name:*iPhone*, online:true/false, vendor:Apple, gid:box_id, network.name:*, group.name:*. Examples: "online:false AND vendor:Apple", "ip:192.168.1.* AND name:*laptop*", "mac:AA:* OR name:*phone*"',
+                },
+                status: {
+                  type: 'string',
+                  enum: ['online', 'offline', 'any'],
+                  default: 'any',
+                  description: 'Filter by online status',
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results',
                   minimum: 1,
-                  maximum: 10000,
+                  maximum: 500,
+                  default: 50,
+                  description: 'Maximum number of devices to return',
                 },
-                offset: {
-                  type: 'number',
-                  description:
-                    'Results offset for pagination (default: 0) - DEPRECATED: use cursor',
-                  minimum: 0,
-                },
-                cursor: {
+                box: {
                   type: 'string',
-                  description:
-                    'Pagination cursor from previous response (preferred over offset)',
-                },
-                include_offline: {
-                  type: 'boolean',
-                  description: 'Include offline devices (default: true)',
-                },
-                network_ids: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Filter by network IDs',
-                },
-                last_seen_threshold: {
-                  type: 'number',
-                  description: 'Minimum last seen threshold (seconds ago)',
-                },
-                aggregate: {
-                  type: 'boolean',
-                  description:
-                    'Include aggregation statistics (default: false)',
+                  description: 'Filter devices under a specific Firewalla box',
                 },
               },
-              required: ['query', 'limit'],
+              required: [],
             },
           },
           {
             name: 'search_target_lists',
             description:
-              'Advanced Firewalla target list searching with category and ownership filters',
+              'Search target lists with client-side filtering (convenience wrapper around get_target_lists)',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
                   description:
-                    'Search query (e.g., "category:ad AND owner:global")',
+                    'Search query for target lists. Supported fields: name:*Social*, owner:global/box_gid, category:social/games/ad/porn/etc, targets:*.facebook.com, notes:"description text". Examples: "category:social", "owner:global AND name:*Block*", "targets:*.gaming.com"',
+                },
+                category: {
+                  type: 'string',
+                  description: 'Filter by category',
+                },
+                owner: {
+                  type: 'string',
+                  description: 'Filter by owner (global or box gid)',
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results',
                   minimum: 1,
-                  maximum: 10000,
-                },
-                offset: {
-                  type: 'number',
-                  description: 'Results offset for pagination (default: 0)',
-                  minimum: 0,
-                },
-                owners: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Filter by list owners',
-                },
-                categories: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Filter by categories',
-                },
-                min_targets: {
-                  type: 'number',
-                  description: 'Minimum number of targets in list',
-                },
-                aggregate: {
-                  type: 'boolean',
-                  description:
-                    'Include aggregation statistics (default: false)',
+                  maximum: 500,
+                  default: 100,
+                  description: 'Maximum number of target lists to return',
                 },
               },
-              required: ['query', 'limit'],
-            },
-          },
-          {
-            name: 'search_cross_reference',
-            description:
-              'Multi-entity Firewalla searches with correlation across different data types',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                primary_query: {
-                  type: 'string',
-                  description: 'Primary search query (typically for flows)',
-                },
-                secondary_queries: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description:
-                    'Secondary queries to correlate with primary results',
-                },
-                correlation_field: {
-                  type: 'string',
-                  description:
-                    'Field to use for correlation (e.g., "source_ip", "destination_ip", "device_ip", "protocol")',
-                },
-                limit: {
-                  type: 'number',
-                  description: 'Maximum results per query',
-                  minimum: 1,
-                  maximum: 10000,
-                },
-              },
-              required: [
-                'primary_query',
-                'secondary_queries',
-                'correlation_field',
-                'limit',
-              ],
+              required: [],
             },
           },
           {
             name: 'get_network_rules_summary',
             description:
-              'Get overview statistics and counts of Firewalla network rules by category',
+              'Get overview statistics and counts of network rules by category (convenience wrapper)',
             inputSchema: {
               type: 'object',
               properties: {
-                limit: {
-                  type: 'number',
-                  description:
-                    'Maximum number of rules to analyze for summary statistics',
-                  minimum: 1,
-                  maximum: 2000,
-                },
-                rule_type: {
-                  type: 'string',
-                  description: 'Filter by rule type',
-                },
                 active_only: {
                   type: 'boolean',
                   description:
                     'Only include active rules in summary (default: true)',
-                },
-              },
-              required: ['limit'],
-            },
-          },
-          {
-            name: 'get_most_active_rules',
-            description:
-              'Get Firewalla rules with highest hit counts for traffic analysis',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                limit: {
-                  type: 'number',
-                  description: 'Number of top rules to return',
-                  minimum: 1,
-                  maximum: 1000,
-                },
-                min_hits: {
-                  type: 'number',
-                  description: 'Minimum hit count threshold (default: 1)',
-                  minimum: 0,
+                  default: true,
                 },
                 rule_type: {
                   type: 'string',
                   description: 'Filter by rule type',
                 },
               },
-              required: ['limit'],
-            },
-          },
-          {
-            name: 'get_recent_rules',
-            description:
-              'Get recently created or modified Firewalla firewall rules',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                hours: {
-                  type: 'number',
-                  description:
-                    'Look back period in hours (default: 24, max: 168, supports decimals like 0.5)',
-                  minimum: 0.1,
-                  maximum: 168,
-                },
-                limit: {
-                  type: 'number',
-                  description: 'Maximum number of rules to return',
-                  minimum: 1,
-                  maximum: 1000,
-                },
-                rule_type: {
-                  type: 'string',
-                  description: 'Filter by rule type',
-                },
-                include_modified: {
-                  type: 'boolean',
-                  description:
-                    'Include recently modified rules, not just created (default: true)',
-                },
-              },
-              required: ['limit'],
-            },
-          },
-          {
-            name: 'search_enhanced_cross_reference',
-            description:
-              'Advanced Firewalla multi-field correlation with temporal windows and network scoping',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                primary_query: {
-                  type: 'string',
-                  description: 'Primary search query for correlation analysis',
-                },
-                secondary_queries: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description:
-                    'Secondary queries to correlate with primary results',
-                },
-                correlation_params: {
-                  type: 'object',
-                  properties: {
-                    correlationFields: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description:
-                        'Fields to use for correlation (max 5 for performance)',
-                      maxItems: 5,
-                    },
-                    correlationType: {
-                      type: 'string',
-                      enum: ['AND', 'OR'],
-                      description: 'Correlation logic type',
-                    },
-                    temporalWindow: {
-                      type: 'object',
-                      properties: {
-                        windowSize: {
-                          type: 'number',
-                          minimum: 1,
-                          description: 'Temporal window size',
-                        },
-                        windowUnit: {
-                          type: 'string',
-                          enum: ['seconds', 'minutes', 'hours', 'days'],
-                          description: 'Temporal window unit',
-                        },
-                      },
-                      description: 'Optional temporal window filtering',
-                    },
-                    networkScope: {
-                      type: 'object',
-                      properties: {
-                        includeSubnets: {
-                          type: 'boolean',
-                          description: 'Include subnet matching',
-                        },
-                        includePorts: {
-                          type: 'boolean',
-                          description: 'Include port matching',
-                        },
-                      },
-                      description: 'Network scope options',
-                    },
-                    deviceScope: {
-                      type: 'object',
-                      properties: {
-                        includeVendor: {
-                          type: 'boolean',
-                          description: 'Include vendor matching',
-                        },
-                        includeGroup: {
-                          type: 'boolean',
-                          description: 'Include group matching',
-                        },
-                      },
-                      description: 'Device scope options',
-                    },
-                  },
-                  required: ['correlationFields', 'correlationType'],
-                  description: 'Enhanced correlation parameters',
-                },
-                limit: {
-                  type: 'number',
-                  minimum: 1,
-                  maximum: 10000,
-                  description: 'Maximum results per query',
-                },
-              },
-              required: [
-                'primary_query',
-                'secondary_queries',
-                'correlation_params',
-                'limit',
-              ],
-            },
-          },
-          {
-            name: 'get_correlation_suggestions',
-            description:
-              'Get intelligent field combination recommendations for Firewalla cross-reference searches',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                primary_query: {
-                  type: 'string',
-                  description:
-                    'Primary search query to analyze for correlation suggestions',
-                },
-                secondary_queries: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description:
-                    'Secondary queries to analyze for correlation patterns',
-                },
-              },
-              required: ['primary_query', 'secondary_queries'],
-            },
-          },
-          {
-            name: 'search_alarms_by_geography',
-            description:
-              'Firewalla geographic alarm search with location-based threat analysis',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                query: {
-                  type: 'string',
-                  description:
-                    'Optional alarm search query using advanced syntax',
-                },
-                geographic_filters: {
-                  type: 'object',
-                  properties: {
-                    countries: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Filter by specific countries',
-                    },
-                    continents: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Filter by continents',
-                    },
-                    regions: {
-                      type: 'array',
-                      items: { type: 'string' },
-                      description: 'Filter by geographic regions',
-                    },
-                    high_risk_countries: {
-                      type: 'boolean',
-                      description: 'Include only high-risk countries',
-                    },
-                    exclude_known_providers: {
-                      type: 'boolean',
-                      description: 'Exclude known cloud/hosting providers',
-                    },
-                    threat_analysis: {
-                      type: 'boolean',
-                      description:
-                        'Enable detailed threat intelligence analysis',
-                    },
-                  },
-                  description:
-                    'Geographic filtering options for threat analysis',
-                },
-                limit: {
-                  type: 'number',
-                  minimum: 1,
-                  maximum: 10000,
-                  description: 'Maximum number of alarms to return',
-                },
-                sort_by: {
-                  type: 'string',
-                  description: 'Sort alarms by field',
-                },
-                group_by: {
-                  type: 'string',
-                  description: 'Group results by field',
-                },
-              },
-              required: ['limit'],
-            },
-          },
-          {
-            name: 'get_geographic_statistics',
-            description:
-              'Comprehensive Firewalla geographic statistics and analytics for flows and alarms',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                entity_type: {
-                  type: 'string',
-                  enum: ['flows', 'alarms'],
-                  description: 'Type of entity to analyze',
-                },
-                time_range: {
-                  type: 'object',
-                  properties: {
-                    start: {
-                      type: 'string',
-                      description: 'Start time (ISO 8601 format)',
-                    },
-                    end: {
-                      type: 'string',
-                      description: 'End time (ISO 8601 format)',
-                    },
-                  },
-                  description: 'Optional time range for analysis',
-                },
-                analysis_type: {
-                  type: 'string',
-                  enum: ['summary', 'detailed', 'threat_intelligence'],
-                  description: 'Type of geographic analysis to perform',
-                },
-                group_by: {
-                  type: 'string',
-                  enum: ['country', 'continent', 'region', 'asn', 'provider'],
-                  description: 'How to group the geographic statistics',
-                },
-                limit: {
-                  type: 'number',
-                  minimum: 1,
-                  maximum: 1000,
-                  description: 'Maximum number of statistics entries to return',
-                },
-              },
-              required: ['entity_type'],
+              required: [],
             },
           },
         ],
       };
     });
 
-    // List available resources
-    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
-      return {
-        resources: [
-          {
-            uri: 'firewalla://summary',
-            mimeType: 'application/json',
-            name: 'Firewall Summary',
-            description: 'Real-time firewall health and status overview',
-          },
-          {
-            uri: 'firewalla://devices',
-            mimeType: 'application/json',
-            name: 'Device Inventory',
-            description: 'Complete list of managed devices with metadata',
-          },
-          {
-            uri: 'firewalla://metrics/security',
-            mimeType: 'application/json',
-            name: 'Security Metrics',
-            description: 'Aggregated security statistics and trends',
-          },
-          {
-            uri: 'firewalla://topology',
-            mimeType: 'application/json',
-            name: 'Network Topology',
-            description: 'Network structure and device relationships',
-          },
-          {
-            uri: 'firewalla://threats/recent',
-            mimeType: 'application/json',
-            name: 'Recent Threats',
-            description: 'Latest security events and blocked attempts',
-          },
-        ],
-      };
-    });
-
-    // List available prompts
-    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
-      return {
-        prompts: [
-          {
-            name: 'security_report',
-            description: 'Generate comprehensive security status report',
-            arguments: [
-              {
-                name: 'period',
-                description: 'Time period for report',
-                required: false,
-              },
-              {
-                name: 'include_resolved',
-                description: 'Include resolved issues',
-                required: false,
-              },
-            ],
-          },
-          {
-            name: 'threat_analysis',
-            description: 'Deep dive into recent security threats and patterns',
-            arguments: [
-              {
-                name: 'severity_threshold',
-                description: 'Minimum severity level',
-                required: false,
-              },
-            ],
-          },
-          {
-            name: 'bandwidth_analysis',
-            description: 'Investigate high bandwidth usage patterns',
-            arguments: [
-              {
-                name: 'period',
-                description: 'Analysis period',
-                required: true,
-              },
-              {
-                name: 'threshold_mb',
-                description: 'Minimum bandwidth threshold in MB',
-                required: false,
-              },
-            ],
-          },
-          {
-            name: 'device_investigation',
-            description: 'Detailed analysis of specific device activity',
-            arguments: [
-              {
-                name: 'device_id',
-                description: 'Target device identifier',
-                required: true,
-              },
-              {
-                name: 'lookback_hours',
-                description: 'Hours to look back',
-                required: false,
-              },
-            ],
-          },
-          {
-            name: 'network_health_check',
-            description: 'Overall network status and performance assessment',
-            arguments: [],
-          },
-        ],
-      };
-    });
-
-    // Set up tool, resource, and prompt handlers
+    // Set up tool handlers using the registry
     setupTools(this.server, this.firewalla);
+
+    // Set up resources
     setupResources(this.server, this.firewalla);
+
+    // Set up prompts
     setupPrompts(this.server, this.firewalla);
   }
 
   /**
-   * Starts the MCP server and begins listening for requests
-   * Uses stdio transport for communication with Claude Code
-   *
-   * @returns Promise that resolves when the server is running
-   * @throws Will throw an error if server startup fails
+   * Starts the MCP server using stdio transport
    */
   async start(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-
-    process.stderr.write('Firewalla MCP Server running on stdio\n');
+    console.error(
+      'Firewalla MCP Server running with 28-tool architecture - 100% API coverage'
+    );
   }
 }
 
-// Start server if run directly (ES module compatible)
+// Start the server if this file is run directly
 if (import.meta.url === `file://${process.argv[1]}`) {
   const server = new FirewallaMCPServer();
-  server
-    .start()
-    .then(() => {
-      const healthPortEnv = process.env.MCP_HEALTH_PORT;
-      if (healthPortEnv) {
-        const port = Number(healthPortEnv);
-        import('node:http')
-          .then(({ createServer }) => {
-            createServer((_req, res) => {
-              res.writeHead(200, { 'Content-Type': 'application/json' });
-              res.end(
-                JSON.stringify({
-                  wave0: featureFlags,
-                  metrics: metrics.snapshot(),
-                  uptime: process.uptime(),
-                })
-              );
-            }).listen(port, () => {
-              process.stderr.write(
-                `Health endpoint listening on http://localhost:${port}\n`
-              );
-            });
-          })
-          .catch((error: Error) => {
-            process.stderr.write(
-              `Failed to start health endpoint: ${error.message}\n`
-            );
-          });
-      }
-    })
-    .catch((error: Error) => {
-      process.stderr.write(`Fatal error: ${error.message}\n`);
-      process.exit(1);
-    });
+  server.start().catch((error: unknown) => {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  });
 }

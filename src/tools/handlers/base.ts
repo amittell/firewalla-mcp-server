@@ -10,7 +10,7 @@
  * tool ecosystem.
  *
  * @version 1.0.0
- * @author Firewalla MCP Server Team
+ * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
  * @since 2024-01-01
  */
 
@@ -30,7 +30,6 @@ import {
   getGlobalEnrichmentPipeline,
 } from '../../utils/geographic-enrichment-pipeline.js';
 import { geoCache } from '../../utils/geographic.js';
-import { featureFlags } from '../../config/feature-flags.js';
 
 /**
  * Base arguments interface for MCP tool execution
@@ -347,10 +346,7 @@ export abstract class BaseToolHandler implements ToolHandler {
     const meta: Record<string, any> = {};
 
     // Apply geographic enrichment if enabled
-    if (
-      this.options.enableGeoEnrichment &&
-      featureFlags.GEOGRAPHIC_ENRICHMENT_ENABLED
-    ) {
+    if (this.options.enableGeoEnrichment) {
       try {
         processedData = await enrichWithGeographicData(processedData, geoCache);
         meta.geo_enriched = true;
@@ -414,10 +410,7 @@ export abstract class BaseToolHandler implements ToolHandler {
     payload: T,
     ipFields: string[] = ['source_ip', 'destination_ip', 'device_ip', 'ip']
   ): Promise<T> {
-    if (
-      !this.options.enableGeoEnrichment ||
-      !featureFlags.GEOGRAPHIC_ENRICHMENT_ENABLED
-    ) {
+    if (!this.options.enableGeoEnrichment) {
       return payload;
     }
 

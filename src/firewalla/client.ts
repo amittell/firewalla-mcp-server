@@ -14,7 +14,7 @@
  * cross-reference correlation and trend analysis.
  *
  * @version 1.0.0
- * @author Firewalla MCP Server Team
+ * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
  * @since 2024-01-01
  */
 
@@ -339,9 +339,10 @@ export class FirewallaClient {
   }
 
   private async request<T>(
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
     endpoint: string,
     params?: Record<string, unknown>,
+    body?: Record<string, unknown> | boolean,
     cacheable = true
   ): Promise<T> {
     // Filter parameters for raw /v2/* data endpoints to prevent "Bad Request" errors
@@ -367,10 +368,19 @@ export class FirewallaClient {
           response = await this.api.get(endpoint, { params: filteredParams });
           break;
         case 'POST':
-          response = await this.api.post(endpoint, params);
+          response = await this.api.post(endpoint, body, {
+            params: filteredParams,
+          });
           break;
         case 'PUT':
-          response = await this.api.put(endpoint, params);
+          response = await this.api.put(endpoint, body, {
+            params: filteredParams,
+          });
+          break;
+        case 'PATCH':
+          response = await this.api.patch(endpoint, body, {
+            params: filteredParams,
+          });
           break;
         case 'DELETE':
           response = await this.api.delete(endpoint, {
@@ -1250,6 +1260,63 @@ export class FirewallaClient {
     };
   }
 
+  /**
+   * Get a specific target list by ID
+   */
+  async getSpecificTargetList(id: string): Promise<TargetList> {
+    return this.request<TargetList>('GET', `/v2/target-lists/${id}`);
+  }
+
+  /**
+   * Create a new target list
+   */
+  async createTargetList(targetListData: {
+    name: string;
+    owner: string;
+    targets: string[];
+    category?: string;
+    notes?: string;
+  }): Promise<TargetList> {
+    return this.request<TargetList>(
+      'POST',
+      `/v2/target-lists`,
+      {},
+      targetListData
+    );
+  }
+
+  /**
+   * Update an existing target list
+   */
+  async updateTargetList(
+    id: string,
+    updateData: {
+      name?: string;
+      targets?: string[];
+      category?: string;
+      notes?: string;
+    }
+  ): Promise<TargetList> {
+    return this.request<TargetList>(
+      'PATCH',
+      `/v2/target-lists/${id}`,
+      {},
+      updateData
+    );
+  }
+
+  /**
+   * Delete a target list
+   */
+  async deleteTargetList(
+    id: string
+  ): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(
+      'DELETE',
+      `/v2/target-lists/${id}`
+    );
+  }
+
   async getFirewallSummary(): Promise<{
     status: string;
     uptime: number;
@@ -1706,6 +1773,21 @@ export class FirewallaClient {
       throw new Error(
         `Failed to get specific alarm: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
+    }
+  }
+
+  /**
+   * Create a new firewall rule
+   * @param ruleData - Rule configuration object
+   * @returns Promise resolving to created rule
+   */
+  async createRule(ruleData: any): Promise<any> {
+    try {
+      const response = await this.api.post('/v2/rules', ruleData);
+      return response.data;
+    } catch (error: any) {
+      logger.error('Failed to create rule:', error);
+      throw error;
     }
   }
 
@@ -4823,5 +4905,39 @@ export class FirewallaClient {
     }
 
     return trimmedValue;
+  }
+
+  /**
+   * Public method for making raw API calls
+   * Used by management tools for bulk operations
+   */
+  async makeApiCall(
+    method: 'get' | 'post' | 'patch' | 'delete',
+    endpoint: string,
+    data?: any
+  ): Promise<any> {
+    try {
+      let response;
+      switch (method) {
+        case 'get':
+          response = await this.api.get(endpoint);
+          break;
+        case 'post':
+          response = await this.api.post(endpoint, data || {});
+          break;
+        case 'patch':
+          response = await this.api.patch(endpoint, data || {});
+          break;
+        case 'delete':
+          response = await this.api.delete(endpoint);
+          break;
+        default:
+          throw new Error(`Unsupported HTTP method: ${method}`);
+      }
+      return response.data;
+    } catch (error) {
+      logger.error(`API call failed: ${method} ${endpoint}`, error as Error);
+      throw error;
+    }
   }
 }

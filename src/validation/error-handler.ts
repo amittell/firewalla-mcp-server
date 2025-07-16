@@ -813,6 +813,65 @@ export class ParameterValidator {
     
     return contexts[paramName] || '';
   }
+
+  /**
+   * Validate array parameter with optional constraints
+   */
+  static validateArray(
+    value: unknown, 
+    paramName: string, 
+    options: {
+      required?: boolean;
+      minLength?: number;
+      maxLength?: number;
+    } = {}
+  ): ValidationResult {
+    // Handle required validation
+    if (options.required && (value === undefined || value === null)) {
+      return {
+        isValid: false,
+        errors: [`${paramName} is required`]
+      };
+    }
+
+    // Handle optional arrays
+    if (!options.required && (value === undefined || value === null)) {
+      return {
+        isValid: true,
+        errors: [],
+        sanitizedValue: []
+      };
+    }
+
+    // Validate array type
+    if (!Array.isArray(value)) {
+      return {
+        isValid: false,
+        errors: [`${paramName} must be an array`]
+      };
+    }
+
+    // Validate length constraints
+    if (options.minLength !== undefined && value.length < options.minLength) {
+      return {
+        isValid: false,
+        errors: [`${paramName} must have at least ${options.minLength} item(s)`]
+      };
+    }
+
+    if (options.maxLength !== undefined && value.length > options.maxLength) {
+      return {
+        isValid: false,
+        errors: [`${paramName} must have at most ${options.maxLength} item(s)`]
+      };
+    }
+
+    return {
+      isValid: true,
+      errors: [],
+      sanitizedValue: value
+    };
+  }
 }
 
 /**

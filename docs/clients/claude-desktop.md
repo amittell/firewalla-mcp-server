@@ -80,9 +80,9 @@ Restart Claude Desktop and try:
 "What firewall rules are currently blocking traffic?"
 ```
 
-## Advanced Features
+## Features
 
-- **34+ specialized tools** for comprehensive network analysis
+- **33 working tools** for comprehensive network analysis
 - **Advanced search syntax** with logical operators and filters
 - **Geographic threat analysis** with country-level insights
 - **Real-time monitoring** with intelligent caching

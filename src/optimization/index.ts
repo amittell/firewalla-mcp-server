@@ -12,7 +12,7 @@
  * ensuring Claude can process large datasets within MCP protocol constraints.
  *
  * @version 1.0.0
- * @author Firewalla MCP Server Team
+ * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
  * @since 2024-01-01
  */
 

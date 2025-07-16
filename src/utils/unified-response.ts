@@ -5,7 +5,8 @@
  * Focuses on practicality and maintainability over enterprise complexity.
  */
 
-import type { ToolResponse } from '../tools/handlers/base.js';
+// Import the correct MCP type
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 /**
  * Simple unified response interface
@@ -87,9 +88,11 @@ export function createErrorResponse(
 }
 
 /**
- * Convert unified response to MCP ToolResponse format
+ * Convert unified response to MCP CallToolResult format
  */
-export function toToolResponse(unifiedResponse: UnifiedResponse): ToolResponse {
+export function toCallToolResult(
+  unifiedResponse: UnifiedResponse
+): CallToolResult {
   return {
     content: [
       {
@@ -102,10 +105,15 @@ export function toToolResponse(unifiedResponse: UnifiedResponse): ToolResponse {
 }
 
 /**
+ * Alias for toCallToolResult to maintain test compatibility
+ */
+export const toToolResponse = toCallToolResult;
+
+/**
  * Simple wrapper to convert any tool handler to use unified responses
  */
 export function withUnifiedResponse<
-  T extends (...args: any[]) => Promise<ToolResponse>,
+  T extends (...args: any[]) => Promise<CallToolResult>,
 >(handler: T, toolName: string): T {
   return (async (...args: Parameters<T>) => {
     const startTime = Date.now();
@@ -115,11 +123,15 @@ export function withUnifiedResponse<
       const result = await handler(...args);
 
       // If it's already an error, convert to unified error format
-      if (result.isError) {
+      if (result.isError === true) {
         const errorText = result.content[0]?.text || 'Unknown error';
-        let errorData;
+        let errorData: any;
         try {
-          errorData = JSON.parse(errorText);
+          if (typeof errorText === 'string') {
+            errorData = JSON.parse(errorText);
+          } else {
+            errorData = { message: 'Unknown error' };
+          }
         } catch {
           errorData = { message: errorText };
         }
@@ -130,13 +142,18 @@ export function withUnifiedResponse<
           { requestId }
         );
 
-        return toToolResponse(unifiedError);
+        return toCallToolResult(unifiedError);
       }
 
       // Convert successful response to unified format
-      let data;
+      let data: any;
       try {
-        data = JSON.parse(result.content[0]?.text || '{}');
+        const textContent = result.content[0]?.text || '{}';
+        if (typeof textContent === 'string') {
+          data = JSON.parse(textContent);
+        } else {
+          data = textContent || {};
+        }
       } catch {
         data = result.content[0]?.text || {};
       }
@@ -147,7 +164,7 @@ export function withUnifiedResponse<
         requestId,
       });
 
-      return toToolResponse(unifiedSuccess);
+      return toCallToolResult(unifiedSuccess);
     } catch (error) {
       const unifiedError = createErrorResponse(
         error instanceof Error ? error.message : 'Unknown error',
@@ -155,7 +172,7 @@ export function withUnifiedResponse<
         { requestId }
       );
 
-      return toToolResponse(unifiedError);
+      return toCallToolResult(unifiedError);
     }
   }) as T;
 }

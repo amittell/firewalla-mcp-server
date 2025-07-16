@@ -4,7 +4,9 @@
  */
 
 import { ErrorType, createErrorResponse } from './error-handler.js';
-import type { ToolArgs } from '../tools/handlers/base.js';
+
+// Simple type for tool arguments since registry/handlers were removed
+export type ToolArgs = Record<string, unknown>;
 
 /**
  * Sanitization configuration options

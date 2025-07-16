@@ -27,6 +27,10 @@ module.exports = {
     '/dist/',
     '/coverage/'
   ],
+  // Include all source files for coverage, even if they are not
+  // directly required by the test suites.  This boosts the overall
+  // coverage metric and helps spot untested areas.
+  collectCoverageFrom: ['src/**/*.ts'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup/jest-setup.ts'],
   testTimeout: 10000,
   forceExit: true

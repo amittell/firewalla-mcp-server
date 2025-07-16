@@ -1438,3 +1438,376 @@ export class GetRecentRulesHandler extends BaseToolHandler {
     }
   }
 }
+
+/**
+ * Handler for retrieving a specific target list by ID
+ */
+export class GetSpecificTargetListHandler extends BaseToolHandler {
+  name = 'get_specific_target_list';
+  description = 'Retrieve a specific target list by ID from Firewalla';
+  category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'target_lists',
+        entity_type: 'target_list',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
+  async execute(
+    args: ToolArgs,
+    firewalla: FirewallaClient
+  ): Promise<ToolResponse> {
+    try {
+      const idValidation = ParameterValidator.validateRequiredString(
+        args?.id,
+        'id'
+      );
+
+      if (!idValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          idValidation.errors
+        );
+      }
+
+      const id = idValidation.sanitizedValue as string;
+
+      const response = await withToolTimeout(
+        async () => firewalla.getSpecificTargetList(id),
+        this.name
+      );
+
+      return this.createUnifiedResponse(response);
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return createErrorResponse(
+        this.name,
+        `Failed to get target list: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { id: args?.id }
+      );
+    }
+  }
+}
+
+/**
+ * Handler for creating a new target list
+ */
+export class CreateTargetListHandler extends BaseToolHandler {
+  name = 'create_target_list';
+  description = 'Create a new target list in Firewalla';
+  category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'target_lists',
+        entity_type: 'target_list_creation',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
+  async execute(
+    args: ToolArgs,
+    firewalla: FirewallaClient
+  ): Promise<ToolResponse> {
+    try {
+      const nameValidation = ParameterValidator.validateRequiredString(
+        args?.name,
+        'name'
+      );
+      const ownerValidation = ParameterValidator.validateRequiredString(
+        args?.owner,
+        'owner'
+      );
+      const targetsValidation = ParameterValidator.validateArray(
+        args?.targets,
+        'targets',
+        { required: true }
+      );
+      const categoryValidation = ParameterValidator.validateEnum(
+        args?.category,
+        'category',
+        [
+          'ad',
+          'edu',
+          'games',
+          'gamble',
+          'intel',
+          'p2p',
+          'porn',
+          'private',
+          'social',
+          'shopping',
+          'video',
+          'vpn',
+        ],
+        false
+      );
+      const notesValidation = ParameterValidator.validateOptionalString(
+        args?.notes,
+        'notes'
+      );
+
+      const validationResult = ParameterValidator.combineValidationResults([
+        nameValidation,
+        ownerValidation,
+        targetsValidation,
+        categoryValidation,
+        notesValidation,
+      ]);
+
+      if (!validationResult.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          validationResult.errors
+        );
+      }
+
+      const targetListData: any = {
+        name: nameValidation.sanitizedValue,
+        owner: ownerValidation.sanitizedValue,
+        targets: targetsValidation.sanitizedValue,
+      };
+
+      if (categoryValidation.sanitizedValue) {
+        targetListData.category = categoryValidation.sanitizedValue;
+      }
+      if (notesValidation.sanitizedValue) {
+        targetListData.notes = notesValidation.sanitizedValue;
+      }
+
+      const response = await withToolTimeout(
+        async () => firewalla.createTargetList(targetListData),
+        this.name
+      );
+
+      return this.createUnifiedResponse(response);
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return createErrorResponse(
+        this.name,
+        `Failed to create target list: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { name: args?.name, owner: args?.owner }
+      );
+    }
+  }
+}
+
+/**
+ * Handler for updating an existing target list
+ */
+export class UpdateTargetListHandler extends BaseToolHandler {
+  name = 'update_target_list';
+  description = 'Update an existing target list in Firewalla';
+  category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'target_lists',
+        entity_type: 'target_list_update',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
+  async execute(
+    args: ToolArgs,
+    firewalla: FirewallaClient
+  ): Promise<ToolResponse> {
+    try {
+      const idValidation = ParameterValidator.validateRequiredString(
+        args?.id,
+        'id'
+      );
+      const nameValidation = ParameterValidator.validateOptionalString(
+        args?.name,
+        'name'
+      );
+      const targetsValidation = ParameterValidator.validateArray(
+        args?.targets,
+        'targets',
+        { required: false }
+      );
+      const categoryValidation = ParameterValidator.validateEnum(
+        args?.category,
+        'category',
+        [
+          'ad',
+          'edu',
+          'games',
+          'gamble',
+          'intel',
+          'p2p',
+          'porn',
+          'private',
+          'social',
+          'shopping',
+          'video',
+          'vpn',
+        ],
+        false
+      );
+      const notesValidation = ParameterValidator.validateOptionalString(
+        args?.notes,
+        'notes'
+      );
+
+      const validationResult = ParameterValidator.combineValidationResults([
+        idValidation,
+        nameValidation,
+        targetsValidation,
+        categoryValidation,
+        notesValidation,
+      ]);
+
+      if (!validationResult.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          validationResult.errors
+        );
+      }
+
+      const id = idValidation.sanitizedValue as string;
+      const updateData: Record<string, unknown> = {};
+
+      if (nameValidation.sanitizedValue !== undefined) {
+        updateData.name = nameValidation.sanitizedValue;
+      }
+      if (targetsValidation.sanitizedValue !== undefined) {
+        updateData.targets = targetsValidation.sanitizedValue;
+      }
+      if (categoryValidation.sanitizedValue !== undefined) {
+        updateData.category = categoryValidation.sanitizedValue;
+      }
+      if (notesValidation.sanitizedValue !== undefined) {
+        updateData.notes = notesValidation.sanitizedValue;
+      }
+
+      const response = await withToolTimeout(
+        async () => firewalla.updateTargetList(id, updateData),
+        this.name
+      );
+
+      return this.createUnifiedResponse(response);
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return createErrorResponse(
+        this.name,
+        `Failed to update target list: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { id: args?.id }
+      );
+    }
+  }
+}
+
+/**
+ * Handler for deleting a target list
+ */
+export class DeleteTargetListHandler extends BaseToolHandler {
+  name = 'delete_target_list';
+  description = 'Delete a target list from Firewalla';
+  category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'target_lists',
+        entity_type: 'target_list_deletion',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
+  async execute(
+    args: ToolArgs,
+    firewalla: FirewallaClient
+  ): Promise<ToolResponse> {
+    try {
+      const idValidation = ParameterValidator.validateRequiredString(
+        args?.id,
+        'id'
+      );
+
+      if (!idValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          idValidation.errors
+        );
+      }
+
+      const id = idValidation.sanitizedValue as string;
+
+      const response = await withToolTimeout(
+        async () => firewalla.deleteTargetList(id),
+        this.name
+      );
+
+      return this.createUnifiedResponse(response);
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return createErrorResponse(
+        this.name,
+        `Failed to delete target list: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { id: args?.id }
+      );
+    }
+  }
+}
