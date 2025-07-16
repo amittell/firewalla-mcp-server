@@ -162,7 +162,8 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
         args?.limit,
         'limit',
         {
-          required: true,
+          required: false,
+          defaultValue: 200,
           ...getLimitValidationConfig(this.name),
         }
       );
@@ -798,7 +799,8 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
         args?.limit,
         'limit',
         {
-          required: true,
+          required: false,
+          defaultValue: 200,
           ...getLimitValidationConfig(this.name),
         }
       );
@@ -1054,7 +1056,8 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
         args?.limit,
         'limit',
         {
-          required: true,
+          required: false,
+          defaultValue: 200,
           ...getLimitValidationConfig(this.name),
         }
       );
@@ -1247,7 +1250,8 @@ export class GetRecentRulesHandler extends BaseToolHandler {
         args?.limit,
         'limit',
         {
-          required: true,
+          required: false,
+          defaultValue: 200,
           ...getLimitValidationConfig(this.name),
         }
       );

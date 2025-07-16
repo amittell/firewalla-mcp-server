@@ -76,7 +76,8 @@ export class GetFlowDataHandler extends BaseToolHandler {
         args?.limit,
         'limit',
         {
-          required: true,
+          required: false,
+          defaultValue: 200,
           ...getLimitValidationConfig(this.name),
         }
       );
@@ -435,7 +436,8 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
         args?.limit,
         'limit',
         {
-          required: true,
+          required: false,
+          defaultValue: 10,
           ...getLimitValidationConfig(this.name),
         }
       );
@@ -570,7 +572,8 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
         args?.limit,
         'limit',
         {
-          required: true,
+          required: false,
+          defaultValue: 100,
           ...getLimitValidationConfig(this.name),
         }
       );

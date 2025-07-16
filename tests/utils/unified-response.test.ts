@@ -144,5 +144,85 @@ describe('Unified Response Format', () => {
       expect(parsedContent.error).toBe('Handler threw error');
       expect(parsedContent.meta.tool).toBe('test-tool');
     });
+
+    it('should handle non-JSON error text from handler', async () => {
+      const mockHandler = jest.fn().mockResolvedValue({
+        content: [{ type: 'text', text: 'This is not JSON' }],
+        isError: true,
+      });
+
+      const wrappedHandler = withUnifiedResponse(mockHandler, 'test-tool');
+      const result = await wrappedHandler();
+
+      expect(result.isError).toBe(true);
+      const parsedContent = JSON.parse(result.content[0].text);
+      expect(parsedContent.success).toBe(false);
+      expect(parsedContent.error).toBe('This is not JSON');
+      expect(parsedContent.meta.tool).toBe('test-tool');
+    });
+
+    it('should handle non-string error content from handler', async () => {
+      const mockHandler = jest.fn().mockResolvedValue({
+        content: [{ type: 'text', text: 12345 }], // Non-string content
+        isError: true,
+      });
+
+      const wrappedHandler = withUnifiedResponse(mockHandler, 'test-tool');
+      const result = await wrappedHandler();
+
+      expect(result.isError).toBe(true);
+      const parsedContent = JSON.parse(result.content[0].text);
+      expect(parsedContent.success).toBe(false);
+      expect(parsedContent.error).toBe('Unknown error');
+      expect(parsedContent.meta.tool).toBe('test-tool');
+    });
+
+    it('should handle non-JSON success text from handler', async () => {
+      const mockHandler = jest.fn().mockResolvedValue({
+        content: [{ type: 'text', text: 'Plain text response' }],
+        isError: false,
+      });
+
+      const wrappedHandler = withUnifiedResponse(mockHandler, 'test-tool');
+      const result = await wrappedHandler();
+
+      expect(result.isError).toBe(false);
+      const parsedContent = JSON.parse(result.content[0].text);
+      expect(parsedContent.success).toBe(true);
+      expect(parsedContent.data).toBe('Plain text response');
+      expect(parsedContent.meta.tool).toBe('test-tool');
+    });
+
+    it('should handle non-string success content from handler', async () => {
+      const mockHandler = jest.fn().mockResolvedValue({
+        content: [{ type: 'text', text: { nested: 'object' } }], // Non-string content
+        isError: false,
+      });
+
+      const wrappedHandler = withUnifiedResponse(mockHandler, 'test-tool');
+      const result = await wrappedHandler();
+
+      expect(result.isError).toBe(false);
+      const parsedContent = JSON.parse(result.content[0].text);
+      expect(parsedContent.success).toBe(true);
+      expect(parsedContent.data).toEqual({ nested: 'object' });
+      expect(parsedContent.meta.tool).toBe('test-tool');
+    });
+
+    it('should handle missing error field in parsed error', async () => {
+      const mockHandler = jest.fn().mockResolvedValue({
+        content: [{ type: 'text', text: JSON.stringify({ someField: 'value' }) }], // No message or error field
+        isError: true,
+      });
+
+      const wrappedHandler = withUnifiedResponse(mockHandler, 'test-tool');
+      const result = await wrappedHandler();
+
+      expect(result.isError).toBe(true);
+      const parsedContent = JSON.parse(result.content[0].text);
+      expect(parsedContent.success).toBe(false);
+      expect(parsedContent.error).toBe('Unknown error');
+      expect(parsedContent.meta.tool).toBe('test-tool');
+    });
   });
 });

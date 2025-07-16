@@ -184,8 +184,7 @@ export class TimeoutManager {
       if (metrics.duration > finalConfig.errorMs) {
         metrics.error = true;
         if (finalConfig.enableMetrics) {
-          // eslint-disable-next-line no-console
-          console.error(
+          logger.error(
             `Performance error: ${finalConfig.toolName} took ${metrics.duration}ms (error threshold: ${finalConfig.errorMs}ms)`
           );
         }

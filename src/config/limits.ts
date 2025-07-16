@@ -72,7 +72,7 @@ export const PERFORMANCE_TIER_LIMITS = {
 export function getToolLimit(toolName: string): number {
   const toolLimits: Record<string, number> = {
     // Security tools
-    get_active_alarms: STANDARD_LIMITS.BASIC_QUERY,
+    get_active_alarms: 500, // API documented maximum
 
     // Device tools
     get_device_status: STANDARD_LIMITS.BASIC_QUERY,

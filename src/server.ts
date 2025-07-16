@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 
 /**
- * @fileoverview Firewalla MCP Server - 28-Tool Complete API Coverage
+ * @fileoverview Firewalla MCP Server
  *
  * This file implements the primary MCP server class that provides Claude with access to
- * Firewalla firewall data through 28 tools covering 100% of the Firewalla API.
- * All tools are mapped to actual Firewalla API endpoints with proper parameter validation.
+ * Firewalla firewall data through 28 tools that map to Firewalla API endpoints.
+ * Tools include parameter validation and error handling.
  *
  * Architecture:
- * - 23 Direct API Endpoints (100% coverage)
+ * - 23 Direct API Endpoints
  * - 5 Convenience Wrappers
- * - All limits corrected to API maximum (500)
- * - Required parameters added for proper API calls
- * - Complete CRUD operations for all resources
+ * - Limits set to API maximum (500)
+ * - Required parameters for proper API calls
+ * - CRUD operations for all resources
  *
  * @version 1.0.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
@@ -27,6 +27,7 @@ import { FirewallaClient } from './firewalla/client.js';
 import { setupTools } from './tools/index.js';
 import { setupResources } from './resources/index.js';
 import { setupPrompts } from './prompts/index.js';
+import { logger } from './monitoring/logger.js';
 
 /**
  * Main MCP Server class for Firewalla integration with 28-tool architecture
@@ -90,7 +91,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Results per page (API maximum: 500)',
+                  description: 'Results per page (optional, default: 200, API maximum: 500)',
                   minimum: 1,
                   maximum: 500,
                   default: 200,
@@ -110,16 +111,12 @@ export class FirewallaMCPServer {
             inputSchema: {
               type: 'object',
               properties: {
-                gid: {
-                  type: 'string',
-                  description: 'Box ID (required for API call)',
-                },
-                aid: {
+                alarm_id: {
                   type: 'string',
                   description: 'Alarm ID (required for API call)',
                 },
               },
-              required: ['gid', 'aid'],
+              required: ['alarm_id'],
             },
           },
           {
@@ -128,16 +125,12 @@ export class FirewallaMCPServer {
             inputSchema: {
               type: 'object',
               properties: {
-                gid: {
-                  type: 'string',
-                  description: 'Box ID (required for API call)',
-                },
-                aid: {
+                alarm_id: {
                   type: 'string',
                   description: 'Alarm ID (required for API call)',
                 },
               },
-              required: ['gid', 'aid'],
+              required: ['alarm_id'],
             },
           },
           {
@@ -162,7 +155,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (API maximum: 500)',
+                  description: 'Maximum results (optional, default: 200, API maximum: 500)',
                   minimum: 1,
                   maximum: 500,
                   default: 200,
@@ -224,7 +217,7 @@ export class FirewallaMCPServer {
                 duration: {
                   type: 'number',
                   description:
-                    'Duration in minutes to pause the rule (default: 60, range: 1-1440)',
+                    'Duration in minutes to pause the rule (optional, default: 60, range: 1-1440)',
                   minimum: 1,
                   maximum: 1440,
                   default: 60,
@@ -413,7 +406,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (API maximum: 500)',
+                  description: 'Maximum results (optional, default: 200, API maximum: 500)',
                   minimum: 1,
                   maximum: 500,
                   default: 200,
@@ -449,7 +442,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (API maximum: 500)',
+                  description: 'Maximum results (optional, default: 200, API maximum: 500)',
                   minimum: 1,
                   maximum: 500,
                   default: 200,
@@ -520,7 +513,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum number of results (default: 5)',
+                  description: 'Maximum number of results (optional, default: 5)',
                   minimum: 1,
                   default: 5,
                 },
@@ -547,7 +540,7 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum number of results (default: 5)',
+                  description: 'Maximum number of results (optional, default: 5)',
                   minimum: 1,
                   default: 5,
                 },
@@ -608,6 +601,11 @@ export class FirewallaMCPServer {
             inputSchema: {
               type: 'object',
               properties: {
+                period: {
+                  type: 'string',
+                  description: 'Time period for bandwidth calculation',
+                  enum: ['1h', '24h', '7d', '30d'],
+                },
                 limit: {
                   type: 'number',
                   description: 'Number of top devices to return',
@@ -620,7 +618,7 @@ export class FirewallaMCPServer {
                   description: 'Filter devices under a specific Firewalla box',
                 },
               },
-              required: [],
+              required: ['period'],
             },
           },
           {
@@ -755,9 +753,7 @@ export class FirewallaMCPServer {
   async start(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error(
-      'Firewalla MCP Server running with 28-tool architecture - 100% API coverage'
-    );
+    logger.info('Firewalla MCP Server running with 28 tools');
   }
 }
 
@@ -765,7 +761,7 @@ export class FirewallaMCPServer {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const server = new FirewallaMCPServer();
   server.start().catch((error: unknown) => {
-    console.error('Failed to start server:', error);
+    logger.error('Failed to start server:', error instanceof Error ? error : new Error(String(error)));
     process.exit(1);
   });
 }

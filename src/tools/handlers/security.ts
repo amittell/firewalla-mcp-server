@@ -201,7 +201,8 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         args?.limit,
         'limit',
         {
-          required: true,
+          required: false,
+          defaultValue: 200,
           ...getLimitValidationConfig('get_active_alarms'),
         }
       );

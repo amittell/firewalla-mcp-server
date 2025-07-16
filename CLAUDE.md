@@ -15,14 +15,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Model Context Protocol (MCP) server that provides Claude with access to Firewalla firewall data. Features a clean **28-tool architecture** with 100% API coverage, advanced search capabilities, intelligent caching, and result aggregation.
+A Model Context Protocol (MCP) server that provides Claude with access to Firewalla firewall data. Features a **28-tool architecture** with advanced search capabilities, intelligent caching, and result aggregation.
 
 ## Architecture Overview
 
-### 28-Tool Complete API Coverage Architecture
-- **23 Direct API Tools**: Full mapping to Firewalla MSP API endpoints with 100% coverage
+### 28-Tool Architecture
+- **23 Direct API Tools**: Mapping to Firewalla MSP API endpoints
 - **5 Convenience Wrapper Tools**: Client-side enhanced functionality for common operations
-- **Complete CRUD**: Full Create, Read, Update, Delete operations for all resources
+- **CRUD Operations**: Create, Read, Update, Delete operations for all resources
 
 ### Tool Categories (28 total)
 - **Security (3 tools)**: get_active_alarms, get_specific_alarm, delete_alarm
@@ -119,7 +119,7 @@ MCP_DEBUG_MODE=false                      # Debug logging (default: false)
 
 ### Tool Configuration
 - **WAVE0_ENABLED=false**: All 28 tools disabled (safe mode)
-- **WAVE0_ENABLED=true**: All 28 tools available (100% API coverage)
+- **WAVE0_ENABLED=true**: All 28 tools available
 - **MCP_DISABLED_TOOLS**: Selectively disable specific tools by name
 
 ## Testing Procedures
@@ -226,7 +226,7 @@ This file contains the complete, official Firewalla MSP API v2 documentation inc
 
 ### Clean 28-Tool Design
 - **Direct Implementation**: All 28 tools defined directly in TOOL_SCHEMAS
-- **100% API Coverage**: Complete mapping to all Firewalla MSP API endpoints
+- **API Mapping**: Mapping to all Firewalla MSP API endpoints
 - **Type Safety**: Full TypeScript implementation with strict validation
 - **Registry Pattern**: Clean tool registration with handler-based architecture
 
@@ -339,9 +339,9 @@ DEBUG=cache npm run mcp:start
 
 ## Version Information
 
-- **Current Version**: 1.0.0 (100% API coverage)
-- **Architecture**: 28-tool complete design (23 direct API + 5 convenience)
-- **API Coverage**: 100% Firewalla MSP API v2 coverage with full CRUD operations
+- **Current Version**: 1.0.0
+- **Architecture**: 28-tool design (23 direct API + 5 convenience)
+- **API Support**: Firewalla MSP API v2 with CRUD operations
 - **Node.js**: Requires 18+
 - **TypeScript**: ES2020 target with strict mode
 

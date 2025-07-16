@@ -1,19 +1,19 @@
 /**
- * @fileoverview Tool Registry - 28-Tool Complete API Coverage Architecture
+ * @fileoverview Tool Registry
  *
  * Implements a registry pattern for managing 28 MCP tool handlers with clean
- * organization and easy discovery. Each tool maps to actual Firewalla API endpoints
- * with corrected schemas and proper parameter validation for 100% API coverage.
+ * organization and easy discovery. Each tool maps to Firewalla API endpoints
+ * with parameter validation.
  *
  * Registry Features:
  * - **Automatic Registration**: All 28 handlers are auto-registered during construction
  * - **API Mapping**: Direct mapping to verified Firewalla API endpoints
  * - **Type Safety**: Full TypeScript support with proper handler interfaces
  * - **Easy Discovery**: Methods to find tools by name, category, or list all tools
- * - **Corrected Schemas**: All limits updated to API maximum (500), required parameters added
- * - **Complete CRUD**: Full Create, Read, Update, Delete operations for all resources
+ * - **Proper Schemas**: All limits set to API maximum (500), required parameters added
+ * - **CRUD Operations**: Create, Read, Update, Delete operations for all resources
  *
- * 28-Tool Distribution (100% API Coverage):
+ * 28-Tool Distribution:
  * - Direct API Endpoints (23 tools):
  *   * Security: 3 handlers (get_active_alarms, get_specific_alarm, delete_alarm)
  *   * Network: 1 handler (get_flow_data)

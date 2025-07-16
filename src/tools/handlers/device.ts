@@ -61,7 +61,8 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
         args?.limit,
         'limit',
         {
-          required: true,
+          required: false,
+          defaultValue: 200,
           ...getLimitValidationConfig(this.name),
         }
       );

@@ -2016,8 +2016,6 @@ export class FirewallaClient {
   }> {
     try {
       const flows = await this.getFlowData();
-      // TODO: Implement alarm-based statistics
-      // const alarms = await this.getActiveAlarms();
 
       // Validate flows response structure
       if (!flows?.results || !Array.isArray(flows.results)) {

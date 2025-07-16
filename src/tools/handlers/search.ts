@@ -20,6 +20,10 @@ import {
   ErrorType,
 } from '../../validation/error-handler.js';
 import { getLimitValidationConfig } from '../../config/limits.js';
+import { 
+  validateFirewallaQuerySyntax, 
+  getExampleQueries 
+} from '../../utils/query-validator.js';
 import {
   withToolTimeout,
   TimeoutError,
@@ -159,11 +163,11 @@ function validateCommonSearchParameters(
   toolName: string,
   entityType: 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists'
 ): CommonSearchValidationResult {
-  // Validate required limit parameter
+  // Validate optional limit parameter with default
   const limitValidation = ParameterValidator.validateNumber(
     args.limit,
     'limit',
-    { required: true, ...getLimitValidationConfig(toolName) }
+    { required: false, defaultValue: 200, ...getLimitValidationConfig(toolName) }
   );
 
   if (!limitValidation.isValid) {
@@ -194,6 +198,28 @@ function validateCommonSearchParameters(
         ErrorType.VALIDATION_ERROR,
         undefined,
         queryValidation.errors
+      ),
+    };
+  }
+
+  // Validate query syntax
+  const querySyntaxValidation = validateFirewallaQuerySyntax(args.query);
+  
+  if (!querySyntaxValidation.isValid) {
+    const examples = getExampleQueries(entityType);
+    return {
+      isValid: false,
+      response: createErrorResponse(
+        toolName,
+        'Invalid query syntax',
+        ErrorType.VALIDATION_ERROR,
+        {
+          query: args.query,
+          syntax_errors: querySyntaxValidation.errors,
+          examples: examples.slice(0, 3),
+          hint: 'Use field:value syntax with logical operators (AND, OR, NOT)'
+        },
+        querySyntaxValidation.errors
       ),
     };
   }
@@ -281,15 +307,15 @@ function validateCommonSearchParameters(
 
 export class SearchFlowsHandler extends BaseToolHandler {
   name = 'search_flows';
-  description = `Advanced network flow searching with powerful query syntax and enhanced reliability. Requires query and limit parameters. Data cached for 15 seconds, use force_refresh=true for real-time network analysis.
+  description = `Advanced network flow searching with powerful query syntax and enhanced reliability. Data cached for 15 seconds, use force_refresh=true for real-time network analysis.
   
 Search through network traffic flows using complex queries with logical operators, wildcards, and field-specific filters. Features automatic boolean query translation for improved compatibility.
 
 REQUIRED PARAMETERS:
 - query: Search query string using flow field syntax
-- limit: Maximum number of results to return (1-10000)
 
 OPTIONAL PARAMETERS:
+- limit: Maximum number of results to return (default: 200, max: 500)
 - force_refresh: Bypass cache for real-time data (default: false)
 - cursor: Pagination cursor from previous response
 - time_range: Time window for search (start/end timestamps)
@@ -584,7 +610,7 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
           'execution_time_ms',
           executionTime
         ) as number,
-        cached: false, // TODO: Detect from result if available
+        cached: false,
         cursor: (result as any).next_cursor,
         hasMore: !!(result as any).next_cursor,
         limit: searchArgs.limit,
@@ -661,15 +687,15 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
 
 export class SearchAlarmsHandler extends BaseToolHandler {
   name = 'search_alarms';
-  description = `Security alarm searching with powerful filtering and enhanced reliability. Requires query and limit parameters. Data cached for 15 seconds, use force_refresh=true for real-time security data.
+  description = `Security alarm searching with powerful filtering and enhanced reliability. Data cached for 15 seconds, use force_refresh=true for real-time security data.
 
 Search through security alerts and alarms using flexible query syntax to identify threats and suspicious activities. Features automatic boolean query translation, enhanced schema harmonization with device information, and improved alarm ID resolution for seamless integration with get_specific_alarm and delete_alarm.
 
 REQUIRED PARAMETERS:
 - query: Search query string using alarm field syntax
-- limit: Maximum number of results to return (1-10000)
 
 OPTIONAL PARAMETERS:
+- limit: Maximum number of results to return (default: 200, max: 500)
 - force_refresh: Bypass cache for real-time data (default: false)
 - cursor: Pagination cursor from previous response
 - sort_by: Field to sort results by
@@ -1136,15 +1162,15 @@ For rule management operations, see pause_rule and resume_rule tools.`;
 
 export class SearchDevicesHandler extends BaseToolHandler {
   name = 'search_devices';
-  description = `Network device searching with comprehensive filtering for status, usage patterns, and network properties. Requires query and limit parameters. Data cached for 5 minutes, use force_refresh=true for real-time device status.
+  description = `Network device searching with comprehensive filtering for status, usage patterns, and network properties. Data cached for 5 minutes, use force_refresh=true for real-time device status.
 
 Search through network devices to monitor connectivity, identify issues, and analyze usage patterns.
 
 REQUIRED PARAMETERS:
 - query: Search query string using device field syntax
-- limit: Maximum number of results to return (1-10000)
 
 OPTIONAL PARAMETERS:
+- limit: Maximum number of results to return (default: 200, max: 500)
 - force_refresh: Bypass cache for real-time status (default: false)
 - cursor: Pagination cursor from previous response
 - time_range: Time window for search (start/end timestamps)

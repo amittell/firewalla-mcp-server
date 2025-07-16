@@ -5,7 +5,7 @@ A Model Context Protocol (MCP) server that enables Claude to access and analyze 
 ## Why Firewalla MCP Server?
 
 **🚀 Simple Network Security Integration**
-- **28 Complete Tools** for network monitoring and analysis
+- **28 Tools** for network monitoring and analysis
 - **23 Direct API Endpoints** + **5 Convenience Wrappers**
 - **Advanced Search** with query syntax and filters
 - **Clean, Verified Architecture** with corrected API schemas
@@ -314,7 +314,7 @@ firewalla-mcp-server/
 │   └── prompts/            # MCP prompt implementations
 ├── tests/                  # Test files
 ├── docs/
-│   └── firewalla-api-reference.md  # Complete API documentation
+│   └── firewalla-api-reference.md  # API documentation
 ├── CLAUDE.md              # Comprehensive development guide
 ├── SPEC.md                # Technical specifications
 └── README.md              # This file
@@ -387,7 +387,7 @@ For more detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 ## What's New
 
 **Version 1.0.0:**
-- 28 complete tools with API-verified schemas
+- 28 tools with API-verified schemas
 - 23 direct API endpoints + 5 convenience wrappers
 - Advanced search with logical operators (AND, OR, NOT)
 - All limits corrected to API maximum (500)
