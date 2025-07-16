@@ -20,9 +20,9 @@ import {
   ErrorType,
 } from '../../validation/error-handler.js';
 import { getLimitValidationConfig } from '../../config/limits.js';
-import { 
-  validateFirewallaQuerySyntax, 
-  getExampleQueries 
+import {
+  validateFirewallaQuerySyntax,
+  getExampleQueries,
 } from '../../utils/query-validator.js';
 import {
   withToolTimeout,
@@ -167,7 +167,11 @@ function validateCommonSearchParameters(
   const limitValidation = ParameterValidator.validateNumber(
     args.limit,
     'limit',
-    { required: false, defaultValue: 200, ...getLimitValidationConfig(toolName) }
+    {
+      required: false,
+      defaultValue: 200,
+      ...getLimitValidationConfig(toolName),
+    }
   );
 
   if (!limitValidation.isValid) {
@@ -204,7 +208,7 @@ function validateCommonSearchParameters(
 
   // Validate query syntax
   const querySyntaxValidation = validateFirewallaQuerySyntax(args.query);
-  
+
   if (!querySyntaxValidation.isValid) {
     const examples = getExampleQueries(entityType);
     return {
@@ -217,7 +221,7 @@ function validateCommonSearchParameters(
           query: args.query,
           syntax_errors: querySyntaxValidation.errors,
           examples: examples.slice(0, 3),
-          hint: 'Use field:value syntax with logical operators (AND, OR, NOT)'
+          hint: 'Use field:value syntax with logical operators (AND, OR, NOT)',
         },
         querySyntaxValidation.errors
       ),

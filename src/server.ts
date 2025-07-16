@@ -91,7 +91,8 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Results per page (optional, default: 200, API maximum: 500)',
+                  description:
+                    'Results per page (optional, default: 200, API maximum: 500)',
                   minimum: 1,
                   maximum: 500,
                   default: 200,
@@ -155,7 +156,8 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (optional, default: 200, API maximum: 500)',
+                  description:
+                    'Maximum results (optional, default: 200, API maximum: 500)',
                   minimum: 1,
                   maximum: 500,
                   default: 200,
@@ -406,7 +408,8 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (optional, default: 200, API maximum: 500)',
+                  description:
+                    'Maximum results (optional, default: 200, API maximum: 500)',
                   minimum: 1,
                   maximum: 500,
                   default: 200,
@@ -442,7 +445,8 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum results (optional, default: 200, API maximum: 500)',
+                  description:
+                    'Maximum results (optional, default: 200, API maximum: 500)',
                   minimum: 1,
                   maximum: 500,
                   default: 200,
@@ -513,7 +517,8 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum number of results (optional, default: 5)',
+                  description:
+                    'Maximum number of results (optional, default: 5)',
                   minimum: 1,
                   default: 5,
                 },
@@ -540,7 +545,8 @@ export class FirewallaMCPServer {
                 },
                 limit: {
                   type: 'number',
-                  description: 'Maximum number of results (optional, default: 5)',
+                  description:
+                    'Maximum number of results (optional, default: 5)',
                   minimum: 1,
                   default: 5,
                 },
@@ -761,7 +767,10 @@ export class FirewallaMCPServer {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const server = new FirewallaMCPServer();
   server.start().catch((error: unknown) => {
-    logger.error('Failed to start server:', error instanceof Error ? error : new Error(String(error)));
+    logger.error(
+      'Failed to start server:',
+      error instanceof Error ? error : new Error(String(error))
+    );
     process.exit(1);
   });
 }
