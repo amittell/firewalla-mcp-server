@@ -312,14 +312,14 @@ DEBUG=firewalla:* npm run dev
 - All tools must be defined in TOOL_SCHEMAS with proper schema
 - Add to appropriate tool category in feature flags
 - Include proper input validation and error handling
-- Follow the 24-tool architecture constraints
+- Follow the 28-tool architecture constraints
 - Implement direct API execution in the server
 
 ## Performance Considerations
 
 ### Caching System
-- API Responses: 300s TTL (configurable via CACHE_TTL environment variable)
-- Geographic Data: 1h TTL with LRU eviction
+- Context-specific TTLs: Alarms (15s), Devices (300s), Rules (30s), Geographic Data (1h)
+- LRU eviction for geographic data cache
 - Cache key collision prevention with enhanced hashing
 - Automatic cleanup of expired entries
 

@@ -577,6 +577,110 @@ class GeographicEnrichmentPipeline {
     return enriched;
   }
 
+  // Helper functions for geographic data normalization
+  private normalizeCountry(country: any): string {
+    return typeof country === 'string' ? country : 'Unknown';
+  }
+
+  private normalizeCountryCode(country: any): string {
+    return typeof country === 'string' ? country.substring(0, 2).toUpperCase() : 'XX';
+  }
+
+  private deriveContinent(country: any): string {
+    // Simple continent mapping - in production use a proper geo library
+    const continentMap: Record<string, string> = {
+      'US': 'North America', 'CA': 'North America', 'CN': 'Asia', 'JP': 'Asia', 
+      'DE': 'Europe', 'FR': 'Europe', 'GB': 'Europe', 'AU': 'Oceania'
+    };
+    const code = this.normalizeCountryCode(country);
+    return continentMap[code] || 'Unknown';
+  }
+
+  private normalizeRegion(region: any): string {
+    return typeof region === 'string' ? region : 'Unknown';
+  }
+
+  private normalizeCity(city: any): string {
+    return typeof city === 'string' ? city : 'Unknown';
+  }
+
+  private normalizeASN(asn: any): number | null {
+    return typeof asn === 'number' ? asn : null;
+  }
+
+  private normalizeASNName(org: any): string {
+    return typeof org === 'string' ? org : 'Unknown';
+  }
+
+  private normalizeCoordinates(lat: any, lng: any): { lat: number; lng: number } | null {
+    if (typeof lat === 'number' && typeof lng === 'number') {
+      return { lat, lng };
+    }
+    return null;
+  }
+
+  private classifyHostingProvider(org: any, isp: any): boolean {
+    const hostingKeywords = ['hosting', 'cloud', 'datacenter', 'server'];
+    const orgStr = String(org || '').toLowerCase();
+    const ispStr = String(isp || '').toLowerCase();
+    return hostingKeywords.some(keyword => 
+      orgStr.includes(keyword) || ispStr.includes(keyword)
+    );
+  }
+
+  private isCloudProvider(org: any, asn: any): boolean {
+    const cloudProviders = ['amazon', 'google', 'microsoft', 'azure', 'aws'];
+    const orgStr = String(org || '').toLowerCase();
+    return cloudProviders.some(provider => orgStr.includes(provider));
+  }
+
+  private isVPNProvider(org: any, isp: any): boolean {
+    const vpnKeywords = ['vpn', 'proxy', 'tunnel'];
+    const orgStr = String(org || '').toLowerCase();
+    const ispStr = String(isp || '').toLowerCase();
+    return vpnKeywords.some(keyword => 
+      orgStr.includes(keyword) || ispStr.includes(keyword)
+    );
+  }
+
+  private isProxyProvider(org: any): boolean {
+    const proxyKeywords = ['proxy', 'anonymizer'];
+    const orgStr = String(org || '').toLowerCase();
+    return proxyKeywords.some(keyword => orgStr.includes(keyword));
+  }
+
+  private calculateGeographicRisk(data: any): number {
+    // Simple risk scoring - in production use proper threat intelligence
+    let risk = 0;
+    if (this.isVPNProvider(data.org, data.isp)) risk += 30;
+    if (this.isProxyProvider(data.org)) risk += 20;
+    if (this.isCloudProvider(data.org, data.asn)) risk += 10;
+    return Math.min(risk, 100);
+  }
+
+  private enrichThreatIntelligence(ip: string, data: any): any {
+    // Placeholder for threat intelligence enrichment
+    return {
+      reputation_score: 50, // neutral
+      threat_categories: [],
+      last_seen_malicious: null
+    };
+  }
+
+  private calculateDataQuality(data: any): number {
+    let quality = 0;
+    if (data.country) quality += 25;
+    if (data.city) quality += 25;
+    if (data.org) quality += 25;
+    if (data.asn) quality += 25;
+    return quality;
+  }
+
+  private calculateConfidenceLevel(data: any): number {
+    // Simple confidence calculation based on data completeness
+    return this.calculateDataQuality(data);
+  }
+
   private normalizeGeoDataBatch(rawGeoData: Record<string, any>): Record<string, NormalizedGeoData> {
     const normalized: Record<string, NormalizedGeoData> = {};
 
@@ -701,8 +805,12 @@ class GeographicCache {
       miss_rate: this.missCount / this.totalRequests,
       total_requests: this.totalRequests,
       cache_size: this.cache.size,
-      memory_usage: this.getMemoryUsage()
+      memory_usage: process.memoryUsage().heapUsed
     };
+  }
+
+  private getMemoryUsage() {
+    return process.memoryUsage().heapUsed;
   }
 }
 ```

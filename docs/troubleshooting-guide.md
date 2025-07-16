@@ -32,8 +32,8 @@ Run through this checklist to identify the most common issues:
 
 2. **Basic Connectivity Test**
    ```bash
-   curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
-        "https://$FIREWALLA_MSP_ID/v2/boxes/$FIREWALLA_BOX_ID/alarms?limit=1"
+   curl -H "Authorization: Token ${FIREWALLA_MSP_TOKEN}" \
+        "https://${FIREWALLA_MSP_ID}/v2/boxes/${FIREWALLA_BOX_ID}/alarms?limit=1"
    ```
 
 3. **MCP Server Status**

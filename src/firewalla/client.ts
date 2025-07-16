@@ -1638,8 +1638,7 @@ export class FirewallaClient {
             error: lastError.message,
           });
 
-          // Continue to next variation
-          continue;
+          // Skip invalid variations
         }
       }
 
