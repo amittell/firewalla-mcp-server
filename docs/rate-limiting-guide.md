@@ -74,6 +74,9 @@ interface ClientRateLimits {
   maxRetries: 3;                // Maximum retry attempts
   retryDelay: 1000;             // Base retry delay (ms)
   backoffMultiplier: 2;         // Exponential backoff multiplier
+  
+  // Polling settings
+  pollInterval: 25;             // 25ms poll interval for request slots
 }
 ```
 
@@ -93,7 +96,6 @@ X-RateLimit-Type: standard
 ```typescript
 // Automatic rate limit detection and handling
 class RateLimitManager {
-  private requestQueue: Array<() => Promise<any>> = [];
   private activeRequests = 0;
   private lastRequestTime = 0;
 
@@ -143,7 +145,7 @@ class RateLimitManager {
         if (this.activeRequests < this.limits.maxConcurrentRequests) {
           return resolve();
         }
-        setTimeout(check, 25);
+        setTimeout(check, this.limits.pollInterval);
       };
       check();
     });
@@ -475,6 +477,8 @@ class RequestQueue {
 
   private processing = false;
 
+  constructor(private readonly limits: ClientRateLimits = defaultClientLimits) {}
+
   async enqueue<T>(
     request: () => Promise<T>,
     priority: number = 0
@@ -503,8 +507,10 @@ class RequestQueue {
         item.reject(error);
       }
 
-      // Rate limiting delay
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Rate limiting delay - use configured minimum interval
+      await new Promise(resolve => 
+        setTimeout(resolve, this.limits.minimumRequestInterval)
+      );
     }
 
     this.processing = false;

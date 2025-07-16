@@ -127,7 +127,7 @@ Then set environment variables in your shell.
 ## Advanced Features
 
 - **Real-time security insights** integrated with your development workflow
-- **34+ specialized tools** for comprehensive network analysis
+- **28 specialized tools** for comprehensive network analysis
 - **Advanced search syntax** with complex filtering capabilities
 - **Geographic threat analysis** for international development teams
 

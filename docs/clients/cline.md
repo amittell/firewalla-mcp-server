@@ -143,7 +143,7 @@ Are there any firewall rules that might block this endpoint?"
 ## AI-Enhanced Security Benefits
 
 - **Intelligent threat analysis** with AI-powered pattern recognition
-- **34+ specialized tools** for comprehensive network monitoring
+- **28 specialized tools** for comprehensive network monitoring
 - **Natural language security queries** with advanced search capabilities
 - **Automated security workflows** for proactive monitoring
 - **Context-aware recommendations** based on network patterns

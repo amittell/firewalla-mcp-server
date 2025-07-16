@@ -244,18 +244,20 @@ interface StandardPagination {
 
 ### Issues Identified
 
-#### 4.1 Inconsistent SafeAccess Usage
+#### 4.3 Inconsistent SafeAccess Usage
 **Impact**: Medium - Some tools don't use SafeAccess consistently
 
 **Current Issue**: Not all tool handlers consistently use the SafeAccess utility class.
 
-**Recommendation**: Enforce SafeAccess usage through linting rules and code review:
+**Recommendation**: Enforce SafeAccess usage through code review and custom rules:
 ```typescript
-// ESLint rule to enforce SafeAccess usage
-"no-unsafe-property-access": "error"
+// Custom ESLint rule suggestion (requires implementation)
+// Alternative: Use existing rules to catch potential issues
+"@typescript-eslint/no-unsafe-member-access": "error",
+"@typescript-eslint/no-unsafe-assignment": "error"
 ```
 
-#### 4.2 Missing Null Checks in Geographic Processing
+#### 4.4 Missing Null Checks in Geographic Processing
 **Location**: Geographic utility functions
 **Impact**: Low - Potential runtime errors
 
@@ -318,7 +320,7 @@ interface StandardTimestamps {
 
 ### Issues Identified
 
-#### 6.1 Inconsistent Error Type Usage
+#### 6.3 Inconsistent Error Type Usage
 **Impact**: Medium - Mixed error categorization
 
 **Issue**: Tools don't consistently use the ErrorType enumeration.
@@ -334,7 +336,7 @@ createErrorResponse(
 );
 ```
 
-#### 6.2 Missing Error Context
+#### 6.4 Missing Error Context
 **Impact**: Low - Reduced debugging capability
 
 **Issue**: Many error responses lack context information.

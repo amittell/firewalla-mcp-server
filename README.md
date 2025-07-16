@@ -16,7 +16,7 @@ A Model Context Protocol (MCP) server that enables Claude to access and analyze 
 - **Security Analysis**: Get insights on threats, blocked attacks, and network anomalies  
 - **Bandwidth Monitoring**: Track top bandwidth consumers and usage patterns  
 - **Rule Management**: View and temporarily pause firewall rules  
-- **Target Lists**: Access CloudFlare and CrowdSec security intelligence
+- **Target Lists**: Manage custom security target lists and categories
 - **Search Tools**: Query syntax with filters and logical operators
 
 ## Client Setup Guides
@@ -156,7 +156,7 @@ npm run mcp:start
 ```
 
 **2. Test with Claude**
-Open Claude Code and try these starter queries:
+Open Claude Desktop and try these starter queries:
 
 **Basic Health Check:**
 ```text
@@ -217,7 +217,7 @@ search for: high severity alarms from IP range 10.0.0.* in the last 24 hours
 ```text
 "Show me firewall rules that blocked the most connections this week"
 ```
-*Uses: `get_most_active_rules` + `search_flows` for blocked traffic*
+*Uses: `get_network_rules` + `search_flows` for blocked traffic analysis*
 
 **Device Behavior Analysis:**
 ```text
@@ -255,17 +255,17 @@ If responses are slow:
 - **Rules**: Manage firewall rules, pause/resume rules
 - **Search**: Advanced search across all data types
 - **Analytics**: Statistics, trends, and geographic analysis
-- **Bulk Operations**: Manage multiple alarms and rules at once
+- **Target Management**: Create, update, and delete security target lists
 
 ### Quick Reference
 ```
 Security: get_active_alarms, delete_alarm, get_specific_alarm
 Network: get_flow_data, get_bandwidth_usage, get_offline_devices  
-Devices: get_device_status, get_boxes
+Devices: get_device_status, get_boxes, search_devices
 Rules: get_network_rules, pause_rule, resume_rule, get_target_lists
-Search: search_flows, search_alarms, search_rules, search_devices
+Search: search_flows, search_alarms, search_rules, search_target_lists
 Analytics: get_simple_statistics, get_flow_trends, get_alarm_trends
-Bulk: bulk_delete_alarms, bulk_pause_rules, bulk_resume_rules
+Management: create_target_list, update_target_list, delete_target_list
 ```
 
 ## Development
@@ -288,7 +288,7 @@ npm run lint:fix     # Fix ESLint issues
 - **Dependency Resolution**: Handles package dependencies automatically  
 - **No global installation required**: Works without global installation
 - **MCP Standard**: Follows Model Context Protocol conventions
-- **Cross-Platform**: Works consistently across different environments
+- **Reliable**: Works consistently across different environments
 
 **Alternative execution methods:**
 ```bash

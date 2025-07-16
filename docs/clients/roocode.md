@@ -68,12 +68,12 @@ In Roocode, test the connection:
 
 ## Roocode Workflow Integration
 
-**Code-Aware Security Monitoring**
+### Code-Aware Security Monitoring
 - Monitor network security while coding
 - Analyze bandwidth usage during development
 - Review firewall rules affecting your applications
 
-**Development Environment Security**
+### Development Environment Security
 ```bash
 # Monitor development network activity
 "What network connections are active from my development environment?"
@@ -82,21 +82,21 @@ In Roocode, test the connection:
 "Are there any blocked connections that might affect my local development?"
 ```
 
-**Real-time Network Analysis**
+### Real-time Network Analysis
 - Device connectivity monitoring
 - Traffic pattern analysis
 - Security alert integration
 
 ## Useful Commands
 
-**Security Monitoring**
+### Security Monitoring
 ```text
 "What security alerts have triggered in the last hour?"
 "Show me top bandwidth consumers on my network"
 "Are there any offline devices I should know about?"
 ```
 
-**Network Troubleshooting**
+### Network Troubleshooting
 ```text
 "Check firewall rules affecting port 3000"
 "Analyze network flows for my development server IP"
@@ -105,24 +105,24 @@ In Roocode, test the connection:
 
 ## Troubleshooting
 
-**MCP Server Not Found**
+### MCP Server Not Found
 - Verify global installation: `npm list -g firewalla-mcp-server`
 - Check PATH includes npm global bin directory
 - Try absolute path: `/usr/local/bin/npx firewalla-mcp-server`
 
-**Connection Issues**
+### Connection Issues
 - Verify Firewalla credentials are correct
 - Test connection manually: `curl -H "Authorization: Bearer $FIREWALLA_MSP_TOKEN" https://$FIREWALLA_MSP_ID/v2/boxes`
 - Check network connectivity to MSP domain
 
-**Performance Optimization**
+### Performance Optimization
 - Use specific time ranges for faster queries
 - Leverage caching by avoiding frequent `force_refresh` calls
 - Set reasonable `limit` parameters for large datasets
 
 ## Advanced Features
 
-- **34+ specialized tools** for comprehensive network security analysis
+- **28 specialized tools** for comprehensive network security analysis
 - **Geographic threat analysis** with country-level filtering
 - **Advanced search syntax** supporting complex queries with logical operators
 - **Real-time monitoring** with intelligent caching for optimal performance

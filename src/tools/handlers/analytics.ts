@@ -21,40 +21,14 @@ import { normalizeTimestamps } from '../../utils/data-validator.js';
 
 export class GetBoxesHandler extends BaseToolHandler {
   name = 'get_boxes';
-  description = `List all managed Firewalla boxes with comprehensive status and configuration details.
-
-Retrieve information about all Firewalla devices in your network including their status, configuration, and monitoring capabilities.
-
-RESPONSE DATA:
-- Box identification: GID, name, model, and version information
-- Status monitoring: Online/offline status and last seen timestamps
-- Network configuration: Public IP, location, and network settings
-- Device statistics: Connected device count, active rules, and alarm counts
-- License information: Subscription status and feature availability
-
-OPTIONAL FILTERING:
-- group_id parameter to filter boxes by specific groups
-- Automatic data normalization for consistent field formats
-- Timestamp conversion to ISO format for standardized time handling
-
-DATA NORMALIZATION:
-- Unknown values standardized across all fields
-- Box names sanitized to handle null/empty values
-- Location data normalized for consistent geographic information
-- Public IP validation and formatting
-
-TROUBLESHOOTING:
-- If no boxes returned, verify MSP API credentials and permissions
-- Check network connectivity if boxes show as offline
-- Ensure box GIDs are correctly configured in environment variables
-
-See the Box Management guide for configuration details.`;
+  description =
+    'List all managed Firewalla boxes with status and configuration details.';
   category = 'analytics' as const;
 
   constructor() {
     super({
-      enableGeoEnrichment: false, // No IP fields in flow trends
-      enableFieldNormalization: false, // Disabled because we manually map fields
+      enableGeoEnrichment: false,
+      enableFieldNormalization: false,
       additionalMeta: {
         data_source: 'flow_trends',
         entity_type: 'historical_flow_data',
@@ -70,7 +44,6 @@ See the Box Management guide for configuration details.`;
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      // Parameter validation
       const groupIdValidation = ParameterValidator.validateOptionalString(
         _args?.group_id,
         'group_id'
@@ -92,14 +65,12 @@ See the Box Management guide for configuration details.`;
         this.name
       );
 
-      // Normalize box data for consistency
       const boxResults = SafeAccess.safeArrayAccess(
         boxesResponse.results,
         (arr: any[]) => arr,
         []
       ) as any[];
 
-      // Apply proper data normalization to ensure consistent field formats
       const normalizedBoxes = batchNormalize(boxResults, {
         name: (v: any) => sanitizeFieldValue(v, 'Unknown Box').value,
         model: (v: any) => sanitizeFieldValue(v, 'unknown').value,
@@ -111,24 +82,22 @@ See the Box Management guide for configuration details.`;
 
       const startTime = Date.now();
 
-      // Process box data
       const boxData = normalizedBoxes.map((box: any) => {
-        // Apply timestamp normalization
         const timestampNormalized = normalizeTimestamps(box);
         const finalBox = timestampNormalized.data;
 
         return {
           gid: SafeAccess.getNestedValue(finalBox, 'gid', 'unknown'),
-          name: finalBox.name, // Already normalized
-          model: finalBox.model, // Already normalized
-          mode: finalBox.mode, // Already normalized
-          version: finalBox.version, // Already normalized
+          name: finalBox.name,
+          model: finalBox.model,
+          mode: finalBox.mode,
+          version: finalBox.version,
           online: SafeAccess.getNestedValue(finalBox, 'online', false),
           last_seen: SafeAccess.getNestedValue(finalBox, 'lastSeen', 0),
           license: SafeAccess.getNestedValue(finalBox, 'license', null),
-          public_ip: finalBox.publicIP || finalBox.public_ip || 'unknown', // Standardized field name
-          group: finalBox.group, // Already normalized
-          location: finalBox.location, // Already normalized
+          public_ip: finalBox.publicIP || finalBox.public_ip || 'unknown',
+          group: finalBox.group,
+          location: finalBox.location,
           device_count: SafeAccess.getNestedValue(finalBox, 'deviceCount', 0),
           rule_count: SafeAccess.getNestedValue(finalBox, 'ruleCount', 0),
           alarm_count: SafeAccess.getNestedValue(finalBox, 'alarmCount', 0),
@@ -162,42 +131,8 @@ See the Box Management guide for configuration details.`;
 
 export class GetSimpleStatisticsHandler extends BaseToolHandler {
   name = 'get_simple_statistics';
-  description = `Get comprehensive network statistics with health monitoring and status analysis.
-
-Provides an overview of your entire Firewalla network infrastructure including box status, security metrics, and system health indicators.
-
-STATISTICS PROVIDED:
-- Box availability: Online/offline counts and availability percentage
-- Security monitoring: Total alarms and active threats
-- Policy management: Total rules and enforcement status
-- Health assessment: Overall system health score (0-100)
-- Status summary: Operational status and active monitoring indicators
-
-HEALTH SCORE CALCULATION:
-- Base score: 100 points
-- Offline box penalty: Up to -40 points based on offline ratio
-- Alarm penalty: Up to -30 points for high alarm counts
-- Rule bonus: Up to +10 points for active rule management
-- Final range: 0-100 with higher scores indicating better health
-
-USE CASES:
-- Dashboard overview: Quick system status assessment
-- Health monitoring: Automated health check integration
-- Capacity planning: Understanding current infrastructure load
-- Troubleshooting: Identifying system-wide issues
-
-PERFORMANCE NOTES:
-- Statistics cached for 1 hour for optimal performance
-- Real-time calculation of derived metrics
-- Defensive programming prevents division by zero errors
-- Null-safe operations throughout calculation pipeline
-
-ERROR HANDLING:
-- Returns default values if API data unavailable
-- Graceful degradation with partial data
-- Detailed error context for troubleshooting
-
-This tool provides the foundation for network health monitoring and dashboard displays.`;
+  description =
+    'Get network statistics including box status, security metrics, and system health indicators.';
   category = 'analytics' as const;
 
   constructor() {
@@ -656,7 +591,6 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      // Parameter validation
       const periodValidation = ParameterValidator.validateEnum(
         _args?.period,
         'period',
@@ -835,7 +769,6 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      // Parameter validation
       const periodValidation = ParameterValidator.validateEnum(
         _args?.period,
         'period',
@@ -996,7 +929,6 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      // Parameter validation
       const periodValidation = ParameterValidator.validateEnum(
         _args?.period,
         'period',
@@ -1115,48 +1047,22 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
       return 100;
     }
 
-    let totalVariation = 0;
-    for (let i = 1; i < trends.length; i++) {
-      const current = trends[i];
-      const previous = trends[i - 1];
-      if (current && previous) {
-        const currentValue = SafeAccess.getNestedValue(current, 'value', 0);
-        const previousValue = SafeAccess.getNestedValue(previous, 'value', 0);
-        if (
-          typeof currentValue === 'number' &&
-          typeof previousValue === 'number'
-        ) {
-          const change = Math.abs(currentValue - previousValue);
-          totalVariation += change;
-        }
-      }
-    }
-
-    const avgValue =
-      trends.reduce(
-        (sum: number, t: any) =>
-          sum + (SafeAccess.getNestedValue(t, 'value', 0) as number),
-        0
-      ) / trends.length;
-    if (avgValue === 0 || !Number.isFinite(avgValue)) {
-      return 100;
-    }
-
-    // Prevent division by zero when there's only one trend
-    if (trends.length <= 1) {
-      return 100;
-    }
-
-    const variationPercentage = totalVariation / (trends.length - 1) / avgValue;
-
-    // Ensure the result is a finite number
-    if (!Number.isFinite(variationPercentage)) {
-      return 0;
-    }
-
-    return Math.max(
-      0,
-      Math.min(100, Math.round((1 - variationPercentage) * 100))
+    const values = trends.map(
+      t => SafeAccess.getNestedValue(t, 'value', 0) as number
     );
+    const avgValue = values.reduce((sum, val) => sum + val, 0) / values.length;
+
+    if (avgValue === 0) {
+      return 100;
+    }
+
+    const variation =
+      values.reduce((sum, val, i) => {
+        return i > 0 ? sum + Math.abs(val - values[i - 1]) : sum;
+      }, 0) /
+      (values.length - 1);
+
+    const variationPercent = variation / avgValue;
+    return Math.max(0, Math.min(100, Math.round((1 - variationPercent) * 100)));
   }
 }

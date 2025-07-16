@@ -135,7 +135,7 @@ In Cursor, activate Claude Code and test:
 
 ## Key Benefits
 
-- **34+ specialized security tools** integrated into your IDE
+- **28 specialized security tools** integrated into your IDE
 - **Real-time threat monitoring** while developing
 - **Geographic security analysis** for global deployments
 - **Advanced search capabilities** with natural language queries

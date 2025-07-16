@@ -78,15 +78,14 @@ export class ResourceValidator {
         };
       }
 
-      // First try to get the specific rule to check existence  
-      const ruleResponse = await firewalla.getNetworkRules(undefined, 1);
+      // Get all rules to check for existence (with a reasonable limit)
+      const ruleResponse = await firewalla.getNetworkRules(undefined, 1000);
       
       if (!ruleResponse || !ruleResponse.results) {
         throw new Error('Invalid response from getNetworkRules');
       }
 
-      const exists = ruleResponse.results.length > 0 && 
-        ruleResponse.results.some((rule: any) => rule.gid === ruleId || rule.id === ruleId);
+      const exists = ruleResponse.results.some((rule: any) => rule.gid === ruleId || rule.id === ruleId);
 
       // Cache the result
       this.existenceCache.set(cacheKey, { exists, timestamp: Date.now() });

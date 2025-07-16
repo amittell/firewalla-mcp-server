@@ -248,6 +248,10 @@ export async function measurePerformance<T>(operation: () => Promise<T>): Promis
     return { result, duration };
   } catch (error) {
     const duration = Date.now() - start;
+    // Attach duration to error for performance tracking
+    if (error instanceof Error) {
+      (error as any).performanceDuration = duration;
+    }
     throw error;
   }
 }

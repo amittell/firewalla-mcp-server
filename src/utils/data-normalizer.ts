@@ -3,7 +3,7 @@
  * Provides basic null safety and prevents crashes from malformed API data
  */
 
-import type { GeographicData } from '../types.js';
+import type { GeographicData, SanitizationResult } from '../types.js';
 
 /**
  * Basic null safety for objects - prevents crashes from null/undefined data
@@ -123,15 +123,6 @@ export interface NormalizationConfig {
 }
 
 /**
- * Sanitization result interface
- */
-export interface SanitizationResult {
-  value: any;
-  wasModified: boolean;
-  modifications: string[];
-}
-
-/**
  * Sanitize field value with default fallback and tracking
  */
 export function sanitizeFieldValue(
@@ -180,7 +171,7 @@ export function sanitizeFieldValue(
 export function normalizeUnknownFields(
   value: any,
   config?: Partial<NormalizationConfig>,
-  seen?: Set<any>
+  visited: WeakSet<object> = new WeakSet()
 ): any {
   const defaultConfig: NormalizationConfig = {
     defaultUnknownValue: 'unknown',
@@ -191,33 +182,28 @@ export function normalizeUnknownFields(
 
   const actualConfig = { ...defaultConfig, ...config };
 
-  // Simple circular reference detection using Set
-  if (!seen) {
-    seen = new Set();
-  }
-
   if (Array.isArray(value)) {
-    if (seen.has(value)) {
+    if (visited.has(value)) {
       return '[Circular Reference]';
     }
-    seen.add(value);
+    visited.add(value);
     const result = value.map(item =>
-      normalizeUnknownFields(item, actualConfig, seen)
+      normalizeUnknownFields(item, actualConfig, visited)
     );
-    seen.delete(value);
+    visited.delete(value);
     return result;
   }
 
   if (value && typeof value === 'object') {
-    if (seen.has(value)) {
+    if (visited.has(value)) {
       return '[Circular Reference]';
     }
-    seen.add(value);
+    visited.add(value);
     const normalized: any = {};
     for (const [key, val] of Object.entries(value)) {
-      normalized[key] = normalizeUnknownFields(val, actualConfig, seen);
+      normalized[key] = normalizeUnknownFields(val, actualConfig, visited);
     }
-    seen.delete(value);
+    visited.delete(value);
     return normalized;
   }
 

@@ -330,7 +330,7 @@ const sessionState = {
 // Good: Validate cursor before use
 function isValidCursor(cursor: string): boolean {
   try {
-    const decoded = atob(cursor);
+    const decoded = Buffer.from(cursor, 'base64').toString('utf8');
     const data = JSON.parse(decoded);
     return data.offset >= 0 && data.page_size > 0;
   } catch {
@@ -537,7 +537,7 @@ async function parallelProcessing(query: string, totalPages: number) {
   // Create promises for each page
   for (let page = 0; page < totalPages; page++) {
     const offset = page * pageSize;
-    const cursor = btoa(JSON.stringify({ offset, page_size: pageSize }));
+    const cursor = Buffer.from(JSON.stringify({ offset, page_size: pageSize }), 'utf8').toString('base64');
 
     promises.push(
       searchFlows({ query, limit: pageSize, cursor })
@@ -620,7 +620,7 @@ do {
 ```typescript
 function inspectCursor(cursor: string) {
   try {
-    const decoded = atob(cursor);
+    const decoded = Buffer.from(cursor, 'base64').toString('utf8');
     const data = JSON.parse(decoded);
     console.log('Cursor data:', data);
     return data;

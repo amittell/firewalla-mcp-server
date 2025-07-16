@@ -40,7 +40,15 @@ describe('InMemoryMetrics', () => {
     it('should record single timing', () => {
       metrics.timing('test.timing', 100);
       const snapshot = metrics.snapshot();
-      expect(snapshot.timings['test.timing']).toEqual({ count: 1 });
+      expect(snapshot.timings['test.timing']).toEqual({ 
+        count: 1,
+        min: 100,
+        max: 100,
+        avg: 100,
+        p50: 100,
+        p95: 100,
+        p99: 100
+      });
     });
 
     it('should record multiple timings', () => {
@@ -48,7 +56,15 @@ describe('InMemoryMetrics', () => {
       metrics.timing('test.timing', 200);
       metrics.timing('test.timing', 300);
       const snapshot = metrics.snapshot();
-      expect(snapshot.timings['test.timing']).toEqual({ count: 3 });
+      expect(snapshot.timings['test.timing']).toEqual({ 
+        count: 3,
+        min: 100,
+        max: 300,
+        avg: 200,
+        p50: 200,
+        p95: 300,
+        p99: 300
+      });
     });
 
     it('should handle multiple different timings', () => {
@@ -56,8 +72,24 @@ describe('InMemoryMetrics', () => {
       metrics.timing('timing2', 200);
       metrics.timing('timing2', 300);
       const snapshot = metrics.snapshot();
-      expect(snapshot.timings['timing1']).toEqual({ count: 1 });
-      expect(snapshot.timings['timing2']).toEqual({ count: 2 });
+      expect(snapshot.timings['timing1']).toEqual({ 
+        count: 1,
+        min: 100,
+        max: 100,
+        avg: 100,
+        p50: 100,
+        p95: 100,
+        p99: 100
+      });
+      expect(snapshot.timings['timing2']).toEqual({ 
+        count: 2,
+        min: 200,
+        max: 300,
+        avg: 250,
+        p50: 300,
+        p95: 300,
+        p99: 300
+      });
     });
   });
 
@@ -83,7 +115,15 @@ describe('InMemoryMetrics', () => {
           counter2: 20
         },
         timings: {
-          timing1: { count: 2 }
+          timing1: { 
+            count: 2,
+            min: 100,
+            max: 200,
+            avg: 150,
+            p50: 200,
+            p95: 200,
+            p99: 200
+          }
         }
       });
     });

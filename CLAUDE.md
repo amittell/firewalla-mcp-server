@@ -136,7 +136,7 @@ MCP_DEBUG_MODE=false                      # Debug logging (default: false)
 
 ### Manual Testing with Claude
 1. Start MCP server: `npm run mcp:start`
-2. Connect Claude Code to server
+2. Connect Claude Desktop to server
 3. Test queries:
    - "What security alerts do I have?"
    - "Show me top bandwidth users"

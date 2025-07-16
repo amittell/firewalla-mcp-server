@@ -82,7 +82,7 @@ Restart Claude Desktop and try:
 
 ## Features
 
-- **33 working tools** for comprehensive network analysis
+- **28 tools** for comprehensive network analysis
 - **Advanced search syntax** with logical operators and filters
 - **Geographic threat analysis** with country-level insights
 - **Real-time monitoring** with intelligent caching

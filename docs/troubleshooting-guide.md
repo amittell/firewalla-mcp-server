@@ -2,6 +2,8 @@
 
 This guide provides step-by-step troubleshooting procedures for common issues encountered with the Firewalla MCP Server. Each section includes symptom identification, root cause analysis, and actionable solutions.
 
+> **⚠️ Security Warning**: When debugging authentication issues, be careful not to expose your full API token in logs, terminal output, or support tickets. Always use partial token display (e.g., `${FIREWALLA_MSP_TOKEN:0:10}...`) when sharing debug information.
+
 ## Table of Contents
 
 - [Quick Diagnostic Checklist](#quick-diagnostic-checklist)
@@ -709,7 +711,7 @@ curl -vI "https://$FIREWALLA_MSP_ID"
 **Diagnostic Steps**:
 ```bash
 # Test direct connection
-telnet $FIREWALLA_MSP_ID 443
+nc -zv $FIREWALLA_MSP_ID 443
 
 # Check for proxy interference
 curl -v "https://$FIREWALLA_MSP_ID" --proxy ""

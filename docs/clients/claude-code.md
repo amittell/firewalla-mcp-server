@@ -116,7 +116,7 @@ claude-code "Get high-severity alarms as JSON" | jq '.alarms[] | select(.severit
 
 - **Real-time CLI monitoring** of network security
 - **Scriptable security analysis** for automation
-- **34+ specialized tools** accessible via natural language
+- **28 specialized tools** accessible via natural language
 - **Advanced search capabilities** with complex query syntax
 
 ---

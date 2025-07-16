@@ -38,7 +38,7 @@ const DEFAULT_SANITIZATION_CONFIG: Required<SanitizationConfig> = {
 /**
  * Result of parameter sanitization
  */
-export interface SanitizationResult {
+export interface ParameterSanitizationResult {
   isValid: boolean;
   sanitizedArgs?: ToolArgs;
   errors: string[];
@@ -73,7 +73,7 @@ export class ParameterSanitizer {
   static sanitizeParameters(
     args: unknown,
     config: Partial<SanitizationConfig> = {}
-  ): SanitizationResult {
+  ): ParameterSanitizationResult {
     const finalConfig = { ...DEFAULT_SANITIZATION_CONFIG, ...config };
     const errors: string[] = [];
 
@@ -243,7 +243,7 @@ export class ParameterSanitizer {
    */
   static createSanitizationErrorResponse(
     toolName: string,
-    sanitizationResult: SanitizationResult
+    sanitizationResult: ParameterSanitizationResult
   ) {
     return createErrorResponse(
       toolName,

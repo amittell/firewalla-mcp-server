@@ -51,11 +51,7 @@ import {
 } from '../utils/geographic.js';
 import { safeAccess, safeValue } from '../utils/data-normalizer.js';
 import { validateAlarmId } from '../utils/alarm-id-validation.js';
-import {
-  validateResponseStructure,
-  normalizeTimestamps,
-  createValidationSchema,
-} from '../utils/data-validator.js';
+import { normalizeTimestamps } from '../utils/data-validator.js';
 
 /**
  * Standard API response wrapper for Firewalla MSP endpoints
@@ -115,6 +111,14 @@ export class FirewallaClient {
 
   /** @private Geographic cache for IP geolocation lookups */
   private geoCache: GeographicCache;
+
+  /** @private Mapping of severity levels to alarm type numbers for query conversion */
+  private static readonly SEVERITY_TYPE_MAP: Record<string, number> = {
+    low: 1,
+    medium: 4,
+    high: 8,
+    critical: 12,
+  };
 
   /**
    * Creates a new Firewalla API client instance
@@ -212,6 +216,28 @@ export class FirewallaClient {
         }
 
         return Promise.reject(error);
+      }
+    );
+  }
+
+  /**
+   * Converts severity-based queries to type-based queries for API compatibility
+   *
+   * The Firewalla API uses numeric alarm types instead of severity labels.
+   * This method converts human-readable severity queries like "severity:high"
+   * to API-compatible type queries like "type:>=8".
+   *
+   * @param query - The search query string that may contain severity filters
+   * @returns Converted query string with severity filters replaced by type filters
+   * @private
+   */
+  private convertSeverityToTypeQuery(query: string): string {
+    return query.replace(
+      /severity:(high|medium|low|critical)/gi,
+      (match: string, severity: string) => {
+        const minType =
+          FirewallaClient.SEVERITY_TYPE_MAP[severity.toLowerCase()];
+        return minType !== undefined ? `type:>=${minType}` : match;
       }
     );
   }
@@ -548,19 +574,7 @@ export class FirewallaClient {
     if (query) {
       // Convert severity:X queries to type:>=X queries since API doesn't understand severity
       if (typeof query === 'string') {
-        query = query.replace(
-          /severity:(high|medium|low|critical)/gi,
-          (match: string, severity: string) => {
-            const severityMap: Record<string, number> = {
-              low: 1,
-              medium: 4,
-              high: 8,
-              critical: 12,
-            };
-            const minType = severityMap[severity.toLowerCase()];
-            return minType !== undefined ? `type:>=${minType}` : match;
-          }
-        );
+        query = this.convertSeverityToTypeQuery(query);
       }
       params.query = query;
     }
@@ -585,20 +599,17 @@ export class FirewallaClient {
       next_cursor?: string;
     }>('GET', endpoint, params, !force_refresh);
 
-    // Validate response structure
-    const validationSchema = createValidationSchema('alarms');
-    const validationResult = validateResponseStructure(
-      response,
-      validationSchema
-    );
-
-    if (!validationResult.isValid) {
-      logger.warn('Alarm response validation failed:', {
-        errors: validationResult.errors,
-      });
+    // Basic response validation
+    if (!response || typeof response !== 'object') {
+      logger.warn('Invalid alarm response structure');
+      return {
+        count: 0,
+        results: [],
+        next_cursor: undefined,
+      };
     }
 
-    // Normalize and process alarm data
+    // Extract alarm data with safe defaults
     const rawAlarms = Array.isArray(response.results) ? response.results : [];
 
     // Apply basic safety to the raw alarm data
@@ -2962,29 +2973,12 @@ export class FirewallaClient {
 
       // Convert severity:X queries to type:>=X queries since API doesn't understand severity
       if (params.query && typeof params.query === 'string') {
-        params.query = params.query.replace(
-          /severity:(high|medium|low|critical)/gi,
-          (match: string, severity: string) => {
-            const severityMap: Record<string, number> = {
-              low: 1,
-              medium: 4,
-              high: 8,
-              critical: 12,
-            };
-            const minType = severityMap[severity.toLowerCase()];
-            return minType !== undefined ? `type:>=${minType}` : match;
-          }
-        );
+        params.query = this.convertSeverityToTypeQuery(params.query);
       }
 
       if (options.min_severity && typeof options.min_severity === 'string') {
-        const severityMap: Record<string, number> = {
-          low: 1,
-          medium: 4,
-          high: 8,
-          critical: 12,
-        };
-        const minSeverity = severityMap[options.min_severity.toLowerCase()];
+        const minSeverity =
+          FirewallaClient.SEVERITY_TYPE_MAP[options.min_severity.toLowerCase()];
         if (minSeverity) {
           params.query = params.query
             ? `${params.query} AND type:>=${minSeverity}`
@@ -4753,6 +4747,26 @@ export class FirewallaClient {
   }
 
   /**
+   * Helper method to build OR queries for array-based geographic filters
+   *
+   * @param fieldName - The field name for the query (e.g., 'country', 'region')
+   * @param values - Array of values to include in the OR query
+   * @returns Query string or null if values array is empty
+   * @private
+   */
+  private buildArrayFilterQuery(
+    fieldName: string,
+    values?: string[]
+  ): string | null {
+    if (!values || values.length === 0) {
+      return null;
+    }
+
+    const queries = values.map(value => `${fieldName}:"${value}"`);
+    return queries.length === 1 ? queries[0] : `(${queries.join(' OR ')})`;
+  }
+
+  /**
    * Build geographic query string from filters for Firewalla API
    *
    * Converts geographic filter objects into API-compatible query syntax.
@@ -4779,63 +4793,44 @@ export class FirewallaClient {
   }): string {
     const queryParts: string[] = [];
 
-    // Build OR queries for array filters
-    if (filters.countries && filters.countries.length > 0) {
-      const countryQueries = filters.countries.map(
-        country => `country:"${country}"`
-      );
-      queryParts.push(
-        countryQueries.length === 1
-          ? countryQueries[0]
-          : `(${countryQueries.join(' OR ')})`
-      );
+    // Build OR queries for array filters using helper method
+    const countryQuery = this.buildArrayFilterQuery(
+      'country',
+      filters.countries
+    );
+    if (countryQuery) {
+      queryParts.push(countryQuery);
     }
 
-    if (filters.continents && filters.continents.length > 0) {
-      const continentQueries = filters.continents.map(
-        continent => `continent:"${continent}"`
-      );
-      queryParts.push(
-        continentQueries.length === 1
-          ? continentQueries[0]
-          : `(${continentQueries.join(' OR ')})`
-      );
+    const continentQuery = this.buildArrayFilterQuery(
+      'continent',
+      filters.continents
+    );
+    if (continentQuery) {
+      queryParts.push(continentQuery);
     }
 
-    if (filters.regions && filters.regions.length > 0) {
-      const regionQueries = filters.regions.map(region => `region:"${region}"`);
-      queryParts.push(
-        regionQueries.length === 1
-          ? regionQueries[0]
-          : `(${regionQueries.join(' OR ')})`
-      );
+    const regionQuery = this.buildArrayFilterQuery('region', filters.regions);
+    if (regionQuery) {
+      queryParts.push(regionQuery);
     }
 
-    if (filters.cities && filters.cities.length > 0) {
-      const cityQueries = filters.cities.map(city => `city:"${city}"`);
-      queryParts.push(
-        cityQueries.length === 1
-          ? cityQueries[0]
-          : `(${cityQueries.join(' OR ')})`
-      );
+    const cityQuery = this.buildArrayFilterQuery('city', filters.cities);
+    if (cityQuery) {
+      queryParts.push(cityQuery);
     }
 
-    if (filters.asns && filters.asns.length > 0) {
-      const asnQueries = filters.asns.map(asn => `asn:"${asn}"`);
-      queryParts.push(
-        asnQueries.length === 1 ? asnQueries[0] : `(${asnQueries.join(' OR ')})`
-      );
+    const asnQuery = this.buildArrayFilterQuery('asn', filters.asns);
+    if (asnQuery) {
+      queryParts.push(asnQuery);
     }
 
-    if (filters.hosting_providers && filters.hosting_providers.length > 0) {
-      const providerQueries = filters.hosting_providers.map(
-        provider => `hosting_provider:"${provider}"`
-      );
-      queryParts.push(
-        providerQueries.length === 1
-          ? providerQueries[0]
-          : `(${providerQueries.join(' OR ')})`
-      );
+    const providerQuery = this.buildArrayFilterQuery(
+      'hosting_provider',
+      filters.hosting_providers
+    );
+    if (providerQuery) {
+      queryParts.push(providerQuery);
     }
 
     // Boolean filters

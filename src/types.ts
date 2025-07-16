@@ -276,6 +276,7 @@ export interface Flow {
 /**
  * Paginated network flow data response
  * @interface FlowData
+ * @deprecated Consider using StandardPaginatedResponse<Flow> for consistent pagination
  */
 export interface FlowData {
   /** Array of network flows */

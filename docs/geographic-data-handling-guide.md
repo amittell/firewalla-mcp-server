@@ -291,6 +291,59 @@ interface NormalizationConfig {
   qualityMetrics: boolean;
 }
 
+// Helper function to normalize individual geographic data items
+function normalizeGeoDataItem(
+  item: any,
+  config: NormalizationConfig
+): NormalizedGeoData {
+  const normalized: any = {
+    _normalization_info: {
+      fallbacks_used: 0,
+      validation_passed: true
+    }
+  };
+
+  // Apply field transformations
+  for (const [field, transformer] of Object.entries(config.fields)) {
+    const value = item[field];
+    
+    // Apply validation if provided
+    if (config.validation[field] && !config.validation[field](value)) {
+      normalized[field] = config.fallbacks[field];
+      normalized._normalization_info.fallbacks_used++;
+    } else {
+      normalized[field] = transformer(value);
+    }
+  }
+
+  return normalized as NormalizedGeoData;
+}
+
+// Helper function to create fallback geographic data
+function createFallbackGeoData(item: any): NormalizedGeoData {
+  return {
+    country_code: item.country_code || 'XX',
+    country_name: item.country_name || 'Unknown',
+    region: item.region || 'Unknown',
+    city: item.city || 'Unknown',
+    latitude: item.latitude || 0,
+    longitude: item.longitude || 0,
+    timezone: item.timezone || 'UTC',
+    confidence_score: 0,
+    _normalization_info: {
+      fallback: true,
+      original_data: item
+    }
+  } as NormalizedGeoData;
+}
+
+// Simple logger interface for the example
+const logger = {
+  info: (message: string, data: any) => {
+    console.log(`[INFO] ${message}`, JSON.stringify(data, null, 2));
+  }
+};
+
 function batchNormalizeGeoData(
   rawData: any[],
   config: NormalizationConfig
