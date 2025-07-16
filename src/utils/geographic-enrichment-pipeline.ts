@@ -197,7 +197,7 @@ export class GeographicEnrichmentPipeline {
       }
 
       // Secondary provider: IP range mapping
-      // Fallback always enabled in OSS version
+      // Secondary provider fallback
       {
         const secondaryResult = this.trySecondaryProvider(normalizedIP);
         if (secondaryResult) {
@@ -264,7 +264,7 @@ export class GeographicEnrichmentPipeline {
   ): Promise<Map<string, EnrichmentResult>> {
     const results = new Map<string, EnrichmentResult>();
 
-    // Always enrich in OSS version - feature flags removed
+    // Geographic enrichment enabled by default
 
     const batchStartTime = process.hrtime.bigint();
     const uniqueIPs = [...new Set(requests.map(r => r.ip))];
@@ -535,7 +535,7 @@ export async function enrichWithGeographicData<T extends Record<string, any>>(
   geoCache: GeographicCache,
   ipFields?: string[]
 ): Promise<T> {
-  // Geographic enrichment is always enabled in OSS version
+  // Geographic enrichment enabled by default
 
   const pipeline = getGlobalEnrichmentPipeline(geoCache);
   return pipeline.enrichObject(obj, ipFields);

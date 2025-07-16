@@ -15,7 +15,7 @@
  *
  * @version 1.0.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
- * @since 2024-01-01
+ * @since 2025-06-21
  */
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
