@@ -621,6 +621,15 @@ class GeographicEnrichmentPipeline {
     return cachedData;
   }
 
+  private updateGeoDataCache(geoData: Record<string, NormalizedGeoData>): void {
+    // Update cache with already-normalized geo data
+    for (const [ip, data] of Object.entries(geoData)) {
+      if (data && typeof data === 'object') {
+        // Data is already normalized, just cache it directly
+        this.cache.setGeoData(ip, data);
+      }
+    }
+  }
 
   async enrichFlowData(flows: NetworkFlow[]): Promise<EnrichedNetworkFlow[]> {
     const enriched: EnrichedNetworkFlow[] = [];
@@ -846,10 +855,12 @@ class GeographicEnrichmentPipeline {
     return null;
   }
 
-  private isCloudProvider(org: any): boolean {
+  private isCloudProvider(org: any, isp: any): boolean {
     const cloudProviders = ['amazon', 'google', 'microsoft', 'azure', 'aws'];
     const orgStr = String(org || '').toLowerCase();
-    return cloudProviders.some(provider => orgStr.includes(provider));
+    const ispStr = String(isp || '').toLowerCase();
+    const combined = `${orgStr} ${ispStr}`;
+    return cloudProviders.some(provider => combined.includes(provider));
   }
 
   private isVPNProvider(org: any, isp: any): boolean {
@@ -881,7 +892,7 @@ class GeographicEnrichmentPipeline {
       // Working with raw data
       if (this.isVPNProvider(data.org, data.isp)) risk += 0.30;
       if (this.isProxyProvider(data.org)) risk += 0.20;
-      if (this.isCloudProvider(data.org)) risk += 0.10;
+      if (this.isCloudProvider(data.org, data.isp)) risk += 0.10;
     }
     
     return Math.min(risk, 1.0); // Normalize to 0-1 scale
@@ -927,7 +938,7 @@ class GeographicEnrichmentPipeline {
         asn_name: this.normalizeASNName(data.org),
         coordinates: this.normalizeCoordinates(data.lat, data.lng),
         hosting_provider: this.classifyHostingProvider(data.org, data.isp),
-        is_cloud_provider: this.isCloudProvider(data.org),
+        is_cloud_provider: this.isCloudProvider(data.org, data.isp),
         is_vpn: this.isVPNProvider(data.org, data.isp),
         is_proxy: this.isProxyProvider(data.org),
         geographic_risk_score: this.calculateGeographicRisk(data),
@@ -1038,7 +1049,7 @@ class GeographicEnrichmentPipeline {
 interface GeoCacheConfig {
   ttl: number;              // Time to live in seconds
   maxEntries: number;       // Maximum cache entries
-  eviction: 'fifo' | 'lru'; // Eviction strategy (current implementation supports only 'fifo')
+  eviction: 'fifo';         // Eviction strategy - FIFO (First In, First Out)
   compressionEnabled: boolean;
   persistToDisk: boolean;
 }
@@ -1122,16 +1133,12 @@ class GeographicCache {
     // If still over limit, use FIFO eviction (oldest entries first)
     // Map maintains insertion order, so first entries are oldest
     // 
-    // IMPORTANT: This is a FIFO (First In, First Out) cache implementation, not true LRU.
-    // - FIFO: Evicts oldest entries based on insertion time
-    // - LRU: Would evict least recently accessed entries
+    // Note: This cache uses FIFO (First In, First Out) eviction strategy.
+    // FIFO is simpler than LRU and performs well for geographic data where
+    // access patterns are often temporal (recent IPs are more likely to be accessed again).
     // 
-    // For true LRU behavior, you would need to:
-    // 1. Move accessed entries to the end of the Map on each getGeoData() call
-    // 2. Use a dedicated LRU cache library like 'lru-cache' npm package
-    // 
-    // FIFO is simpler and performs well for geographic data where access patterns
-    // are often temporal (recent IPs are more likely to be accessed again)
+    // For LRU (Least Recently Used) behavior, consider using a dedicated 
+    // LRU cache library like 'lru-cache' npm package.
     if (this.cache.size > geoCacheConfig.maxEntries) {
       const entriesToRemove = this.cache.size - geoCacheConfig.maxEntries;
       const keysIterator = this.cache.keys();
