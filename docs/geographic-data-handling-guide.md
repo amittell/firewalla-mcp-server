@@ -54,6 +54,33 @@ interface FirewallaGeoData {
 
 #### 2. Enhanced Geographic Enrichment
 ```typescript
+/**
+ * Canonical representation returned by all normalization helpers.
+ * Keep this in sync with the EnrichedGeoData contract below.
+ */
+interface NormalizedGeoData {
+  country: string;
+  country_code: string;
+  continent: string;
+  region: string;
+  city: string;
+  asn: string | number | 'Unknown';
+  asn_name: string;
+  coordinates: { lat: number | null; lng: number | null };
+  hosting_provider: string | null;
+  is_cloud_provider: boolean;
+  is_vpn: boolean;
+  is_proxy: boolean;
+  geographic_risk_score: number;        // 0-100
+  threat_intelligence: Record<string, any>;
+  data_quality: {
+    completeness_score: number;         // 0-1
+    confidence_level: 'high' | 'medium' | 'low';
+    last_updated: string;               // ISO-8601
+    source: string;
+  };
+}
+
 interface EnrichedGeoData {
   // Normalized core fields
   country: string;           // Always present, standardized
@@ -321,15 +348,28 @@ function normalizeGeoDataItem(
 
 // Helper function to create fallback geographic data
 function createFallbackGeoData(item: any): NormalizedGeoData {
+  // Minimal but structurally correct fallback
   return {
-    country_code: item.country_code || 'XX',
-    country_name: item.country_name || 'Unknown',
-    region: item.region || 'Unknown',
-    city: item.city || 'Unknown',
-    latitude: item.latitude || 0,
-    longitude: item.longitude || 0,
-    timezone: item.timezone || 'UTC',
-    confidence_score: 0,
+    country: 'Unknown',
+    country_code: 'XX',
+    continent: 'Unknown',
+    region: 'Unknown',
+    city: 'Unknown',
+    asn: 'Unknown',
+    asn_name: 'Unknown',
+    coordinates: { lat: null, lng: null },
+    hosting_provider: null,
+    is_cloud_provider: false,
+    is_vpn: false,
+    is_proxy: false,
+    geographic_risk_score: 0,
+    threat_intelligence: {},
+    data_quality: {
+      completeness_score: 0,
+      confidence_level: 'low',
+      last_updated: new Date().toISOString(),
+      source: 'fallback'
+    },
     _normalization_info: {
       fallback: true,
       original_data: item
@@ -530,6 +570,27 @@ function calculateDataQuality(normalizedData: NormalizedGeoData): number {
 ### Enrichment Pipeline
 
 ```typescript
+// Interface definitions for type safety
+interface NetworkFlow {
+  id: string;
+  source_ip: string;
+  destination_ip: string;
+  protocol: string;
+  bytes: number;
+  timestamp: string;
+  [key: string]: any; // Allow additional properties
+}
+
+interface EnrichedNetworkFlow extends NetworkFlow {
+  source_geo: NormalizedGeoData | null;
+  destination_geo: NormalizedGeoData | null;
+  enrichment_metadata: {
+    enriched_at: string;
+    version: string;
+    fallback?: boolean;
+  };
+}
+
 class GeographicEnrichmentPipeline {
   async enrichFlowData(flows: NetworkFlow[]): Promise<EnrichedNetworkFlow[]> {
     const enriched: EnrichedNetworkFlow[] = [];
@@ -676,9 +737,12 @@ class GeographicEnrichmentPipeline {
     return quality;
   }
 
-  private calculateConfidenceLevel(data: any): number {
+  private calculateConfidenceLevel(data: any): 'high' | 'medium' | 'low' {
     // Simple confidence calculation based on data completeness
-    return this.calculateDataQuality(data);
+    const score = this.calculateDataQuality(data);
+    if (score >= 75) return 'high';
+    if (score >= 50) return 'medium';
+    return 'low';
   }
 
   private normalizeGeoDataBatch(rawGeoData: Record<string, any>): Record<string, NormalizedGeoData> {
@@ -710,6 +774,79 @@ class GeographicEnrichmentPipeline {
     }
 
     return normalized;
+  }
+
+  // Missing helper methods for enrichFlowData
+  private extractIPsFromFlow(flow: NetworkFlow): string[] {
+    const ips: string[] = [];
+    if (flow.source_ip) ips.push(flow.source_ip);
+    if (flow.destination_ip) ips.push(flow.destination_ip);
+    return [...new Set(ips)]; // Remove duplicates
+  }
+
+  private async getCachedGeoData(ips: string[]): Promise<Record<string, any>> {
+    // TODO: Implement cache lookup
+    // For now, return empty object indicating no cached data
+    return {};
+  }
+
+  private async enrichIPsWithGeoData(ips: string[]): Promise<Record<string, any>> {
+    // TODO: Implement API call to get geographic data for IPs
+    // For now, return placeholder data
+    const result: Record<string, any> = {};
+    for (const ip of ips) {
+      result[ip] = {
+        country: 'Unknown',
+        country_code: 'XX',
+        region: 'Unknown',
+        city: 'Unknown'
+      };
+    }
+    return result;
+  }
+
+  private calculateRiskScores(geoData: Record<string, NormalizedGeoData>): Record<string, NormalizedGeoData> {
+    // Apply risk scoring to each geographic entry
+    const riskEnriched: Record<string, NormalizedGeoData> = {};
+    
+    for (const [ip, data] of Object.entries(geoData)) {
+      riskEnriched[ip] = {
+        ...data,
+        geographic_risk_score: this.calculateGeographicRisk(data)
+      };
+    }
+    
+    return riskEnriched;
+  }
+
+  private applyGeoDataToFlow(flow: NetworkFlow, geoData: Record<string, NormalizedGeoData>): EnrichedNetworkFlow {
+    return {
+      ...flow,
+      source_geo: geoData[flow.source_ip] || null,
+      destination_geo: geoData[flow.destination_ip] || null,
+      enrichment_metadata: {
+        enriched_at: new Date().toISOString(),
+        version: '1.0'
+      }
+    };
+  }
+
+  private async updateGeoDataCache(geoData: Record<string, any>): Promise<void> {
+    // TODO: Implement cache update
+    // For now, this is a no-op
+  }
+
+  private createFallbackEnrichedFlow(flow: NetworkFlow): EnrichedNetworkFlow {
+    return {
+      ...flow,
+      source_geo: null,
+      destination_geo: null,
+      enrichment_metadata: {
+        enriched_at: new Date().toISOString(),
+        version: '1.0',
+        fallback: true
+      }
+    };
   }
 }
 ```
@@ -754,7 +891,7 @@ class GeographicCache {
   private missCount = 0;
   private totalRequests = 0;
 
-  async getGeoData(ip: string): Promise<NormalizedGeoData | null> {
+  getGeoData(ip: string): NormalizedGeoData | null {
     this.totalRequests++;
 
     const cached = this.cache.get(ip);
@@ -818,7 +955,7 @@ class GeographicCache {
       miss_rate: this.totalRequests ? this.missCount / this.totalRequests : 0,
       total_requests: this.totalRequests,
       cache_size: this.cache.size,
-      memory_usage: process.memoryUsage().heapUsed
+      memory_usage: typeof process !== 'undefined' ? process.memoryUsage().heapUsed : 0
     };
   }
 }
