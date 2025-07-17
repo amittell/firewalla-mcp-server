@@ -79,6 +79,17 @@ interface NormalizedGeoData {
     last_updated: string;               // ISO-8601
     source: string;
   };
+  /**
+   * Internal bookkeeping injected by the normalizer.
+   * Not transmitted over the wire.
+   */
+  _normalization_info?: {
+    fallbacks_used?: number;
+    validation_passed?: boolean;
+    fallback?: boolean;
+    original_data?: any;
+    [key: string]: any;
+  };
 }
 
 interface EnrichedGeoData {
@@ -686,10 +697,8 @@ class GeographicEnrichmentPipeline {
   }
 
   private normalizeCoordinates(lat: any, lng: any): { lat: number | null; lng: number | null } {
-    if (typeof lat === 'number' && typeof lng === 'number') {
-      return { lat, lng };
-    }
-    return { lat: null, lng: null };
+    // Use the standalone normalizeCoordinates helper function defined earlier
+    return normalizeCoordinates(lat, lng);
   }
 
   private classifyHostingProvider(org: any, isp: any): string | null {
@@ -818,10 +827,19 @@ class GeographicEnrichmentPipeline {
     return [...new Set(ips)]; // Remove duplicates
   }
 
+  private cache = new GeographicCache();
+
   private async getCachedGeoData(ips: string[]): Promise<Record<string, any>> {
-    // TODO: Implement cache lookup
-    // For now, return empty object indicating no cached data
-    return {};
+    const cachedData: Record<string, any> = {};
+    
+    for (const ip of ips) {
+      const geoData = this.cache.getGeoData(ip);
+      if (geoData) {
+        cachedData[ip] = geoData;
+      }
+    }
+    
+    return cachedData;
   }
 
   private async enrichIPsWithGeoData(ips: string[]): Promise<Record<string, any>> {
@@ -866,8 +884,16 @@ class GeographicEnrichmentPipeline {
   }
 
   private async updateGeoDataCache(geoData: Record<string, any>): Promise<void> {
-    // TODO: Implement cache update
-    // For now, this is a no-op
+    // Update cache with normalized geo data
+    for (const [ip, data] of Object.entries(geoData)) {
+      if (data && typeof data === 'object') {
+        // Ensure data is properly normalized before caching
+        const normalized = this.normalizeGeoDataBatch({ [ip]: data })[ip];
+        if (normalized) {
+          this.cache.setGeoData(ip, normalized);
+        }
+      }
+    }
   }
 
   private createFallbackEnrichedFlow(flow: NetworkFlow): EnrichedNetworkFlow {
@@ -1117,10 +1143,11 @@ function calculateFieldCompleteness(data: NormalizedGeoData[], field: keyof Norm
 }
 
 function calculateCoordinateCompleteness(data: NormalizedGeoData[]): number {
-  const validCount = data.filter(item => 
-    item.coordinates && 
-    item.coordinates.lat !== 0 && 
-    item.coordinates.lng !== 0
+  const validCount = data.filter(item =>
+    item.coordinates &&
+    item.coordinates.lat !== null &&
+    item.coordinates.lng !== null &&
+    !(item.coordinates.lat === 0 && item.coordinates.lng === 0)  // ocean placeholder
   ).length;
   return data.length > 0 ? validCount / data.length : 0;
 }
@@ -1144,11 +1171,21 @@ function validateCoordinateData(data: NormalizedGeoData[]): number {
 }
 
 function validateASNData(data: NormalizedGeoData[]): number {
-  const validCount = data.filter(item => 
-    item.asn && 
-    typeof item.asn === 'number' && 
-    item.asn > 0
-  ).length;
+  const validCount = data.filter(item => {
+    if (!item.asn || item.asn === 'Unknown') return false;
+    
+    // Handle numeric ASNs
+    if (typeof item.asn === 'number') {
+      return item.asn > 0;
+    }
+    
+    // Handle string ASNs (e.g., "AS15169")
+    if (typeof item.asn === 'string') {
+      return /^AS\d+$/i.test(item.asn);
+    }
+    
+    return false;
+  }).length;
   return data.length > 0 ? validCount / data.length : 0;
 }
 
@@ -1316,6 +1353,34 @@ class GeoDataErrorHandler {
         source: 'fallback'
       }
     };
+  }
+
+  // Stub implementations for recovery helpers
+  private async tryFallbackSources(ip: string): Promise<NormalizedGeoData | null> {
+    // TODO: Implement fallback API calls (e.g., MaxMind, IP2Location)
+    return null;
+  }
+
+  private createPrivateIPGeoData(ip: string): NormalizedGeoData {
+    // TODO: Handle private/local IP addresses (192.168.*, 10.*, 172.16-31.*, etc.)
+    return this.createMinimalGeoData(ip);
+  }
+
+  private createUnknownGeoData(ip: string, reason: string): NormalizedGeoData {
+    // TODO: Create unknown data with specific reason metadata
+    const geoData = this.createMinimalGeoData(ip);
+    (geoData as any)._error_reason = reason;
+    return geoData;
+  }
+
+  private applyBasicNormalization(ip: string, rawData: any): NormalizedGeoData {
+    // TODO: Apply minimal normalization to raw data
+    return this.createMinimalGeoData(ip);
+  }
+
+  private createFallbackGeoData(ip: string): NormalizedGeoData {
+    // TODO: Create ultimate fallback data
+    return this.createMinimalGeoData(ip);
   }
 }
 ```
