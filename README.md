@@ -5,8 +5,8 @@ A Model Context Protocol (MCP) server that enables Claude to access and analyze 
 ## Why Firewalla MCP Server?
 
 **🚀 Simple Network Security Integration**
-- **28 Tools** for network monitoring and analysis
-- **23 Direct API Endpoints** + **5 Convenience Wrappers**
+- **29 Tools** for network monitoring and analysis
+- **24 Direct API Endpoints** + **5 Convenience Wrappers**
 - **Advanced Search** with query syntax and filters
 - **Clean, Verified Architecture** with corrected API schemas
 
@@ -264,7 +264,7 @@ Network: get_flow_data, get_bandwidth_usage, get_offline_devices
 Devices: get_device_status, get_boxes, search_devices
 Rules: get_network_rules, pause_rule, resume_rule, get_target_lists
 Search: search_flows, search_alarms, search_rules, search_target_lists
-Analytics: get_simple_statistics, get_flow_insights, get_flow_trends, get_alarm_trends
+Analytics: get_simple_statistics, get_flow_insights, get_recent_flow_activity, get_alarm_trends
 Management: create_target_list, update_target_list, delete_target_list
 ```
 
