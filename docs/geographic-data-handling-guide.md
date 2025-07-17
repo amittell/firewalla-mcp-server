@@ -575,7 +575,7 @@ function calculateDataQuality(normalizedData: NormalizedGeoData): number {
     score += 10;
   }
 
-  return Math.round((score / maxScore) * 100) / 100; // Return 0.0-1.0
+  return Number((score / maxScore).toFixed(2)); // Return 0.0-1.0
 }
 ```
 
@@ -857,9 +857,7 @@ class GeographicEnrichmentPipeline {
 
   private isCloudProvider(org: any, isp: any): boolean {
     const cloudProviders = ['amazon', 'google', 'microsoft', 'azure', 'aws'];
-    const orgStr = String(org || '').toLowerCase();
-    const ispStr = String(isp || '').toLowerCase();
-    const combined = `${orgStr} ${ispStr}`;
+    const combined = `${org ?? ''} ${isp ?? ''}`.toLowerCase();
     return cloudProviders.some(provider => combined.includes(provider));
   }
 
@@ -1049,7 +1047,6 @@ class GeographicEnrichmentPipeline {
 interface GeoCacheConfig {
   ttl: number;              // Time to live in seconds
   maxEntries: number;       // Maximum cache entries
-  eviction: 'fifo';         // Eviction strategy - FIFO (First In, First Out)
   compressionEnabled: boolean;
   persistToDisk: boolean;
 }
@@ -1065,7 +1062,6 @@ interface LogEntry {
 const geoCacheConfig: GeoCacheConfig = {
   ttl: 3600,               // 1 hour cache
   maxEntries: 10000,       // 10k IP addresses
-  eviction: 'fifo',        // Current implementation uses FIFO eviction
   compressionEnabled: true,
   persistToDisk: true
 };
@@ -1100,6 +1096,9 @@ class GeographicCache {
       this.cache.delete(ip);
     }
 
+    // Clean up other expired entries to prevent stale data accumulation
+    this.removeExpiredEntries();
+
     this.missCount++;
     return null;
   }
@@ -1117,10 +1116,7 @@ class GeographicCache {
     this.pruneIfNeeded();
   }
 
-  private pruneIfNeeded(): void {
-    if (this.cache.size <= geoCacheConfig.maxEntries) return;
-
-    // Remove expired entries first
+  private removeExpiredEntries(): void {
     const now = Date.now();
     const ttlMs = geoCacheConfig.ttl * 1000;
     
@@ -1129,6 +1125,13 @@ class GeographicCache {
         this.cache.delete(ip);
       }
     }
+  }
+
+  private pruneIfNeeded(): void {
+    if (this.cache.size <= geoCacheConfig.maxEntries) return;
+
+    // Remove expired entries first
+    this.removeExpiredEntries();
 
     // If still over limit, use FIFO eviction (oldest entries first)
     // Map maintains insertion order, so first entries are oldest
@@ -1374,7 +1377,8 @@ function validateCoordinateCountryConsistency(data: NormalizedGeoData[]): number
       consistentCount++; // Unknown country, assume valid
     } else {
       const { lat, lng } = item.coordinates;
-      if (lat >= bounds.minLat && lat <= bounds.maxLat && 
+      if (lat !== null && lng !== null &&
+          lat >= bounds.minLat && lat <= bounds.maxLat && 
           lng >= bounds.minLng && lng <= bounds.maxLng) {
         consistentCount++;
       }
