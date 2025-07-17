@@ -177,6 +177,12 @@ export class FirewallaMCPServer {
             inputSchema: {
               type: 'object',
               properties: {
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of devices to return (required)',
+                  minimum: 1,
+                  maximum: 1000,
+                },
                 box: {
                   type: 'string',
                   description:
@@ -188,7 +194,7 @@ export class FirewallaMCPServer {
                     'Get devices under a specific box group (requires group ID)',
                 },
               },
-              required: [],
+              required: ['limit'],
             },
           },
           {
@@ -197,12 +203,18 @@ export class FirewallaMCPServer {
             inputSchema: {
               type: 'object',
               properties: {
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of rules to return (required)',
+                  minimum: 1,
+                  maximum: 1000,
+                },
                 query: {
                   type: 'string',
                   description: 'Search conditions for filtering rules',
                 },
               },
-              required: [],
+              required: ['limit'],
             },
           },
           {
@@ -256,8 +268,15 @@ export class FirewallaMCPServer {
             description: 'Retrieve all target lists from Firewalla',
             inputSchema: {
               type: 'object',
-              properties: {},
-              required: [],
+              properties: {
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of target lists to return (required)',
+                  minimum: 1,
+                  maximum: 1000,
+                },
+              },
+              required: ['limit'],
             },
           },
           {

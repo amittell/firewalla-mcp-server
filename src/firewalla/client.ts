@@ -1786,7 +1786,6 @@ export class FirewallaClient {
     }
   }
 
-
   @optimizeResponse('alarms')
   async deleteAlarm(alarmId: string, gid?: string): Promise<any> {
     try {

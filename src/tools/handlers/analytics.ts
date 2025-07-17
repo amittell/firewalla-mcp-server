@@ -78,6 +78,13 @@ export class GetBoxesHandler extends BaseToolHandler {
         version: (v: any) => sanitizeFieldValue(v, 'unknown').value,
         group: (v: any) => (v ? normalizeUnknownFields(v) : null),
         location: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        online: (v: any) => Boolean(v),
+        gid: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        license: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        publicIP: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        deviceCount: (v: any) => Number(v) || 0,
+        ruleCount: (v: any) => Number(v) || 0,
+        alarmCount: (v: any) => Number(v) || 0,
       });
 
       const startTime = Date.now();
