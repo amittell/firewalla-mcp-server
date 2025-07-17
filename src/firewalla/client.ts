@@ -1886,7 +1886,6 @@ export class FirewallaClient {
           });
 
           // Continue to next variation
-          continue;
         }
       }
 

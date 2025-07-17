@@ -308,7 +308,7 @@ DEBUG=firewalla:* npm run dev
 5. Add to TOOL_SCHEMAS in `src/server.ts`
 6. Add to appropriate category in `src/core/feature-flags.ts`
 
-### Tool Architecture Requirements:
+### Tool Architecture Requirements
 - All tools must be defined in TOOL_SCHEMAS with proper schema
 - Add to appropriate tool category in feature flags
 - Include proper input validation and error handling

@@ -789,7 +789,7 @@ class GeographicCache {
   async getGeoData(ip: string): Promise<NormalizedGeoData | null> {
     this.totalRequests++;
 
-    const cached = await this.cache.get(ip);
+    const cached = this.cache.get(ip);
     if (cached) {
       this.hitCount++;
       return cached;
@@ -807,10 +807,6 @@ class GeographicCache {
       cache_size: this.cache.size,
       memory_usage: process.memoryUsage().heapUsed
     };
-  }
-
-  private getMemoryUsage() {
-    return process.memoryUsage().heapUsed;
   }
 }
 ```
