@@ -717,43 +717,7 @@ class GeographicEnrichmentPipeline {
 ### Risk Score Calculation
 
 ```typescript
-function calculateGeographicRisk(geoData: any): number {
-  let riskScore = 0.0;
-
-  // Country-based risk scoring
-  const highRiskCountries = ['China', 'Russia', 'Iran', 'North Korea'];
-  const mediumRiskCountries = ['Brazil', 'India', 'Turkey', 'Pakistan'];
-
-  if (highRiskCountries.includes(geoData.country)) {
-    riskScore += 0.4;
-  } else if (mediumRiskCountries.includes(geoData.country)) {
-    riskScore += 0.2;
-  }
-
-  // ASN-based risk scoring
-  const suspiciousASNs = ['AS4134', 'AS8075', 'AS9255']; // Known problematic ASNs
-  if (suspiciousASNs.includes(geoData.asn)) {
-    riskScore += 0.3;
-  }
-
-  // Hosting provider risk
-  if (geoData.is_vpn || geoData.is_proxy) {
-    riskScore += 0.2;
-  }
-
-  // Threat intelligence integration
-  if (geoData.threat_intelligence?.known_threat_source) {
-    riskScore += 0.5;
-  }
-
-  if (geoData.threat_intelligence?.malware_hosting) {
-    riskScore += 0.4;
-  }
-
-  // Cap at 1.0
-  return Math.min(riskScore, 1.0);
-}
-```
+// Note: calculateGeographicRisk is implemented as a private method in the GeographicEnrichmentPipeline class above
 
 ## Caching and Performance
 
@@ -801,8 +765,8 @@ class GeographicCache {
 
   getPerformanceMetrics() {
     return {
-      hit_rate: this.hitCount / this.totalRequests,
-      miss_rate: this.missCount / this.totalRequests,
+      hit_rate: this.totalRequests ? this.hitCount / this.totalRequests : 0,
+      miss_rate: this.totalRequests ? this.missCount / this.totalRequests : 0,
       total_requests: this.totalRequests,
       cache_size: this.cache.size,
       memory_usage: process.memoryUsage().heapUsed
@@ -814,6 +778,20 @@ class GeographicCache {
 ### Cache Optimization Strategies
 
 ```typescript
+// Helper function stubs for cache optimization
+async function preloadIPRange(cidr: string): Promise<void> {
+  // Implementation would iterate through IP range and pre-cache
+}
+
+function extractUniqueIPs(logs: any[]): string[] {
+  // Implementation would extract and deduplicate IPs from log entries
+  return [];
+}
+
+async function enrichAndCacheIPBatch(ips: string[]): Promise<void> {
+  // Implementation would enrich multiple IPs in parallel and cache results
+}
+
 const cacheOptimization = {
   // Preload common IP ranges
   preloadCommonRanges: async () => {
