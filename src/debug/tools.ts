@@ -21,7 +21,15 @@ export interface DebugInfo {
   metrics: {
     total_metrics: number;
     counters: Record<string, number>;
-    timings: Record<string, { count: number }>;
+    timings: Record<string, {
+      count: number;
+      min: number;
+      max: number;
+      avg: number;
+      p50: number;
+      p95: number;
+      p99: number;
+    }>;
   };
   health: HealthStatus;
 }
