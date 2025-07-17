@@ -71,7 +71,7 @@ interface NormalizedGeoData {
   is_cloud_provider: boolean;
   is_vpn: boolean;
   is_proxy: boolean;
-  geographic_risk_score: number;        // 0-100
+  geographic_risk_score: number;        // 0.0-1.0
   threat_intelligence: Record<string, any>;
   data_quality: {
     completeness_score: number;         // 0-1
@@ -665,28 +665,62 @@ class GeographicEnrichmentPipeline {
     return typeof city === 'string' ? city : 'Unknown';
   }
 
-  private normalizeASN(asn: any): number | null {
-    return typeof asn === 'number' ? asn : null;
+  private parseASNNumber(asn: any): string | number | 'Unknown' {
+    if (typeof asn === 'number' && asn > 0) {
+      return asn;
+    }
+    if (typeof asn === 'string' && asn.trim() !== '') {
+      // Try to extract number from strings like "AS15169" 
+      const match = asn.match(/AS?(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1]);
+        return num > 0 ? num : 'Unknown';
+      }
+      return asn; // Return string as-is if not AS format
+    }
+    return 'Unknown';
   }
 
   private normalizeASNName(org: any): string {
     return typeof org === 'string' ? org : 'Unknown';
   }
 
-  private normalizeCoordinates(lat: any, lng: any): { lat: number; lng: number } | null {
+  private normalizeCoordinates(lat: any, lng: any): { lat: number | null; lng: number | null } {
     if (typeof lat === 'number' && typeof lng === 'number') {
       return { lat, lng };
     }
-    return null;
+    return { lat: null, lng: null };
   }
 
-  private classifyHostingProvider(org: any, isp: any): boolean {
-    const hostingKeywords = ['hosting', 'cloud', 'datacenter', 'server'];
-    const orgStr = String(org || '').toLowerCase();
-    const ispStr = String(isp || '').toLowerCase();
-    return hostingKeywords.some(keyword => 
-      orgStr.includes(keyword) || ispStr.includes(keyword)
-    );
+  private classifyHostingProvider(org: any, isp: any): string | null {
+    if (!org && !isp) return null;
+
+    const providerMappings: Record<string, string> = {
+      amazon: 'Amazon',
+      aws: 'Amazon',
+      google: 'Google',
+      microsoft: 'Microsoft',
+      azure: 'Microsoft',
+      cloudflare: 'Cloudflare',
+      alibaba: 'Alibaba Cloud',
+      tencent: 'Tencent Cloud',
+      digitalocean: 'DigitalOcean',
+      ovh: 'OVH',
+      hetzner: 'Hetzner'
+    };
+
+    const combined = `${org ?? ''} ${isp ?? ''}`.toLowerCase();
+    for (const [keyword, provider] of Object.entries(providerMappings)) {
+      if (combined.includes(keyword)) return provider;
+    }
+
+    // Check for generic hosting keywords
+    const hostingKeywords = ['hosting', 'cloud', 'datacenter', 'server', 'vps'];
+    if (hostingKeywords.some(keyword => combined.includes(keyword))) {
+      return 'Generic Hosting Provider';
+    }
+
+    return null;
   }
 
   private isCloudProvider(org: any, asn: any): boolean {
@@ -713,10 +747,10 @@ class GeographicEnrichmentPipeline {
   private calculateGeographicRisk(data: any): number {
     // Simple risk scoring - in production use proper threat intelligence
     let risk = 0;
-    if (this.isVPNProvider(data.org, data.isp)) risk += 30;
-    if (this.isProxyProvider(data.org)) risk += 20;
-    if (this.isCloudProvider(data.org, data.asn)) risk += 10;
-    return Math.min(risk, 100);
+    if (this.isVPNProvider(data.org, data.isp)) risk += 0.30;
+    if (this.isProxyProvider(data.org)) risk += 0.20;
+    if (this.isCloudProvider(data.org, data.asn)) risk += 0.10;
+    return Math.min(risk, 1.0); // Normalize to 0-1 scale
   }
 
   private enrichThreatIntelligence(ip: string, data: any): any {
@@ -734,14 +768,14 @@ class GeographicEnrichmentPipeline {
     if (data.city) quality += 25;
     if (data.org) quality += 25;
     if (data.asn) quality += 25;
-    return quality;
+    return quality / 100; // Normalize to 0-1 scale
   }
 
   private calculateConfidenceLevel(data: any): 'high' | 'medium' | 'low' {
     // Simple confidence calculation based on data completeness
     const score = this.calculateDataQuality(data);
-    if (score >= 75) return 'high';
-    if (score >= 50) return 'medium';
+    if (score >= 0.75) return 'high';
+    if (score >= 0.50) return 'medium';
     return 'low';
   }
 
@@ -755,7 +789,7 @@ class GeographicEnrichmentPipeline {
         continent: this.deriveContinent(data.country),
         region: this.normalizeRegion(data.region),
         city: this.normalizeCity(data.city),
-        asn: this.normalizeASN(data.asn),
+        asn: this.parseASNNumber(data.asn),
         asn_name: this.normalizeASNName(data.org),
         coordinates: this.normalizeCoordinates(data.lat, data.lng),
         hosting_provider: this.classifyHostingProvider(data.org, data.isp),
@@ -1078,7 +1112,7 @@ function generateQualityReport(enrichedData: NormalizedGeoData[]): DataQualityMe
 
 // Helper function stubs for generateQualityReport
 function calculateFieldCompleteness(data: NormalizedGeoData[], field: keyof NormalizedGeoData): number {
-  const validCount = data.filter(item => item[field] && item[field] !== 'unknown').length;
+  const validCount = data.filter(item => item[field] && item[field] !== 'Unknown').length;
   return data.length > 0 ? validCount / data.length : 0;
 }
 
