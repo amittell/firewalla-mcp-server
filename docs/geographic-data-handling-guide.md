@@ -856,9 +856,20 @@ class GeographicEnrichmentPipeline {
   private calculateGeographicRisk(data: any): number {
     // Simple risk scoring - in production use proper threat intelligence
     let risk = 0;
-    if (this.isVPNProvider(data.org, data.isp)) risk += 0.30;
-    if (this.isProxyProvider(data.org)) risk += 0.20;
-    if (this.isCloudProvider(data.org, data.asn)) risk += 0.10;
+    
+    // Check if we have normalized data fields or raw data fields
+    if ('is_vpn' in data && 'is_proxy' in data && 'is_cloud_provider' in data) {
+      // Working with NormalizedGeoData
+      if (data.is_vpn) risk += 0.30;
+      if (data.is_proxy) risk += 0.20;
+      if (data.is_cloud_provider) risk += 0.10;
+    } else {
+      // Working with raw data
+      if (this.isVPNProvider(data.org, data.isp)) risk += 0.30;
+      if (this.isProxyProvider(data.org)) risk += 0.20;
+      if (this.isCloudProvider(data.org, data.asn)) risk += 0.10;
+    }
+    
     return Math.min(risk, 1.0); // Normalize to 0-1 scale
   }
 
@@ -1024,7 +1035,7 @@ class GeographicEnrichmentPipeline {
 interface GeoCacheConfig {
   ttl: number;              // Time to live in seconds
   maxEntries: number;       // Maximum cache entries
-  lruEviction: boolean;     // Least Recently Used eviction
+  lruEviction: boolean;     // Least Recently Used eviction (Note: example uses FIFO for simplicity)
   compressionEnabled: boolean;
   persistToDisk: boolean;
 }
@@ -1107,6 +1118,8 @@ class GeographicCache {
 
     // If still over limit, use FIFO eviction (oldest entries first)
     // Map maintains insertion order, so first entries are oldest
+    // Note: This is a simplified implementation. For true LRU, you would need
+    // to move accessed entries to the end of the Map on each getGeoData() call
     if (this.cache.size > geoCacheConfig.maxEntries) {
       const entriesToRemove = this.cache.size - geoCacheConfig.maxEntries;
       const keysIterator = this.cache.keys();
