@@ -676,7 +676,8 @@ class GeographicEnrichmentPipeline {
 
   // Helper functions for geographic data normalization
   private normalizeCountry(country: any): string {
-    return typeof country === 'string' ? country : 'Unknown';
+    // Delegate to the global normalizeCountry function for consistency
+    return normalizeCountry(country);
   }
 
   private normalizeCountryCode(country: any): string {
@@ -879,6 +880,7 @@ class GeographicEnrichmentPipeline {
   private calculateGeographicRisk(data: any): number {
     // Simple risk scoring - in production use proper threat intelligence
     let risk = 0;
+    const maxPossibleRisk = 0.60; // Sum of all risk factors
     
     // Check if we have normalized data fields or raw data fields
     if ('is_vpn' in data && 'is_proxy' in data && 'is_cloud_provider' in data) {
@@ -893,7 +895,8 @@ class GeographicEnrichmentPipeline {
       if (this.isCloudProvider(data.org, data.isp)) risk += 0.10;
     }
     
-    return Math.min(risk, 1.0); // Normalize to 0-1 scale
+    // Scale to 0-1 range (current max is 0.6)
+    return Number((risk / maxPossibleRisk).toFixed(2));
   }
 
   private enrichThreatIntelligence(ip: string, data: any): any {
@@ -975,8 +978,8 @@ class GeographicEnrichmentPipeline {
         country_code: 'US',
         region: 'California',
         city: 'San Francisco',
-        latitude: 37.7749,
-        longitude: -122.4194,
+        lat: 37.7749,
+        lng: -122.4194,
         asn: 'AS15169',
         org: 'Google LLC',
         isp: 'Google',
@@ -1098,11 +1101,10 @@ class GeographicCache {
     }
 
     // Clean up other expired entries to prevent stale data accumulation
-    // Note: In production with large caches, consider optimizing this by:
-    // - Tracking last cleanup time and only running periodically
-    // - Using a priority queue for expiration times
-    // - Or using a dedicated LRU cache library with built-in TTL support
-    this.removeExpiredEntries();
+    // Run cleanup periodically to avoid O(n) cost on every cache miss
+    if (this.totalRequests % 100 === 0) {
+      this.removeExpiredEntries();
+    }
 
     this.missCount++;
     return null;
