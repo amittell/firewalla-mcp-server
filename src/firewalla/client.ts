@@ -15,7 +15,7 @@
  *
  * @version 1.0.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
- * @since 2025-06-21
+ * @since 2024-06-21
  */
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
@@ -4784,70 +4784,57 @@ export class FirewallaClient {
     exclude_cloud?: boolean;
     exclude_vpn?: boolean;
     min_risk_score?: number;
-    // Alarm-specific filters
     high_risk_countries?: boolean;
     exclude_known_providers?: boolean;
     threat_analysis?: boolean;
   }): string {
     const queryParts: string[] = [];
 
+    // Define filter configurations in a data-driven approach
+    const filterConfigs = {
+      // Array filters
+      arrayFilters: [
+        { field: 'country', values: filters.countries },
+        { field: 'continent', values: filters.continents },
+        { field: 'region', values: filters.regions },
+        { field: 'city', values: filters.cities },
+        { field: 'asn', values: filters.asns },
+        { field: 'hosting_provider', values: filters.hosting_providers },
+      ],
+      // Boolean filters
+      booleanFilters: [
+        {
+          condition: filters.exclude_cloud === true,
+          query: 'NOT is_cloud_provider:true',
+        },
+        { condition: filters.exclude_vpn === true, query: 'NOT is_vpn:true' },
+        {
+          condition: filters.high_risk_countries === true,
+          query: 'geographic_risk_score:>=7',
+        },
+        {
+          condition: filters.exclude_known_providers === true,
+          query: 'NOT is_cloud_provider:true AND NOT hosting_provider:*',
+        },
+      ],
+    };
+
     // Process array filters
-    this.addArrayFiltersToQuery(filters, queryParts);
-
-    // Process boolean filters
-    this.addBooleanFiltersToQuery(filters, queryParts);
-
-    // Process numeric and alarm-specific filters
-    this.addNumericAndAlarmFiltersToQuery(filters, queryParts);
-
-    return queryParts.join(' AND ');
-  }
-
-  /**
-   * Add array-based geographic filters to query parts
-   * @private
-   */
-  private addArrayFiltersToQuery(filters: any, queryParts: string[]): void {
-    const arrayFields = [
-      { field: 'country', values: filters.countries },
-      { field: 'continent', values: filters.continents },
-      { field: 'region', values: filters.regions },
-      { field: 'city', values: filters.cities },
-      { field: 'asn', values: filters.asns },
-      { field: 'hosting_provider', values: filters.hosting_providers },
-    ];
-
-    arrayFields.forEach(({ field, values }) => {
+    filterConfigs.arrayFilters.forEach(({ field, values }) => {
       const query = this.buildArrayFilterQuery(field, values);
       if (query) {
         queryParts.push(query);
       }
     });
-  }
 
-  /**
-   * Add boolean geographic filters to query parts
-   * @private
-   */
-  private addBooleanFiltersToQuery(filters: any, queryParts: string[]): void {
-    if (filters.exclude_cloud === true) {
-      queryParts.push('NOT is_cloud_provider:true');
-    }
+    // Process boolean filters
+    filterConfigs.booleanFilters.forEach(({ condition, query }) => {
+      if (condition) {
+        queryParts.push(query);
+      }
+    });
 
-    if (filters.exclude_vpn === true) {
-      queryParts.push('NOT is_vpn:true');
-    }
-  }
-
-  /**
-   * Add numeric and alarm-specific filters to query parts
-   * @private
-   */
-  private addNumericAndAlarmFiltersToQuery(
-    filters: any,
-    queryParts: string[]
-  ): void {
-    // Numeric filters
+    // Process numeric filters
     if (
       filters.min_risk_score !== undefined &&
       typeof filters.min_risk_score === 'number' &&
@@ -4856,17 +4843,9 @@ export class FirewallaClient {
       queryParts.push(`geographic_risk_score:>=${filters.min_risk_score}`);
     }
 
-    // Alarm-specific boolean filters
-    if (filters.high_risk_countries === true) {
-      queryParts.push('geographic_risk_score:>=7');
-    }
+    // Note: threat_analysis is handled by the API server, not as a query filter
 
-    if (filters.exclude_known_providers === true) {
-      queryParts.push('NOT is_cloud_provider:true AND NOT hosting_provider:*');
-    }
-
-    // Note: threat_analysis is typically handled by the API server,
-    // not as a query filter, so we don't add it to the query string
+    return queryParts.join(' AND ');
   }
 
   /**
@@ -4904,6 +4883,46 @@ export class FirewallaClient {
   }
 
   /**
+   * Validate that an endpoint is documented in the Firewalla API reference
+   * @private
+   */
+  private isEndpointDocumented(method: string, endpoint: string): boolean {
+    // Define all documented endpoints from /docs/firewalla-api-reference.md
+    const documentedEndpoints: Record<string, string[]> = {
+      GET: [
+        '/v2/alarms',
+        '/v2/alarms/{gid}/{aid}',
+        '/v2/boxes',
+        '/v2/devices',
+        '/v2/flows',
+        '/v2/rules',
+        '/v2/stats/{type}',
+        '/v2/target-lists',
+        '/v2/target-lists/{id}',
+        '/v2/trends/{type}',
+      ],
+      POST: [
+        '/v2/rules',
+        '/v2/rules/{id}/pause',
+        '/v2/rules/{id}/resume',
+        '/v2/target-lists',
+      ],
+      PATCH: ['/v2/target-lists/{id}'],
+      DELETE: ['/v2/alarms/{gid}/{aid}', '/v2/target-lists/{id}'],
+    };
+
+    const endpoints = documentedEndpoints[method.toUpperCase()] || [];
+
+    // Check exact matches and patterns with parameters
+    return endpoints.some(pattern => {
+      // Replace {param} with regex pattern to match actual values
+      const regexPattern = pattern.replace(/\{[^}]+\}/g, '[^/]+');
+      const regex = new RegExp(`^${regexPattern}$`);
+      return regex.test(endpoint);
+    });
+  }
+
+  /**
    * Public method for making raw API calls
    * Used by management tools for bulk operations
    */
@@ -4912,6 +4931,13 @@ export class FirewallaClient {
     endpoint: string,
     data?: any
   ): Promise<any> {
+    // Verify endpoint is documented
+    if (!this.isEndpointDocumented(method.toUpperCase(), endpoint)) {
+      throw new Error(
+        `Undocumented endpoint: ${method.toUpperCase()} ${endpoint}. ` +
+          `Refer to /docs/firewalla-api-reference.md for valid endpoints.`
+      );
+    }
     try {
       let response;
       switch (method) {

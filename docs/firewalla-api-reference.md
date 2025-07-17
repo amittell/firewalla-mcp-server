@@ -258,6 +258,82 @@ Retrieve list of firewall rules.
 }
 ```
 
+#### Create Rule
+Create a new firewall rule.
+
+**Endpoint**: `POST https://{msp_domain}/v2/rules`
+
+**Request Body**:
+```json
+{
+  "action": "block",
+  "direction": "bidirection",
+  "target": {
+    "type": "domain",
+    "value": "example.com"
+  },
+  "scope": {
+    "type": "device",
+    "value": "mac:AA:BB:CC:DD:EE:FF"
+  },
+  "protocol": "tcp",
+  "notes": "Block social media",
+  "box": "box_gid_here"
+}
+```
+
+**Parameters**:
+- `action` (string, required): Rule action - "block", "allow", or "timelimit"
+- `direction` (string, optional): Traffic direction - "bidirection", "inbound", or "outbound" (default: "bidirection")
+- `target` (object, required): Target specification
+  - `type` (string, required): Target type - "domain", "ip", "device", or "network"
+  - `value` (string, required): Target value (e.g., domain name, IP address, MAC address)
+- `scope` (object, optional): Scope specification
+  - `type` (string, required): Scope type - "device", "network", or "global"
+  - `value` (string, required): Scope value (e.g., MAC address, network ID)
+- `protocol` (string, optional): Protocol - "tcp", "udp", or "all" (default: "all")
+- `notes` (string, optional): Rule description or notes
+- `box` (string, required): Box GID for context
+
+**Response (201 Created)**:
+```json
+{
+  "id": "rule_id_here",
+  "gid": "00000000-0000-0000-0000-000000000000",
+  "action": "block",
+  "direction": "bidirection",
+  "target": {
+    "type": "domain",
+    "value": "example.com"
+  },
+  "scope": {
+    "type": "device",
+    "value": "mac:AA:BB:CC:DD:EE:FF"
+  },
+  "status": "active",
+  "protocol": "tcp",
+  "notes": "Block social media",
+  "ts": 1641024000,
+  "updateTs": 1641024000
+}
+```
+
+**Example Request**:
+```bash
+curl -X POST "https://yourdomain.firewalla.net/v2/rules" \
+  -H "Authorization: Token <YOUR_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "block",
+    "target": {
+      "type": "domain",
+      "value": "facebook.com"
+    },
+    "notes": "Block social media",
+    "box": "box_gid_here"
+  }'
+```
+
 #### Pause Rule
 Temporarily disable an active firewall rule for a specified duration.
 
@@ -647,6 +723,17 @@ interface Rule {
 interface Target {
   type: string;                  // Target type
   value: string;                 // Target value
+}
+
+interface CreateRuleRequest {
+  action: "allow" | "block" | "timelimit"; // Rule action (required)
+  direction?: "bidirection" | "inbound" | "outbound"; // Traffic direction (default: "bidirection")
+  target: Target;                // Rule target details (required)
+  scope?: Scope;                 // Local rule application scope (optional)
+  protocol?: "tcp" | "udp" | "all"; // Traffic protocol (default: "all")
+  notes?: string;                // Descriptive text (optional)
+  box: string;                   // Box GID for context (required)
+  schedule?: Schedule;           // Rule activation schedule (optional)
 }
 
 interface Scope {
