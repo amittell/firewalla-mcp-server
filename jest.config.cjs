@@ -16,9 +16,6 @@ module.exports = {
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1'
   },
-  moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1'
-  },
   collectCoverage: true,
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
@@ -33,5 +30,7 @@ module.exports = {
   collectCoverageFrom: ['src/**/*.ts'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup/jest-setup.ts'],
   testTimeout: 10000,
+  // forceExit is needed because the MCP server creates persistent connections
+  // and event listeners that prevent Jest from exiting cleanly
   forceExit: true
 };
