@@ -4791,47 +4791,45 @@ export class FirewallaClient {
   }): string {
     const queryParts: string[] = [];
 
-    // Build OR queries for array filters using helper method
-    const countryQuery = this.buildArrayFilterQuery(
-      'country',
-      filters.countries
-    );
-    if (countryQuery) {
-      queryParts.push(countryQuery);
-    }
+    // Process array filters
+    this.addArrayFiltersToQuery(filters, queryParts);
 
-    const continentQuery = this.buildArrayFilterQuery(
-      'continent',
-      filters.continents
-    );
-    if (continentQuery) {
-      queryParts.push(continentQuery);
-    }
+    // Process boolean filters
+    this.addBooleanFiltersToQuery(filters, queryParts);
 
-    const regionQuery = this.buildArrayFilterQuery('region', filters.regions);
-    if (regionQuery) {
-      queryParts.push(regionQuery);
-    }
+    // Process numeric and alarm-specific filters
+    this.addNumericAndAlarmFiltersToQuery(filters, queryParts);
 
-    const cityQuery = this.buildArrayFilterQuery('city', filters.cities);
-    if (cityQuery) {
-      queryParts.push(cityQuery);
-    }
+    return queryParts.join(' AND ');
+  }
 
-    const asnQuery = this.buildArrayFilterQuery('asn', filters.asns);
-    if (asnQuery) {
-      queryParts.push(asnQuery);
-    }
+  /**
+   * Add array-based geographic filters to query parts
+   * @private
+   */
+  private addArrayFiltersToQuery(filters: any, queryParts: string[]): void {
+    const arrayFields = [
+      { field: 'country', values: filters.countries },
+      { field: 'continent', values: filters.continents },
+      { field: 'region', values: filters.regions },
+      { field: 'city', values: filters.cities },
+      { field: 'asn', values: filters.asns },
+      { field: 'hosting_provider', values: filters.hosting_providers },
+    ];
 
-    const providerQuery = this.buildArrayFilterQuery(
-      'hosting_provider',
-      filters.hosting_providers
-    );
-    if (providerQuery) {
-      queryParts.push(providerQuery);
-    }
+    arrayFields.forEach(({ field, values }) => {
+      const query = this.buildArrayFilterQuery(field, values);
+      if (query) {
+        queryParts.push(query);
+      }
+    });
+  }
 
-    // Boolean filters
+  /**
+   * Add boolean geographic filters to query parts
+   * @private
+   */
+  private addBooleanFiltersToQuery(filters: any, queryParts: string[]): void {
     if (filters.exclude_cloud === true) {
       queryParts.push('NOT is_cloud_provider:true');
     }
@@ -4839,7 +4837,16 @@ export class FirewallaClient {
     if (filters.exclude_vpn === true) {
       queryParts.push('NOT is_vpn:true');
     }
+  }
 
+  /**
+   * Add numeric and alarm-specific filters to query parts
+   * @private
+   */
+  private addNumericAndAlarmFiltersToQuery(
+    filters: any,
+    queryParts: string[]
+  ): void {
     // Numeric filters
     if (
       filters.min_risk_score !== undefined &&
@@ -4860,8 +4867,6 @@ export class FirewallaClient {
 
     // Note: threat_analysis is typically handled by the API server,
     // not as a query filter, so we don't add it to the query string
-
-    return queryParts.join(' AND ');
   }
 
   /**

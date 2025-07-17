@@ -318,8 +318,8 @@ DEBUG=firewalla:* npm run dev
 ## Performance Considerations
 
 ### Caching System
-- Context-specific TTLs: Alarms (15s), Devices (300s), Rules (30s), Geographic Data (1h)
-- LRU eviction for geographic data cache
+- API Responses: 300s TTL (configurable via CACHE_TTL environment variable)
+- Geographic Data: 1h TTL with LRU eviction
 - Cache key collision prevention with enhanced hashing
 - Automatic cleanup of expired entries
 

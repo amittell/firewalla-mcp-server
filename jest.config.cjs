@@ -30,7 +30,9 @@ module.exports = {
   collectCoverageFrom: ['src/**/*.ts'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup/jest-setup.ts'],
   testTimeout: 10000,
-  // forceExit is needed because the MCP server creates persistent connections
-  // and event listeners that prevent Jest from exiting cleanly
+  // TODO: Investigate and fix test cleanup issues. The MCP server creates
+  // persistent connections and event listeners that prevent Jest from exiting
+  // cleanly. This should be addressed by properly closing all connections
+  // and clearing all timers in afterAll/afterEach hooks.
   forceExit: true
 };
