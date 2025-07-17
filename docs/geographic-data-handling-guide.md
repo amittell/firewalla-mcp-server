@@ -392,6 +392,9 @@ function createFallbackGeoData(item: any): NormalizedGeoData {
 const logger = {
   info: (message: string, data: any) => {
     console.log(`[INFO] ${message}`, JSON.stringify(data, null, 2));
+  },
+  warn: (message: string, data: any) => {
+    console.warn(`[WARN] ${message}`, JSON.stringify(data, null, 2));
   }
 };
 
@@ -612,7 +615,7 @@ class GeographicEnrichmentPipeline {
         const ipsToEnrich = this.extractIPsFromFlow(flow);
 
         // 2. Check cache for existing data
-        const cachedData = await this.getCachedGeoData(ipsToEnrich);
+        const cachedData = this.getCachedGeoData(ipsToEnrich);
 
         // 3. Enrich missing IPs
         const missingIPs = ipsToEnrich.filter(ip => !cachedData[ip]);
@@ -633,7 +636,7 @@ class GeographicEnrichmentPipeline {
         enriched.push(enrichedFlow);
 
         // 8. Update cache with new data
-        await this.updateGeoDataCache(newGeoData);
+        this.updateGeoDataCache(newGeoData);
 
       } catch (error) {
         logger.warn('Geographic enrichment failed for flow', {
@@ -655,7 +658,104 @@ class GeographicEnrichmentPipeline {
   }
 
   private normalizeCountryCode(country: any): string {
-    return typeof country === 'string' ? country.substring(0, 2).toUpperCase() : 'XX';
+    if (typeof country !== 'string') return 'XX';
+    
+    const normalized = country.trim().toLowerCase();
+    
+    // Common country name to ISO-3166-1 alpha-2 code mappings
+    const countryToCode: Record<string, string> = {
+      'united states': 'US',
+      'united states of america': 'US',
+      'usa': 'US',
+      'united kingdom': 'GB',
+      'uk': 'GB',
+      'great britain': 'GB',
+      'china': 'CN',
+      'people\'s republic of china': 'CN',
+      'prc': 'CN',
+      'russia': 'RU',
+      'russian federation': 'RU',
+      'germany': 'DE',
+      'france': 'FR',
+      'japan': 'JP',
+      'canada': 'CA',
+      'australia': 'AU',
+      'brazil': 'BR',
+      'india': 'IN',
+      'south korea': 'KR',
+      'mexico': 'MX',
+      'spain': 'ES',
+      'italy': 'IT',
+      'netherlands': 'NL',
+      'singapore': 'SG',
+      'switzerland': 'CH',
+      'sweden': 'SE',
+      'norway': 'NO',
+      'denmark': 'DK',
+      'finland': 'FI',
+      'poland': 'PL',
+      'ukraine': 'UA',
+      'belgium': 'BE',
+      'austria': 'AT',
+      'ireland': 'IE',
+      'new zealand': 'NZ',
+      'israel': 'IL',
+      'united arab emirates': 'AE',
+      'uae': 'AE',
+      'saudi arabia': 'SA',
+      'turkey': 'TR',
+      'south africa': 'ZA',
+      'argentina': 'AR',
+      'chile': 'CL',
+      'colombia': 'CO',
+      'egypt': 'EG',
+      'greece': 'GR',
+      'portugal': 'PT',
+      'czech republic': 'CZ',
+      'romania': 'RO',
+      'hungary': 'HU',
+      'vietnam': 'VN',
+      'thailand': 'TH',
+      'malaysia': 'MY',
+      'indonesia': 'ID',
+      'philippines': 'PH',
+      'pakistan': 'PK',
+      'bangladesh': 'BD',
+      'nigeria': 'NG',
+      'kenya': 'KE',
+      'ethiopia': 'ET',
+      'morocco': 'MA',
+      'peru': 'PE',
+      'venezuela': 'VE',
+      'ecuador': 'EC',
+      'taiwan': 'TW',
+      'hong kong': 'HK',
+      'luxembourg': 'LU',
+      'bulgaria': 'BG',
+      'croatia': 'HR',
+      'serbia': 'RS',
+      'slovakia': 'SK',
+      'slovenia': 'SI',
+      'lithuania': 'LT',
+      'latvia': 'LV',
+      'estonia': 'EE',
+      'iceland': 'IS',
+      'malta': 'MT',
+      'cyprus': 'CY'
+    };
+    
+    // If we have a mapping, use it
+    if (countryToCode[normalized]) {
+      return countryToCode[normalized];
+    }
+    
+    // Check if it's already a 2-letter code
+    if (normalized.length === 2 && /^[a-z]{2}$/.test(normalized)) {
+      return normalized.toUpperCase();
+    }
+    
+    // Default to unknown
+    return 'XX';
   }
 
   private deriveContinent(country: any): string {
@@ -829,7 +929,7 @@ class GeographicEnrichmentPipeline {
 
   private cache = new GeographicCache();
 
-  private async getCachedGeoData(ips: string[]): Promise<Record<string, any>> {
+  private getCachedGeoData(ips: string[]): Record<string, any> {
     const cachedData: Record<string, any> = {};
     
     for (const ip of ips) {
@@ -883,7 +983,7 @@ class GeographicEnrichmentPipeline {
     };
   }
 
-  private async updateGeoDataCache(geoData: Record<string, any>): Promise<void> {
+  private updateGeoDataCache(geoData: Record<string, any>): void {
     // Update cache with normalized geo data
     for (const [ip, data] of Object.entries(geoData)) {
       if (data && typeof data === 'object') {
@@ -927,6 +1027,14 @@ interface GeoCacheConfig {
   lruEviction: boolean;     // Least Recently Used eviction
   compressionEnabled: boolean;
   persistToDisk: boolean;
+}
+
+// Type definition for log entries used in cache warming
+interface LogEntry {
+  timestamp: string;
+  source_ip?: string;
+  destination_ip?: string;
+  [key: string]: any;  // Allow additional fields
 }
 
 const geoCacheConfig: GeoCacheConfig = {
@@ -997,14 +1105,17 @@ class GeographicCache {
       }
     }
 
-    // If still over limit, use LRU eviction (oldest entries first)
+    // If still over limit, use FIFO eviction (oldest entries first)
+    // Map maintains insertion order, so first entries are oldest
     if (this.cache.size > geoCacheConfig.maxEntries) {
-      const sortedEntries = Array.from(this.cache.entries())
-        .sort((a, b) => a[1]._cachedAt - b[1]._cachedAt);
-      
       const entriesToRemove = this.cache.size - geoCacheConfig.maxEntries;
+      const keysIterator = this.cache.keys();
+      
       for (let i = 0; i < entriesToRemove; i++) {
-        this.cache.delete(sortedEntries[i][0]);
+        const oldestKey = keysIterator.next().value;
+        if (oldestKey !== undefined) {
+          this.cache.delete(oldestKey);
+        }
       }
     }
   }
