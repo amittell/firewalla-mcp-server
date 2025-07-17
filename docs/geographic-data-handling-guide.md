@@ -1051,8 +1051,9 @@ class GeographicEnrichmentPipeline {
 interface GeoCacheConfig {
   ttl: number;              // Time to live in seconds
   maxEntries: number;       // Maximum cache entries
-  compressionEnabled: boolean;
-  persistToDisk: boolean;
+  // Note: The following flags are placeholders for future enhancements
+  compressionEnabled: boolean;  // Not implemented in sample cache
+  persistToDisk: boolean;       // Not implemented in sample cache
 }
 
 // Type definition for log entries used in cache warming
@@ -1462,11 +1463,27 @@ const qualityImprovementStrategies = {
     },
 
     countryRegionConsistency: (country: string, region: string) => {
+      // TODO: Implement getValidRegionsForCountry with actual country-region mappings
+      // For now, using the helper function defined below
       const validRegions = getValidRegionsForCountry(country);
       return validRegions.includes(region);
     }
   }
 };
+
+// Helper function stub for country-region validation
+function getValidRegionsForCountry(country: string): string[] {
+  // TODO: Implement with comprehensive country-region mappings
+  // This is a simplified example with a few countries
+  const regionMappings: Record<string, string[]> = {
+    'US': ['California', 'Texas', 'New York', 'Florida', 'Illinois'],
+    'GB': ['England', 'Scotland', 'Wales', 'Northern Ireland'],
+    'CA': ['Ontario', 'Quebec', 'British Columbia', 'Alberta'],
+    'AU': ['New South Wales', 'Victoria', 'Queensland', 'Western Australia']
+  };
+  
+  return regionMappings[country] || [];
+}
 ```
 
 ## Error Handling
