@@ -15,7 +15,7 @@
  *
  * @version 1.0.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
- * @since 2024-06-21
+ * @since 2025-06-21
  */
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
@@ -1786,20 +1786,6 @@ export class FirewallaClient {
     }
   }
 
-  /**
-   * Create a new firewall rule
-   * @param ruleData - Rule configuration object
-   * @returns Promise resolving to created rule
-   */
-  async createRule(ruleData: any): Promise<any> {
-    try {
-      const response = await this.api.post('/v2/rules', ruleData);
-      return response.data;
-    } catch (error: any) {
-      logger.error('Failed to create rule:', error);
-      throw error;
-    }
-  }
 
   @optimizeResponse('alarms')
   async deleteAlarm(alarmId: string, gid?: string): Promise<any> {
@@ -4883,46 +4869,6 @@ export class FirewallaClient {
   }
 
   /**
-   * Validate that an endpoint is documented in the Firewalla API reference
-   * @private
-   */
-  private isEndpointDocumented(method: string, endpoint: string): boolean {
-    // Define all documented endpoints from /docs/firewalla-api-reference.md
-    const documentedEndpoints: Record<string, string[]> = {
-      GET: [
-        '/v2/alarms',
-        '/v2/alarms/{gid}/{aid}',
-        '/v2/boxes',
-        '/v2/devices',
-        '/v2/flows',
-        '/v2/rules',
-        '/v2/stats/{type}',
-        '/v2/target-lists',
-        '/v2/target-lists/{id}',
-        '/v2/trends/{type}',
-      ],
-      POST: [
-        '/v2/rules',
-        '/v2/rules/{id}/pause',
-        '/v2/rules/{id}/resume',
-        '/v2/target-lists',
-      ],
-      PATCH: ['/v2/target-lists/{id}'],
-      DELETE: ['/v2/alarms/{gid}/{aid}', '/v2/target-lists/{id}'],
-    };
-
-    const endpoints = documentedEndpoints[method.toUpperCase()] || [];
-
-    // Check exact matches and patterns with parameters
-    return endpoints.some(pattern => {
-      // Replace {param} with regex pattern to match actual values
-      const regexPattern = pattern.replace(/\{[^}]+\}/g, '[^/]+');
-      const regex = new RegExp(`^${regexPattern}$`);
-      return regex.test(endpoint);
-    });
-  }
-
-  /**
    * Public method for making raw API calls
    * Used by management tools for bulk operations
    */
@@ -4931,13 +4877,6 @@ export class FirewallaClient {
     endpoint: string,
     data?: any
   ): Promise<any> {
-    // Verify endpoint is documented
-    if (!this.isEndpointDocumented(method.toUpperCase(), endpoint)) {
-      throw new Error(
-        `Undocumented endpoint: ${method.toUpperCase()} ${endpoint}. ` +
-          `Refer to /docs/firewalla-api-reference.md for valid endpoints.`
-      );
-    }
     try {
       let response;
       switch (method) {
