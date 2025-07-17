@@ -437,7 +437,7 @@ function batchNormalizeGeoData(
     logger.info('Geographic data normalization completed', {
       stats: qualityStats,
       processing_time: processingTime,
-      success_rate: qualityStats.normalized / qualityStats.total
+      success_rate: qualityStats.total > 0 ? qualityStats.normalized / qualityStats.total : 0
     });
   }
 
@@ -905,7 +905,8 @@ class GeographicEnrichmentPipeline {
     };
   }
 
-  private calculateDataQuality(data: any): number {
+  // Simple quality check for raw API data before normalization
+  private calculateRawDataCompleteness(data: any): number {
     let quality = 0;
     if (data.country) quality += 25;
     if (data.city) quality += 25;
@@ -916,7 +917,7 @@ class GeographicEnrichmentPipeline {
 
   private calculateConfidenceLevel(data: any): 'high' | 'medium' | 'low' {
     // Simple confidence calculation based on data completeness
-    const score = this.calculateDataQuality(data);
+    const score = this.calculateRawDataCompleteness(data);
     if (score >= 0.75) return 'high';
     if (score >= 0.50) return 'medium';
     return 'low';
@@ -942,7 +943,7 @@ class GeographicEnrichmentPipeline {
         geographic_risk_score: this.calculateGeographicRisk(data),
         threat_intelligence: this.enrichThreatIntelligence(ip, data),
         data_quality: {
-          completeness_score: this.calculateDataQuality(data),
+          completeness_score: this.calculateRawDataCompleteness(data),
           confidence_level: this.calculateConfidenceLevel(data),
           last_updated: new Date().toISOString(),
           source: 'firewalla_api'
@@ -1097,6 +1098,10 @@ class GeographicCache {
     }
 
     // Clean up other expired entries to prevent stale data accumulation
+    // Note: In production with large caches, consider optimizing this by:
+    // - Tracking last cleanup time and only running periodically
+    // - Using a priority queue for expiration times
+    // - Or using a dedicated LRU cache library with built-in TTL support
     this.removeExpiredEntries();
 
     this.missCount++;
@@ -1310,6 +1315,8 @@ function validateCountryData(data: NormalizedGeoData[]): number {
 function validateCoordinateData(data: NormalizedGeoData[]): number {
   const validCount = data.filter(item => 
     item.coordinates &&
+    item.coordinates.lat !== null &&
+    item.coordinates.lng !== null &&
     Math.abs(item.coordinates.lat) <= 90 &&
     Math.abs(item.coordinates.lng) <= 180
   ).length;
