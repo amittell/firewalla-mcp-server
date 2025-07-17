@@ -627,15 +627,12 @@ class GeographicEnrichmentPipeline {
         // 5. Combine cached and newly normalized data
         const allGeoData = { ...cachedData, ...normalizedNewData };
 
-        // 6. Calculate risk scores
-        const riskEnrichedData = this.calculateRiskScores(allGeoData);
-
-        // 7. Apply to flow
-        const enrichedFlow = this.applyGeoDataToFlow(flow, riskEnrichedData);
+        // 6. Apply to flow (risk scores already calculated in normalization)
+        const enrichedFlow = this.applyGeoDataToFlow(flow, allGeoData);
 
         enriched.push(enrichedFlow);
 
-        // 8. Update cache with normalized new data
+        // 7. Update cache with normalized new data
         this.updateGeoDataCache(normalizedNewData);
 
       } catch (error) {
@@ -941,8 +938,8 @@ class GeographicEnrichmentPipeline {
 
   private cache = new GeographicCache();
 
-  private getCachedGeoData(ips: string[]): Record<string, any> {
-    const cachedData: Record<string, any> = {};
+  private getCachedGeoData(ips: string[]): Record<string, NormalizedGeoData> {
+    const cachedData: Record<string, NormalizedGeoData> = {};
     
     for (const ip of ips) {
       const geoData = this.cache.getGeoData(ip);
@@ -969,6 +966,8 @@ class GeographicEnrichmentPipeline {
     return result;
   }
 
+  // NOTE: This method is now redundant as risk scores are calculated during normalization
+  // Kept for backward compatibility or if separate risk recalculation is needed
   private calculateRiskScores(geoData: Record<string, NormalizedGeoData>): Record<string, NormalizedGeoData> {
     // Apply risk scoring to each geographic entry
     const riskEnriched: Record<string, NormalizedGeoData> = {};
@@ -1024,6 +1023,7 @@ class GeographicEnrichmentPipeline {
 
 ```typescript
 // Note: calculateGeographicRisk is implemented as a private method in the GeographicEnrichmentPipeline class above
+```
 
 ## Caching and Performance
 
@@ -1033,7 +1033,7 @@ class GeographicEnrichmentPipeline {
 interface GeoCacheConfig {
   ttl: number;              // Time to live in seconds
   maxEntries: number;       // Maximum cache entries
-  lruEviction: boolean;     // If true, use LRU eviction; if false, use FIFO eviction
+  eviction: 'fifo' | 'lru'; // Eviction strategy (current implementation supports only 'fifo')
   compressionEnabled: boolean;
   persistToDisk: boolean;
 }
@@ -1049,7 +1049,7 @@ interface LogEntry {
 const geoCacheConfig: GeoCacheConfig = {
   ttl: 3600,               // 1 hour cache
   maxEntries: 10000,       // 10k IP addresses
-  lruEviction: true,       // Note: Current implementation uses FIFO for simplicity
+  eviction: 'fifo',        // Current implementation uses FIFO eviction
   compressionEnabled: true,
   persistToDisk: true
 };
