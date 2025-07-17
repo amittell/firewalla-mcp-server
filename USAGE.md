@@ -99,6 +99,75 @@ The server supports powerful search queries:
 4. Rule effectiveness"
 ```
 
+## Flow Insights
+
+The `get_flow_insights` tool provides category-based analysis of your network traffic, perfect for answering real-world questions about network usage.
+
+### Common Use Cases
+
+#### Parental Control & Content Monitoring
+```
+"Has anyone accessed porn sites in the last 24 hours?"
+"What social media platforms were used today?"
+"Show me gaming traffic from the past week"
+```
+
+#### Bandwidth Analysis by Category
+```
+"What type of content is using the most bandwidth?"
+"Show me video streaming usage for the past month"
+"Which devices are consuming the most social media bandwidth?"
+```
+
+#### Security & Privacy
+```
+"Are there any blocked porn or gambling sites?"
+"Show me VPN traffic analysis"
+"What ad networks are being blocked?"
+```
+
+### Example Queries
+
+**Basic Category Analysis:**
+```
+"Analyze my network traffic by category for the last 24 hours"
+```
+This returns:
+- Top content categories (social, video, games, etc.)
+- Bandwidth usage per category
+- Top domains in each category
+- Devices consuming the most bandwidth
+
+**Specific Category Investigation:**
+```
+"Show me all social media usage in the last 7 days"
+"Find any porn site access attempts this week"
+"What educational sites were visited today?"
+```
+
+**Blocked Traffic Analysis:**
+```
+"Show me blocked traffic by category with include_blocked=true"
+"What porn sites were blocked in the last 24 hours?"
+"Which ad networks are being blocked most?"
+```
+
+### Understanding Categories
+
+Firewalla categorizes traffic into these types:
+- **porn**: Adult content sites
+- **social**: Facebook, Twitter, Instagram, etc.
+- **video**: YouTube, Netflix, streaming services
+- **games**: Gaming platforms and game traffic
+- **shopping**: E-commerce sites
+- **ad**: Advertising networks
+- **edu**: Educational websites
+- **vpn**: VPN services
+- **p2p**: Peer-to-peer traffic
+- **gamble**: Gambling sites
+- **intel**: Threat intelligence
+- **private**: Private/internal traffic
+
 ## Troubleshooting
 
 ### No Results

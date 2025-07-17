@@ -40,6 +40,61 @@ import type { ScoringCorrelationParams } from '../../validation/field-mapper.js'
 // ResponseStandardizer import removed - using direct response creation
 import { validateCountryCodes } from '../../utils/geographic.js';
 
+/**
+ * Derive alarm severity based on the alarm type.
+ * This mirrors the logic in security.ts to ensure consistency.
+ * @param alarmType - The type field from the alarm
+ * @returns The derived severity level (critical, high, medium, low) or 'medium' as default
+ */
+function deriveAlarmSeverityFromType(alarmType: any): string {
+  if (!alarmType || typeof alarmType !== 'string') {
+    return 'medium'; // Default severity for unknown types
+  }
+
+  // Normalize alarm type to uppercase and remove special characters
+  const normalizedType = alarmType.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+  const typeString = normalizedType.toLowerCase();
+
+  // Check for critical patterns
+  if (
+    typeString.includes('malware') ||
+    typeString.includes('virus') ||
+    typeString.includes('trojan')
+  ) {
+    return 'critical';
+  }
+
+  // Check for high severity patterns
+  if (
+    typeString.includes('intrusion') ||
+    typeString.includes('attack') ||
+    typeString.includes('exploit')
+  ) {
+    return 'high';
+  }
+
+  // Check for medium severity patterns
+  if (
+    typeString.includes('scan') ||
+    typeString.includes('suspicious') ||
+    typeString.includes('anomaly')
+  ) {
+    return 'medium';
+  }
+
+  // Check for low severity patterns
+  if (
+    typeString.includes('dns') ||
+    typeString.includes('http') ||
+    typeString.includes('status')
+  ) {
+    return 'low';
+  }
+
+  // Default to medium severity for unrecognized types
+  return 'medium';
+}
+
 // Base search interface to reduce duplication
 export interface BaseSearchArgs extends ToolArgs {
   query: string;
@@ -851,6 +906,14 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
               'priority',
               'unknown'
             );
+          }
+          
+          // If still unknown, derive from alarm type
+          if (severity === 'unknown') {
+            const alarmType = SafeAccess.getNestedValue(alarm as any, 'type', '');
+            if (alarmType) {
+              severity = deriveAlarmSeverityFromType(alarmType);
+            }
           }
 
           const rawAid = SafeAccess.getNestedValue(

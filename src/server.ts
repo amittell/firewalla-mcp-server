@@ -4,11 +4,11 @@
  * @fileoverview Firewalla MCP Server
  *
  * This file implements the primary MCP server class that provides Claude with access to
- * Firewalla firewall data through 28 tools that map to Firewalla API endpoints.
+ * Firewalla firewall data through 29 tools that map to Firewalla API endpoints.
  * Tools include parameter validation and error handling.
  *
  * Architecture:
- * - 23 Direct API Endpoints
+ * - 24 Direct API Endpoints
  * - 5 Convenience Wrappers
  * - Limits set to API maximum (500)
  * - Required parameters for proper API calls
@@ -30,7 +30,7 @@ import { setupPrompts } from './prompts/index.js';
 import { logger } from './monitoring/logger.js';
 
 /**
- * Main MCP Server class for Firewalla integration with 28-tool architecture
+ * Main MCP Server class for Firewalla integration with 29-tool architecture
  */
 export class FirewallaMCPServer {
   private server: Server;
@@ -56,14 +56,14 @@ export class FirewallaMCPServer {
   }
 
   /**
-   * Sets up MCP protocol request handlers for 28-tool architecture
+   * Sets up MCP protocol request handlers for 29-tool architecture
    */
   private setupHandlers(): void {
-    // List available tools - 28-Tool Complete API Coverage
+    // List available tools - 29-Tool Complete API Coverage
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
-          // Direct API Endpoints (23 tools)
+          // Direct API Endpoints (24 tools)
           {
             name: 'get_active_alarms',
             description:
@@ -271,7 +271,8 @@ export class FirewallaMCPServer {
               properties: {
                 limit: {
                   type: 'number',
-                  description: 'Maximum number of target lists to return (required)',
+                  description:
+                    'Maximum number of target lists to return (required)',
                   minimum: 1,
                   maximum: 1000,
                 },
@@ -574,15 +575,41 @@ export class FirewallaMCPServer {
             },
           },
           {
-            name: 'get_flow_trends',
+            name: 'get_recent_flow_activity',
             description:
-              'Get historical flow trend data (blocked flows per day)',
+              'Get recent network flow activity snapshot (last 10-20 minutes). Returns up to 2000 most recent flows for immediate analysis. CRITICAL: This is NOT historical trend data - shows current activity only. Use for "what\'s happening now" questions, not daily/weekly patterns. Perfect for: current security assessment, immediate network state, recent protocol distribution. AVOID for: historical analysis, daily patterns, trend identification.',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+              required: [],
+            },
+          },
+          {
+            name: 'get_flow_insights',
+            description:
+              'Get category-based flow analysis including top content categories, bandwidth consumers, and blocked traffic. Ideal for answering questions like "what porn sites were accessed" or "what social media was used". Replaces time-based trends with actionable insights.',
             inputSchema: {
               type: 'object',
               properties: {
-                group: {
+                period: {
                   type: 'string',
-                  description: 'Get trends for a specific box group',
+                  enum: ['1h', '24h', '7d', '30d'],
+                  description: 'Time period for analysis (default: 24h)',
+                  default: '24h',
+                },
+                categories: {
+                  type: 'array',
+                  items: {
+                    type: 'string',
+                    enum: ['ad', 'edu', 'games', 'gamble', 'intel', 'p2p', 
+                           'porn', 'private', 'social', 'shopping', 'video', 'vpn'],
+                  },
+                  description: 'Filter to specific content categories (optional)',
+                },
+                include_blocked: {
+                  type: 'boolean',
+                  description: 'Include blocked traffic analysis (default: false)',
+                  default: false,
                 },
               },
               required: [],
@@ -778,7 +805,7 @@ export class FirewallaMCPServer {
   async start(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    logger.info('Firewalla MCP Server running with 28 tools');
+    logger.info('Firewalla MCP Server running with 29 tools');
   }
 }
 

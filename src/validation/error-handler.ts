@@ -146,7 +146,10 @@ export class ParameterValidator {
     if (value === undefined || value === null) {
       return {
         isValid: false,
-        errors: [`${paramName} is required`]
+        errors: [
+          `${paramName} is required but was not provided`,
+          `Please provide a valid string value for ${paramName}`
+        ]
       };
     }
 
@@ -259,9 +262,19 @@ export class ParameterValidator {
     // Enhanced null/undefined handling with consistent normalization
     if (value === undefined || value === null) {
       if (required) {
+        const contextHint = min !== undefined && max !== undefined 
+          ? ` (valid range: ${min}-${max})`
+          : min !== undefined 
+          ? ` (minimum: ${min})`
+          : max !== undefined
+          ? ` (maximum: ${max})`
+          : '';
         return {
           isValid: false,
-          errors: [`${paramName} is required`]
+          errors: [
+            `${paramName} is required but was not provided`,
+            `Please provide a numeric value for ${paramName}${contextHint}`
+          ]
         };
       }
       
@@ -406,7 +419,10 @@ export class ParameterValidator {
       if (required) {
         return {
           isValid: false,
-          errors: [`${paramName} is required`]
+          errors: [
+            `${paramName} is required but was not provided`,
+            `Please select one of the following values for ${paramName}: ${allowedValues.join(', ')}`
+          ]
         };
       }
       return {

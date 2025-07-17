@@ -59,7 +59,8 @@ import {
   GetSimpleStatisticsHandler,
   GetStatisticsByRegionHandler,
   GetStatisticsByBoxHandler,
-  GetFlowTrendsHandler,
+  GetRecentFlowActivityHandler,
+  GetFlowInsightsHandler,
   GetAlarmTrendsHandler,
   GetRuleTrendsHandler,
 } from './handlers/analytics.js';
@@ -154,12 +155,13 @@ export class ToolRegistry {
     this.register(new SearchAlarmsHandler());
     this.register(new SearchRulesHandler());
 
-    // Analytics tools (5 handlers)
+    // Analytics tools (6 handlers)
     this.register(new GetBoxesHandler());
     this.register(new GetSimpleStatisticsHandler());
     this.register(new GetStatisticsByRegionHandler());
     this.register(new GetStatisticsByBoxHandler());
-    this.register(new GetFlowTrendsHandler());
+    this.register(new GetRecentFlowActivityHandler());
+    this.register(new GetFlowInsightsHandler());
     this.register(new GetAlarmTrendsHandler());
     this.register(new GetRuleTrendsHandler());
 

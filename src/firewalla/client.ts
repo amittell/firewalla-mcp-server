@@ -2124,7 +2124,7 @@ export class FirewallaClient {
       // Get flow data for the period using global endpoint with box parameter
       const params: Record<string, unknown> = {
         query: `ts:${begin}-${end}`,
-        limit: 10000, // Get large sample for trend analysis
+        limit: 500, // API maximum limit
         sortBy: 'ts:asc',
       };
       if (this.config.boxId) {
@@ -4898,6 +4898,185 @@ export class FirewallaClient {
     } catch (error) {
       logger.error(`API call failed: ${method} ${endpoint}`, error as Error);
       throw error;
+    }
+  }
+
+  /**
+   * Get flow insights with category-based analysis
+   * This provides category breakdowns and bandwidth analysis for networks with high flow volumes
+   */
+  async getFlowInsights(
+    period: '1h' | '24h' | '7d' | '30d' = '24h',
+    options?: {
+      categories?: string[];
+      includeBlocked?: boolean;
+    }
+  ): Promise<{
+    period: string;
+    categoryBreakdown: Array<{
+      category: string;
+      count: number;
+      bytes: number;
+      topDomains: Array<{ domain: string; count: number; bytes: number }>;
+    }>;
+    topDevices: Array<{
+      device: string;
+      totalBytes: number;
+      categories: Array<{ category: string; bytes: number }>;
+    }>;
+    blockedSummary?: {
+      totalBlocked: number;
+      byCategory: Array<{ category: string; count: number }>;
+    };
+  }> {
+    try {
+      // Calculate time range
+      const end = Math.floor(Date.now() / 1000);
+      let begin: number;
+      switch (period) {
+        case '1h':
+          begin = end - 3600;
+          break;
+        case '24h':
+          begin = end - 24 * 3600;
+          break;
+        case '7d':
+          begin = end - 7 * 24 * 3600;
+          break;
+        case '30d':
+          begin = end - 30 * 24 * 3600;
+          break;
+      }
+
+      // Get category breakdown
+      const categoryQuery = `ts:${begin}-${end}${options?.categories ? ` AND (${options.categories.map(c => `category:${c}`).join(' OR ')})` : ''}`;
+      
+      const categoryData = await this.searchFlows({
+        query: categoryQuery,
+        group_by: 'category,domain',
+        sort_by: 'bytes:desc',
+        limit: 500,
+      });
+
+      // Process category breakdown
+      const categoryMap = new Map<string, {
+        count: number;
+        bytes: number;
+        domains: Map<string, { count: number; bytes: number }>;
+      }>();
+
+      categoryData.results.forEach((item: any) => {
+        const category = item.category?.name || 'uncategorized';
+        const domain = item.domain || 'unknown';
+        
+        if (!categoryMap.has(category)) {
+          categoryMap.set(category, {
+            count: 0,
+            bytes: 0,
+            domains: new Map(),
+          });
+        }
+        
+        const cat = categoryMap.get(category)!;
+        cat.count += item.count || 1;
+        cat.bytes += item.bytes || 0;
+        
+        if (!cat.domains.has(domain)) {
+          cat.domains.set(domain, { count: 0, bytes: 0 });
+        }
+        const dom = cat.domains.get(domain)!;
+        dom.count += item.count || 1;
+        dom.bytes += item.bytes || 0;
+      });
+
+      // Get top devices by bandwidth
+      const deviceData = await this.searchFlows({
+        query: `ts:${begin}-${end}`,
+        group_by: 'device,category',
+        sort_by: 'bytes:desc',
+        limit: 200,
+      });
+
+      // Process device data
+      const deviceMap = new Map<string, {
+        totalBytes: number;
+        categories: Map<string, number>;
+      }>();
+
+      deviceData.results.forEach((item: any) => {
+        const deviceName = item.device?.name || item.device?.ip || 'unknown';
+        const category = item.category?.name || 'uncategorized';
+        
+        if (!deviceMap.has(deviceName)) {
+          deviceMap.set(deviceName, {
+            totalBytes: 0,
+            categories: new Map(),
+          });
+        }
+        
+        const dev = deviceMap.get(deviceName)!;
+        dev.totalBytes += item.bytes || 0;
+        
+        if (!dev.categories.has(category)) {
+          dev.categories.set(category, 0);
+        }
+        dev.categories.set(category, (dev.categories.get(category) || 0) + (item.bytes || 0));
+      });
+
+      // Get blocked flows summary if requested
+      let blockedSummary;
+      if (options?.includeBlocked) {
+        const blockedData = await this.searchFlows({
+          query: `ts:${begin}-${end} AND blocked:true`,
+          group_by: 'category',
+          sort_by: 'count:desc',
+          limit: 50,
+        });
+
+        blockedSummary = {
+          totalBlocked: blockedData.count,
+          byCategory: blockedData.results.map((item: any) => ({
+            category: item.category?.name || 'uncategorized',
+            count: item.count || 0,
+          })),
+        };
+      }
+
+      // Format results
+      const categoryBreakdown = Array.from(categoryMap.entries())
+        .map(([category, data]) => ({
+          category,
+          count: data.count,
+          bytes: data.bytes,
+          topDomains: Array.from(data.domains.entries())
+            .map(([domain, stats]) => ({ domain, ...stats }))
+            .sort((a, b) => b.bytes - a.bytes)
+            .slice(0, 5),
+        }))
+        .sort((a, b) => b.bytes - a.bytes);
+
+      const topDevices = Array.from(deviceMap.entries())
+        .map(([device, data]) => ({
+          device,
+          totalBytes: data.totalBytes,
+          categories: Array.from(data.categories.entries())
+            .map(([category, bytes]) => ({ category, bytes }))
+            .sort((a, b) => b.bytes - a.bytes),
+        }))
+        .sort((a, b) => b.totalBytes - a.totalBytes)
+        .slice(0, 10);
+
+      return {
+        period,
+        categoryBreakdown,
+        topDevices,
+        blockedSummary,
+      };
+    } catch (error) {
+      logger.error('Error in getFlowInsights:', error as Error);
+      throw error instanceof Error
+        ? error
+        : new Error('Failed to get flow insights');
     }
   }
 }

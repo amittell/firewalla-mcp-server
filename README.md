@@ -246,7 +246,7 @@ If responses are slow:
 2. Use more specific time ranges
 3. Check your network connection to the MSP API
 
-## Available Tools (28 total)
+## Available Tools (29 total)
 
 ### Core Tools
 - **Security**: Get alarms, analyze threats, delete alerts
@@ -264,7 +264,7 @@ Network: get_flow_data, get_bandwidth_usage, get_offline_devices
 Devices: get_device_status, get_boxes, search_devices
 Rules: get_network_rules, pause_rule, resume_rule, get_target_lists
 Search: search_flows, search_alarms, search_rules, search_target_lists
-Analytics: get_simple_statistics, get_flow_trends, get_alarm_trends
+Analytics: get_simple_statistics, get_flow_insights, get_flow_trends, get_alarm_trends
 Management: create_target_list, update_target_list, delete_target_list
 ```
 
@@ -387,12 +387,15 @@ For more detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 ## What's New
 
 **Version 1.0.0:**
-- 28 tools with API-verified schemas
-- 23 direct API endpoints + 5 convenience wrappers
+- 29 tools with API-verified schemas
+- 24 direct API endpoints + 5 convenience wrappers
+- get_flow_insights for category-based traffic analysis
+- get_recent_flow_activity for current network state snapshots
 - Advanced search with logical operators (AND, OR, NOT)
 - All limits corrected to API maximum (500)
 - Required parameters added for proper API calls
-- Better caching for faster responses  
+- Better caching for faster responses
+- Handles high-volume networks (300k+ flows/day)  
 
 ## License
 

@@ -90,6 +90,7 @@
     "@types/geoip-lite": "^1.4.4",
     "@types/node": "^24.0.3",
     "axios": "^1.10.0",
+    "axios-retry": "^4.5.0",
     "dotenv": "^16.5.0",
     "geoip-lite": "^1.4.10",
     "zod": "^3.25.75"

@@ -9,7 +9,7 @@ import {
   SafeAccess,
   ErrorType,
 } from '../../validation/error-handler.js';
-import { unixToISOString } from '../../utils/timestamp.js';
+import { unixToISOString, getCurrentTimestamp } from '../../utils/timestamp.js';
 import { logger } from '../../monitoring/logger.js';
 import { withToolTimeout } from '../../utils/timeout-manager.js';
 import {
@@ -573,19 +573,204 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
   }
 }
 
-export class GetFlowTrendsHandler extends BaseToolHandler {
-  name = 'get_flow_trends';
+export class GetRecentFlowActivityHandler extends BaseToolHandler {
+  name = 'get_recent_flow_activity';
   description =
-    'Get historical flow data trends over time with configurable intervals. Optional interval and period parameters. Data cached for 1 hour for performance.';
+    'Get recent network flow activity snapshot (last 10-20 minutes of traffic). Returns up to 2000 most recent flows for immediate analysis. IMPORTANT: This is NOT historical trend data - it shows current activity only. Use for "what\'s happening now" questions, not daily/weekly patterns. Ideal for: current security assessment, immediate network state, recent protocol distribution.';
+  category = 'analytics' as const;
+
+  private static readonly MAX_FLOWS = 2000;
+  private static readonly FLOWS_PER_PAGE = 500;
+  private static readonly MAX_PAGES = Math.ceil(GetRecentFlowActivityHandler.MAX_FLOWS / GetRecentFlowActivityHandler.FLOWS_PER_PAGE);
+
+  constructor() {
+    super({
+      enableGeoEnrichment: true, // Enable geographic enrichment for IP analysis
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'recent_flow_activity',
+        entity_type: 'current_network_snapshot',
+        supports_geographic_enrichment: true,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+        time_scope: 'recent_activity_only',
+        max_flows: GetRecentFlowActivityHandler.MAX_FLOWS,
+      },
+    });
+  }
+
+  async execute(
+    _args: ToolArgs,
+    firewalla: FirewallaClient
+  ): Promise<ToolResponse> {
+    try {
+      const startTime = Date.now();
+      const allFlows: any[] = [];
+      let cursor: string | undefined;
+      let pagesProcessed = 0;
+
+      // Fetch up to 2000 flows in 4 pages of 500 each
+      while (pagesProcessed < GetRecentFlowActivityHandler.MAX_PAGES && allFlows.length < GetRecentFlowActivityHandler.MAX_FLOWS) {
+        const currentCursor = cursor;
+        const pageData = await withToolTimeout(
+          async () =>
+            firewalla.getFlowData(
+              undefined, // No query filter - get all recent flows
+              undefined, // No groupBy - we want individual flows
+              'ts:desc', // Most recent first
+              GetRecentFlowActivityHandler.FLOWS_PER_PAGE,
+              currentCursor
+            ),
+          this.name
+        );
+
+        if (!pageData?.results || !Array.isArray(pageData.results)) {
+          break; // No more data or invalid response
+        }
+
+        allFlows.push(...pageData.results);
+        cursor = pageData.next_cursor;
+        pagesProcessed++;
+
+        // Break if no more pages available or we hit our limit
+        if (!cursor || allFlows.length >= GetRecentFlowActivityHandler.MAX_FLOWS) {
+          break;
+        }
+      }
+
+      // Limit to exactly MAX_FLOWS if we got more
+      const flows = allFlows.slice(0, GetRecentFlowActivityHandler.MAX_FLOWS);
+
+      if (flows.length === 0) {
+        return this.createUnifiedResponse({
+          flows_analyzed: 0,
+          time_span_minutes: 0,
+          activity_summary: 'No recent flows found',
+          flows: [],
+          limitations: {
+            data_scope: 'Current activity snapshot only',
+            not_suitable_for: ['Historical analysis', 'Daily patterns', 'Trend analysis'],
+            time_frame: 'Last 10-20 minutes for high-volume networks',
+          },
+        }, {
+          executionTimeMs: Date.now() - startTime,
+        });
+      }
+
+      // Calculate time span of the flows
+      const oldestFlow = flows[flows.length - 1];
+      const newestFlow = flows[0];
+      const timeSpanSeconds = (newestFlow.ts || 0) - (oldestFlow.ts || 0);
+      const timeSpanMinutes = Math.round(timeSpanSeconds / 60);
+
+      // Analyze the flows for summary statistics
+      const protocolCounts = new Map<string, number>();
+      const regionCounts = new Map<string, number>();
+      const blockedCount = flows.filter(f => f.block).length;
+      const allowedCount = flows.length - blockedCount;
+
+      flows.forEach(flow => {
+        const protocol = flow.protocol || 'unknown';
+        const region = flow.region || flow.country || 'unknown';
+        
+        protocolCounts.set(protocol, (protocolCounts.get(protocol) || 0) + 1);
+        regionCounts.set(region, (regionCounts.get(region) || 0) + 1);
+      });
+
+      // Convert maps to sorted arrays for top protocols/regions
+      const topProtocols = Array.from(protocolCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([protocol, count]) => ({ protocol, count, percentage: Math.round((count / flows.length) * 100) }));
+
+      const topRegions = Array.from(regionCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([region, count]) => ({ region, count, percentage: Math.round((count / flows.length) * 100) }));
+
+      const unifiedResponseData = {
+        flows_analyzed: flows.length,
+        pages_fetched: pagesProcessed,
+        time_span_minutes: timeSpanMinutes,
+        data_period: `Last ${timeSpanMinutes} minutes`,
+        activity_summary: {
+          total_flows: flows.length,
+          blocked_flows: blockedCount,
+          allowed_flows: allowedCount,
+          blocked_percentage: Math.round((blockedCount / flows.length) * 100),
+          top_protocols: topProtocols,
+          top_regions: topRegions,
+        },
+        flows: flows.map(flow => ({
+          timestamp: flow.ts,
+          timestamp_iso: unixToISOString(flow.ts),
+          protocol: flow.protocol,
+          direction: flow.direction,
+          blocked: flow.block,
+          source_ip: flow.source?.ip,
+          destination_ip: flow.destination?.ip,
+          region: flow.region || flow.country,
+          category: flow.category,
+          domain: flow.domain,
+          bytes: flow.total || 0,
+          block_reason: flow.blockedby,
+        })),
+        limitations: {
+          data_scope: 'Recent activity snapshot only - NOT historical trends',
+          sample_size: `${flows.length} flows from last ${timeSpanMinutes} minutes`,
+          not_suitable_for: [
+            'Daily/weekly/monthly analysis',
+            'Historical trend identification', 
+            'Peak usage time analysis',
+            'Long-term pattern detection'
+          ],
+          suitable_for: [
+            'Current network state assessment',
+            'Immediate security analysis',
+            'Recent protocol distribution',
+            'Active threat detection',
+            'Real-time activity monitoring'
+          ],
+          performance_note: flows.length >= GetRecentFlowActivityHandler.MAX_FLOWS ? 
+            `Limited to ${GetRecentFlowActivityHandler.MAX_FLOWS} flows for performance` : 
+            'All available recent flows included',
+        },
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
+      });
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      return this.createErrorResponse(
+        `Failed to get recent flow activity: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        {
+          max_flows: GetRecentFlowActivityHandler.MAX_FLOWS,
+          flows_per_page: GetRecentFlowActivityHandler.FLOWS_PER_PAGE,
+          troubleshooting:
+            'Check if Firewalla API is accessible and credentials are valid',
+        }
+      );
+    }
+  }
+}
+
+export class GetFlowInsightsHandler extends BaseToolHandler {
+  name = 'get_flow_insights';
+  description =
+    'Get category-based flow analysis including top content categories, bandwidth consumers, and blocked traffic. Replaces time-based trends with actionable insights for networks with high flow volumes. Ideal for answering questions like "what porn sites were accessed" or "what social media was used".';
   category = 'analytics' as const;
 
   constructor() {
     super({
-      enableGeoEnrichment: false, // No IP fields in flow trends
+      enableGeoEnrichment: false, // Already contains aggregated data
       enableFieldNormalization: true,
       additionalMeta: {
-        data_source: 'flow_trends',
-        entity_type: 'historical_flow_data',
+        data_source: 'flow_insights',
+        entity_type: 'category_flow_analysis',
         supports_geographic_enrichment: false,
         supports_field_normalization: true,
         standardization_version: '2.0.0',
@@ -605,20 +790,38 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
         false,
         '24h'
       );
-      const intervalValidation = ParameterValidator.validateNumber(
-        _args?.interval,
-        'interval',
+      const categoriesValidation = ParameterValidator.validateArray(
+        _args?.categories,
+        'categories',
         {
-          min: 60,
-          max: 86400,
-          defaultValue: 3600,
-          integer: true,
+          required: false,
         }
+      );
+      
+      // Validate allowed category values if provided
+      const allowedCategories = [
+        'ad', 'edu', 'games', 'gamble', 'intel', 'p2p',
+        'porn', 'private', 'social', 'shopping', 'video', 'vpn'
+      ];
+      
+      if (categoriesValidation.isValid && categoriesValidation.sanitizedValue) {
+        const categories = categoriesValidation.sanitizedValue as string[];
+        const invalidCategories = categories.filter(cat => !allowedCategories.includes(cat));
+        if (invalidCategories.length > 0) {
+          categoriesValidation.isValid = false;
+          categoriesValidation.errors = [`Invalid categories: ${invalidCategories.join(', ')}`];
+        }
+      }
+      const includeBlockedValidation = ParameterValidator.validateBoolean(
+        _args?.include_blocked,
+        'include_blocked',
+        false
       );
 
       const validationResult = ParameterValidator.combineValidationResults([
         periodValidation,
-        intervalValidation,
+        categoriesValidation,
+        includeBlockedValidation,
       ]);
 
       if (!validationResult.isValid) {
@@ -630,103 +833,65 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
         );
       }
 
-      const period = periodValidation.sanitizedValue!;
-      const interval = intervalValidation.sanitizedValue!;
-
-      const trends = await withToolTimeout(
-        async () =>
-          firewalla.getFlowTrends(
-            period as '1h' | '24h' | '7d' | '30d',
-            interval as number
-          ),
-        this.name
-      );
-
-      // Validate trends response structure
-      if (!trends || typeof trends !== 'object') {
-        throw new Error('Invalid trends response: not an object');
-      }
-
-      if (
-        !SafeAccess.getNestedValue(trends, 'results') ||
-        !Array.isArray(trends.results)
-      ) {
-        throw new Error('Invalid trends response: results is not an array');
-      }
-
-      // Validate each trend item has required properties
-      const validTrends = SafeAccess.safeArrayFilter(
-        trends.results,
-        (trend: any) =>
-          trend &&
-          typeof SafeAccess.getNestedValue(trend, 'ts') === 'number' &&
-          typeof SafeAccess.getNestedValue(trend, 'value') === 'number'
-      );
+      const period = periodValidation.sanitizedValue as '1h' | '24h' | '7d' | '30d';
+      const categories = categoriesValidation.sanitizedValue as string[] | undefined;
+      const includeBlocked = includeBlockedValidation.sanitizedValue as boolean;
 
       const startTime = Date.now();
 
+      const insights = await withToolTimeout(
+        async () =>
+          firewalla.getFlowInsights(period, {
+            categories,
+            includeBlocked,
+          }),
+        this.name
+      );
+
+      // Format response for better readability
       const unifiedResponseData = {
         period,
-        interval_seconds: interval,
-        data_points: validTrends.length,
-        trends: validTrends.map((trend: any) => ({
-          timestamp: SafeAccess.getNestedValue(trend, 'ts', 0),
-          timestamp_iso: unixToISOString(
-            SafeAccess.getNestedValue(trend, 'ts', 0) as number
-          ),
-          flow_count: SafeAccess.getNestedValue(trend, 'value', 0),
+        analysis_time: getCurrentTimestamp(),
+        
+        // Category breakdown with human-readable formatting
+        content_categories: insights.categoryBreakdown.map(cat => ({
+          category: cat.category,
+          flow_count: cat.count,
+          total_bytes: cat.bytes,
+          total_mb: Math.round(cat.bytes / 1048576 * 100) / 100,
+          top_domains: cat.topDomains.map(dom => ({
+            domain: dom.domain,
+            visits: dom.count,
+            bandwidth_mb: Math.round(dom.bytes / 1048576 * 100) / 100,
+          })),
         })),
+        
+        // Top bandwidth consumers
+        top_bandwidth_devices: insights.topDevices.map(dev => ({
+          device: dev.device,
+          total_bandwidth_mb: Math.round(dev.totalBytes / 1048576 * 100) / 100,
+          category_usage: dev.categories.map(cat => ({
+            category: cat.category,
+            bandwidth_mb: Math.round(cat.bytes / 1048576 * 100) / 100,
+          })),
+        })),
+        
+        // Blocked traffic summary if requested
+        ...(insights.blockedSummary && {
+          blocked_traffic: {
+            total_blocked_flows: insights.blockedSummary.totalBlocked,
+            blocked_by_category: insights.blockedSummary.byCategory,
+          },
+        }),
+        
+        // Summary statistics
         summary: {
-          total_flows: validTrends.reduce(
-            (sum: number, t: any) =>
-              sum + (SafeAccess.getNestedValue(t, 'value', 0) as number),
-            0
-          ),
-          avg_flows_per_interval:
-            validTrends.length > 0
-              ? Math.round(
-                  validTrends.reduce(
-                    (sum: number, t: any) =>
-                      sum +
-                      (SafeAccess.getNestedValue(t, 'value', 0) as number),
-                    0
-                  ) / validTrends.length
-                )
-              : 0,
-          // Performance Buffer Strategy: Array processing limitation
-          //
-          // Problem: Math.max() and Math.min() can exceed call stack limits with
-          // very large arrays (>10,000 elements in some JavaScript engines).
-          //
-          // Solution: Use defensive slicing to process only first 1000 elements.
-          // This provides accurate peak/min detection for reasonable datasets while
-          // preventing stack overflow errors on unusually large trend datasets.
-          //
-          // Rationale: 1000 data points is sufficient for trend analysis in most
-          // time series scenarios and represents a good balance between accuracy
-          // and performance safety.
-          peak_flow_count:
-            validTrends.length > 0
-              ? Math.max(
-                  ...validTrends
-                    .slice(0, 1000) // Defensive limit to prevent call stack overflow
-                    .map(
-                      (t: any) =>
-                        SafeAccess.getNestedValue(t, 'value', 0) as number
-                    )
-                )
-              : 0,
-          min_flow_count:
-            validTrends.length > 0
-              ? Math.min(
-                  ...validTrends
-                    .slice(0, 1000) // Defensive limit to prevent call stack overflow
-                    .map(
-                      (t: any) =>
-                        SafeAccess.getNestedValue(t, 'value', 0) as number
-                    )
-                )
-              : 0,
+          total_categories: insights.categoryBreakdown.length,
+          total_bandwidth_gb: Math.round(
+            insights.categoryBreakdown.reduce((sum, cat) => sum + cat.bytes, 0) / 1073741824 * 100
+          ) / 100,
+          most_active_category: insights.categoryBreakdown[0]?.category || 'none',
+          top_bandwidth_consumer: insights.topDevices[0]?.device || 'none',
         },
       };
 
@@ -738,13 +903,13 @@ export class GetFlowTrendsHandler extends BaseToolHandler {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       return this.createErrorResponse(
-        `Failed to get flow trends: ${errorMessage}`,
+        `Failed to get flow insights: ${errorMessage}`,
         ErrorType.API_ERROR,
         {
           period: _args?.period || '24h',
-          interval_seconds: _args?.interval || 3600,
+          categories: _args?.categories || 'all',
           troubleshooting:
-            'Check if Firewalla API is accessible and credentials are valid',
+            'Check if Firewalla API is accessible and flow data is available',
         }
       );
     }

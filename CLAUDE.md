@@ -15,22 +15,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Model Context Protocol (MCP) server that provides Claude with access to Firewalla firewall data. Features a **28-tool architecture** with advanced search capabilities, intelligent caching, and result aggregation.
+A Model Context Protocol (MCP) server that provides Claude with access to Firewalla firewall data. Features a **29-tool architecture** with advanced search capabilities, intelligent caching, and result aggregation.
 
 ## Architecture Overview
 
-### 28-Tool Architecture
-- **23 Direct API Tools**: Mapping to Firewalla MSP API endpoints
+### 29-Tool Architecture
+- **24 Direct API Tools**: Mapping to Firewalla MSP API endpoints
 - **5 Convenience Wrapper Tools**: Client-side enhanced functionality for common operations
 - **CRUD Operations**: Create, Read, Update, Delete operations for all resources
 
-### Tool Categories (28 total)
+### Tool Categories (29 total)
 - **Security (3 tools)**: get_active_alarms, get_specific_alarm, delete_alarm
 - **Network (1 tool)**: get_flow_data
 - **Device (1 tool)**: get_device_status
 - **Rules (8 tools)**: get_network_rules, pause_rule, resume_rule, get_target_lists, get_specific_target_list, create_target_list, update_target_list, delete_target_list
 - **Search (3 tools)**: search_flows, search_alarms, search_rules
-- **Analytics (7 tools)**: get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_trends, get_alarm_trends, get_rule_trends
+- **Analytics (8 tools)**: get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_insights, get_flow_trends, get_alarm_trends, get_rule_trends
 - **Convenience Wrappers (5 tools)**: get_bandwidth_usage, get_offline_devices, search_devices, search_target_lists, get_network_rules_summary
 
 ## Development Commands
@@ -118,8 +118,8 @@ MCP_DEBUG_MODE=false                      # Debug logging (default: false)
 ```
 
 ### Tool Configuration
-- **WAVE0_ENABLED=false**: All 28 tools disabled (safe mode)
-- **WAVE0_ENABLED=true**: All 28 tools available
+- **WAVE0_ENABLED=false**: All 29 tools disabled (safe mode)
+- **WAVE0_ENABLED=true**: All 29 tools available
 - **MCP_DISABLED_TOOLS**: Selectively disable specific tools by name
 
 ## Testing Procedures
@@ -141,6 +141,8 @@ MCP_DEBUG_MODE=false                      # Debug logging (default: false)
    - "What security alerts do I have?"
    - "Show me top bandwidth users"
    - "What firewall rules are active?"
+   - "Has anyone accessed porn sites today?"
+   - "Show me social media usage analysis"
 
 ## Search API
 
@@ -203,6 +205,27 @@ search_flows query:"region:US AND protocol:tcp AND category:social" limit:50
 search_alarms query:"region:CN AND severity:high AND status:1" limit:25
 ```
 
+## Flow Insights Tool
+
+The `get_flow_insights` tool addresses the challenge of analyzing high-volume networks (100k+ flows/day) by using category-based aggregation instead of time-based pagination.
+
+### Why get_flow_insights?
+- **Scalability**: Handles 338k+ flows/day efficiently with 2-3 API calls instead of 1,690+ pagination requests
+- **Real Questions**: Answers "did anyone watch porn?" or "what social media was used?" directly
+- **Performance**: Uses groupBy aggregation at the API level instead of client-side processing
+- **Actionable Data**: Returns category breakdowns, top domains, and device-specific usage
+
+### Implementation Details
+- Uses Firewalla's category classification: porn, social, video, games, shopping, etc.
+- Aggregates data using API-level groupBy instead of fetching all flows
+- Returns both allowed and blocked traffic analysis
+- Provides device-level breakdowns for parental control use cases
+
+### Recent Flow Activity Tool
+- `get_recent_flow_activity` provides current network state snapshots (last 10-20 minutes)  
+- Returns up to 2000 flows across 4 API pages for immediate analysis
+- Use for current security assessment and real-time activity monitoring
+
 ## API Reference Documentation
 
 **📖 COMPREHENSIVE API REFERENCE**: `/docs/firewalla-api-reference.md`
@@ -224,15 +247,15 @@ This file contains the complete, official Firewalla MSP API v2 documentation inc
 
 ## Architecture Notes
 
-### Clean 28-Tool Design
-- **Direct Implementation**: All 28 tools defined directly in TOOL_SCHEMAS
+### Clean 29-Tool Design
+- **Direct Implementation**: All 29 tools defined directly in TOOL_SCHEMAS
 - **API Mapping**: Mapping to all Firewalla MSP API endpoints
 - **Type Safety**: Full TypeScript implementation with strict validation
 - **Registry Pattern**: Clean tool registration with handler-based architecture
 
 ### Key Files
-- `src/server.ts`: Main MCP server with 28-tool TOOL_SCHEMAS architecture
-- `src/tools/registry.ts`: Tool registry with 28 handler definitions
+- `src/server.ts`: Main MCP server with 29-tool TOOL_SCHEMAS architecture
+- `src/tools/registry.ts`: Tool registry with 29 handler definitions
 - `src/firewalla/client.ts`: Firewalla API client with caching
 - `src/validation/`: Parameter validation and error handling
 
@@ -312,7 +335,7 @@ DEBUG=firewalla:* npm run dev
 - All tools must be defined in TOOL_SCHEMAS with proper schema
 - Add to appropriate tool category in feature flags
 - Include proper input validation and error handling
-- Follow the 28-tool architecture constraints
+- Follow the 29-tool architecture constraints
 - Implement direct API execution in the server
 
 ## Performance Considerations
@@ -340,7 +363,7 @@ DEBUG=cache npm run mcp:start
 ## Version Information
 
 - **Current Version**: 1.0.0
-- **Architecture**: 28-tool design (23 direct API + 5 convenience)
+- **Architecture**: 29-tool design (24 direct API + 5 convenience)
 - **API Support**: Firewalla MSP API v2 with CRUD operations
 - **Node.js**: Requires 18+
 - **TypeScript**: ES2020 target with strict mode
