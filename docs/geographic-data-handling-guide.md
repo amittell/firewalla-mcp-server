@@ -686,23 +686,23 @@ class GeographicEnrichmentPipeline {
 
     for (const [ip, data] of Object.entries(rawGeoData)) {
       normalized[ip] = {
-        country: normalizeCountry(data.country),
-        country_code: normalizeCountryCode(data.country),
-        continent: deriveContinent(data.country),
-        region: normalizeRegion(data.region),
-        city: normalizeCity(data.city),
-        asn: normalizeASN(data.asn),
-        asn_name: normalizeASNName(data.org),
-        coordinates: normalizeCoordinates(data.lat, data.lng),
-        hosting_provider: classifyHostingProvider(data.org, data.isp),
-        is_cloud_provider: isCloudProvider(data.org, data.asn),
-        is_vpn: isVPNProvider(data.org, data.isp),
-        is_proxy: isProxyProvider(data.org),
-        geographic_risk_score: calculateGeographicRisk(data),
-        threat_intelligence: enrichThreatIntelligence(ip, data),
+        country: this.normalizeCountry(data.country),
+        country_code: this.normalizeCountryCode(data.country),
+        continent: this.deriveContinent(data.country),
+        region: this.normalizeRegion(data.region),
+        city: this.normalizeCity(data.city),
+        asn: this.normalizeASN(data.asn),
+        asn_name: this.normalizeASNName(data.org),
+        coordinates: this.normalizeCoordinates(data.lat, data.lng),
+        hosting_provider: this.classifyHostingProvider(data.org, data.isp),
+        is_cloud_provider: this.isCloudProvider(data.org, data.asn),
+        is_vpn: this.isVPNProvider(data.org, data.isp),
+        is_proxy: this.isProxyProvider(data.org),
+        geographic_risk_score: this.calculateGeographicRisk(data),
+        threat_intelligence: this.enrichThreatIntelligence(ip, data),
         data_quality: {
-          completeness_score: calculateDataQuality(data),
-          confidence_level: calculateConfidenceLevel(data),
+          completeness_score: this.calculateDataQuality(data),
+          confidence_level: this.calculateConfidenceLevel(data),
           last_updated: new Date().toISOString(),
           source: 'firewalla_api'
         }
@@ -744,8 +744,12 @@ const geoCacheConfig: GeoCacheConfig = {
 ### Cache Performance Metrics
 
 ```typescript
+interface CachedGeoData extends NormalizedGeoData {
+  _cachedAt: number;
+}
+
 class GeographicCache {
-  private cache = new Map<string, NormalizedGeoData>();
+  private cache = new Map<string, CachedGeoData>();
   private hitCount = 0;
   private missCount = 0;
   private totalRequests = 0;
@@ -754,13 +758,58 @@ class GeographicCache {
     this.totalRequests++;
 
     const cached = this.cache.get(ip);
-    if (cached) {
+    if (cached && (Date.now() - cached._cachedAt) < geoCacheConfig.ttl * 1000) {
       this.hitCount++;
-      return cached;
+      // Return without the internal _cachedAt property
+      const { _cachedAt, ...geoData } = cached;
+      return geoData;
+    }
+
+    // Remove expired entry if exists
+    if (cached) {
+      this.cache.delete(ip);
     }
 
     this.missCount++;
     return null;
+  }
+
+  setGeoData(ip: string, data: NormalizedGeoData): void {
+    // Add timestamp for TTL checking
+    const cachedData: CachedGeoData = {
+      ...data,
+      _cachedAt: Date.now()
+    };
+
+    this.cache.set(ip, cachedData);
+    
+    // Prune cache if needed
+    this.pruneIfNeeded();
+  }
+
+  private pruneIfNeeded(): void {
+    if (this.cache.size <= geoCacheConfig.maxEntries) return;
+
+    // Remove expired entries first
+    const now = Date.now();
+    const ttlMs = geoCacheConfig.ttl * 1000;
+    
+    for (const [ip, data] of this.cache.entries()) {
+      if (now - data._cachedAt > ttlMs) {
+        this.cache.delete(ip);
+      }
+    }
+
+    // If still over limit, use LRU eviction (oldest entries first)
+    if (this.cache.size > geoCacheConfig.maxEntries) {
+      const sortedEntries = Array.from(this.cache.entries())
+        .sort((a, b) => a[1]._cachedAt - b[1]._cachedAt);
+      
+      const entriesToRemove = this.cache.size - geoCacheConfig.maxEntries;
+      for (let i = 0; i < entriesToRemove; i++) {
+        this.cache.delete(sortedEntries[i][0]);
+      }
+    }
   }
 
   getPerformanceMetrics() {
@@ -888,6 +937,77 @@ function generateQualityReport(enrichedData: NormalizedGeoData[]): DataQualityMe
       stale_data_percentage: calculateStaleDataPercentage(enrichedData)
     }
   };
+}
+
+// Helper function stubs for generateQualityReport
+function calculateFieldCompleteness(data: NormalizedGeoData[], field: keyof NormalizedGeoData): number {
+  const validCount = data.filter(item => item[field] && item[field] !== 'unknown').length;
+  return data.length > 0 ? validCount / data.length : 0;
+}
+
+function calculateCoordinateCompleteness(data: NormalizedGeoData[]): number {
+  const validCount = data.filter(item => 
+    item.coordinates && 
+    item.coordinates.lat !== 0 && 
+    item.coordinates.lng !== 0
+  ).length;
+  return data.length > 0 ? validCount / data.length : 0;
+}
+
+function validateCountryData(data: NormalizedGeoData[]): number {
+  const validCount = data.filter(item => 
+    item.country_code && 
+    item.country_code.length === 2 && 
+    /^[A-Z]{2}$/.test(item.country_code)
+  ).length;
+  return data.length > 0 ? validCount / data.length : 0;
+}
+
+function validateCoordinateData(data: NormalizedGeoData[]): number {
+  const validCount = data.filter(item => 
+    item.coordinates &&
+    Math.abs(item.coordinates.lat) <= 90 &&
+    Math.abs(item.coordinates.lng) <= 180
+  ).length;
+  return data.length > 0 ? validCount / data.length : 0;
+}
+
+function validateASNData(data: NormalizedGeoData[]): number {
+  const validCount = data.filter(item => 
+    item.asn && 
+    typeof item.asn === 'number' && 
+    item.asn > 0
+  ).length;
+  return data.length > 0 ? validCount / data.length : 0;
+}
+
+function validateCountryRegionConsistency(data: NormalizedGeoData[]): number {
+  // TODO: Implement actual validation logic based on country-region mapping
+  return 0.95; // Placeholder value
+}
+
+function validateCoordinateCountryConsistency(data: NormalizedGeoData[]): number {
+  // TODO: Implement actual coordinate-to-country validation
+  return 0.92; // Placeholder value
+}
+
+function getCurrentCacheHitRate(): number {
+  // TODO: Get from actual cache instance
+  return 0.85; // Placeholder value
+}
+
+function getAverageEnrichmentTime(): number {
+  // TODO: Get from actual performance metrics
+  return 45; // Placeholder value in ms
+}
+
+function calculateStaleDataPercentage(data: NormalizedGeoData[]): number {
+  const staleThreshold = Date.now() - (24 * 60 * 60 * 1000); // 24 hours ago
+  const staleCount = data.filter(item => {
+    const lastUpdated = new Date(item.data_quality.last_updated).getTime();
+    return lastUpdated < staleThreshold;
+  }).length;
+  return data.length > 0 ? staleCount / data.length : 0;
 }
 ```
 
