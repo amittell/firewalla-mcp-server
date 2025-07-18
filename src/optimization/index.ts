@@ -269,7 +269,7 @@ export function optimizeAlarmResponse(
         // Type assertion for known Alarm structure
         const typedAlarm = alarm as Partial<Alarm>;
         return {
-          aid: typedAlarm?.aid || 'unknown',
+          aid: typedAlarm?.aid !== undefined ? typedAlarm.aid : 'unknown',
           timestamp:
             typeof typedAlarm?.ts === 'number'
               ? safeUnixToISOString(typedAlarm.ts, new Date().toISOString())

@@ -5,8 +5,8 @@ A Model Context Protocol (MCP) server that enables Claude to access and analyze 
 ## Why Firewalla MCP Server?
 
 **🚀 Simple Network Security Integration**
-- **29 Tools** for network monitoring and analysis
-- **24 Direct API Endpoints** + **5 Convenience Wrappers**
+- **28 Tools** for network monitoring and analysis
+- **23 Direct API Endpoints** + **5 Convenience Wrappers**
 - **Advanced Search** with query syntax and filters
 - **Clean, Verified Architecture** with corrected API schemas
 
@@ -264,7 +264,7 @@ Network: get_flow_data, get_bandwidth_usage, get_offline_devices
 Devices: get_device_status, get_boxes, search_devices
 Rules: get_network_rules, pause_rule, resume_rule, get_target_lists
 Search: search_flows, search_alarms, search_rules, search_target_lists
-Analytics: get_simple_statistics, get_flow_insights, get_recent_flow_activity, get_alarm_trends
+Analytics: get_simple_statistics, get_flow_insights, get_flow_trends, get_alarm_trends
 Management: create_target_list, update_target_list, delete_target_list
 ```
 
@@ -336,6 +336,17 @@ firewalla-mcp-server/
 - Input validation prevents injection attacks
 - All API communications use HTTPS
 
+## Known Behaviors and Limitations
+
+### Category Classification
+- **Flow Categories**: Many network flows may show as empty category ("") in the Firewalla API response. This is expected behavior - Firewalla categorizes traffic when it recognizes the domain/service (e.g., "av" for audio/video, "social" for social media).
+- **Target List Categories**: Some target lists may show category as "unknown". This is normal for user-created or certain system lists.
+- **Timeline**: Category classification happens at the Firewalla device level and may take time to build up meaningful categorization data.
+
+### Data Characteristics
+- **Response Sizes**: The `get_recent_flow_activity` tool returns up to 400 recent flows. For larger datasets or historical analysis, use `search_flows` with time filters for more targeted queries.
+- **Geographic Data**: IP geolocation is enriched by the MCP server and includes country, city, and risk scores when available.
+
 ## Troubleshooting
 
 ### Quick Fixes
@@ -389,8 +400,7 @@ For more detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 **Version 1.0.0:**
 - 29 tools with API-verified schemas
 - 24 direct API endpoints + 5 convenience wrappers
-- get_flow_insights for category-based traffic analysis
-- get_recent_flow_activity for current network state snapshots
+- NEW: get_flow_insights for category-based traffic analysis
 - Advanced search with logical operators (AND, OR, NOT)
 - All limits corrected to API maximum (500)
 - Required parameters added for proper API calls

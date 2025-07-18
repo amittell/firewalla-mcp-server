@@ -577,7 +577,7 @@ export class FirewallaMCPServer {
           {
             name: 'get_recent_flow_activity',
             description:
-              'Get recent network flow activity snapshot (last 10-20 minutes). Returns up to 2000 most recent flows for immediate analysis. CRITICAL: This is NOT historical trend data - shows current activity only. Use for "what\'s happening now" questions, not daily/weekly patterns. Perfect for: current security assessment, immediate network state, recent protocol distribution. AVOID for: historical analysis, daily patterns, trend identification.',
+              'Get recent network flow activity snapshot (last 10-20 minutes). Returns up to 400 most recent flows for immediate analysis. For larger datasets, use search_flows with time filters. CRITICAL: This is NOT historical trend data - shows current activity only. Use for "what\'s happening now" questions, not daily/weekly patterns. Perfect for: current security assessment, immediate network state, recent protocol distribution. AVOID for: historical analysis, daily patterns, trend identification.',
             inputSchema: {
               type: 'object',
               properties: {},

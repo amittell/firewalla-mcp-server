@@ -580,11 +580,11 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
 export class GetRecentFlowActivityHandler extends BaseToolHandler {
   name = 'get_recent_flow_activity';
   description =
-    'Get recent network flow activity snapshot (last 10-20 minutes of traffic). Returns up to 2000 most recent flows for immediate analysis. IMPORTANT: This is NOT historical trend data - it shows current activity only. Use for "what\'s happening now" questions, not daily/weekly patterns. Ideal for: current security assessment, immediate network state, recent protocol distribution.';
+    'Get recent network flow activity snapshot (last 10-20 minutes of traffic). Returns up to 400 most recent flows for immediate analysis. IMPORTANT: This is NOT historical trend data - it shows current activity only. Use for "what\'s happening now" questions, not daily/weekly patterns. Ideal for: current security assessment, immediate network state, recent protocol distribution.';
   category = 'analytics' as const;
 
-  private static readonly MAX_FLOWS = 2000;
-  private static readonly FLOWS_PER_PAGE = 500;
+  private static readonly MAX_FLOWS = 400;
+  private static readonly FLOWS_PER_PAGE = 200;
   private static readonly MAX_PAGES = Math.ceil(
     GetRecentFlowActivityHandler.MAX_FLOWS /
       GetRecentFlowActivityHandler.FLOWS_PER_PAGE
