@@ -1,22 +1,49 @@
 {
   "name": "firewalla-mcp-server",
   "version": "1.0.0",
-  "type": "module",
   "description": "A Model Context Protocol (MCP) server that enables Claude to access and analyze your Firewalla firewall data in real-time.",
-  "main": "dist/server.js",
-  "files": [
-    "dist/**/*",
-    "README.md",
-    "LICENSE"
+  "keywords": [
+    "mcp",
+    "firewalla",
+    "firewall",
+    "security",
+    "model-context-protocol",
+    "claude",
+    "network-monitoring",
+    "claude-desktop",
+    "claude-code",
+    "vscode",
+    "cursor",
+    "ai-tools",
+    "network-security",
+    "threat-detection"
   ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/amittell/firewalla-mcp-server.git"
-  },
+  "homepage": "https://github.com/amittell/firewalla-mcp-server#readme",
   "bugs": {
     "url": "https://github.com/amittell/firewalla-mcp-server/issues"
   },
-  "homepage": "https://github.com/amittell/firewalla-mcp-server#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amittell/firewalla-mcp-server.git"
+  },
+  "license": "MIT",
+  "author": "Alex Mittell <mittell@me.com> (https://github.com/amittell)",
+  "type": "module",
+  "main": "dist/server.js",
+  "types": "./dist/server.d.ts",
+  "bin": {
+    "firewalla-mcp-server": "dist/server.js"
+  },
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "files": [
+    "dist/**/*",
+    "docs/**/*",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "build:clean": "rimraf dist && npm run build",
@@ -28,7 +55,7 @@
     "test": "cross-env NODE_ENV=test jest",
     "test:watch": "cross-env NODE_ENV=test jest --watch",
     "test:ci": "cross-env CI=true NODE_ENV=test jest --coverage --watchAll=false",
-    "test:quick": "cross-env NODE_ENV=test jest --testPathPatterns='tools|utils|validation' --passWithNoTests --maxWorkers=2",
+    "test:quick": "cross-env NODE_ENV=test jest --testPathPatterns='utils|validation' --testPathIgnorePatterns='bulk-operations|problematic-tools|timeout-retry' --passWithNoTests --maxWorkers=2",
     "test:integration": "cross-env NODE_ENV=test TEST_ENV=integration jest --testPathPatterns=integration --passWithNoTests",
     "test:unit": "cross-env NODE_ENV=test TEST_ENV=development jest --testPathPatterns=unit",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
@@ -49,28 +76,24 @@
     "ci:quick": "npm run format:check && npm run typecheck && npm run lint && npm run build && npm run test:quick",
     "ci:full": "npm run ci:quick && npm run test:ci",
     "demo:optimization": "node scripts/demo-optimization.cjs",
-    "test:optimized": "cross-env OPTIMIZE_TESTS=true npm test -- tests/firewalla/client-device-optimized.test.ts"
+    "test:optimized": "cross-env OPTIMIZE_TESTS=true npm test -- tests/firewalla/client-device-optimized.test.ts",
+    "test:regression": "cross-env NODE_ENV=test jest --testPathPatterns='regression' --passWithNoTests",
+    "test:regression:wave0": "cross-env NODE_ENV=test jest tests/regression/wave-0-features.test.ts",
+    "test:regression:wave1": "cross-env NODE_ENV=test jest tests/regression/wave-1-validation.test.ts",
+    "test:regression:wave2": "cross-env NODE_ENV=test jest tests/regression/wave-2-search.test.ts",
+    "test:regression:contracts": "cross-env NODE_ENV=test jest tests/regression/api-contracts.test.ts",
+    "test:regression:performance": "cross-env NODE_ENV=test jest tests/regression/performance.test.ts",
+    "test:regression:all": "npm run test:regression:wave0 && npm run test:regression:wave1 && npm run test:regression:wave2 && npm run test:regression:contracts && npm run test:regression:performance"
   },
-  "keywords": [
-    "mcp",
-    "firewalla",
-    "firewall",
-    "security",
-    "model-context-protocol"
-  ],
-  "author": {
-    "name": "Alex Mittell",
-    "email": "mittell@me.com",
-    "url": "https://github.com/amittell"
-  },
-  "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",
     "@types/geoip-lite": "^1.4.4",
     "@types/node": "^24.0.3",
     "axios": "^1.10.0",
+    "axios-retry": "^4.5.0",
     "dotenv": "^16.5.0",
-    "geoip-lite": "^1.4.10"
+    "geoip-lite": "^1.4.10",
+    "zod": "^3.25.75"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
@@ -79,11 +102,18 @@
     "cross-env": "^7.0.3",
     "eslint": "^9.29.0",
     "jest": "^30.0.2",
+    "nock": "^14.0.5",
     "nodemon": "^3.1.10",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

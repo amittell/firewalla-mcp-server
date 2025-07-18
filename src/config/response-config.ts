@@ -68,17 +68,10 @@ export const DEFAULT_RESPONSE_CONFIG: ResponseFormatConfig = {
   useStandardFormats: true,
 
   legacyCompatibility: {
-    enabled: true,
-    toolsUsingLegacyFormat: [
-      // Start with legacy tools to avoid breaking existing tests
-      'search_flows',
-      'search_alarms',
-      'search_rules',
-      'get_flow_data',
-      'get_bandwidth_usage',
-    ],
+    enabled: false, // Wave 1: Disable legacy compatibility for greenfield project
+    toolsUsingLegacyFormat: [],
     migrationDeadline: '2024-12-31',
-    showDeprecationWarnings: false, // Start without warnings to avoid disruption
+    showDeprecationWarnings: false,
   },
 
   includeMetadata: {
@@ -116,9 +109,9 @@ export function getEnvironmentConfig(
           paginationDetails: true,
         },
         legacyCompatibility: {
-          enabled: true,
+          enabled: false, // Wave 1: Disable legacy compatibility everywhere
           toolsUsingLegacyFormat: [],
-          showDeprecationWarnings: true, // Show warnings in development
+          showDeprecationWarnings: false,
         },
       };
 
@@ -126,16 +119,9 @@ export function getEnvironmentConfig(
       return {
         useStandardFormats: true,
         legacyCompatibility: {
-          enabled: true,
-          toolsUsingLegacyFormat: [
-            // Keep legacy formats in test to avoid breaking existing tests
-            'search_flows',
-            'search_alarms',
-            'search_rules',
-            'get_flow_data',
-            'get_bandwidth_usage',
-          ],
-          showDeprecationWarnings: false, // Avoid test noise
+          enabled: false, // Wave 1: Disable legacy compatibility in tests too
+          toolsUsingLegacyFormat: [],
+          showDeprecationWarnings: false,
         },
         includeMetadata: {
           executionTime: true,
@@ -221,61 +207,7 @@ export function shouldUseLegacyFormat(toolName: string): boolean {
   return config.legacyCompatibility.toolsUsingLegacyFormat.includes(toolName);
 }
 
-/**
- * Add a tool to the legacy format list
- *
- * @param toolName - Name of the tool to add
- */
-export function addLegacyTool(toolName: string): void {
-  const config = getResponseConfig();
-
-  if (!config.legacyCompatibility.toolsUsingLegacyFormat.includes(toolName)) {
-    config.legacyCompatibility.toolsUsingLegacyFormat.push(toolName);
-    updateResponseConfig(config);
-  }
-}
-
-/**
- * Remove a tool from the legacy format list (migrate to standard format)
- *
- * @param toolName - Name of the tool to remove
- */
-export function migrateTool(toolName: string): void {
-  const config = getResponseConfig();
-
-  const index =
-    config.legacyCompatibility.toolsUsingLegacyFormat.indexOf(toolName);
-  if (index > -1) {
-    config.legacyCompatibility.toolsUsingLegacyFormat.splice(index, 1);
-    updateResponseConfig(config);
-  }
-}
-
-/**
- * Get migration status for all tools
- *
- * @returns Object with migration status information
- */
-export function getMigrationStatus(): {
-  totalTools: number;
-  migratedTools: number;
-  legacyTools: string[];
-  migrationProgress: number;
-} {
-  const config = getResponseConfig();
-  const legacyTools = config.legacyCompatibility.toolsUsingLegacyFormat;
-
-  // This would be calculated from the actual tool registry in a real implementation
-  const estimatedTotalTools = 25; // Approximate number of tools that could be standardized
-
-  return {
-    totalTools: estimatedTotalTools,
-    migratedTools: estimatedTotalTools - legacyTools.length,
-    legacyTools: [...legacyTools],
-    migrationProgress:
-      ((estimatedTotalTools - legacyTools.length) / estimatedTotalTools) * 100,
-  };
-}
+// Legacy migration functions removed - greenfield project uses standard responses only
 
 // Initialize configuration on module load
 initializeResponseConfig();

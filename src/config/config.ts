@@ -18,8 +18,8 @@
  * - MAX_PAGE_SIZE: Maximum allowed pagination page size (default: 10000)
  *
  * @version 1.0.0
- * @author Firewalla MCP Server Team
- * @since 2024-01-01
+ * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
+ * @since 2025-06-21
  */
 
 import * as dotenv from 'dotenv';

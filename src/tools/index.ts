@@ -1,7 +1,7 @@
 /**
  * @fileoverview MCP Tool Setup and Registry Management
  *
- * Implements a clean, modular registry pattern for managing 25 distinct MCP tools
+ * Implements a clean, modular registry pattern for managing 35 distinct MCP tools
  * that provide comprehensive Firewalla firewall management capabilities. Replaces
  * the original 1000+ line switch statement with maintainable, testable handler classes.
  *
@@ -9,9 +9,10 @@
  * - **Security (3 tools)**: Alarm management and threat monitoring
  * - **Network (3 tools)**: Flow analysis and bandwidth monitoring
  * - **Device (1 tool)**: Device status and inventory management
- * - **Rule (6 tools)**: Firewall rule configuration and analytics
- * - **Analytics (6 tools)**: Statistical analysis and trend reporting
- * - **Search (6 tools)**: Advanced search with cross-reference capabilities
+ * - **Rule (7 tools)**: Firewall rule configuration and analytics
+ * - **Analytics (7 tools)**: Statistical analysis and trend reporting
+ * - **Search (11 tools)**: Advanced search with cross-reference capabilities
+ * - **Bulk Operations (3 tools)**: Alarm and rule bulk management
  *
  * Architecture Benefits:
  * - Single Responsibility Principle for each tool handler
@@ -21,8 +22,8 @@
  * - Comprehensive logging and monitoring integration
  *
  * @version 1.0.0
- * @author Firewalla MCP Server Team
- * @since 2024-01-01
+ * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
+ * @since 2025-06-21
  */
 
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -33,10 +34,12 @@ import { logger } from '../monitoring/logger.js';
 import { ToolRegistry } from './registry.js';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
 
+import { metrics } from '../monitoring/metrics.js';
+
 /**
  * Registers and configures all Firewalla MCP tools on the server using a modular registry pattern
  *
- * Sets up the complete toolkit of 25 distinct firewall management tools, each encapsulated
+ * Sets up the complete toolkit of 35 distinct firewall management tools, each encapsulated
  * in its own handler class and organized by functional category. The registry pattern provides
  * clean separation of concerns and enables easy testing and maintenance.
  *
@@ -64,12 +67,14 @@ import { getCurrentTimestamp } from '../utils/timestamp.js';
  * @public
  */
 export function setupTools(server: Server, firewalla: FirewallaClient): void {
-  // Initialize the tool registry with all 25 handlers
+  // Initialize the tool registry with all 35 handlers
   const toolRegistry = new ToolRegistry();
 
   // Set up the main request handler using the registry
   server.setRequestHandler(CallToolRequestSchema, async request => {
     const { name, arguments: args } = request.params;
+
+    const startTime = Date.now();
 
     try {
       // Get handler from the registry
@@ -85,8 +90,18 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
       logger.debug(
         `Executing tool: ${name} with handler: ${handler.constructor.name}`
       );
-      return await handler.execute(args || {}, firewalla);
+      const response = await handler.execute(args || {}, firewalla);
+
+      // <add success telemetry>
+      metrics.count('tool.success');
+      metrics.timing('tool.latency_ms', Date.now() - startTime);
+      // </add>
+
+      return response;
     } catch (error: unknown) {
+      // <add error metric>
+      metrics.count('tool.error');
+      // </add>
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       logger.error(`Tool execution failed for ${name}:`, error as Error);
@@ -121,7 +136,7 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
 /**
  * Migration Complete!
  *
- * ✅ Migrated to Registry (25 handlers total):
+ * ✅ Migrated to Registry (35 handlers total):
  *
  * Security (3):
  * - get_active_alarms, get_specific_alarm, delete_alarm

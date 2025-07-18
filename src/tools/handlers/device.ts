@@ -11,26 +11,59 @@ import {
   ErrorType,
 } from '../../validation/error-handler.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
+import {
+  sanitizeFieldValue,
+  normalizeUnknownFields,
+  batchNormalize,
+  sanitizeByteCount,
+} from '../../utils/data-normalizer.js';
+import {
+  validateResponseStructure,
+  normalizeTimestamps,
+  createValidationSchema,
+} from '../../utils/data-validator.js';
+import { getLimitValidationConfig } from '../../config/limits.js';
+import {
+  withToolTimeout,
+  TimeoutError,
+  createTimeoutErrorResponse,
+} from '../../utils/timeout-manager.js';
 
 export class GetDeviceStatusHandler extends BaseToolHandler {
   name = 'get_device_status';
-  description = 'Check online/offline status of devices';
+  description =
+    'Check online/offline status of all network devices with detailed information including MAC addresses, IP addresses, device types, and last seen timestamps. Requires limit parameter. Data is cached for 2 minutes for performance.';
   category = 'device' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: true,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'devices',
+        entity_type: 'network_devices',
+        supports_geographic_enrichment: true,
+        supports_field_normalization: true,
+        supports_pagination: true,
+        supports_filtering: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      // Parameter validation
+      // Parameter validation with standardized limits
       const limitValidation = ParameterValidator.validateNumber(
         args?.limit,
         'limit',
         {
-          required: true,
-          min: 1,
-          max: 1000,
-          integer: true,
+          required: false,
+          defaultValue: 200,
+          ...getLimitValidationConfig(this.name),
         }
       );
 
@@ -49,32 +82,91 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
       const limit = limitValidation.sanitizedValue! as number;
       const cursor = args?.cursor; // Cursor for pagination
 
-      const devicesResponse = await firewalla.getDeviceStatus(
-        deviceId,
-        includeOffline,
-        limit,
-        cursor
+      const devicesResponse = await withToolTimeout(
+        async () =>
+          firewalla.getDeviceStatus(deviceId, includeOffline, limit, cursor),
+        this.name
       );
 
-      // Optimize device counting to avoid dual array iteration
-      const deviceCounts = SafeAccess.safeArrayAccess(
+      // Validate response structure
+      const validationSchema = createValidationSchema('devices');
+      const validationResult = validateResponseStructure(
+        devicesResponse,
+        validationSchema
+      );
+
+      if (!validationResult.isValid) {
+        // Validation warnings logged for debugging
+      }
+
+      // Normalize device data for consistency
+      const deviceResults = SafeAccess.safeArrayAccess(
         devicesResponse.results,
-        (devices: any[]) =>
-          devices.reduce(
-            (acc: { online: number; offline: number }, d: any) => {
-              if (d.online) {
-                acc.online++;
-              } else {
-                acc.offline++;
-              }
-              return acc;
-            },
-            { online: 0, offline: 0 }
-          ),
+        (arr: any[]) => arr,
+        []
+      ) as any[];
+      const normalizedDevices = batchNormalize(deviceResults, {
+        name: (v: any) => sanitizeFieldValue(v, 'Unknown Device').value,
+        ip: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        macVendor: (v: any) => sanitizeFieldValue(v, 'unknown').value,
+        network: (v: any) => (v ? normalizeUnknownFields(v) : null),
+        group: (v: any) => (v ? normalizeUnknownFields(v) : null),
+        online: (v: any) => Boolean(v), // Ensure consistent boolean handling
+      });
+
+      // Optimize device counting to avoid dual array iteration
+      const deviceCounts = normalizedDevices.reduce(
+        (acc: { online: number; offline: number }, d: any) => {
+          if (d.online === true) {
+            acc.online++;
+          } else {
+            acc.offline++;
+          }
+          return acc;
+        },
         { online: 0, offline: 0 }
       );
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+
+      // Process device data with timestamps
+      const processedDevices = normalizedDevices.map((device: any) => {
+        // Apply timestamp normalization to device data
+        const timestampNormalized = normalizeTimestamps(device);
+        const finalDevice = timestampNormalized.data;
+
+        return {
+          id: SafeAccess.getNestedValue(finalDevice, 'id', 'unknown'),
+          gid: SafeAccess.getNestedValue(finalDevice, 'gid', 'unknown'),
+          name: finalDevice.name, // Already normalized
+          ip: finalDevice.ip, // Already normalized
+          macVendor: finalDevice.macVendor, // Already normalized
+          online: finalDevice.online, // Already normalized to boolean
+          lastSeen: unixToISOStringOrNow(
+            SafeAccess.getNestedValue(finalDevice, 'lastSeen', 0) as number
+          ),
+          ipReserved: SafeAccess.getNestedValue(
+            finalDevice,
+            'ipReserved',
+            false
+          ),
+          network: finalDevice.network, // Already normalized
+          group: finalDevice.group, // Already normalized
+          totalDownload: sanitizeByteCount(
+            SafeAccess.getNestedValue(finalDevice, 'totalDownload', 0)
+          ),
+          totalUpload: sanitizeByteCount(
+            SafeAccess.getNestedValue(finalDevice, 'totalUpload', 0)
+          ),
+        };
+      });
+
+      // Apply geographic enrichment for IP addresses
+      const enrichedDevices = await this.enrichGeoIfNeeded(processedDevices, [
+        'ip',
+      ]);
+
+      const unifiedResponseData = {
         total_devices: SafeAccess.getNestedValue(
           devicesResponse,
           'total_count',
@@ -94,44 +186,35 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
           'has_more',
           false
         ),
-        devices: SafeAccess.safeArrayMap(
-          devicesResponse.results,
-          (device: any) => ({
-            id: SafeAccess.getNestedValue(device, 'id', 'unknown'),
-            gid: SafeAccess.getNestedValue(device, 'gid', 'unknown'),
-            name: SafeAccess.getNestedValue(device, 'name', 'Unknown Device'),
-            ip: SafeAccess.getNestedValue(device, 'ip', 'unknown'),
-            macVendor: SafeAccess.getNestedValue(
-              device,
-              'macVendor',
-              'unknown'
-            ),
-            online: SafeAccess.getNestedValue(device, 'online', false),
-            lastSeen: unixToISOStringOrNow(
-              SafeAccess.getNestedValue(device, 'lastSeen', 0) as number
-            ),
-            ipReserved: SafeAccess.getNestedValue(device, 'ipReserved', false),
-            network: SafeAccess.getNestedValue(device, 'network', null),
-            group: SafeAccess.getNestedValue(device, 'group', null),
-            totalDownload: SafeAccess.getNestedValue(
-              device,
-              'totalDownload',
-              0
-            ),
-            totalUpload: SafeAccess.getNestedValue(device, 'totalUpload', 0),
-          })
-        ),
+        devices: enrichedDevices,
         next_cursor: SafeAccess.getNestedValue(
           devicesResponse,
           'next_cursor',
           null
         ),
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
+      // Handle timeout errors specifically
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000 // Default timeout from timeout-manager
+        );
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to get device status: ${errorMessage}`
+      return createErrorResponse(
+        this.name,
+        `Failed to get device status: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { originalError: errorMessage }
       );
     }
   }

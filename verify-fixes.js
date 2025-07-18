@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Quick verification script for the three critical fixes
+// Verification script for critical fixes
 console.log('🔍 Verifying Critical Fixes...\n');
 
 // 1. Verify get_flow_data time query fix

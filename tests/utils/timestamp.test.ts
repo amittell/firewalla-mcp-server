@@ -7,7 +7,11 @@ import {
   unixToISOString, 
   safeUnixToISOString, 
   unixToISOStringOrNow, 
-  getCurrentTimestamp 
+  getCurrentTimestamp,
+  detectAndConvertTimestamp,
+  convertTimestampWithDetection,
+  isValidTimestamp,
+  parseFlexibleTimestamp
 } from '../../src/utils/timestamp.js';
 
 describe('Timestamp Utilities - Edge Cases', () => {
@@ -247,6 +251,238 @@ describe('Timestamp Utilities - Edge Cases', () => {
       const results = await Promise.all(promises);
       expect(results).toHaveLength(100);
       expect(results.every(result => result.includes('2023-01-01'))).toBe(true);
+    });
+  });
+
+  describe('detectAndConvertTimestamp', () => {
+    test('should detect and convert ISO string', () => {
+      const result = detectAndConvertTimestamp('2023-01-01T00:00:00.000Z');
+      expect(result).toMatchObject({
+        timestamp: 1672531200000,
+        format: 'iso_string',
+        confidence: 1.0
+      });
+    });
+
+    test('should detect Unix seconds timestamp', () => {
+      const result = detectAndConvertTimestamp(1672531200);
+      expect(result).toMatchObject({
+        timestamp: 1672531200000,
+        format: 'unix_seconds',
+        confidence: expect.any(Number)
+      });
+      expect(result!.confidence).toBeGreaterThan(0.5);
+    });
+
+    test('should detect Unix milliseconds timestamp', () => {
+      const result = detectAndConvertTimestamp(1672531200000);
+      expect(result).toMatchObject({
+        timestamp: 1672531200000,
+        format: 'unix_milliseconds',
+        confidence: expect.any(Number)
+      });
+    });
+
+    test('should return null for null input', () => {
+      expect(detectAndConvertTimestamp(null)).toBeNull();
+    });
+
+    test('should return null for undefined input', () => {
+      expect(detectAndConvertTimestamp(undefined)).toBeNull();
+    });
+
+    test('should handle string numbers', () => {
+      const result = detectAndConvertTimestamp('1672531200');
+      expect(result).toMatchObject({
+        timestamp: 1672531200000,
+        format: 'unix_seconds'
+      });
+    });
+
+    test('should return null for invalid string', () => {
+      expect(detectAndConvertTimestamp('not-a-number')).toBeNull();
+    });
+
+    test('should return null for negative numbers', () => {
+      expect(detectAndConvertTimestamp(-1)).toBeNull();
+    });
+
+    test('should return null for non-finite numbers', () => {
+      expect(detectAndConvertTimestamp(Infinity)).toBeNull();
+      expect(detectAndConvertTimestamp(NaN)).toBeNull();
+    });
+
+    test('should return null for timestamps outside valid range', () => {
+      expect(detectAndConvertTimestamp(100)).toBeNull(); // Too small
+      expect(detectAndConvertTimestamp(5000000000000)).toBeNull(); // Too large
+    });
+
+    test('should have high confidence for recent timestamps', () => {
+      const now = Math.floor(Date.now() / 1000);
+      const result = detectAndConvertTimestamp(now);
+      expect(result!.confidence).toBe(0.9);
+    });
+
+    test('should have lower confidence for distant timestamps', () => {
+      const futureTimestamp = 4000000000; // Year ~2096
+      const result = detectAndConvertTimestamp(futureTimestamp);
+      expect(result!.confidence).toBe(0.7);
+    });
+  });
+
+  describe('convertTimestampWithDetection', () => {
+    test('should convert valid timestamp without detection info', () => {
+      const result = convertTimestampWithDetection(1672531200);
+      expect(result).toBe('2023-01-01T00:00:00.000Z');
+    });
+
+    test('should include detection info when requested', () => {
+      const result = convertTimestampWithDetection(1672531200, { includeDetectionInfo: true });
+      expect(result).toMatchObject({
+        result: '2023-01-01T00:00:00.000Z',
+        detection: {
+          timestamp: 1672531200000,
+          format: 'unix_seconds',
+          confidence: expect.any(Number)
+        }
+      });
+    });
+
+    test('should use fallback for null/undefined', () => {
+      expect(convertTimestampWithDetection(null)).toBe('Never');
+      expect(convertTimestampWithDetection(undefined, { fallback: 'N/A' })).toBe('N/A');
+    });
+
+    test('should use fallback for low confidence', () => {
+      const result = convertTimestampWithDetection(100, { minimumConfidence: 0.8 });
+      expect(result).toBe('Never');
+    });
+
+    test('should include detection info for failed conversion', () => {
+      const result = convertTimestampWithDetection(null, { includeDetectionInfo: true });
+      expect(result).toMatchObject({
+        result: 'Never',
+        detection: { timestamp: 0, format: 'unknown', confidence: 0 }
+      });
+    });
+
+    test('should handle detection failure with info', () => {
+      const result = convertTimestampWithDetection(-1, { includeDetectionInfo: true });
+      expect(result).toMatchObject({
+        result: 'Never',
+        detection: { timestamp: 0, format: 'unknown', confidence: 0 }
+      });
+    });
+
+    test('should handle exceptions gracefully', () => {
+      // Force an exception by mocking Date constructor
+      const originalDate = global.Date;
+      global.Date = jest.fn().mockImplementation(() => {
+        throw new Error('Date error');
+      }) as any;
+
+      const result = convertTimestampWithDetection(1672531200, { includeDetectionInfo: true });
+      expect(result).toMatchObject({
+        result: 'Never',
+        detection: { timestamp: 0, format: 'unknown', confidence: 0 }
+      });
+
+      global.Date = originalDate;
+    });
+  });
+
+  describe('isValidTimestamp', () => {
+    test('should return true for valid timestamps', () => {
+      expect(isValidTimestamp(1672531200)).toBe(true);
+      expect(isValidTimestamp(1672531200000)).toBe(true);
+      expect(isValidTimestamp('2023-01-01T00:00:00.000Z')).toBe(true);
+    });
+
+    test('should return false for invalid timestamps', () => {
+      expect(isValidTimestamp(null)).toBe(false);
+      expect(isValidTimestamp(undefined)).toBe(false);
+      expect(isValidTimestamp('invalid')).toBe(false);
+      expect(isValidTimestamp(-1)).toBe(false);
+      expect(isValidTimestamp(0)).toBe(false);
+    });
+
+    test('should handle various input types', () => {
+      expect(isValidTimestamp({})).toBe(false);
+      expect(isValidTimestamp([])).toBe(false);
+      expect(isValidTimestamp(true)).toBe(false);
+      expect(isValidTimestamp(false)).toBe(false);
+    });
+  });
+
+  describe('parseFlexibleTimestamp', () => {
+    test('should parse Date objects', () => {
+      const date = new Date('2023-01-01T00:00:00.000Z');
+      const result = parseFlexibleTimestamp(date);
+      expect(result?.toISOString()).toBe('2023-01-01T00:00:00.000Z');
+    });
+
+    test('should return null for invalid Date objects', () => {
+      const invalidDate = new Date('invalid');
+      expect(parseFlexibleTimestamp(invalidDate)).toBeNull();
+    });
+
+    test('should parse Unix timestamps', () => {
+      const result = parseFlexibleTimestamp(1672531200);
+      expect(result?.toISOString()).toBe('2023-01-01T00:00:00.000Z');
+    });
+
+    test('should parse ISO strings', () => {
+      const result = parseFlexibleTimestamp('2023-01-01T00:00:00.000Z');
+      expect(result?.toISOString()).toBe('2023-01-01T00:00:00.000Z');
+    });
+
+    test('should return null for invalid inputs', () => {
+      expect(parseFlexibleTimestamp(null)).toBeNull();
+      expect(parseFlexibleTimestamp(undefined)).toBeNull();
+      expect(parseFlexibleTimestamp('invalid')).toBeNull();
+      expect(parseFlexibleTimestamp({})).toBeNull();
+    });
+
+    test('should handle low confidence detections', () => {
+      // Timestamp outside valid range
+      expect(parseFlexibleTimestamp(100)).toBeNull();
+    });
+
+    test('should handle exceptions gracefully', () => {
+      // This should handle any internal errors and return null
+      const badInput = { toString: () => { throw new Error('toString error'); } };
+      expect(parseFlexibleTimestamp(badInput)).toBeNull();
+    });
+  });
+
+  describe('Additional edge cases for coverage', () => {
+    test('should handle millisecond timestamps with high confidence for recent dates', () => {
+      const now = Date.now();
+      const result = detectAndConvertTimestamp(now);
+      expect(result).toMatchObject({
+        format: 'unix_milliseconds',
+        confidence: 0.9
+      });
+    });
+
+    test('should handle millisecond timestamps with lower confidence for distant dates', () => {
+      const futureMs = 4000000000000; // Year ~2096 in milliseconds
+      const result = detectAndConvertTimestamp(futureMs);
+      expect(result).toMatchObject({
+        format: 'unix_milliseconds',
+        confidence: 0.7
+      });
+    });
+
+    test('should handle non-string, non-number inputs in detectAndConvertTimestamp', () => {
+      expect(detectAndConvertTimestamp({} as any)).toBeNull();
+      expect(detectAndConvertTimestamp([] as any)).toBeNull();
+      expect(detectAndConvertTimestamp(true as any)).toBeNull();
+    });
+
+    test('should handle very small positive numbers', () => {
+      expect(detectAndConvertTimestamp(0.1)).toBeNull();
+      expect(detectAndConvertTimestamp(1)).toBeNull();
     });
   });
 });

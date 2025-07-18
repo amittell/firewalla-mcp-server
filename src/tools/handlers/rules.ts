@@ -18,26 +18,153 @@ import {
   safeUnixToISOString,
   getCurrentTimestamp,
 } from '../../utils/timestamp.js';
+import {
+  getLimitValidationConfig,
+  VALIDATION_CONFIG,
+} from '../../config/limits.js';
+import {
+  withToolTimeout,
+  createTimeoutErrorResponse,
+  TimeoutError,
+} from '../../utils/timeout-manager.js';
+import { validateRuleExists } from '../../validation/resource-validator.js';
+import { logger } from '../../monitoring/logger.js';
+
+/**
+ * Rule status checking utility for preventing redundant operations
+ */
+interface RuleStatusInfo {
+  exists: boolean;
+  status: string;
+  isPaused: boolean;
+  isActive: boolean;
+  resumeAt?: string;
+  errorResponse?: ToolResponse;
+}
+
+/**
+ * Check the current status of a rule before performing operations
+ */
+async function checkRuleStatus(
+  ruleId: string,
+  toolName: string,
+  firewalla: FirewallaClient
+): Promise<RuleStatusInfo> {
+  try {
+    // First check if the rule exists
+    const existenceCheck = await validateRuleExists(
+      ruleId,
+      toolName,
+      firewalla
+    );
+    if (!existenceCheck.exists) {
+      return {
+        exists: false,
+        status: 'not_found',
+        isPaused: false,
+        isActive: false,
+        errorResponse: existenceCheck.errorResponse,
+      };
+    }
+
+    // Get the specific rule details to check its status
+    const rulesResponse = await firewalla.getNetworkRules(`id:${ruleId}`, 1);
+    const rules = SafeAccess.getNestedValue(
+      rulesResponse,
+      'results',
+      []
+    ) as any[];
+
+    if (rules.length === 0) {
+      return {
+        exists: false,
+        status: 'not_found',
+        isPaused: false,
+        isActive: false,
+        errorResponse: createErrorResponse(
+          toolName,
+          'Rule not found in current rule set',
+          ErrorType.API_ERROR,
+          { rule_id: ruleId }
+        ),
+      };
+    }
+
+    const rule = rules[0];
+    const status = SafeAccess.getNestedValue(
+      rule,
+      'status',
+      'unknown'
+    ) as string;
+    const resumeTs = SafeAccess.getNestedValue(rule, 'resumeTs', undefined) as
+      | number
+      | undefined;
+
+    // Determine if rule is paused or active
+    const isPaused: boolean =
+      status === 'paused' ||
+      status === 'disabled' ||
+      Boolean(resumeTs && resumeTs > Date.now() / 1000);
+    const isActive: boolean = status === 'active' || status === 'enabled';
+
+    return {
+      exists: true,
+      status,
+      isPaused,
+      isActive,
+      resumeAt: resumeTs ? new Date(resumeTs * 1000).toISOString() : undefined,
+    };
+  } catch (error) {
+    return {
+      exists: false,
+      status: 'error',
+      isPaused: false,
+      isActive: false,
+      errorResponse: createErrorResponse(
+        toolName,
+        `Failed to check rule status: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        ErrorType.API_ERROR,
+        { rule_id: ruleId }
+      ),
+    };
+  }
+}
 
 export class GetNetworkRulesHandler extends BaseToolHandler {
   name = 'get_network_rules';
-  description = 'Retrieve firewall rules and conditions';
+  description =
+    'Retrieve firewall rules and conditions including target domains, actions, and status. Requires limit parameter. Data is cached for 10 minutes for performance.';
   category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in network rules
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'network_rules',
+        entity_type: 'firewall_rules',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        supports_pagination: true,
+        supports_filtering: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      // Parameter validation
+      // Parameter validation with standardized limits
       const limitValidation = ParameterValidator.validateNumber(
         args?.limit,
         'limit',
         {
-          required: true,
-          min: 1,
-          max: 1000,
-          integer: true,
+          required: false,
+          defaultValue: 200,
+          ...getLimitValidationConfig(this.name),
         }
       );
 
@@ -55,7 +182,10 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
       const summaryOnly = (args?.summary_only as boolean) ?? false;
       const limit = limitValidation.sanitizedValue! as number;
 
-      const response = await firewalla.getNetworkRules(query, limit);
+      const response = await withToolTimeout(
+        async () => firewalla.getNetworkRules(query, limit),
+        this.name
+      );
 
       // Apply additional optimization if summary mode requested
       let optimizedResponse: any = response;
@@ -77,7 +207,9 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
         });
       }
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+
+      const unifiedResponseData = {
         count: SafeAccess.getNestedValue(optimizedResponse, 'count', 0),
         summary_mode: summaryOnly,
         limit_applied: summaryOnly ? limit : undefined,
@@ -161,8 +293,21 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
           optimizedResponse.pagination_note && {
             pagination_note: optimizedResponse.pagination_note,
           }),
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000 // Default timeout
+        );
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
@@ -174,16 +319,31 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
 
 export class PauseRuleHandler extends BaseToolHandler {
   name = 'pause_rule';
-  description = 'Temporarily disable a specific firewall rule';
+  description =
+    'Temporarily disable a specific firewall rule. Requires rule_id parameter. Optional duration parameter (default 60 minutes).';
   category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in rule operations
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'rule_operations',
+        entity_type: 'rule_pause_operation',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      // Parameter validation
-      const ruleIdValidation = ParameterValidator.validateRequiredString(
+      // Parameter validation with enhanced rule ID format checking
+      const ruleIdValidation = ParameterValidator.validateRuleId(
         args?.rule_id,
         'rule_id'
       );
@@ -191,10 +351,8 @@ export class PauseRuleHandler extends BaseToolHandler {
         args?.duration,
         'duration',
         {
-          min: 1,
-          max: 1440,
           defaultValue: 60,
-          integer: true,
+          ...VALIDATION_CONFIG.DURATION_MINUTES,
         }
       );
 
@@ -213,42 +371,177 @@ export class PauseRuleHandler extends BaseToolHandler {
         );
       }
 
-      const result = await firewalla.pauseRule(
-        ruleIdValidation.sanitizedValue as string,
-        durationValidation.sanitizedValue as number
+      const ruleId = ruleIdValidation.sanitizedValue as string;
+      const duration = durationValidation.sanitizedValue as number;
+
+      // Check rule status before attempting to pause it
+      const statusCheck = await checkRuleStatus(ruleId, this.name, firewalla);
+
+      if (!statusCheck.exists) {
+        return statusCheck.errorResponse!;
+      }
+
+      // Prevent redundant pause operations
+      if (statusCheck.isPaused) {
+        const resumeInfo = statusCheck.resumeAt
+          ? ` (scheduled to resume at ${statusCheck.resumeAt})`
+          : '';
+
+        return createErrorResponse(
+          this.name,
+          `Rule is already paused${resumeInfo}`,
+          ErrorType.API_ERROR,
+          {
+            rule_id: ruleId,
+            current_status: statusCheck.status,
+            already_paused: true,
+            resume_at: statusCheck.resumeAt,
+            requested_duration_minutes: duration,
+          },
+          [
+            'Rule is already in a paused state',
+            statusCheck.resumeAt
+              ? `Rule will automatically resume at ${statusCheck.resumeAt}`
+              : 'Use resume_rule to manually reactivate the rule',
+            'Use get_network_rules to check current rule status',
+            'If you want to extend the pause duration, resume first then pause again',
+          ]
+        );
+      }
+
+      // Warn if rule is not currently active
+      if (!statusCheck.isActive) {
+        logger.warn(
+          `Rule ${ruleId} has status '${statusCheck.status}' - pausing may not have the expected effect`,
+          {
+            tool: 'pause_rule',
+            rule_id: ruleId,
+            current_status: statusCheck.status,
+            warning: 'rule_not_active',
+          }
+        );
+      }
+
+      const result = await withToolTimeout(
+        async () => firewalla.pauseRule(ruleId, duration),
+        this.name
       );
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+
+      const unifiedResponseData = {
         success: SafeAccess.getNestedValue(result as any, 'success', false),
         message: SafeAccess.getNestedValue(
           result,
           'message',
           'Rule pause completed'
         ),
-        rule_id: ruleIdValidation.sanitizedValue,
-        duration_minutes: durationValidation.sanitizedValue,
+        rule_id: ruleId,
+        duration_minutes: duration,
         action: 'pause_rule',
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000 // Default timeout
+        );
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(`Failed to pause rule: ${errorMessage}`);
+
+      // Provide enhanced error context based on common failure scenarios
+      let errorType = ErrorType.API_ERROR;
+      const suggestions: string[] = [];
+      const context: Record<string, any> = {
+        rule_id: args?.rule_id,
+        duration: args?.duration || 60,
+        operation: 'pause_rule',
+      };
+
+      // Analyze error message for specific guidance
+      if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+        errorType = ErrorType.API_ERROR;
+        suggestions.push(
+          'Verify the rule_id exists by searching rules first: search_rules query:"id:your_rule_id"',
+          'Check if the rule was recently deleted or modified',
+          'Ensure you have permission to access this rule'
+        );
+      } else if (
+        errorMessage.includes('permission') ||
+        errorMessage.includes('401') ||
+        errorMessage.includes('403')
+      ) {
+        errorType = ErrorType.AUTHENTICATION_ERROR;
+        suggestions.push(
+          'Verify your Firewalla MSP API credentials are valid',
+          'Check if your API token has rule management permissions',
+          'Ensure the rule belongs to a box you have access to'
+        );
+      } else if (
+        errorMessage.includes('already paused') ||
+        errorMessage.includes('inactive')
+      ) {
+        errorType = ErrorType.API_ERROR;
+        suggestions.push(
+          'Rule may already be paused - check rule status first',
+          'Use resume_rule if the rule needs to be reactivated',
+          'Check rule status with get_network_rules to verify current state'
+        );
+      } else {
+        suggestions.push(
+          'Verify network connectivity to Firewalla API',
+          'Check if the Firewalla box is online and accessible',
+          'Try with a different rule_id to test functionality',
+          'See the Error Handling Guide: /docs/error-handling-guide.md'
+        );
+      }
+
+      return createErrorResponse(
+        this.name,
+        `Failed to pause rule: ${errorMessage}`,
+        errorType,
+        context,
+        suggestions
+      );
     }
   }
 }
 
 export class ResumeRuleHandler extends BaseToolHandler {
   name = 'resume_rule';
-  description = 'Resume a previously paused firewall rule';
+  description =
+    'Resume a previously paused firewall rule. Requires rule_id parameter.';
   category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in rule operations
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'rule_operations',
+        entity_type: 'rule_resume_operation',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      // Parameter validation
-      const ruleIdValidation = ParameterValidator.validateRequiredString(
+      // Parameter validation with enhanced rule ID format checking
+      const ruleIdValidation = ParameterValidator.validateRuleId(
         args?.rule_id,
         'rule_id'
       );
@@ -263,21 +556,79 @@ export class ResumeRuleHandler extends BaseToolHandler {
         );
       }
 
-      const result = await firewalla.resumeRule(
-        ruleIdValidation.sanitizedValue as string
+      const ruleId = ruleIdValidation.sanitizedValue as string;
+
+      // Check rule status before attempting to resume it
+      const statusCheck = await checkRuleStatus(ruleId, this.name, firewalla);
+
+      if (!statusCheck.exists) {
+        return statusCheck.errorResponse!;
+      }
+
+      // Prevent redundant resume operations
+      if (statusCheck.isActive) {
+        return createErrorResponse(
+          this.name,
+          'Rule is already active and does not need to be resumed',
+          ErrorType.API_ERROR,
+          {
+            rule_id: ruleId,
+            current_status: statusCheck.status,
+            already_active: true,
+          },
+          [
+            'Rule is already in an active state',
+            'Use get_network_rules to verify current rule status',
+            'If the rule is not working as expected, check rule configuration instead',
+            'Use pause_rule if you want to temporarily disable the rule',
+          ]
+        );
+      }
+
+      // Provide helpful context for non-paused rules
+      if (!statusCheck.isPaused) {
+        logger.warn(
+          `Rule ${ruleId} has status '${statusCheck.status}' - resuming may not activate it as expected`,
+          {
+            tool: 'resume_rule',
+            rule_id: ruleId,
+            current_status: statusCheck.status,
+            warning: 'rule_not_paused',
+          }
+        );
+      }
+
+      const result = await withToolTimeout(
+        async () => firewalla.resumeRule(ruleId),
+        this.name
       );
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+
+      const unifiedResponseData = {
         success: SafeAccess.getNestedValue(result as any, 'success', false),
         message: SafeAccess.getNestedValue(
           result,
           'message',
           'Rule resume completed'
         ),
-        rule_id: ruleIdValidation.sanitizedValue,
+        rule_id: ruleId,
         action: 'resume_rule',
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000 // Default timeout
+        );
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(`Failed to resume rule: ${errorMessage}`);
@@ -287,56 +638,72 @@ export class ResumeRuleHandler extends BaseToolHandler {
 
 export class GetTargetListsHandler extends BaseToolHandler {
   name = 'get_target_lists';
-  description = 'Access security target lists (CloudFlare, CrowdSec)';
+  description =
+    'Access security target lists (CloudFlare, CrowdSec) with domains and IPs. Requires limit parameter. Data cached for 1 hour for performance.';
   category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in target lists metadata
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'target_lists',
+        entity_type: 'security_target_lists',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
-    try {
-      // Parameter validation
-      const limitValidation = ParameterValidator.validateNumber(
-        args?.limit,
-        'limit',
-        {
-          required: true,
-          min: 1,
-          max: 1000,
-          integer: true,
-        }
-      );
+    // Pre-flight parameter validation - do this before timeout wrapper
+    const limitValidation = ParameterValidator.validateNumber(
+      args?.limit,
+      'limit',
+      {
+        required: true,
+        ...getLimitValidationConfig(this.name),
+      }
+    );
 
-      if (!limitValidation.isValid) {
+    if (!limitValidation.isValid) {
+      return createErrorResponse(
+        this.name,
+        'Parameter validation failed',
+        ErrorType.VALIDATION_ERROR,
+        undefined,
+        limitValidation.errors
+      );
+    }
+
+    const limit = limitValidation.sanitizedValue! as number;
+    const listType = args?.list_type as string | undefined;
+
+    // Validate list_type parameter if provided
+    if (listType !== undefined) {
+      const validTypes = ['cloudflare', 'crowdsec', 'all'];
+      if (!validTypes.includes(listType)) {
         return createErrorResponse(
           this.name,
-          'Parameter validation failed',
+          'Invalid list_type parameter',
           ErrorType.VALIDATION_ERROR,
           undefined,
-          limitValidation.errors
+          [`list_type must be one of: ${validTypes.join(', ')}`]
         );
       }
+    }
 
-      const limit = limitValidation.sanitizedValue! as number;
-      const listType = args?.list_type as string | undefined;
-
-      // Validate list_type parameter if provided
-      if (listType !== undefined) {
-        const validTypes = ['cloudflare', 'crowdsec', 'all'];
-        if (!validTypes.includes(listType)) {
-          return createErrorResponse(
-            this.name,
-            'Invalid list_type parameter',
-            ErrorType.VALIDATION_ERROR,
-            undefined,
-            [`list_type must be one of: ${validTypes.join(', ')}`]
-          );
-        }
-      }
-
+    // Use timeout wrapper only for the API call and response processing
+    return withToolTimeout(async () => {
       const listsResponse = await firewalla.getTargetLists(listType, limit);
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+
+      const unifiedResponseData = {
         total_lists: SafeAccess.safeArrayAccess(
           listsResponse.results,
           arr => arr.length,
@@ -358,7 +725,7 @@ export class GetTargetListsHandler extends BaseToolHandler {
             owner: SafeAccess.getNestedValue(list, 'owner', 'unknown'),
             category: SafeAccess.getNestedValue(list, 'category', 'unknown'),
             entry_count: SafeAccess.safeArrayAccess(
-              list.targets,
+              SafeAccess.getNestedValue(list, 'targets', []),
               arr => arr.length,
               0
             ),
@@ -379,7 +746,7 @@ export class GetTargetListsHandler extends BaseToolHandler {
             // The 500 limit was chosen as 5x the original 100 limit to provide
             // better visibility into large lists while maintaining performance.
             targets: SafeAccess.safeArrayAccess(
-              list.targets,
+              SafeAccess.getNestedValue(list, 'targets', []),
               arr => arr.slice(0, 500), // Per-list target buffer limit
               []
             ),
@@ -392,37 +759,49 @@ export class GetTargetListsHandler extends BaseToolHandler {
             notes: SafeAccess.getNestedValue(list, 'notes', ''),
           })
         ),
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to get target lists: ${errorMessage}`
-      );
-    }
+    }, this.name);
   }
 }
 
 export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
   name = 'get_network_rules_summary';
   description =
-    'Get overview statistics and counts of network rules by category (requires limit parameter)';
+    'Get overview statistics and counts of network rules by category. Requires limit parameter. Data cached for 10 minutes for performance.';
   category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in rule summary statistics
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'rule_summary',
+        entity_type: 'rule_statistics',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      // Parameter validation
+      // Parameter validation with standardized limits
       const limitValidation = ParameterValidator.validateNumber(
         args?.limit,
         'limit',
         {
-          required: true,
-          min: 1,
-          max: 10000,
-          integer: true,
+          required: false,
+          defaultValue: 200,
+          ...getLimitValidationConfig(this.name),
         }
       );
       const ruleTypeValidation = ParameterValidator.validateEnum(
@@ -474,9 +853,9 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
       //
       // The limit is validated to ensure reasonable bounds (1-10000) which allows
       // both lightweight queries and comprehensive enterprise-level analysis.
-      const allRulesResponse = await firewalla.getNetworkRules(
-        undefined,
-        limit
+      const allRulesResponse = await withToolTimeout(
+        async () => firewalla.getNetworkRules(undefined, limit),
+        this.name
       );
       const allRules = SafeAccess.getNestedValue(
         allRulesResponse,
@@ -588,7 +967,9 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
         }
       }
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+
+      const unifiedResponseData = {
         total_rules: allRules.length,
         limit_applied: limit,
         summary_timestamp: getCurrentTimestamp(),
@@ -621,8 +1002,21 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
           rule_type: ruleType || 'all',
           active_only: activeOnly,
         },
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000 // Default timeout
+        );
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
@@ -634,23 +1028,37 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
 
 export class GetMostActiveRulesHandler extends BaseToolHandler {
   name = 'get_most_active_rules';
-  description = 'Get rules with highest hit counts for traffic analysis';
+  description =
+    'Get rules with highest hit counts for traffic analysis. Requires limit parameter. Optional min_hits parameter.';
   category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in rule hit analysis
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'rule_analysis',
+        entity_type: 'active_rule_statistics',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      // Parameter validation
+      // Parameter validation with standardized limits
       const limitValidation = ParameterValidator.validateNumber(
         args?.limit,
         'limit',
         {
-          required: true,
-          min: 1,
-          max: 1000,
-          integer: true,
+          required: false,
+          defaultValue: 200,
+          ...getLimitValidationConfig(this.name),
         }
       );
 
@@ -701,9 +1109,9 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
       // The 3000 cap prevents excessive API loads while still allowing reasonable
       // result sets for most use cases.
       const fetchLimit = Math.min(limit * 3, 3000); // 3x buffer with 3000 cap
-      const allRulesResponse = await firewalla.getNetworkRules(
-        undefined,
-        fetchLimit
+      const allRulesResponse = await withToolTimeout(
+        async () => firewalla.getNetworkRules(undefined, fetchLimit),
+        this.name
       );
 
       // Filter and sort by hit count
@@ -725,7 +1133,9 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
         })
         .slice(0, limit);
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+
+      const unifiedResponseData = {
         total_rules_analyzed: SafeAccess.safeArrayAccess(
           allRulesResponse.results,
           arr => arr.length,
@@ -786,8 +1196,21 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
               : 0,
           analysis_timestamp: getCurrentTimestamp(),
         },
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000 // Default timeout
+        );
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
@@ -799,33 +1222,47 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
 
 export class GetRecentRulesHandler extends BaseToolHandler {
   name = 'get_recent_rules';
-  description = 'Get recently created or modified firewall rules';
+  description =
+    'Get recently created or modified firewall rules. Requires limit parameter. Optional hours parameter (default 24 hours lookback).';
   category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in rule timeline analysis
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'rule_timeline',
+        entity_type: 'recent_rule_activity',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      // Parameter validation
+      // Parameter validation with standardized limits
       const limitValidation = ParameterValidator.validateNumber(
         args?.limit,
         'limit',
         {
-          required: true,
-          min: 1,
-          max: 1000,
-          integer: true,
+          required: false,
+          defaultValue: 200,
+          ...getLimitValidationConfig(this.name),
         }
       );
       const hoursValidation = ParameterValidator.validateNumber(
         args?.hours,
         'hours',
         {
-          min: 1,
+          min: 0.1,
           max: 168,
           defaultValue: 24,
-          integer: true,
+          integer: false,
         }
       );
 
@@ -871,9 +1308,9 @@ export class GetRecentRulesHandler extends BaseToolHandler {
       // result sets for most time-based queries.
       const fetchMultiplier = Math.max(3, Math.min(10, 500 / limit)); // Adaptive multiplier: 3-10x based on limit size
       const fetchLimit = Math.min(limit * fetchMultiplier, 2000); // Cap at reasonable maximum
-      const allRulesResponse = await firewalla.getNetworkRules(
-        undefined,
-        fetchLimit
+      const allRulesResponse = await withToolTimeout(
+        async () => firewalla.getNetworkRules(undefined, fetchLimit),
+        this.name
       );
 
       const hoursAgoTs = Math.floor(Date.now() / 1000) - hours * 3600;
@@ -911,7 +1348,9 @@ export class GetRecentRulesHandler extends BaseToolHandler {
         }) // Sort by most recent activity
         .slice(0, limit);
 
-      return this.createSuccessResponse({
+      const startTime = Date.now();
+
+      const unifiedResponseData = {
         total_rules_analyzed: SafeAccess.safeArrayAccess(
           allRulesResponse.results,
           arr => arr.length,
@@ -980,12 +1419,398 @@ export class GetRecentRulesHandler extends BaseToolHandler {
           }).length,
           analysis_timestamp: getCurrentTimestamp(),
         },
+      };
+
+      const executionTime = Date.now() - startTime;
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000 // Default timeout
+        );
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
         `Failed to get recent rules: ${errorMessage}`
+      );
+    }
+  }
+}
+
+/**
+ * Handler for retrieving a specific target list by ID
+ */
+export class GetSpecificTargetListHandler extends BaseToolHandler {
+  name = 'get_specific_target_list';
+  description = 'Retrieve a specific target list by ID from Firewalla';
+  category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'target_lists',
+        entity_type: 'target_list',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
+  async execute(
+    args: ToolArgs,
+    firewalla: FirewallaClient
+  ): Promise<ToolResponse> {
+    try {
+      const idValidation = ParameterValidator.validateRequiredString(
+        args?.id,
+        'id'
+      );
+
+      if (!idValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          idValidation.errors
+        );
+      }
+
+      const id = idValidation.sanitizedValue as string;
+
+      const response = await withToolTimeout(
+        async () => firewalla.getSpecificTargetList(id),
+        this.name
+      );
+
+      return this.createUnifiedResponse(response);
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return createErrorResponse(
+        this.name,
+        `Failed to get target list: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { id: args?.id }
+      );
+    }
+  }
+}
+
+/**
+ * Handler for creating a new target list
+ */
+export class CreateTargetListHandler extends BaseToolHandler {
+  name = 'create_target_list';
+  description = 'Create a new target list in Firewalla';
+  category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'target_lists',
+        entity_type: 'target_list_creation',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
+  async execute(
+    args: ToolArgs,
+    firewalla: FirewallaClient
+  ): Promise<ToolResponse> {
+    try {
+      const nameValidation = ParameterValidator.validateRequiredString(
+        args?.name,
+        'name'
+      );
+      const ownerValidation = ParameterValidator.validateRequiredString(
+        args?.owner,
+        'owner'
+      );
+      const targetsValidation = ParameterValidator.validateArray(
+        args?.targets,
+        'targets',
+        { required: true }
+      );
+      const categoryValidation = ParameterValidator.validateEnum(
+        args?.category,
+        'category',
+        [
+          'ad',
+          'edu',
+          'games',
+          'gamble',
+          'intel',
+          'p2p',
+          'porn',
+          'private',
+          'social',
+          'shopping',
+          'video',
+          'vpn',
+        ],
+        false
+      );
+      const notesValidation = ParameterValidator.validateOptionalString(
+        args?.notes,
+        'notes'
+      );
+
+      const validationResult = ParameterValidator.combineValidationResults([
+        nameValidation,
+        ownerValidation,
+        targetsValidation,
+        categoryValidation,
+        notesValidation,
+      ]);
+
+      if (!validationResult.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          validationResult.errors
+        );
+      }
+
+      const targetListData: any = {
+        name: nameValidation.sanitizedValue,
+        owner: ownerValidation.sanitizedValue,
+        targets: targetsValidation.sanitizedValue,
+      };
+
+      if (categoryValidation.sanitizedValue) {
+        targetListData.category = categoryValidation.sanitizedValue;
+      }
+      if (notesValidation.sanitizedValue) {
+        targetListData.notes = notesValidation.sanitizedValue;
+      }
+
+      const response = await withToolTimeout(
+        async () => firewalla.createTargetList(targetListData),
+        this.name
+      );
+
+      return this.createUnifiedResponse(response);
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return createErrorResponse(
+        this.name,
+        `Failed to create target list: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { name: args?.name, owner: args?.owner }
+      );
+    }
+  }
+}
+
+/**
+ * Handler for updating an existing target list
+ */
+export class UpdateTargetListHandler extends BaseToolHandler {
+  name = 'update_target_list';
+  description = 'Update an existing target list in Firewalla';
+  category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'target_lists',
+        entity_type: 'target_list_update',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
+  async execute(
+    args: ToolArgs,
+    firewalla: FirewallaClient
+  ): Promise<ToolResponse> {
+    try {
+      const idValidation = ParameterValidator.validateRequiredString(
+        args?.id,
+        'id'
+      );
+      const nameValidation = ParameterValidator.validateOptionalString(
+        args?.name,
+        'name'
+      );
+      const targetsValidation = ParameterValidator.validateArray(
+        args?.targets,
+        'targets',
+        { required: false }
+      );
+      const categoryValidation = ParameterValidator.validateEnum(
+        args?.category,
+        'category',
+        [
+          'ad',
+          'edu',
+          'games',
+          'gamble',
+          'intel',
+          'p2p',
+          'porn',
+          'private',
+          'social',
+          'shopping',
+          'video',
+          'vpn',
+        ],
+        false
+      );
+      const notesValidation = ParameterValidator.validateOptionalString(
+        args?.notes,
+        'notes'
+      );
+
+      const validationResult = ParameterValidator.combineValidationResults([
+        idValidation,
+        nameValidation,
+        targetsValidation,
+        categoryValidation,
+        notesValidation,
+      ]);
+
+      if (!validationResult.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          validationResult.errors
+        );
+      }
+
+      const id = idValidation.sanitizedValue as string;
+      const updateData: Record<string, unknown> = {};
+
+      if (nameValidation.sanitizedValue !== undefined) {
+        updateData.name = nameValidation.sanitizedValue;
+      }
+      if (targetsValidation.sanitizedValue !== undefined) {
+        updateData.targets = targetsValidation.sanitizedValue;
+      }
+      if (categoryValidation.sanitizedValue !== undefined) {
+        updateData.category = categoryValidation.sanitizedValue;
+      }
+      if (notesValidation.sanitizedValue !== undefined) {
+        updateData.notes = notesValidation.sanitizedValue;
+      }
+
+      const response = await withToolTimeout(
+        async () => firewalla.updateTargetList(id, updateData),
+        this.name
+      );
+
+      return this.createUnifiedResponse(response);
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return createErrorResponse(
+        this.name,
+        `Failed to update target list: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { id: args?.id }
+      );
+    }
+  }
+}
+
+/**
+ * Handler for deleting a target list
+ */
+export class DeleteTargetListHandler extends BaseToolHandler {
+  name = 'delete_target_list';
+  description = 'Delete a target list from Firewalla';
+  category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'target_lists',
+        entity_type: 'target_list_deletion',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
+  async execute(
+    args: ToolArgs,
+    firewalla: FirewallaClient
+  ): Promise<ToolResponse> {
+    try {
+      const idValidation = ParameterValidator.validateRequiredString(
+        args?.id,
+        'id'
+      );
+
+      if (!idValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          idValidation.errors
+        );
+      }
+
+      const id = idValidation.sanitizedValue as string;
+
+      const response = await withToolTimeout(
+        async () => firewalla.deleteTargetList(id),
+        this.name
+      );
+
+      return this.createUnifiedResponse(response);
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return createErrorResponse(
+        this.name,
+        `Failed to delete target list: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { id: args?.id }
       );
     }
   }

@@ -10,11 +10,26 @@
  * tool ecosystem.
  *
  * @version 1.0.0
- * @author Firewalla MCP Server Team
- * @since 2024-01-01
+ * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
+ * @since 2025-06-21
  */
 
 import type { FirewallaClient } from '../../firewalla/client.js';
+import type { ToolResponseUnified } from '../../types.js';
+import {
+  createErrorResponse,
+  ErrorType,
+} from '../../validation/error-handler.js';
+import {
+  validateAndSanitizeParameters,
+  type SanitizationConfig,
+} from '../../validation/parameter-sanitizer.js';
+import { toSnakeCaseDeep } from '../../utils/field-normalizer.js';
+import {
+  enrichWithGeographicData,
+  getGlobalEnrichmentPipeline,
+} from '../../utils/geographic-enrichment-pipeline.js';
+import { geoCache } from '../../utils/geographic.js';
 
 /**
  * Base arguments interface for MCP tool execution
@@ -38,6 +53,8 @@ export interface BaseToolArgs {
   group_by?: string;
   /** @description Optional flag to enable result aggregation */
   aggregate?: boolean;
+  /** @description Optional flag to force refresh and bypass cache */
+  force_refresh?: boolean;
   [key: string]: unknown; // Allow additional properties while maintaining base structure
 }
 
@@ -212,10 +229,31 @@ export interface ToolHandler {
 }
 
 /**
+ * Configuration options for BaseToolHandler
+ */
+export interface BaseToolOptions {
+  /** Whether to enable geographic enrichment for IP addresses */
+  enableGeoEnrichment?: boolean;
+  /** Whether to enable field normalization to snake_case */
+  enableFieldNormalization?: boolean;
+  /** Additional metadata to include in responses */
+  additionalMeta?: Record<string, any>;
+}
+
+/**
+ * Generate a simple request ID for tracking
+ */
+function generateRequestId(): string {
+  return `req_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+}
+
+/**
  * Base class for tool handlers with common validation and error handling
  *
  * Provides standardized implementation patterns for MCP tools including:
- * - Consistent response formatting for success and error cases
+ * - Unified response formatting with consistent metadata
+ * - Automatic geographic enrichment for IP addresses
+ * - Field normalization to snake_case
  * - JSON serialization with proper error handling
  * - Tool metadata structure validation
  * - Common utility methods for response construction
@@ -242,6 +280,20 @@ export abstract class BaseToolHandler implements ToolHandler {
     | 'analytics'
     | 'search';
 
+  /** @description Configuration options for this handler */
+  protected options: BaseToolOptions;
+
+  /**
+   * Constructor with default configuration
+   */
+  constructor(options: BaseToolOptions = {}) {
+    this.options = {
+      enableGeoEnrichment: true, // Default to enabled for consistency
+      enableFieldNormalization: true, // Default to enabled for consistency
+      ...options,
+    };
+  }
+
   /**
    * Execute the tool logic - must be implemented by concrete classes
    *
@@ -255,11 +307,12 @@ export abstract class BaseToolHandler implements ToolHandler {
   ): Promise<ToolResponse>;
 
   /**
-   * Create a standardized success response with JSON-formatted data
+   * Create a legacy success response (DEPRECATED - Use createUnifiedResponse)
    *
    * @param data - The data to include in the response
    * @returns Formatted success response compliant with MCP protocol
    * @protected
+   * @deprecated Use createUnifiedResponse for new handlers
    */
   protected createSuccessResponse(data: any): ToolResponse {
     return {
@@ -273,31 +326,175 @@ export abstract class BaseToolHandler implements ToolHandler {
   }
 
   /**
-   * Create a standardized error response with diagnostic information
+   * Create a unified success response with consistent formatting and enrichment
    *
-   * @param message - Human-readable error message
-   * @param details - Optional additional error context or debugging information
-   * @returns Formatted error response with isError flag set
+   * @param data - The data to include in the response
+   * @param options - Additional options for response generation
+   * @returns Formatted success response with unified structure
    * @protected
    */
-  protected createErrorResponse(message: string, details?: any): ToolResponse {
+  protected async createUnifiedResponse(
+    data: any,
+    options: {
+      executionTimeMs?: number;
+      requestId?: string;
+      additionalMeta?: Record<string, any>;
+    } = {}
+  ): Promise<ToolResponse> {
+    const startTime = Date.now();
+    let processedData = data;
+    const meta: Record<string, any> = {};
+
+    // Apply geographic enrichment if enabled
+    if (this.options.enableGeoEnrichment) {
+      try {
+        processedData = await enrichWithGeographicData(processedData, geoCache);
+        meta.geo_enriched = true;
+      } catch (error) {
+        // Geographic enrichment failure shouldn't break the response
+        meta.geo_enriched = false;
+        meta.geo_enrichment_error =
+          error instanceof Error ? error.message : 'Unknown error';
+      }
+    }
+
+    // Apply field normalization if enabled
+    if (this.options.enableFieldNormalization) {
+      try {
+        processedData = toSnakeCaseDeep(processedData);
+        meta.field_normalized = true;
+      } catch (error) {
+        // Field normalization failure shouldn't break the response
+        meta.field_normalized = false;
+        meta.field_normalization_error =
+          error instanceof Error ? error.message : 'Unknown error';
+      }
+    }
+
+    // Build unified response
+    const unifiedResponse: ToolResponseUnified = {
+      success: true,
+      data: processedData,
+      meta: {
+        request_id: options.requestId || generateRequestId(),
+        execution_time_ms: options.executionTimeMs || Date.now() - startTime,
+        handler: this.name,
+        timestamp: new Date().toISOString(),
+        count: Array.isArray(processedData) ? processedData.length : undefined,
+        ...meta,
+        ...this.options.additionalMeta,
+        ...options.additionalMeta,
+      },
+    };
+
+    // Convert to MCP ToolResponse format
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(
-            {
-              error: true,
-              message,
-              tool: this.name,
-              ...(details && { details }),
-            },
-            null,
-            2
-          ),
+          text: JSON.stringify(unifiedResponse, null, 2),
         },
       ],
-      isError: true,
     };
+  }
+
+  /**
+   * Helper method for geographic enrichment that can be called by handlers
+   *
+   * @param payload - Data to enrich with geographic information
+   * @param ipFields - Array of IP field names to enrich (defaults to common fields)
+   * @returns Promise resolving to enriched data
+   * @protected
+   */
+  protected async enrichGeoIfNeeded<T>(
+    payload: T,
+    ipFields: string[] = ['source_ip', 'destination_ip', 'device_ip', 'ip']
+  ): Promise<T> {
+    if (!this.options.enableGeoEnrichment) {
+      return payload;
+    }
+
+    try {
+      const pipeline = getGlobalEnrichmentPipeline(geoCache);
+      return (await pipeline.enrichObject(payload as any, ipFields)) as T;
+    } catch (_error) {
+      // Return original payload if enrichment fails
+      return payload;
+    }
+  }
+
+  /**
+   * Create a standardized error response with diagnostic information
+   *
+   * @param message - Human-readable error message
+   * @param errorType - Specific type of error (defaults to UNKNOWN_ERROR)
+   * @param details - Optional additional error context or debugging information
+   * @param validationErrors - Optional array of validation error messages
+   * @returns Formatted error response with isError flag set
+   * @protected
+   */
+  protected createErrorResponse(
+    message: string,
+    errorType: ErrorType = ErrorType.UNKNOWN_ERROR,
+    details?: any,
+    validationErrors?: string[]
+  ): ToolResponse {
+    return createErrorResponse(
+      this.name,
+      message,
+      errorType,
+      details,
+      validationErrors
+    );
+  }
+
+  /**
+   * Sanitize and validate parameters early in the execution pipeline
+   *
+   * @param rawArgs - Raw arguments from MCP client
+   * @param config - Optional sanitization configuration
+   * @returns Sanitized arguments or error response
+   * @protected
+   */
+  protected sanitizeParameters(
+    rawArgs: unknown,
+    config?: Partial<SanitizationConfig>
+  ): { sanitizedArgs: ToolArgs } | { errorResponse: ToolResponse } {
+    const result = validateAndSanitizeParameters(rawArgs, this.name, config);
+
+    if ('errorResponse' in result) {
+      return { errorResponse: result.errorResponse };
+    }
+
+    return { sanitizedArgs: result.sanitizedArgs };
+  }
+
+  /**
+   * Execute tool with automatic parameter sanitization
+   *
+   * This is a convenience method that automatically sanitizes parameters
+   * before calling the tool's main execution logic. Tools can override
+   * this to customize sanitization behavior.
+   *
+   * @param rawArgs - Raw arguments from MCP client
+   * @param firewalla - Firewalla API client instance
+   * @param config - Optional sanitization configuration
+   * @returns Promise resolving to tool response
+   * @protected
+   */
+  protected async executeWithSanitization(
+    rawArgs: unknown,
+    firewalla: FirewallaClient,
+    config?: Partial<SanitizationConfig>
+  ): Promise<ToolResponse> {
+    // Early parameter sanitization
+    const sanitizationResult = this.sanitizeParameters(rawArgs, config);
+
+    if ('errorResponse' in sanitizationResult) {
+      return sanitizationResult.errorResponse;
+    }
+
+    // Call the tool's execute method with sanitized parameters
+    return this.execute(sanitizationResult.sanitizedArgs, firewalla);
   }
 }

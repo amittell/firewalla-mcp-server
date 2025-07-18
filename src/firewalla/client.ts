@@ -14,11 +14,12 @@
  * cross-reference correlation and trend analysis.
  *
  * @version 1.0.0
- * @author Firewalla MCP Server Team
- * @since 2024-01-01
+ * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
+ * @since 2025-06-21
  */
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import { createHash } from 'crypto';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
 import {
   FirewallaConfig,
@@ -45,12 +46,12 @@ import { logger } from '../monitoring/logger.js';
 import {
   GeographicCache,
   type GeographicCacheStats,
-} from '../utils/geographic-cache.js';
-import {
   getGeographicDataForIP,
-  enrichObjectWithGeo,
   normalizeIP,
-} from '../utils/geographic-utils.js';
+} from '../utils/geographic.js';
+import { safeAccess, safeValue } from '../utils/data-normalizer.js';
+import { validateAlarmId } from '../utils/alarm-id-validation.js';
+import { normalizeTimestamps } from '../utils/data-validator.js';
 
 /**
  * Standard API response wrapper for Firewalla MSP endpoints
@@ -110,6 +111,14 @@ export class FirewallaClient {
 
   /** @private Geographic cache for IP geolocation lookups */
   private geoCache: GeographicCache;
+
+  /** @private Mapping of severity levels to alarm type numbers for query conversion */
+  private static readonly SEVERITY_TYPE_MAP: Record<string, number> = {
+    low: 1,
+    medium: 4,
+    high: 8,
+    critical: 12,
+  };
 
   /**
    * Creates a new Firewalla API client instance
@@ -212,6 +221,28 @@ export class FirewallaClient {
   }
 
   /**
+   * Converts severity-based queries to type-based queries for API compatibility
+   *
+   * The Firewalla API uses numeric alarm types instead of severity labels.
+   * This method converts human-readable severity queries like "severity:high"
+   * to API-compatible type queries like "type:>=8".
+   *
+   * @param query - The search query string that may contain severity filters
+   * @returns Converted query string with severity filters replaced by type filters
+   * @private
+   */
+  private convertSeverityToTypeQuery(query: string): string {
+    return query.replace(
+      /severity:(high|medium|low|critical)/gi,
+      (match: string, severity: string) => {
+        const minType =
+          FirewallaClient.SEVERITY_TYPE_MAP[severity.toLowerCase()];
+        return minType !== undefined ? `type:>=${minType}` : match;
+      }
+    );
+  }
+
+  /**
    * Generates a unique cache key for API requests with enhanced collision prevention
    *
    * Creates a cache key that includes the box ID, endpoint, method, and sorted parameters
@@ -248,7 +279,12 @@ export class FirewallaClient {
         : 'no-params';
 
     // Include box ID, method, endpoint, and parameters with separators
-    return `fw:${this.config.boxId}:${method}:${endpoint.replace(/[^a-zA-Z0-9]/g, '_')}:${Buffer.from(paramStr).toString('base64').substring(0, 32)}`;
+    // Use SHA256 hash to ensure unique cache keys without truncation issues
+    const paramHash = createHash('sha256')
+      .update(paramStr)
+      .digest('hex')
+      .substring(0, 32);
+    return `fw:${this.config.boxId}:${method}:${endpoint.replace(/[^a-zA-Z0-9]/g, '_')}:${paramHash}`;
   }
 
   /**
@@ -288,13 +324,60 @@ export class FirewallaClient {
       .trim();
   }
 
+  /**
+   * Filter parameters for GET requests to /v2/* endpoints to only include allowed scalar fields
+   * Fixes issue where complex objects get serialized as [object Object] causing "Bad Request" errors
+   */
+  private filterParametersForDataEndpoints(
+    method: string,
+    endpoint: string,
+    params?: Record<string, unknown>
+  ): Record<string, unknown> | undefined {
+    // Only filter GET requests to raw /v2/* data endpoints
+    if (method !== 'GET' || !endpoint.startsWith('/v2/') || !params) {
+      return params;
+    }
+
+    // Skip filtering for /v2/*/search endpoints that accept JSON bodies
+    if (endpoint.includes('/search')) {
+      return params;
+    }
+
+    // Allowed scalar parameters for raw /v2/* endpoints
+    const allowedParams = [
+      'query',
+      'limit',
+      'sortBy',
+      'groupBy',
+      'cursor',
+      'box',
+    ];
+
+    const filtered: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(params)) {
+      if (allowedParams.includes(key) && value !== undefined) {
+        filtered[key] = value;
+      }
+    }
+
+    return filtered;
+  }
+
   private async request<T>(
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
     endpoint: string,
     params?: Record<string, unknown>,
+    body?: Record<string, unknown> | boolean,
     cacheable = true
   ): Promise<T> {
-    const cacheKey = this.getCacheKey(endpoint, params, method);
+    // Filter parameters for raw /v2/* data endpoints to prevent "Bad Request" errors
+    const filteredParams = this.filterParametersForDataEndpoints(
+      method,
+      endpoint,
+      params
+    );
+    const cacheKey = this.getCacheKey(endpoint, filteredParams, method);
 
     if (cacheable && method === 'GET') {
       const cached = this.getFromCache<T>(cacheKey);
@@ -308,16 +391,27 @@ export class FirewallaClient {
 
       switch (method) {
         case 'GET':
-          response = await this.api.get(endpoint, { params });
+          response = await this.api.get(endpoint, { params: filteredParams });
           break;
         case 'POST':
-          response = await this.api.post(endpoint, params);
+          response = await this.api.post(endpoint, body, {
+            params: filteredParams,
+          });
           break;
         case 'PUT':
-          response = await this.api.put(endpoint, params);
+          response = await this.api.put(endpoint, body, {
+            params: filteredParams,
+          });
+          break;
+        case 'PATCH':
+          response = await this.api.patch(endpoint, body, {
+            params: filteredParams,
+          });
           break;
         case 'DELETE':
-          response = await this.api.delete(endpoint, { params });
+          response = await this.api.delete(endpoint, {
+            params: filteredParams,
+          });
           break;
       }
 
@@ -356,7 +450,12 @@ export class FirewallaClient {
       }
 
       if (cacheable && method === 'GET') {
-        this.setCache(cacheKey, result);
+        // Use shorter TTL for dynamic data (alarms, flows)
+        const ttlSeconds =
+          endpoint.includes('/alarms') || endpoint.includes('/flows')
+            ? 15
+            : undefined;
+        this.setCache(cacheKey, result, ttlSeconds);
       }
 
       return result;
@@ -371,6 +470,11 @@ export class FirewallaClient {
         if (status) {
           switch (status) {
             case 400:
+              logger.debug('API 400 Error Details:', {
+                url,
+                params: filteredParams,
+                response: error.response?.data,
+              });
               errorMessage = `Bad Request: Invalid parameters sent to ${url}`;
               break;
             case 401:
@@ -391,6 +495,10 @@ export class FirewallaClient {
             case 500:
               errorMessage =
                 'Server error: Firewalla API is experiencing issues';
+              break;
+            case 502:
+              errorMessage =
+                'Bad Gateway: Unable to connect to Firewalla API server or invalid resource ID';
               break;
             case 503:
               errorMessage =
@@ -455,7 +563,8 @@ export class FirewallaClient {
     groupBy?: string,
     sortBy = 'timestamp:desc',
     limit = 200,
-    cursor?: string
+    cursor?: string,
+    force_refresh = false
   ): Promise<{ count: number; results: Alarm[]; next_cursor?: string }> {
     const params: Record<string, unknown> = {
       sortBy,
@@ -463,6 +572,10 @@ export class FirewallaClient {
     };
 
     if (query) {
+      // Convert severity:X queries to type:>=X queries since API doesn't understand severity
+      if (typeof query === 'string') {
+        query = this.convertSeverityToTypeQuery(query);
+      }
       params.query = query;
     }
     if (groupBy) {
@@ -472,31 +585,49 @@ export class FirewallaClient {
       params.cursor = cursor;
     }
 
-    // Use global endpoint with box parameter for filtering
-    if (this.config.boxId) {
-      params.box = this.config.boxId;
-    }
-    const endpoint = `/v2/alarms`;
+    // Apply box filter through the query parameter
+    params.query = this.addBoxFilter(params.query as string | undefined);
 
     const response = await this.request<{
       count: number;
       results: any[];
       next_cursor?: string;
-    }>('GET', endpoint, params);
+    }>('GET', '/v2/alarms', params, !force_refresh);
 
-    // API returns {count, results[], next_cursor} format
-    const alarms = (
-      Array.isArray(response.results) ? response.results : []
-    ).map(
+    // Basic response validation
+    if (!response || typeof response !== 'object') {
+      logger.warn('Invalid alarm response structure');
+      return {
+        count: 0,
+        results: [],
+        next_cursor: undefined,
+      };
+    }
+
+    // Extract alarm data with safe defaults
+    const rawAlarms = Array.isArray(response.results) ? response.results : [];
+
+    // Apply basic safety to the raw alarm data
+    const normalizedAlarms = rawAlarms.map((alarm: any) => ({
+      ...alarm,
+      message: safeValue(alarm.message, 'Unknown alarm'),
+      direction: safeValue(alarm.direction, 'inbound'),
+      protocol: safeValue(alarm.protocol, 'tcp'),
+      device: alarm.device ? safeAccess(alarm.device) : undefined,
+      remote: alarm.remote ? safeAccess(alarm.remote) : undefined,
+    }));
+
+    // Map normalized data to Alarm objects
+    const alarms = normalizedAlarms.map(
       (item: any): Alarm => ({
         ts: item.ts || Math.floor(Date.now() / 1000),
         gid: item.gid || this.config.boxId,
         aid: item.aid || 0,
         type: item.type || 1,
         status: item.status || 1,
-        message: item.message || 'Unknown alarm',
-        direction: item.direction || 'inbound',
-        protocol: item.protocol || 'tcp',
+        message: item.message,
+        direction: item.direction,
+        protocol: item.protocol,
         // Conditional properties based on alarm type
         ...(item.device && { device: item.device }),
         ...(item.remote && { remote: item.remote }),
@@ -508,9 +639,23 @@ export class FirewallaClient {
       })
     );
 
+    // Normalize timestamps in the alarm objects
+    const timestampNormalizedAlarms = alarms.map(alarm => {
+      const result = normalizeTimestamps(alarm);
+      if (result.warnings.length > 0) {
+        logger.warn(
+          `Timestamp normalization warnings for alarm ${alarm.aid}:`,
+          { warnings: result.warnings }
+        );
+      }
+      return result.data;
+    });
+
     return {
-      count: response.count || alarms.length,
-      results: alarms.map(alarm => this.enrichAlarmWithGeographicData(alarm)),
+      count: response.count || timestampNormalizedAlarms.length,
+      results: timestampNormalizedAlarms.map(alarm =>
+        this.enrichWithGeographicData(alarm, ['remote.ip'])
+      ),
       next_cursor: response.next_cursor,
     };
   }
@@ -539,10 +684,8 @@ export class FirewallaClient {
       params.cursor = cursor;
     }
 
-    // Add box parameter for filtering
-    if (this.config.boxId) {
-      params.box = this.config.boxId;
-    }
+    // Apply box filter through the query parameter
+    params.query = this.addBoxFilter(params.query as string | undefined);
 
     const response = await this.request<{
       count: number;
@@ -582,7 +725,10 @@ export class FirewallaClient {
           duration: item.duration || 0,
           count: item.count || item.packets || 1,
           device: {
-            id: item.device?.id || 'unknown',
+            id:
+              item.device?.id !== null && item.device?.id !== undefined
+                ? String(item.device.id)
+                : 'unknown',
             ip: item.device?.ip || item.srcIP || 'unknown',
             name: item.device?.name || 'Unknown Device',
           },
@@ -629,7 +775,9 @@ export class FirewallaClient {
 
     return {
       count: response.count || flows.length,
-      results: flows.map(flow => this.enrichWithGeographicData(flow)),
+      results: flows.map(flow =>
+        this.enrichWithGeographicData(flow, ['destination.ip', 'source.ip'])
+      ),
       next_cursor: response.next_cursor,
     };
   }
@@ -654,10 +802,12 @@ export class FirewallaClient {
       const dataFetcher = async (): Promise<Device[]> => {
         const params: Record<string, unknown> = {};
 
-        // Use global endpoint with box parameter for filtering
-        if (this.config.boxId) {
-          params.box = this.config.boxId;
+        // Apply box filter through the query parameter
+        const boxQuery = this.addBoxFilter();
+        if (boxQuery) {
+          params.query = boxQuery;
         }
+
         const endpoint = `/v2/devices`;
 
         // API returns direct array of devices
@@ -894,9 +1044,10 @@ export class FirewallaClient {
         sortBy: 'ts:desc',
         limit: Math.min(validatedTop * 10, 1000), // Get more data for client-side grouping
       };
-      if (this.config.boxId) {
-        params.box = this.config.boxId;
-      }
+
+      // Apply box filter through the query parameter
+      params.query = this.addBoxFilter(params.query as string | undefined);
+
       const endpoint = '/v2/flows';
 
       const response = await this.request<{
@@ -1013,10 +1164,8 @@ export class FirewallaClient {
       params.limit = limit;
     }
 
-    // Use global endpoint with box parameter for filtering
-    if (this.config.boxId) {
-      params.box = this.config.boxId;
-    }
+    // Apply box filter through the query parameter
+    params.query = this.addBoxFilter(params.query as string | undefined);
 
     const response = await this.request<{
       count: number;
@@ -1095,10 +1244,8 @@ export class FirewallaClient {
       params.limit = limit;
     }
 
-    // Use global endpoint with box parameter for filtering
-    if (this.config.boxId) {
-      params.box = this.config.boxId;
-    }
+    // Apply box filter through the query parameter
+    params.query = this.addBoxFilter(params.query as string | undefined);
 
     const response = await this.request<
       TargetList[] | { results: TargetList[] }
@@ -1117,6 +1264,63 @@ export class FirewallaClient {
       count: Array.isArray(limitedResults) ? limitedResults.length : 0,
       results: Array.isArray(limitedResults) ? limitedResults : [],
     };
+  }
+
+  /**
+   * Get a specific target list by ID
+   */
+  async getSpecificTargetList(id: string): Promise<TargetList> {
+    return this.request<TargetList>('GET', `/v2/target-lists/${id}`);
+  }
+
+  /**
+   * Create a new target list
+   */
+  async createTargetList(targetListData: {
+    name: string;
+    owner: string;
+    targets: string[];
+    category?: string;
+    notes?: string;
+  }): Promise<TargetList> {
+    return this.request<TargetList>(
+      'POST',
+      `/v2/target-lists`,
+      {},
+      targetListData
+    );
+  }
+
+  /**
+   * Update an existing target list
+   */
+  async updateTargetList(
+    id: string,
+    updateData: {
+      name?: string;
+      targets?: string[];
+      category?: string;
+      notes?: string;
+    }
+  ): Promise<TargetList> {
+    return this.request<TargetList>(
+      'PATCH',
+      `/v2/target-lists/${id}`,
+      {},
+      updateData
+    );
+  }
+
+  /**
+   * Delete a target list
+   */
+  async deleteTargetList(
+    id: string
+  ): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(
+      'DELETE',
+      `/v2/target-lists/${id}`
+    );
   }
 
   async getFirewallSummary(): Promise<{
@@ -1156,20 +1360,21 @@ export class FirewallaClient {
     threat_level: 'low' | 'medium' | 'high' | 'critical';
     last_threat_detected: string;
   }> {
-    // Aggregate security data from real endpoints since /metrics/security doesn't exist
-    const [alarms, flows] = await Promise.all([
-      this.getActiveAlarms(undefined, undefined, 'ts:desc', 1000),
-      this.getFlowData(undefined, undefined, 'ts:desc', 1000),
-    ]);
+    // Optimized: Use server-side filtering instead of client-side filtering
+    const last24Hours = Math.floor(Date.now() / 1000 - 24 * 60 * 60);
 
-    const activeAlarms = alarms.results.filter(alarm => alarm.status === 1);
-    const blockedFlows = flows.results.filter(flow => flow.block);
-    const recentAlarms = alarms.results.filter(
-      alarm => alarm.ts > Date.now() / 1000 - 24 * 60 * 60 // Last 24 hours
-    );
+    const [allAlarms, activeAlarms, blockedFlows, recentAlarms] =
+      await Promise.all([
+        this.getActiveAlarms(undefined, undefined, 'ts:desc', 1000), // Total alarms
+        this.getActiveAlarms('status:1', undefined, 'ts:desc', 1000), // Active alarms only
+        this.getFlowData('block:true', undefined, 'ts:desc', 1000), // Blocked flows only
+        this.getActiveAlarms(`ts:>=${last24Hours}`, undefined, 'ts:desc', 1000), // Recent alarms
+      ]);
 
     // Determine threat level based on recent alarms
-    const criticalAlarms = recentAlarms.filter(alarm => alarm.type >= 5).length;
+    const criticalAlarms = recentAlarms.results.filter(
+      alarm => alarm.type >= 5
+    ).length;
     let threat_level: 'low' | 'medium' | 'high' | 'critical' = 'low';
     if (criticalAlarms > 10) {
       threat_level = 'critical';
@@ -1180,14 +1385,17 @@ export class FirewallaClient {
     }
 
     return {
-      total_alarms: alarms.count,
-      active_alarms: activeAlarms.length,
-      blocked_connections: blockedFlows.length,
-      suspicious_activities: recentAlarms.length,
+      total_alarms: allAlarms.count,
+      active_alarms: activeAlarms.count,
+      blocked_connections: blockedFlows.count,
+      suspicious_activities: recentAlarms.count,
       threat_level,
-      last_threat_detected: recentAlarms[0]?.ts
-        ? new Date(recentAlarms[0].ts * 1000).toISOString()
-        : new Date().toISOString(),
+      last_threat_detected:
+        recentAlarms.results.length > 0 && recentAlarms.results[0]?.ts
+          ? typeof recentAlarms.results[0].ts === 'string'
+            ? recentAlarms.results[0].ts
+            : new Date(recentAlarms.results[0].ts * 1000).toISOString()
+          : new Date().toISOString(),
     };
   }
 
@@ -1252,43 +1460,54 @@ export class FirewallaClient {
       severity: string;
     }>
   > {
-    // Build threats from alarm and flow data since /threats/recent doesn't exist
-    const timeThreshold = Date.now() / 1000 - hours * 60 * 60;
+    // Optimized: Use server-side timestamp filtering instead of client-side filtering
+    const timeThreshold = Math.floor(Date.now() / 1000 - hours * 60 * 60);
 
     const [alarms, blockedFlows] = await Promise.all([
-      this.getActiveAlarms(undefined, undefined, 'ts:desc', 1000),
+      this.getActiveAlarms(`ts:>=${timeThreshold}`, undefined, 'ts:desc', 1000),
       this.getFlowData(
-        `ts:${timeThreshold}-${Math.floor(Date.now() / 1000)}`,
+        `block:true AND ts:>=${timeThreshold}`,
         undefined,
         'ts:desc',
-        1000
+        50
       ),
     ]);
 
     // Convert recent alarms to threat format
-    const threats = alarms.results
-      .filter(alarm => alarm.ts > timeThreshold)
-      .map(alarm => ({
-        timestamp: new Date(alarm.ts * 1000).toISOString(),
+    const threats = alarms.results.map(alarm => {
+      // Handle both string and number timestamp formats
+      const timestamp =
+        typeof alarm.ts === 'string'
+          ? alarm.ts
+          : new Date(alarm.ts * 1000).toISOString();
+
+      return {
+        timestamp,
         type: alarm.message || 'Security Alert',
         source_ip: alarm.device?.ip || 'unknown',
         destination_ip: alarm.remote?.ip || 'unknown',
         action_taken: alarm.status === 1 ? 'blocked' : 'logged',
         severity: alarm.type >= 5 ? 'high' : alarm.type >= 3 ? 'medium' : 'low',
-      }));
+      };
+    });
 
     // Add blocked flows as threats
-    const blockedThreats = blockedFlows.results
-      .filter(flow => flow.block && flow.ts > timeThreshold)
-      .slice(0, 50) // Limit to avoid overwhelming response
-      .map(flow => ({
-        timestamp: new Date(flow.ts * 1000).toISOString(),
+    const blockedThreats = blockedFlows.results.map(flow => {
+      // Handle both string and number timestamp formats
+      const timestamp =
+        typeof flow.ts === 'string'
+          ? flow.ts
+          : new Date(flow.ts * 1000).toISOString();
+
+      return {
+        timestamp,
         type: 'Blocked Connection',
         source_ip: flow.device.ip,
         destination_ip: flow.destination?.ip || 'unknown',
         action_taken: 'blocked',
         severity: 'medium',
-      }));
+      };
+    });
 
     return [...threats, ...blockedThreats].slice(0, 100); // Limit total results
   }
@@ -1367,24 +1586,82 @@ export class FirewallaClient {
 
   @optimizeResponse('alarms')
   async getSpecificAlarm(
-    alarmId: string
+    alarmId: string,
+    gid?: string
   ): Promise<{ count: number; results: Alarm[]; next_cursor?: string }> {
     try {
       // Enhanced input validation and sanitization
-      const validatedAlarmId = this.sanitizeInput(alarmId);
-      if (!validatedAlarmId || validatedAlarmId.length === 0) {
-        throw new Error('Invalid or empty alarm ID provided');
+      const validatedGid = this.sanitizeInput(gid || this.config.boxId);
+
+      if (!validatedGid || validatedGid.length === 0) {
+        throw new Error('Invalid or empty gid provided');
       }
 
-      // Additional validation for alarm ID format
-      if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
-        throw new Error('Alarm ID contains invalid characters');
+      // Additional validation for GID format
+      if (!/^[a-zA-Z0-9_-]+$/.test(validatedGid)) {
+        throw new Error('GID contains invalid characters');
       }
 
-      const response = await this.request<any>(
-        'GET',
-        `/v2/alarms/${this.config.boxId}/${validatedAlarmId}`
-      );
+      // Simple alarm ID validation
+      const validatedAlarmId = validateAlarmId(alarmId);
+
+      // Get all possible alarm ID variations to try
+      const idVariations = [validatedAlarmId]; // Just use the validated ID
+      const debugInfo = { originalId: alarmId };
+
+      logger.debug('Attempting alarm ID resolution', {
+        originalId: alarmId,
+        variations: idVariations,
+        debugInfo,
+      });
+
+      let lastError: Error | null = null;
+      let response: any = null;
+
+      // Try each ID variation until one succeeds
+      for (const idVariation of idVariations) {
+        const validatedAlarmId = this.sanitizeInput(idVariation);
+
+        if (!validatedAlarmId || validatedAlarmId.length === 0) {
+          continue; // Skip invalid variations
+        }
+
+        // Additional validation for alarm ID format (relaxed for ID variations)
+        if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
+          continue; // Skip invalid format variations
+        }
+
+        try {
+          logger.debug(`Trying alarm ID variation: ${validatedAlarmId}`);
+
+          response = await this.request<any>(
+            'GET',
+            `/v2/alarms/${validatedGid}/${validatedAlarmId}`
+          );
+
+          // If we get here, the request succeeded
+          logger.debug(`Successfully found alarm with ID: ${validatedAlarmId}`);
+          break;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          logger.debug(`Failed to find alarm with ID ${validatedAlarmId}:`, {
+            error: lastError.message,
+          });
+
+          // Skip invalid variations
+        }
+      }
+
+      // If no variation worked, throw the last error
+      if (!response) {
+        const errorMessage = `Alarm not found: tried ${idVariations.length} ID variations. Last error: ${lastError?.message || 'Unknown error'}`;
+        logger.warn('All alarm ID variations failed', {
+          originalId: alarmId,
+          variations: idVariations,
+          lastError: lastError?.message,
+        });
+        throw new Error(errorMessage);
+      }
 
       // Enhanced null/undefined checks for response
       if (!response || typeof response !== 'object') {
@@ -1520,39 +1797,107 @@ export class FirewallaClient {
   }
 
   @optimizeResponse('alarms')
-  async deleteAlarm(alarmId: string): Promise<any> {
+  async deleteAlarm(alarmId: string, gid?: string): Promise<any> {
     try {
       // Enhanced input validation and sanitization
-      const validatedAlarmId = this.sanitizeInput(alarmId);
-      if (!validatedAlarmId || validatedAlarmId.length === 0) {
-        throw new Error('Invalid or empty alarm ID provided');
+      const validatedGid = this.sanitizeInput(gid || this.config.boxId);
+
+      if (!validatedGid || validatedGid.length === 0) {
+        throw new Error('Invalid or empty gid provided');
       }
 
-      // Additional validation for alarm ID format
-      if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
-        throw new Error('Alarm ID contains invalid characters');
+      // Additional validation for GID format
+      if (!/^[a-zA-Z0-9_-]+$/.test(validatedGid)) {
+        throw new Error('GID contains invalid characters');
       }
 
-      // Enhanced length validation
-      if (validatedAlarmId.length > 128) {
-        throw new Error('Alarm ID is too long (maximum 128 characters)');
+      // Enhanced length validation for GID
+      if (validatedGid.length > 128) {
+        throw new Error('GID is too long (maximum 128 characters)');
       }
 
-      const response = await this.request<{
-        success: boolean;
-        message: string;
-        deleted?: boolean;
-        status?: string;
-      }>(
-        'DELETE',
-        `/v2/alarms/${this.config.boxId}/${validatedAlarmId}`,
-        undefined,
-        false
-      );
+      // Simple alarm ID validation
+      const validatedAlarmId = validateAlarmId(alarmId);
+
+      // Get all possible alarm ID variations to try
+      const idVariations = [validatedAlarmId]; // Just use the validated ID
+      const debugInfo = { originalId: alarmId };
+
+      logger.debug('Attempting alarm deletion with ID resolution', {
+        originalId: alarmId,
+        variations: idVariations,
+        debugInfo,
+      });
+
+      let lastError: Error | null = null;
+      let response: any = null;
+      let successfulId: string | null = null;
+
+      // Try each ID variation until one succeeds
+      for (const idVariation of idVariations) {
+        const validatedAlarmId = this.sanitizeInput(idVariation);
+
+        if (!validatedAlarmId || validatedAlarmId.length === 0) {
+          continue; // Skip invalid variations
+        }
+
+        // Additional validation for alarm ID format
+        if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
+          continue; // Skip invalid format variations
+        }
+
+        // Enhanced length validation for alarm ID
+        if (validatedAlarmId.length > 128) {
+          continue; // Skip variations that are too long
+        }
+
+        try {
+          logger.debug(
+            `Trying to delete alarm with ID variation: ${validatedAlarmId}`
+          );
+
+          response = await this.request<{
+            success: boolean;
+            message: string;
+            deleted?: boolean;
+            status?: string;
+          }>(
+            'DELETE',
+            `/v2/alarms/${validatedGid}/${validatedAlarmId}`,
+            undefined,
+            false
+          );
+
+          // If we get here, the request succeeded
+          successfulId = validatedAlarmId;
+          logger.debug(
+            `Successfully deleted alarm with ID: ${validatedAlarmId}`
+          );
+          break;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          logger.debug(`Failed to delete alarm with ID ${validatedAlarmId}:`, {
+            error: lastError.message,
+          });
+
+          // Continue to next variation
+        }
+      }
+
+      // If no variation worked, throw the last error
+      if (!response || !successfulId) {
+        const errorMessage = `Alarm deletion failed: tried ${idVariations.length} ID variations. Last error: ${lastError?.message || 'Unknown error'}`;
+        logger.warn('All alarm ID variations failed for deletion', {
+          originalId: alarmId,
+          variations: idVariations,
+          lastError: lastError?.message,
+        });
+        throw new Error(errorMessage);
+      }
 
       // Handle various response formats - API may return empty body, status text, or object
       let isSuccess = true; // Default to success for 200 responses
-      let responseMessage = `Alarm ${validatedAlarmId} deleted successfully`;
+      let responseMessage = `Alarm ${successfulId} deleted successfully`;
 
       if (response && typeof response === 'object') {
         // Complex response object - check multiple success indicators
@@ -1576,7 +1921,7 @@ export class FirewallaClient {
 
       // Enhanced response object construction
       const result = {
-        id: validatedAlarmId,
+        id: successfulId,
         success: isSuccess,
         message: responseMessage,
         timestamp: getCurrentTimestamp(),
@@ -1643,27 +1988,17 @@ export class FirewallaClient {
     results: SimpleStats[];
     next_cursor?: string;
   }> {
-    const [boxes, alarms, rules] = await Promise.all([
-      this.getBoxes(),
-      this.getActiveAlarms(),
-      this.getNetworkRules(),
-    ]);
-
-    const onlineBoxes = boxes.results.filter(
-      (box: any) => box.status === 'online' || box.online
-    ).length;
-    const offlineBoxes = boxes.results.length - onlineBoxes;
-
-    const stats = {
-      onlineBoxes,
-      offlineBoxes,
-      alarms: alarms.count,
-      rules: rules.count,
-    };
+    // Optimized: Use single /v2/stats/simple endpoint instead of 3 API calls
+    const response = await this.request<{
+      onlineBoxes: number;
+      offlineBoxes: number;
+      alarms: number;
+      rules: number;
+    }>('GET', '/v2/stats/simple');
 
     return {
       count: 1,
-      results: [stats],
+      results: [response],
     };
   }
 
@@ -1675,8 +2010,6 @@ export class FirewallaClient {
   }> {
     try {
       const flows = await this.getFlowData();
-      // TODO: Implement alarm-based statistics
-      // const alarms = await this.getActiveAlarms();
 
       // Validate flows response structure
       if (!flows?.results || !Array.isArray(flows.results)) {
@@ -1791,12 +2124,12 @@ export class FirewallaClient {
       // Get flow data for the period using global endpoint with box parameter
       const params: Record<string, unknown> = {
         query: `ts:${begin}-${end}`,
-        limit: 10000, // Get large sample for trend analysis
+        limit: 10000,
         sortBy: 'ts:asc',
       };
-      if (this.config.boxId) {
-        params.box = this.config.boxId;
-      }
+
+      // Apply box filter through the query parameter
+      params.query = this.addBoxFilter(params.query as string | undefined);
       const flowResponse = await this.request<{
         count: number;
         results: any[];
@@ -1913,13 +2246,11 @@ export class FirewallaClient {
 
       // Get alarm data for the period using global endpoint with box parameter
       const params: Record<string, unknown> = {
-        query: `ts:${begin}-${end}`,
         limit: 10000,
         sortBy: 'ts:asc',
       };
-      if (this.config.boxId) {
-        params.box = this.config.boxId;
-      }
+      // Add box.id filter to query
+      params.query = this.addBoxFilter(`ts:${begin}-${end}`);
       const alarmResponse = await this.request<{
         count: number;
         results: any[];
@@ -2323,52 +2654,83 @@ export class FirewallaClient {
   }
 
   /**
-   * Enrich flow object with geographic data for source and destination IPs
-   * @param flow - Flow object to enrich
-   * @returns Enriched flow object with geographic data
+   * Set field value in object using dot notation
+   * @param obj - Object to modify
+   * @param fieldPath - Dot notation path (e.g., 'destination.geo')
+   * @param value - Value to set
    */
-  private enrichWithGeographicData(flow: any): any {
-    let enriched = { ...flow };
-
-    // Enrich destination IP
-    if (flow.destination?.ip) {
-      enriched = enrichObjectWithGeo(
-        enriched,
-        'destination.ip',
-        'destination.geo',
-        this.getGeographicData.bind(this)
-      );
+  private setFieldValue(obj: any, fieldPath: string, value: any): void {
+    const keys = fieldPath.split('.');
+    const lastKey = keys.pop();
+    if (!lastKey) {
+      return;
     }
 
-    // Enrich source IP (if different from destination)
-    if (flow.source?.ip && flow.source.ip !== flow.destination?.ip) {
-      enriched = enrichObjectWithGeo(
-        enriched,
-        'source.ip',
-        'source.geo',
-        this.getGeographicData.bind(this)
-      );
+    let current = obj;
+    for (const key of keys) {
+      if (!current[key] || typeof current[key] !== 'object') {
+        current[key] = {};
+      }
+      current = current[key];
+    }
+    current[lastKey] = value;
+  }
+
+  /**
+   * Generic method to enrich object with geographic data based on IP paths
+   * @param obj - Object to enrich
+   * @param ipPaths - Array of dot notation paths to IP fields (optional, defaults to common flow/alarm paths)
+   * @returns Enriched object with geographic data
+   */
+  private enrichWithGeographicData(obj: any, ipPaths?: string[]): any {
+    const enriched = { ...obj };
+    const processedIPs = new Set<string>();
+
+    // Ensure ipPaths is always an array, with default paths for common flow/alarm fields
+    const defaultPaths = [
+      'source.ip',
+      'destination.ip',
+      'src.ip',
+      'dst.ip',
+      'remote.ip',
+      'device.ip',
+      'local.ip',
+      'peer.ip',
+    ];
+    const pathsArray = ipPaths
+      ? Array.isArray(ipPaths)
+        ? ipPaths
+        : [ipPaths]
+      : defaultPaths;
+
+    for (const path of pathsArray) {
+      const ip = this.extractFieldValue(obj, path);
+      if (ip && typeof ip === 'string' && !processedIPs.has(ip)) {
+        processedIPs.add(ip);
+        const geoData = this.getGeographicData(ip);
+        if (geoData) {
+          const pathParts = path.split('.');
+          const geoPath = [...pathParts.slice(0, -1), 'geo'].join('.');
+          this.setFieldValue(enriched, geoPath, geoData);
+        }
+      }
     }
 
     return enriched;
   }
 
   /**
-   * Enrich alarm object with geographic data for remote IP
+   * Backward compatibility method for alarm enrichment
    * @param alarm - Alarm object to enrich
-   * @returns Enriched alarm object with geographic data
+   * @returns Enriched alarm with geographic data
    */
-  private enrichAlarmWithGeographicData(alarm: any): any {
-    if (!alarm.remote?.ip) {
-      return alarm;
-    }
-
-    return enrichObjectWithGeo(
-      alarm,
+  enrichAlarmWithGeographicData(alarm: any): any {
+    return this.enrichWithGeographicData(alarm, [
+      'src.ip',
+      'dst.ip',
       'remote.ip',
-      'remote.geo',
-      this.getGeographicData.bind(this)
-    );
+      'device.ip',
+    ]);
   }
 
   // Advanced Search Methods
@@ -2386,7 +2748,7 @@ export class FirewallaClient {
     // Simplified: just use the query as provided, add box filter only if needed
     const params: Record<string, unknown> = {
       limit: searchQuery.limit || 200, // Use API default
-      sortBy: searchQuery.sort_by || 'ts:desc',
+      sort_by: searchQuery.sort_by || 'ts:desc',
     };
 
     // Add query if provided
@@ -2395,7 +2757,7 @@ export class FirewallaClient {
     }
 
     if (searchQuery.group_by) {
-      params.groupBy = searchQuery.group_by;
+      params.group_by = searchQuery.group_by;
     }
     if (searchQuery.cursor) {
       params.cursor = searchQuery.cursor;
@@ -2404,10 +2766,8 @@ export class FirewallaClient {
       params.aggregate = true;
     }
 
-    // Add box parameter for filtering
-    if (this.config.boxId) {
-      params.box = this.config.boxId;
-    }
+    // Add box.id filter to query
+    params.query = this.addBoxFilter(params.query as string | undefined);
 
     // Add time range if specified
     if (options.time_range) {
@@ -2420,7 +2780,7 @@ export class FirewallaClient {
           ? Math.floor(new Date(options.time_range.end).getTime() / 1000)
           : options.time_range.end;
 
-      const timeQuery = `timestamp:${startTs}-${endTs}`;
+      const timeQuery = `ts:${startTs}-${endTs}`;
       params.query = params.query
         ? `${params.query} AND ${timeQuery}`
         : timeQuery;
@@ -2469,7 +2829,10 @@ export class FirewallaClient {
         duration: item.duration || 0,
         count: item.count || item.packets || 1,
         device: {
-          id: item.device?.id || 'unknown',
+          id:
+            item.device?.id !== null && item.device?.id !== undefined
+              ? String(item.device.id)
+              : 'unknown',
           ip: item.device?.ip || item.srcIP || 'unknown',
           name: item.device?.name || 'Unknown Device',
         },
@@ -2497,9 +2860,14 @@ export class FirewallaClient {
       return flow;
     });
 
+    // Enrich flows with geographic data
+    const enrichedFlows = flows.map(flow =>
+      this.enrichWithGeographicData(flow, ['destination.ip', 'source.ip'])
+    );
+
     return {
-      count: response.count || flows.length,
-      results: flows,
+      count: response.count || enrichedFlows.length,
+      results: enrichedFlows,
       next_cursor: response.next_cursor,
       aggregations: response.aggregations,
       metadata: {
@@ -2569,7 +2937,7 @@ export class FirewallaClient {
       };
 
       if (searchQuery.group_by && typeof searchQuery.group_by === 'string') {
-        params.groupBy = searchQuery.group_by.trim();
+        params.group_by = searchQuery.group_by.trim();
       }
       if (searchQuery.cursor && typeof searchQuery.cursor === 'string') {
         params.cursor = searchQuery.cursor.trim();
@@ -2585,14 +2953,14 @@ export class FirewallaClient {
           : 'status:1';
       }
 
+      // Convert severity:X queries to type:>=X queries since API doesn't understand severity
+      if (params.query && typeof params.query === 'string') {
+        params.query = this.convertSeverityToTypeQuery(params.query);
+      }
+
       if (options.min_severity && typeof options.min_severity === 'string') {
-        const severityMap: Record<string, number> = {
-          low: 1,
-          medium: 4,
-          high: 8,
-          critical: 12,
-        };
-        const minSeverity = severityMap[options.min_severity.toLowerCase()];
+        const minSeverity =
+          FirewallaClient.SEVERITY_TYPE_MAP[options.min_severity.toLowerCase()];
         if (minSeverity) {
           params.query = params.query
             ? `${params.query} AND type:>=${minSeverity}`
@@ -2605,6 +2973,49 @@ export class FirewallaClient {
         }
       }
 
+      // Build request parameters for GET endpoint
+      // Use the standard /v2/alarms endpoint with query parameter
+      const requestParams: Record<string, unknown> = {
+        limit,
+      };
+
+      // Add box.id filter to query for proper filtering
+      if (params.query) {
+        params.query = this.addBoxFilter(params.query as string);
+      } else {
+        params.query = this.addBoxFilter();
+      }
+
+      // Only include query if it's meaningful
+      if (params.query && params.query !== 'undefined') {
+        requestParams.query = params.query;
+      }
+
+      // Include sortBy, groupBy if provided
+      // Convert timestamp:desc to ts:desc for API compatibility
+      if (params.sortBy) {
+        requestParams.sortBy =
+          params.sortBy === 'timestamp:desc'
+            ? 'ts:desc'
+            : params.sortBy === 'timestamp:asc'
+              ? 'ts:asc'
+              : params.sortBy;
+      }
+      if (params.groupBy) {
+        requestParams.groupBy = params.groupBy;
+      }
+
+      // Only include cursor if present
+      if (params.cursor) {
+        requestParams.cursor = params.cursor;
+      }
+
+      // Log parameters for debugging
+      logger.info(
+        'searchAlarms: Making GET request with params:',
+        requestParams
+      );
+
       // Enhanced API request with better error handling
       let response;
       try {
@@ -2613,7 +3024,7 @@ export class FirewallaClient {
           results: any[];
           next_cursor?: string;
           aggregations?: any;
-        }>('GET', `/v2/alarms`, params);
+        }>('GET', `/v2/alarms`, requestParams);
       } catch (apiError) {
         if (apiError instanceof Error) {
           if (apiError.message.includes('timeout')) {
@@ -2745,9 +3156,14 @@ export class FirewallaClient {
         })
         .filter(alarm => alarm.gid && alarm.gid !== 'unknown'); // Filter out invalid alarms
 
+      // Enrich alarms with geographic data
+      const enrichedAlarms = alarms.map(alarm =>
+        this.enrichWithGeographicData(alarm, ['remote.ip'])
+      );
+
       return {
-        count: response.count || alarms.length,
-        results: alarms,
+        count: response.count || enrichedAlarms.length,
+        results: enrichedAlarms,
         next_cursor: response.next_cursor,
         aggregations: response.aggregations,
         metadata: {
@@ -2835,7 +3251,7 @@ export class FirewallaClient {
       };
 
       if (searchQuery.group_by && typeof searchQuery.group_by === 'string') {
-        params.groupBy = searchQuery.group_by.trim();
+        params.group_by = searchQuery.group_by.trim();
       }
       if (searchQuery.cursor && typeof searchQuery.cursor === 'string') {
         params.cursor = searchQuery.cursor.trim();
@@ -2855,6 +3271,9 @@ export class FirewallaClient {
           ? `${params.query} AND hit.count:>=${minHits}`
           : `hit.count:>=${minHits}`;
       }
+
+      // Apply box filter through the query parameter
+      params.query = this.addBoxFilter(params.query as string | undefined);
 
       // Enhanced API request with better error handling
       let response;
@@ -3134,7 +3553,7 @@ export class FirewallaClient {
       };
 
       if (searchQuery.group_by && typeof searchQuery.group_by === 'string') {
-        params.groupBy = searchQuery.group_by.trim();
+        params.group_by = searchQuery.group_by.trim();
       }
       if (searchQuery.cursor && typeof searchQuery.cursor === 'string') {
         params.cursor = searchQuery.cursor.trim();
@@ -3149,6 +3568,9 @@ export class FirewallaClient {
           ? `${params.query} AND online:true`
           : 'online:true';
       }
+
+      // Apply box filter through the query parameter
+      params.query = this.addBoxFilter(params.query as string | undefined);
 
       // Enhanced API request with better error handling
       let response;
@@ -3434,7 +3856,7 @@ export class FirewallaClient {
       };
 
       if (searchQuery.group_by && typeof searchQuery.group_by === 'string') {
-        params.groupBy = searchQuery.group_by.trim();
+        params.group_by = searchQuery.group_by.trim();
       }
       if (searchQuery.cursor && typeof searchQuery.cursor === 'string') {
         params.cursor = searchQuery.cursor.trim();
@@ -3478,6 +3900,9 @@ export class FirewallaClient {
             : ownerFilter;
         }
       }
+
+      // Apply box filter through the query parameter
+      params.query = this.addBoxFilter(params.query as string | undefined);
 
       // Enhanced API request with better error handling
       let response;
@@ -3631,22 +4056,28 @@ export class FirewallaClient {
 
   /**
    * Multi-entity searches with correlation across different data types
+   * Enhanced with proper entity type handling
    */
   @optimizeResponse('cross-reference')
   async searchCrossReference(
     primaryQuery: SearchQuery,
     secondaryQueries: Record<string, SearchQuery>,
     correlationField: string,
-    options: SearchOptions = {}
+    options: SearchOptions = {},
+    primaryEntityType: 'flows' | 'alarms' | 'rules' | 'devices' = 'flows'
   ): Promise<CrossReferenceResult> {
     try {
-      // Execute primary search first
-      const primary = await this.searchFlows(primaryQuery, options);
+      // Execute primary search with specified entity type
+      const primary = await this.executeSearchByEntityType(
+        primaryEntityType,
+        primaryQuery,
+        options
+      );
 
       // Extract correlation values from primary results
       const correlationValues = new Set<string>();
-      primary.results.forEach(flow => {
-        const value = this.extractFieldValue(flow, correlationField);
+      primary.results.forEach(result => {
+        const value = this.extractFieldValue(result, correlationField);
         if (value) {
           correlationValues.add(String(value));
         }
@@ -3674,16 +4105,15 @@ export class FirewallaClient {
             : correlationFilter,
         };
 
-        // Execute appropriate search based on query name/type
-        if (name.includes('alarm')) {
-          secondary[name] = await this.searchAlarms(enhancedQuery, options);
-        } else if (name.includes('rule')) {
-          secondary[name] = await this.searchRules(enhancedQuery, options);
-        } else if (name.includes('device')) {
-          secondary[name] = await this.searchDevices(enhancedQuery, options);
-        } else {
-          secondary[name] = await this.searchFlows(enhancedQuery, options);
-        }
+        // Infer secondary entity type from query name or default to flows
+        const secondaryEntityType = this.inferEntityTypeFromName(name);
+
+        // Execute appropriate search based on entity type
+        secondary[name] = await this.executeSearchByEntityType(
+          secondaryEntityType,
+          enhancedQuery,
+          options
+        );
       }
 
       // Calculate correlation statistics
@@ -3714,6 +4144,46 @@ export class FirewallaClient {
         `Failed to search cross reference: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
+  }
+
+  /**
+   * Execute search based on entity type
+   */
+  private async executeSearchByEntityType(
+    entityType: 'flows' | 'alarms' | 'rules' | 'devices',
+    query: SearchQuery,
+    options: SearchOptions
+  ): Promise<SearchResult<any>> {
+    switch (entityType) {
+      case 'flows':
+        return this.searchFlows(query, options);
+      case 'alarms':
+        return this.searchAlarms(query, options);
+      case 'rules':
+        return this.searchRules(query, options);
+      case 'devices':
+        return this.searchDevices(query, options);
+      default:
+        throw new Error(`Unsupported entity type: ${entityType}`);
+    }
+  }
+
+  /**
+   * Infer entity type from query name (fallback for backward compatibility)
+   */
+  private inferEntityTypeFromName(
+    name: string
+  ): 'flows' | 'alarms' | 'rules' | 'devices' {
+    const lowerName = name.toLowerCase();
+
+    if (lowerName.includes('alarm')) {
+      return 'alarms';
+    } else if (lowerName.includes('rule')) {
+      return 'rules';
+    } else if (lowerName.includes('device')) {
+      return 'devices';
+    }
+    return 'flows'; // Default fallback
   }
 
   /**
@@ -4207,7 +4677,13 @@ export class FirewallaClient {
       const response = await this.request<{
         success: boolean;
         message: string;
-      }>('POST', `/v2/rules/${validatedRuleId}/pause`, params, false);
+      }>(
+        'POST',
+        `/v2/rules/${validatedRuleId}/pause`,
+        {}, // empty query params
+        params, // body payload with duration & box
+        false
+      );
 
       return {
         success: response?.success ?? true, // Default to true if API doesn't return success field
@@ -4255,7 +4731,13 @@ export class FirewallaClient {
       const response = await this.request<{
         success: boolean;
         message: string;
-      }>('POST', `/v2/rules/${validatedRuleId}/resume`, params, false);
+      }>(
+        'POST',
+        `/v2/rules/${validatedRuleId}/resume`,
+        {}, // empty query params
+        params, // body payload with box
+        false
+      );
 
       return {
         success: response?.success ?? true, // Default to true if API doesn't return success field
@@ -4272,11 +4754,140 @@ export class FirewallaClient {
   }
 
   /**
+   * Helper method to build OR queries for array-based geographic filters
+   *
+   * @param fieldName - The field name for the query (e.g., 'country', 'region')
+   * @param values - Array of values to include in the OR query
+   * @returns Query string or null if values array is empty
+   * @private
+   */
+  private buildArrayFilterQuery(
+    fieldName: string,
+    values?: string[]
+  ): string | null {
+    if (!values || values.length === 0) {
+      return null;
+    }
+
+    const queries = values.map(value => `${fieldName}:"${value}"`);
+    return queries.length === 1 ? queries[0] : `(${queries.join(' OR ')})`;
+  }
+
+  /**
+   * Helper method to add box.id qualifier to search queries
+   *
+   * @param query - Existing query string (optional)
+   * @returns Query string with box.id filter added, or just box.id filter if no query
+   * @private
+   */
+  private addBoxFilter(query?: string): string | undefined {
+    if (!this.config.boxId) {
+      return query;
+    }
+
+    const boxFilter = `box.id:${this.config.boxId}`;
+
+    if (!query || query.trim() === '') {
+      return boxFilter;
+    }
+
+    return `${query} ${boxFilter}`;
+  }
+
+  /**
+   * Build geographic query string from filters for Firewalla API
+   *
+   * Converts geographic filter objects into API-compatible query syntax.
+   * Supports countries, continents, regions, cities, ASNs, hosting providers,
+   * and boolean exclusion filters.
+   *
+   * @param filters - Geographic filter configuration
+   * @returns Query string compatible with Firewalla API
+   */
+  buildGeoQuery(filters: {
+    countries?: string[];
+    continents?: string[];
+    regions?: string[];
+    cities?: string[];
+    asns?: string[];
+    hosting_providers?: string[];
+    exclude_cloud?: boolean;
+    exclude_vpn?: boolean;
+    min_risk_score?: number;
+    high_risk_countries?: boolean;
+    exclude_known_providers?: boolean;
+    threat_analysis?: boolean;
+  }): string {
+    const queryParts: string[] = [];
+
+    // Define filter configurations in a data-driven approach
+    const filterConfigs = {
+      // Array filters
+      arrayFilters: [
+        { field: 'country', values: filters.countries },
+        { field: 'continent', values: filters.continents },
+        { field: 'region', values: filters.regions },
+        { field: 'city', values: filters.cities },
+        { field: 'asn', values: filters.asns },
+        { field: 'hosting_provider', values: filters.hosting_providers },
+      ],
+      // Boolean filters
+      booleanFilters: [
+        {
+          condition: filters.exclude_cloud === true,
+          query: 'NOT is_cloud_provider:true',
+        },
+        { condition: filters.exclude_vpn === true, query: 'NOT is_vpn:true' },
+        {
+          condition: filters.high_risk_countries === true,
+          query: 'geographic_risk_score:>=7',
+        },
+        {
+          condition: filters.exclude_known_providers === true,
+          query: 'NOT is_cloud_provider:true AND NOT hosting_provider:*',
+        },
+      ],
+    };
+
+    // Process array filters
+    filterConfigs.arrayFilters.forEach(({ field, values }) => {
+      const query = this.buildArrayFilterQuery(field, values);
+      if (query) {
+        queryParts.push(query);
+      }
+    });
+
+    // Process boolean filters
+    filterConfigs.booleanFilters.forEach(({ condition, query }) => {
+      if (condition) {
+        queryParts.push(query);
+      }
+    });
+
+    // Process numeric filters
+    if (
+      filters.min_risk_score !== undefined &&
+      typeof filters.min_risk_score === 'number' &&
+      filters.min_risk_score >= 0
+    ) {
+      queryParts.push(`geographic_risk_score:>=${filters.min_risk_score}`);
+    }
+
+    // Note: threat_analysis is handled by the API server, not as a query filter
+
+    return queryParts.join(' AND ');
+  }
 
   /**
    * Extract field value from object using dot notation
    */
   private extractFieldValue(obj: any, fieldPath: string): any {
+    if (!fieldPath || typeof fieldPath !== 'string') {
+      logger.warn('extractFieldValue called with invalid fieldPath:', {
+        fieldPath,
+      });
+      return undefined;
+    }
     return fieldPath.split('.').reduce((current, key) => current?.[key], obj);
   }
 
@@ -4299,5 +4910,256 @@ export class FirewallaClient {
     }
 
     return trimmedValue;
+  }
+
+  /**
+   * Public method for making raw API calls
+   * Used by management tools for bulk operations
+   */
+  async makeApiCall(
+    method: 'get' | 'post' | 'patch' | 'delete',
+    endpoint: string,
+    data?: any
+  ): Promise<any> {
+    try {
+      let response;
+      switch (method) {
+        case 'get':
+          response = await this.api.get(endpoint);
+          break;
+        case 'post':
+          response = await this.api.post(endpoint, data || {});
+          break;
+        case 'patch':
+          response = await this.api.patch(endpoint, data || {});
+          break;
+        case 'delete':
+          response = await this.api.delete(endpoint);
+          break;
+        default:
+          throw new Error(`Unsupported HTTP method: ${method}`);
+      }
+      return response.data;
+    } catch (error) {
+      logger.error(`API call failed: ${method} ${endpoint}`, error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get flow insights with category-based analysis
+   * This provides category breakdowns and bandwidth analysis for networks with high flow volumes
+   */
+  async getFlowInsights(
+    period: '1h' | '24h' | '7d' | '30d' = '24h',
+    options?: {
+      categories?: string[];
+      includeBlocked?: boolean;
+    }
+  ): Promise<{
+    period: string;
+    categoryBreakdown: Array<{
+      category: string;
+      count: number;
+      bytes: number;
+      topDomains: Array<{ domain: string; count: number; bytes: number }>;
+    }>;
+    topDevices: Array<{
+      device: string;
+      totalBytes: number;
+      categories: Array<{ category: string; bytes: number }>;
+    }>;
+    blockedSummary?: {
+      totalBlocked: number;
+      byCategory: Array<{ category: string; count: number }>;
+    };
+  }> {
+    try {
+      // Calculate time range
+      const end = Math.floor(Date.now() / 1000);
+      let begin: number;
+      switch (period) {
+        case '1h':
+          begin = end - 3600;
+          break;
+        case '24h':
+          begin = end - 24 * 3600;
+          break;
+        case '7d':
+          begin = end - 7 * 24 * 3600;
+          break;
+        case '30d':
+          begin = end - 30 * 24 * 3600;
+          break;
+      }
+
+      // Get category breakdown with error handling
+      const categoryQuery = `ts:${begin}-${end}${options?.categories ? ` AND (${options.categories.map(c => `category:${c}`).join(' OR ')})` : ''}`;
+
+      let categoryData;
+      try {
+        categoryData = await this.searchFlows({
+          query: categoryQuery,
+          group_by: 'category,domain',
+          sort_by: 'bytes:desc',
+          limit: 500,
+        });
+      } catch (error) {
+        logger.error(
+          'Failed to get category data in getFlowInsights:',
+          error instanceof Error ? error : new Error(String(error))
+        );
+        categoryData = { results: [], count: 0 };
+      }
+
+      // Process category breakdown
+      const categoryMap = new Map<
+        string,
+        {
+          count: number;
+          bytes: number;
+          domains: Map<string, { count: number; bytes: number }>;
+        }
+      >();
+
+      categoryData.results.forEach((item: any) => {
+        const category = item.category?.name || 'uncategorized';
+        const domain = item.domain || 'unknown';
+
+        if (!categoryMap.has(category)) {
+          categoryMap.set(category, {
+            count: 0,
+            bytes: 0,
+            domains: new Map(),
+          });
+        }
+
+        const cat = categoryMap.get(category)!;
+        cat.count += item.count || 1;
+        cat.bytes += item.bytes || 0;
+
+        if (!cat.domains.has(domain)) {
+          cat.domains.set(domain, { count: 0, bytes: 0 });
+        }
+        const dom = cat.domains.get(domain)!;
+        dom.count += item.count || 1;
+        dom.bytes += item.bytes || 0;
+      });
+
+      // Get top devices by bandwidth with error handling
+      let deviceData;
+      try {
+        deviceData = await this.searchFlows({
+          query: `ts:${begin}-${end}`,
+          group_by: 'device,category',
+          sort_by: 'bytes:desc',
+          limit: 200,
+        });
+      } catch (error) {
+        logger.error(
+          'Failed to get device data in getFlowInsights:',
+          error instanceof Error ? error : new Error(String(error))
+        );
+        deviceData = { results: [], count: 0 };
+      }
+
+      // Process device data
+      const deviceMap = new Map<
+        string,
+        {
+          totalBytes: number;
+          categories: Map<string, number>;
+        }
+      >();
+
+      deviceData.results.forEach((item: any) => {
+        const deviceName = item.device?.name || item.device?.ip || 'unknown';
+        const category = item.category?.name || 'uncategorized';
+
+        if (!deviceMap.has(deviceName)) {
+          deviceMap.set(deviceName, {
+            totalBytes: 0,
+            categories: new Map(),
+          });
+        }
+
+        const dev = deviceMap.get(deviceName)!;
+        dev.totalBytes += item.bytes || 0;
+
+        if (!dev.categories.has(category)) {
+          dev.categories.set(category, 0);
+        }
+        dev.categories.set(
+          category,
+          (dev.categories.get(category) || 0) + (item.bytes || 0)
+        );
+      });
+
+      // Get blocked flows summary if requested with error handling
+      let blockedSummary;
+      if (options?.includeBlocked) {
+        try {
+          const blockedData = await this.searchFlows({
+            query: `ts:${begin}-${end} AND blocked:true`,
+            group_by: 'category',
+            sort_by: 'count:desc',
+            limit: 50,
+          });
+
+          blockedSummary = {
+            totalBlocked: blockedData.count,
+            byCategory: blockedData.results.map((item: any) => ({
+              category: item.category?.name || 'uncategorized',
+              count: item.count || 0,
+            })),
+          };
+        } catch (error) {
+          logger.error(
+            'Failed to get blocked data in getFlowInsights:',
+            error instanceof Error ? error : new Error(String(error))
+          );
+          blockedSummary = {
+            totalBlocked: 0,
+            byCategory: [],
+          };
+        }
+      }
+
+      // Format results
+      const categoryBreakdown = Array.from(categoryMap.entries())
+        .map(([category, data]) => ({
+          category,
+          count: data.count,
+          bytes: data.bytes,
+          topDomains: Array.from(data.domains.entries())
+            .map(([domain, stats]) => ({ domain, ...stats }))
+            .sort((a, b) => b.bytes - a.bytes)
+            .slice(0, 5),
+        }))
+        .sort((a, b) => b.bytes - a.bytes);
+
+      const topDevices = Array.from(deviceMap.entries())
+        .map(([device, data]) => ({
+          device,
+          totalBytes: data.totalBytes,
+          categories: Array.from(data.categories.entries())
+            .map(([category, bytes]) => ({ category, bytes }))
+            .sort((a, b) => b.bytes - a.bytes),
+        }))
+        .sort((a, b) => b.totalBytes - a.totalBytes)
+        .slice(0, 10);
+
+      return {
+        period,
+        categoryBreakdown,
+        topDevices,
+        blockedSummary,
+      };
+    } catch (error) {
+      logger.error('Error in getFlowInsights:', error as Error);
+      throw error instanceof Error
+        ? error
+        : new Error('Failed to get flow insights');
+    }
   }
 }

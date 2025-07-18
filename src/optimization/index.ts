@@ -12,8 +12,8 @@
  * ensuring Claude can process large datasets within MCP protocol constraints.
  *
  * @version 1.0.0
- * @author Firewalla MCP Server Team
- * @since 2024-01-01
+ * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
+ * @since 2025-06-21
  */
 
 import { safeUnixToISOString } from '../utils/timestamp.js';
@@ -269,7 +269,7 @@ export function optimizeAlarmResponse(
         // Type assertion for known Alarm structure
         const typedAlarm = alarm as Partial<Alarm>;
         return {
-          aid: typedAlarm?.aid || 'unknown',
+          aid: typedAlarm?.aid !== undefined ? typedAlarm.aid : 'unknown',
           timestamp:
             typeof typedAlarm?.ts === 'number'
               ? safeUnixToISOString(typedAlarm.ts, new Date().toISOString())

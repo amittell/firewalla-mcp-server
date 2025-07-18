@@ -4,6 +4,7 @@
  */
 
 import { SafeAccess } from './error-handler.js';
+import { logger } from '../monitoring/logger.js';
 
 /**
  * Interface for entities that can be used in field mapping and correlation
@@ -656,8 +657,15 @@ export function normalizeFieldValue(value: FieldValue, field: string): FieldValu
     };
     
     if (!isValidIPv4(normalized) && !isValidIPv6(normalized)) {
-      // eslint-disable-next-line no-console
-      console.warn(`Invalid IP address format: ${normalized}`);
+       
+      logger.warn(
+        'Invalid IP address format detected',
+        {
+          invalid_ip: normalized,
+          validation: 'ip_format_check',
+          action: 'continuing_with_invalid_ip'
+        }
+      );
     }
     
     return normalized;

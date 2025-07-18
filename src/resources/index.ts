@@ -16,8 +16,8 @@
  * indicators, and actionable insights for Claude's analysis and reporting.
  *
  * @version 1.0.0
- * @author Firewalla MCP Server Team
- * @since 2024-01-01
+ * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
+ * @since 2025-06-21
  */
 
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -122,7 +122,10 @@ export function setupResources(
                             )
                           : 0,
                       devices: safeResults.map(device => ({
-                        id: device?.id || 'unknown',
+                        id:
+                          device?.id !== null && device?.id !== undefined
+                            ? String(device.id)
+                            : 'unknown',
                         name: device?.name || 'Unknown Device',
                         ip_address: device?.ip || 'N/A',
                         mac_vendor: device?.macVendor || 'Unknown',

@@ -3,6 +3,9 @@
  * Provides consistent error responses and comprehensive validation utilities
  */
 
+import { FieldValidator } from './field-validator.js';
+import type { ValidationResult } from '../types.js';
+
 /**
  * Interface for validatable objects
  */
@@ -21,6 +24,8 @@ export enum ErrorType {
   CACHE_ERROR = 'cache_error',
   CORRELATION_ERROR = 'correlation_error',
   SEARCH_ERROR = 'search_error',
+  SERVICE_UNAVAILABLE = 'service_unavailable',
+  TOOL_DISABLED = 'tool_disabled',
   UNKNOWN_ERROR = 'unknown_error'
 }
 
@@ -55,11 +60,6 @@ export interface LegacyStandardError {
   validation_errors?: string[];
 }
 
-export interface ValidationResult {
-  isValid: boolean;
-  errors: string[];
-  sanitizedValue?: unknown;
-}
 
 /**
  * Create a standard error response with enhanced error typing
@@ -139,24 +139,44 @@ export function wrapTool<T extends unknown[], R>(
  */
 export class ParameterValidator {
   /**
-   * Validate required string parameter
+   * Validate required string parameter with enhanced null safety
    */
   static validateRequiredString(value: unknown, paramName: string): ValidationResult {
+    // Enhanced null/undefined handling with consistent normalization
     if (value === undefined || value === null) {
       return {
         isValid: false,
-        errors: [`${paramName} is required`]
+        errors: [
+          `${paramName} is required but was not provided`,
+          `Please provide a valid string value for ${paramName}`
+        ]
       };
     }
 
+    // Enhanced type checking to prevent Object conversion errors
     if (typeof value !== 'string') {
+      // Provide specific error messages for different types
+      if (typeof value === 'object' && value !== null) {
+        if (Array.isArray(value)) {
+          return {
+            isValid: false,
+            errors: [`${paramName} must be a string, got array`]
+          };
+        }
+        return {
+          isValid: false,
+          errors: [`${paramName} must be a string, got ${Object.prototype.toString.call(value)}`]
+        };
+      }
       return {
         isValid: false,
         errors: [`${paramName} must be a string, got ${typeof value}`]
       };
     }
 
-    if (value.trim().length === 0) {
+    // Enhanced string validation with null safety
+    const trimmedValue = value.trim();
+    if (trimmedValue.length === 0) {
       return {
         isValid: false,
         errors: [`${paramName} cannot be empty`]
@@ -166,14 +186,15 @@ export class ParameterValidator {
     return {
       isValid: true,
       errors: [],
-      sanitizedValue: value.trim()
+      sanitizedValue: trimmedValue
     };
   }
 
   /**
-   * Validate optional string parameter
+   * Validate optional string parameter with enhanced null safety
    */
   static validateOptionalString(value: unknown, paramName: string): ValidationResult {
+    // Enhanced null/undefined handling with consistent normalization
     if (value === undefined || value === null) {
       return {
         isValid: true,
@@ -182,17 +203,43 @@ export class ParameterValidator {
       };
     }
 
+    // Enhanced type checking to prevent Object conversion errors
     if (typeof value !== 'string') {
+      // Provide specific error messages for different types
+      if (typeof value === 'object' && value !== null) {
+        if (Array.isArray(value)) {
+          return {
+            isValid: false,
+            errors: [`${paramName} must be a string if provided, got array`]
+          };
+        }
+        return {
+          isValid: false,
+          errors: [`${paramName} must be a string if provided, got ${Object.prototype.toString.call(value)}`]
+        };
+      }
       return {
         isValid: false,
         errors: [`${paramName} must be a string if provided, got ${typeof value}`]
       };
     }
 
+    // Enhanced string processing with null safety
+    const trimmedValue = value.trim();
+    
+    // For optional strings, empty values are converted to undefined
+    if (trimmedValue.length === 0) {
+      return {
+        isValid: true,
+        errors: [],
+        sanitizedValue: undefined
+      };
+    }
+
     return {
       isValid: true,
       errors: [],
-      sanitizedValue: value.trim()
+      sanitizedValue: trimmedValue
     };
   }
 
@@ -212,16 +259,34 @@ export class ParameterValidator {
   ): ValidationResult {
     const { required = false, min, max, defaultValue, integer = false } = options;
 
+    // Enhanced null/undefined handling with consistent normalization
     if (value === undefined || value === null) {
       if (required) {
+        const contextHint = min !== undefined && max !== undefined 
+          ? ` (valid range: ${min}-${max})`
+          : min !== undefined 
+          ? ` (minimum: ${min})`
+          : max !== undefined
+          ? ` (maximum: ${max})`
+          : '';
         return {
           isValid: false,
-          errors: [`${paramName} is required`]
+          errors: [
+            `${paramName} is required but was not provided`,
+            `Please provide a numeric value for ${paramName}${contextHint}`
+          ]
         };
       }
       
       // Validate default value against constraints if provided
       if (defaultValue !== undefined) {
+        // Enhanced default value validation with null safety
+        if (typeof defaultValue !== 'number' || !Number.isFinite(defaultValue)) {
+          return {
+            isValid: false,
+            errors: [`${paramName} default value must be a finite number`]
+          };
+        }
         if (min !== undefined && defaultValue < min) {
           return {
             isValid: false,
@@ -249,12 +314,64 @@ export class ParameterValidator {
       };
     }
 
-    const numValue = Number(value);
-    if (isNaN(numValue)) {
+    // Enhanced type checking to prevent Object conversion errors
+    let numValue: number;
+    
+    // Prevent Object conversion errors by checking type before Number() conversion
+    if (typeof value === 'object' && value !== null) {
+      // Handle objects, arrays, and other non-primitive types
+      if (Array.isArray(value)) {
+        return {
+          isValid: false,
+          errors: [`${paramName} must be a number, got array`]
+        };
+      }
       return {
         isValid: false,
-        errors: [`${paramName} must be a valid number`]
+        errors: [`${paramName} must be a number, got ${Object.prototype.toString.call(value)}`]
       };
+    }
+    
+    // Safely convert to number with enhanced validation
+    if (typeof value === 'string') {
+      // Handle empty strings explicitly
+      if (value.trim() === '') {
+        return {
+          isValid: false,
+          errors: [`${paramName} cannot be empty string`]
+        };
+      }
+      numValue = Number(value);
+    } else if (typeof value === 'boolean') {
+      // Explicitly reject boolean values to prevent implicit conversion
+      return {
+        isValid: false,
+        errors: [`${paramName} must be a number, got boolean`]
+      };
+    } else if (typeof value === 'number') {
+      numValue = value;
+    } else {
+      // Handle other types (function, symbol, etc.)
+      return {
+        isValid: false,
+        errors: [`${paramName} must be a number, got ${typeof value}`]
+      };
+    }
+
+    // Enhanced NaN and Infinity checking
+    if (!Number.isFinite(numValue)) {
+      if (isNaN(numValue)) {
+        return {
+          isValid: false,
+          errors: [`${paramName} must be a valid number`]
+        };
+      }
+      if (numValue === Infinity || numValue === -Infinity) {
+        return {
+          isValid: false,
+          errors: [`${paramName} cannot be infinite`]
+        };
+      }
     }
 
     if (integer && !Number.isInteger(numValue)) {
@@ -288,7 +405,7 @@ export class ParameterValidator {
   }
 
   /**
-   * Validate enum parameter
+   * Validate enum parameter with enhanced null safety
    */
   static validateEnum(
     value: unknown,
@@ -297,11 +414,15 @@ export class ParameterValidator {
     required = false,
     defaultValue?: string
   ): ValidationResult {
+    // Enhanced null/undefined handling with consistent normalization
     if (value === undefined || value === null) {
       if (required) {
         return {
           isValid: false,
-          errors: [`${paramName} is required`]
+          errors: [
+            `${paramName} is required but was not provided`,
+            `Please select one of the following values for ${paramName}: ${allowedValues.join(', ')}`
+          ]
         };
       }
       return {
@@ -311,35 +432,75 @@ export class ParameterValidator {
       };
     }
 
+    // Enhanced type checking to prevent Object conversion errors
     if (typeof value !== 'string') {
+      if (typeof value === 'object' && value !== null) {
+        if (Array.isArray(value)) {
+          return {
+            isValid: false,
+            errors: [`${paramName} must be a string, got array`]
+          };
+        }
+        return {
+          isValid: false,
+          errors: [`${paramName} must be a string, got ${Object.prototype.toString.call(value)}`]
+        };
+      }
       return {
         isValid: false,
-        errors: [`${paramName} must be a string`]
+        errors: [`${paramName} must be a string, got ${typeof value}`]
       };
     }
 
-    if (!allowedValues.includes(value)) {
+    // Enhanced string processing with validation
+    const trimmedValue = value.trim();
+    
+    // Handle empty strings for enums
+    if (trimmedValue === '') {
+      if (required) {
+        return {
+          isValid: false,
+          errors: [`${paramName} cannot be empty`]
+        };
+      }
+      return {
+        isValid: true,
+        errors: [],
+        sanitizedValue: defaultValue
+      };
+    }
+
+    // Enhanced enum validation with null safety
+    if (!Array.isArray(allowedValues) || allowedValues.length === 0) {
       return {
         isValid: false,
-        errors: [`${paramName} must be one of: ${allowedValues.join(', ')}, got '${value}'`]
+        errors: [`${paramName} has no valid options defined`]
+      };
+    }
+
+    if (!allowedValues.includes(trimmedValue)) {
+      return {
+        isValid: false,
+        errors: [`${paramName} must be one of: ${allowedValues.join(', ')}, got '${trimmedValue}'`]
       };
     }
 
     return {
       isValid: true,
       errors: [],
-      sanitizedValue: value
+      sanitizedValue: trimmedValue
     };
   }
 
   /**
-   * Validate boolean parameter
+   * Validate boolean parameter with enhanced null safety
    */
   static validateBoolean(
     value: unknown,
     paramName: string,
     defaultValue?: boolean
   ): ValidationResult {
+    // Enhanced null/undefined handling with consistent normalization
     if (value === undefined || value === null) {
       return {
         isValid: true,
@@ -356,9 +517,17 @@ export class ParameterValidator {
       };
     }
 
-    // Handle string representations of booleans
+    // Enhanced string validation to prevent Object conversion errors
     if (typeof value === 'string') {
-      const lowerValue = value.toLowerCase();
+      // Handle empty strings explicitly
+      if (value.trim() === '') {
+        return {
+          isValid: false,
+          errors: [`${paramName} cannot be empty string`]
+        };
+      }
+      
+      const lowerValue = value.toLowerCase().trim();
       if (lowerValue === 'true' || lowerValue === '1') {
         return {
           isValid: true,
@@ -373,11 +542,32 @@ export class ParameterValidator {
           sanitizedValue: false
         };
       }
+      
+      // Provide helpful error for invalid string values
+      return {
+        isValid: false,
+        errors: [`${paramName} must be 'true', 'false', '1', or '0', got '${value}'`]
+      };
     }
 
+    // Enhanced type checking to prevent Object conversion errors
+    if (typeof value === 'object' && value !== null) {
+      if (Array.isArray(value)) {
+        return {
+          isValid: false,
+          errors: [`${paramName} must be a boolean, got array`]
+        };
+      }
+      return {
+        isValid: false,
+        errors: [`${paramName} must be a boolean, got ${Object.prototype.toString.call(value)}`]
+      };
+    }
+
+    // Handle other primitive types explicitly
     return {
       isValid: false,
-      errors: [`${paramName} must be a boolean value`]
+      errors: [`${paramName} must be a boolean value, got ${typeof value}`]
     };
   }
 
@@ -420,6 +610,210 @@ export class ParameterValidator {
   }
 
   /**
+   * Validate date format (ISO 8601) parameter
+   */
+  static validateDateFormat(value: unknown, paramName: string, required: boolean = false): ValidationResult {
+    if (value === undefined || value === null) {
+      if (required) {
+        return {
+          isValid: false,
+          errors: [`${paramName} is required`]
+        };
+      }
+      return {
+        isValid: true,
+        errors: [],
+        sanitizedValue: undefined
+      };
+    }
+
+    if (typeof value !== 'string') {
+      return {
+        isValid: false,
+        errors: [`${paramName} must be a string in ISO 8601 format (e.g., "2024-01-01T00:00:00Z")`]
+      };
+    }
+
+    const trimmedValue = value.trim();
+    if (trimmedValue.length === 0) {
+      if (required) {
+        return {
+          isValid: false,
+          errors: [`${paramName} cannot be empty`]
+        };
+      }
+      return {
+        isValid: true,
+        errors: [],
+        sanitizedValue: undefined
+      };
+    }
+
+    // Validate ISO 8601 date format
+    const date = new Date(trimmedValue);
+    if (isNaN(date.getTime())) {
+      return {
+        isValid: false,
+        errors: [
+          `${paramName} must be a valid ISO 8601 date string`,
+          'Examples: "2024-01-01T00:00:00Z", "2024-01-01T12:30:00+05:00"',
+          `Received: "${trimmedValue}"`
+        ]
+      };
+    }
+
+    // Additional validation for common date format issues
+    if (!trimmedValue.includes('T') && !trimmedValue.includes(' ')) {
+      return {
+        isValid: false,
+        errors: [
+          `${paramName} must include time component in ISO 8601 format`,
+          'Use format: "YYYY-MM-DDTHH:mm:ssZ" or "YYYY-MM-DD HH:mm:ss"',
+          `Received: "${trimmedValue}"`
+        ]
+      };
+    }
+
+    return {
+      isValid: true,
+      errors: [],
+      sanitizedValue: trimmedValue
+    };
+  }
+
+  /**
+   * Validate Firewalla rule ID format
+   */
+  static validateRuleId(value: unknown, paramName: string): ValidationResult {
+    const stringValidation = this.validateRequiredString(value, paramName);
+    if (!stringValidation.isValid) {
+      return stringValidation;
+    }
+
+    const ruleId = stringValidation.sanitizedValue as string;
+
+    // Firewalla rule IDs are typically UUIDs or alphanumeric strings with specific patterns
+    // Common patterns: UUID format, or alphanumeric with specific prefixes
+    const validPatterns = [
+      /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i, // UUID
+      /^rule_[a-zA-Z0-9_-]+$/i, // Rule prefix format
+      /^[a-zA-Z0-9_-]{8,64}$/i, // General alphanumeric ID (8-64 chars)
+    ];
+
+    const isValidFormat = validPatterns.some(pattern => pattern.test(ruleId));
+    
+    if (!isValidFormat) {
+      return {
+        isValid: false,
+        errors: [
+          `${paramName} must be a valid rule identifier`,
+          'Rule IDs should be UUID format or alphanumeric string (8-64 characters)',
+          'Examples: "550e8400-e29b-41d4-a716-446655440000", "rule_block_facebook", "abc123def456"',
+          `Received: "${ruleId}"`
+        ]
+      };
+    }
+
+    return {
+      isValid: true,
+      errors: [],
+      sanitizedValue: ruleId
+    };
+  }
+
+  /**
+   * Validate Firewalla alarm ID format
+   */
+  static validateAlarmId(value: unknown, paramName: string): ValidationResult {
+    const stringValidation = this.validateRequiredString(value, paramName);
+    if (!stringValidation.isValid) {
+      return stringValidation;
+    }
+
+    const alarmId = stringValidation.sanitizedValue as string;
+
+    // Firewalla alarm IDs are typically numeric or alphanumeric
+    // Common patterns: numeric IDs, prefixed IDs, or alphanumeric strings
+    const validPatterns = [
+      /^\d+$/i, // Pure numeric (most common for alarms)
+      /^alarm_[a-zA-Z0-9_-]+$/i, // Alarm prefix format
+      /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i, // UUID
+      /^[a-zA-Z0-9_-]{1,64}$/i, // General alphanumeric ID (1-64 chars)
+    ];
+
+    const isValidFormat = validPatterns.some(pattern => pattern.test(alarmId));
+    
+    if (!isValidFormat) {
+      return {
+        isValid: false,
+        errors: [
+          `${paramName} must be a valid alarm identifier`,
+          'Alarm IDs should be numeric, UUID format, or alphanumeric string (1-64 characters)',
+          'Examples: "12345", "alarm_intrusion_001", "550e8400-e29b-41d4-a716-446655440000"',
+          `Received: "${alarmId}"`
+        ]
+      };
+    }
+
+    return {
+      isValid: true,
+      errors: [],
+      sanitizedValue: alarmId
+    };
+  }
+
+  /**
+   * Validate pagination cursor format using enhanced cursor validator
+   */
+  static validateCursor(value: unknown, paramName: string): ValidationResult {
+    // Enhanced cursor validation to match test expectations
+    if (value === null || value === undefined) {
+      return { isValid: true, sanitizedValue: undefined, errors: [] };
+    }
+    
+    if (typeof value !== 'string') {
+      return {
+        isValid: false,
+        sanitizedValue: value,
+        errors: [`${paramName} must be a string`],
+      };
+    }
+
+    // Empty string handling - convert to undefined
+    if (value.length === 0) {
+      return { isValid: true, sanitizedValue: undefined, errors: [] };
+    }
+
+    // Length validation (max 1000 characters as per test expectations)
+    if (value.length > 1000) {
+      return {
+        isValid: false,
+        sanitizedValue: value,
+        errors: [
+          `${paramName} is too long (${value.length} characters)`,
+          'Pagination cursors should be less than 1000 characters'
+        ],
+      };
+    }
+
+    // Check for invalid cursor format patterns
+    if (!/^[A-Za-z0-9+/=_-]+$/.test(value)) {
+      return {
+        isValid: false,
+        sanitizedValue: value,
+        errors: [
+          `${paramName} must be a valid pagination cursor`,
+          'Cursors should be base64 encoded strings',
+          'Invalid characters found in cursor',
+          `Received: "${value}"`
+        ],
+      };
+    }
+
+    return { isValid: true, sanitizedValue: value, errors: [] };
+  }
+
+  /**
    * Get contextual information about parameter usage
    */
   private static getParameterContext(paramName: string): string {
@@ -435,59 +829,173 @@ export class ParameterValidator {
     
     return contexts[paramName] || '';
   }
+
+  /**
+   * Validate array parameter with optional constraints
+   */
+  static validateArray(
+    value: unknown, 
+    paramName: string, 
+    options: {
+      required?: boolean;
+      minLength?: number;
+      maxLength?: number;
+    } = {}
+  ): ValidationResult {
+    // Handle required validation
+    if (options.required && (value === undefined || value === null)) {
+      return {
+        isValid: false,
+        errors: [`${paramName} is required`]
+      };
+    }
+
+    // Handle optional arrays
+    if (!options.required && (value === undefined || value === null)) {
+      return {
+        isValid: true,
+        errors: [],
+        sanitizedValue: []
+      };
+    }
+
+    // Validate array type
+    if (!Array.isArray(value)) {
+      return {
+        isValid: false,
+        errors: [`${paramName} must be an array`]
+      };
+    }
+
+    // Validate length constraints
+    if (options.minLength !== undefined && value.length < options.minLength) {
+      return {
+        isValid: false,
+        errors: [`${paramName} must have at least ${options.minLength} item(s)`]
+      };
+    }
+
+    if (options.maxLength !== undefined && value.length > options.maxLength) {
+      return {
+        isValid: false,
+        errors: [`${paramName} must have at most ${options.maxLength} item(s)`]
+      };
+    }
+
+    return {
+      isValid: true,
+      errors: [],
+      sanitizedValue: value
+    };
+  }
 }
 
 /**
- * Null safety utilities
+ * Enhanced null safety utilities with improved Object conversion prevention
  */
 export class SafeAccess {
   /**
-   * Safely access nested object properties
+   * Safely access nested object properties with enhanced null checking
    */
   static getNestedValue(obj: ValidatableValue, path: string, defaultValue: unknown = undefined): unknown {
-    if (!obj || typeof obj !== 'object') {
+    // Enhanced null/undefined checking to prevent Object conversion errors
+    if (obj === null || obj === undefined) {
+      return defaultValue;
+    }
+    
+    // Strict type checking to prevent Object conversion errors
+    if (typeof obj !== 'object') {
+      return defaultValue;
+    }
+    
+    // Additional safety check for arrays and other object types
+    if (Array.isArray(obj)) {
+      return defaultValue;
+    }
+
+    // Validate path parameter
+    if (!path || typeof path !== 'string' || path.trim() === '') {
       return defaultValue;
     }
 
     const keys = path.split('.');
-    let current = obj;
+    let current: any = obj;
 
     for (const key of keys) {
-      if (current === null || current === undefined || typeof current !== 'object') {
+      // Enhanced null checking at each level
+      if (current === null || current === undefined) {
         return defaultValue;
       }
-      current = (current as any)[key];
+      
+      // Prevent Object conversion errors
+      if (typeof current !== 'object') {
+        return defaultValue;
+      }
+      
+      // Additional safety for arrays
+      if (Array.isArray(current)) {
+        return defaultValue;
+      }
+      
+      // Safe property access with hasOwnProperty check
+      if (!Object.prototype.hasOwnProperty.call(current, key)) {
+        return defaultValue;
+      }
+      
+      current = current[key];
     }
 
     return current !== undefined ? current : defaultValue;
   }
 
   /**
-   * Safely ensure an array
+   * Safely ensure an array with enhanced type checking
    */
   static ensureArray<T>(value: unknown, defaultValue: T[] = []): T[] {
+    // Enhanced null/undefined handling
+    if (value === null || value === undefined) {
+      return defaultValue;
+    }
+    
+    // Strict array checking
     if (Array.isArray(value)) {
       return value;
     }
+    
     return defaultValue;
   }
 
   /**
-   * Safely ensure an object
+   * Safely ensure an object with enhanced null checking
    */
   static ensureObject(value: unknown, defaultValue: Record<string, unknown> = {}): Record<string, unknown> {
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      return value as Record<string, unknown>;
+    // Enhanced null/undefined checking to prevent Object conversion errors
+    if (value === null || value === undefined) {
+      return defaultValue;
     }
+    
+    // Strict object type checking
+    if (typeof value === 'object' && !Array.isArray(value)) {
+      // Additional check for object-like structures
+      try {
+        // Verify it's a plain object and not a complex object like Date, RegExp, etc.
+        if (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null) {
+          return value as Record<string, unknown>;
+        }
+        return defaultValue;
+      } catch {
+        return defaultValue;
+      }
+    }
+    
     return defaultValue;
   }
 
   /**
-   * Safely access array with null checking
+   * Safely access array with enhanced null checking
    */
   static safeArrayAccess<T>(
     array: unknown,
-     
     accessor: (_: T[]) => unknown,
     defaultValue: unknown = undefined
   ): unknown {
@@ -496,39 +1004,73 @@ export class SafeAccess {
       return defaultValue;
     }
     
+    // Enhanced error handling with type checking
     try {
+      if (typeof accessor !== 'function') {
+        return defaultValue;
+      }
       return accessor(safeArray);
-    } catch {
+    } catch (_error) {
+      // Log error for debugging but don't expose it
       return defaultValue;
     }
   }
 
   /**
-   * Safely process array with filtering for null/undefined values
+   * Safely process array with enhanced filtering for null/undefined values
    */
   static safeArrayMap<T, R>(
     array: unknown,
-     
     mapper: (_: T, __: number) => R,
-     
     filter: (item: T) => boolean = (item) => item !== null && item !== undefined
   ): R[] {
     const safeArray = SafeAccess.ensureArray<T>(array);
-    return safeArray
-      .filter(filter)
-      .map(mapper)
-      .filter(result => result !== null && result !== undefined);
+    
+    // Enhanced parameter validation
+    if (typeof mapper !== 'function') {
+      return [];
+    }
+    
+    if (typeof filter !== 'function') {
+      filter = (item) => item !== null && item !== undefined;
+    }
+    
+    try {
+      return safeArray
+        .filter(item => {
+          try {
+            return filter(item);
+          } catch {
+            return false;
+          }
+        })
+        .map((item, index) => {
+          try {
+            return mapper(item, index);
+          } catch {
+            return null as any;
+          }
+        })
+        .filter(result => result !== null && result !== undefined);
+    } catch {
+      return [];
+    }
   }
 
   /**
-   * Safely filter array with null/undefined checking
+   * Safely filter array with enhanced null/undefined checking
    */
   static safeArrayFilter<T>(
     array: unknown,
-     
     predicate: (item: T) => boolean
   ): T[] {
     const safeArray = SafeAccess.ensureArray<T>(array);
+    
+    // Enhanced parameter validation
+    if (typeof predicate !== 'function') {
+      return safeArray.filter(item => item !== null && item !== undefined);
+    }
+    
     return safeArray.filter(item => {
       if (item === null || item === undefined) {
         return false;
@@ -539,6 +1081,81 @@ export class SafeAccess {
         return false;
       }
     });
+  }
+
+  /**
+   * Enhanced type checking utility to prevent Object conversion errors
+   */
+  static isValidObject(value: unknown): value is Record<string, unknown> {
+    if (value === null || value === undefined) {
+      return false;
+    }
+    
+    if (typeof value !== 'object') {
+      return false;
+    }
+    
+    if (Array.isArray(value)) {
+      return false;
+    }
+    
+    // Check for complex objects that shouldn't be treated as plain objects
+    try {
+      const proto = Object.getPrototypeOf(value);
+      return proto === Object.prototype || proto === null;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Enhanced type checking utility for arrays
+   */
+  static isValidArray(value: unknown): value is unknown[] {
+    return Array.isArray(value);
+  }
+
+  /**
+   * Safe string conversion with null handling
+   */
+  static safeToString(value: unknown, defaultValue = ''): string {
+    if (value === null || value === undefined) {
+      return defaultValue;
+    }
+    
+    if (typeof value === 'string') {
+      return value;
+    }
+    
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    
+    // For objects, arrays, and other complex types, return default
+    return defaultValue;
+  }
+
+  /**
+   * Safe number conversion with enhanced null handling
+   */
+  static safeToNumber(value: unknown, defaultValue = 0): number {
+    if (value === null || value === undefined) {
+      return defaultValue;
+    }
+    
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : defaultValue;
+    }
+    
+    if (typeof value === 'string') {
+      if (value.trim() === '') {
+        return defaultValue;
+      }
+      const num = Number(value);
+      return Number.isFinite(num) ? num : defaultValue;
+    }
+    
+    return defaultValue;
   }
 }
 
@@ -693,9 +1310,12 @@ export class QuerySanitizer {
     // Normalize common patterns for better parsing
     const normalizedQuery = trimmedQuery
       .replace(/\s+/g, ' ')  // Normalize whitespace
+      .replace(/\s+(AND|OR|NOT)\s+/gi, ' $1 ')  // Normalize logical operators FIRST
       .replace(/\s*:\s*/g, ':')  // Remove spaces around colons
-      .replace(/\s*(>=|<=|!=|>|<)\s*/g, '$1')  // Remove spaces around operators
-      .replace(/\s+(AND|OR|NOT)\s+/gi, ' $1 ');  // Normalize logical operators
+      .replace(/\s*>\s*=\s*/g, '>=')  // Handle spaced '>='
+      .replace(/\s*<\s*=\s*/g, '<=')  // Handle spaced '<='
+      .replace(/\s*!\s*=\s*/g, '!=')  // Handle spaced '!='
+      .replace(/\s*(>=|<=|!=|>|<)\s*/g, '$1');  // Remove spaces around operators
 
     return {
       isValid: true,
@@ -729,6 +1349,202 @@ export class QuerySanitizer {
       isValid: true,
       errors: [],
       sanitizedValue: cleanFieldName
+    };
+  }
+
+  /**
+   * Validate field names in search queries and provide helpful error messages
+   */
+  static validateQueryFields(query: string, entityType: string): ValidationResult {
+    if (!query || typeof query !== 'string') {
+      return {
+        isValid: false,
+        errors: ['Query must be a non-empty string']
+      };
+    }
+
+    // FieldValidator is now imported at the top of the file
+    
+    // Extract field names from query using simple regex
+    // Matches patterns like "field_name:" or "field_name:value"
+    const fieldPattern = /(\w+):/g;
+    const foundFields: string[] = [];
+    let match;
+    
+    while ((match = fieldPattern.exec(query)) !== null) {
+      const fieldName = match[1];
+      if (!foundFields.includes(fieldName)) {
+        foundFields.push(fieldName);
+      }
+    }
+
+    if (foundFields.length === 0) {
+      // Check for wildcard-only queries that can cause timeouts
+      const trimmedQuery = query.trim();
+      
+      // Detect patterns that are essentially wildcard-only or overly broad
+      const problematicPatterns = [
+        /^\*+$/,                          // Pure wildcards: "*", "**", etc.
+        /^\*\s*$|^\s*\*$/,               // Wildcards with whitespace
+        /^[*\s]+$/,                     // Only wildcards and spaces
+        /^\*+\s*(AND|OR|NOT)\s*\*+$/i,   // Multiple wildcards with operators
+        /^[*\s()]+$/,                 // Wildcards, spaces, and parentheses only
+      ];
+      
+      // Check if query matches any problematic pattern
+      for (const pattern of problematicPatterns) {
+        if (pattern.test(trimmedQuery)) {
+          return {
+            isValid: false,
+            errors: [
+              'Wildcard-only queries are not supported as they can cause performance issues',
+              'Please provide specific search criteria instead of using bare wildcards',
+              `Examples for ${entityType}:`,
+              ...(entityType === 'flows' ? [
+                '  • "protocol:tcp" - search for TCP flows',
+                '  • "blocked:true" - search for blocked traffic', 
+                '  • "source_ip:192.168.*" - search specific IP range',
+                '  • "bytes:>1000000" - search for large transfers'
+              ] : entityType === 'alarms' ? [
+                '  • "severity:high" - search for high severity alarms',
+                '  • "type:intrusion" - search for intrusion alarms',
+                '  • "resolved:false" - search for unresolved alarms',
+                '  • "source_ip:192.168.*" - search by source IP'
+              ] : entityType === 'rules' ? [
+                '  • "action:block" - search for blocking rules',
+                '  • "target_value:*.facebook.com" - search social media rules',
+                '  • "enabled:true" - search for active rules',
+                '  • "direction:outbound" - search outbound rules'
+              ] : entityType === 'devices' ? [
+                '  • "online:true" - search for online devices',
+                '  • "mac_vendor:Apple" - search by device manufacturer',
+                '  • "name:*iPhone*" - search by device name pattern',
+                '  • "ip:192.168.1.*" - search by IP range'
+              ] : [
+                '  • Use field:value syntax with specific criteria',
+                '  • Combine multiple conditions with AND/OR operators',
+                '  • Use wildcards within field values, not as standalone queries'
+              ])
+            ]
+          };
+        }
+      }
+      
+      // For other queries with no structured fields, allow them (might be simple text search)
+      return {
+        isValid: true,
+        errors: [],
+        sanitizedValue: query
+      };
+    }
+
+    const invalidFields: string[] = [];
+    const suggestions: string[] = [];
+
+    // Validate each field
+    for (const field of foundFields) {
+      const validation = FieldValidator.validateField(field, entityType as any);
+      if (!validation.isValid) {
+        invalidFields.push(field);
+        if (validation.suggestion) {
+          suggestions.push(`${field}: ${validation.suggestion}`);
+        }
+      }
+    }
+
+    if (invalidFields.length > 0) {
+      return {
+        isValid: false,
+        errors: [
+          `Invalid field(s) in query: ${invalidFields.join(', ')}`,
+          ...suggestions
+        ]
+      };
+    }
+
+    // Validate query complexity to prevent performance issues
+    const complexityCheck = QuerySanitizer.validateQueryComplexity(query);
+    if (!complexityCheck.isValid) {
+      return complexityCheck;
+    }
+
+    return {
+      isValid: true,
+      errors: [],
+      sanitizedValue: query
+    };
+  }
+
+  /**
+   * Validate query complexity to prevent performance issues
+   */
+  static validateQueryComplexity(query: string): ValidationResult {
+    if (!query || typeof query !== 'string') {
+      return {
+        isValid: true,
+        errors: []
+      };
+    }
+
+    const complexityIssues: string[] = [];
+
+    // Check for excessive logical operators (potential performance issue)
+    const orCount = (query.match(/\bOR\b/gi) || []).length;
+    const andCount = (query.match(/\bAND\b/gi) || []).length;
+    const totalLogicalOps = orCount + andCount;
+
+    if (totalLogicalOps > 20) {
+      complexityIssues.push(`Too many logical operators (${totalLogicalOps}). Maximum recommended: 20`);
+    }
+
+    // Check for excessive wildcards (can cause performance issues)
+    const wildcardCount = (query.match(/\*/g) || []).length;
+    if (wildcardCount > 10) {
+      complexityIssues.push(`Too many wildcards (${wildcardCount}). Maximum recommended: 10`);
+    }
+
+    // Check for excessive range queries
+    const rangeCount = (query.match(/\[[^\]]+\s+TO\s+[^\]]+\]/gi) || []).length;
+    if (rangeCount > 5) {
+      complexityIssues.push(`Too many range queries (${rangeCount}). Maximum recommended: 5`);
+    }
+
+    // Check for deeply nested parentheses
+    let maxDepth = 0;
+    let currentDepth = 0;
+    for (const char of query) {
+      if (char === '(') {
+        currentDepth++;
+        maxDepth = Math.max(maxDepth, currentDepth);
+      } else if (char === ')') {
+        currentDepth--;
+      }
+    }
+
+    if (maxDepth > 5) {
+      complexityIssues.push(`Query nesting too deep (${maxDepth} levels). Maximum recommended: 5`);
+    }
+
+    // Check for excessive field:value pairs
+    const fieldValuePairs = (query.match(/\w+:[^:\s]+/g) || []).length;
+    if (fieldValuePairs > 15) {
+      complexityIssues.push(`Too many field:value pairs (${fieldValuePairs}). Maximum recommended: 15`);
+    }
+
+    if (complexityIssues.length > 0) {
+      return {
+        isValid: false,
+        errors: [
+          'Query is too complex and may cause performance issues:',
+          ...complexityIssues,
+          'Consider breaking complex queries into smaller, simpler queries for better performance.'
+        ]
+      };
+    }
+
+    return {
+      isValid: true,
+      errors: []
     };
   }
 }

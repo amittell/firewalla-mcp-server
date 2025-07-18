@@ -1,6 +1,6 @@
 import type { FirewallaClient } from '../firewalla/client';
 import { logger } from '../monitoring/logger';
-import { metricsCollector } from '../monitoring/metrics';
+import { metrics } from '../monitoring/metrics';
 import type { HealthCheckManager, HealthStatus } from '../health/endpoints';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
 
@@ -20,7 +20,19 @@ export interface DebugInfo {
   };
   metrics: {
     total_metrics: number;
-    recent_metrics: Array<{ name: string; value: number; timestamp: number }>;
+    counters: Record<string, number>;
+    timings: Record<
+      string,
+      {
+        count: number;
+        min: number;
+        max: number;
+        avg: number;
+        p50: number;
+        p95: number;
+        p99: number;
+      }
+    >;
   };
   health: HealthStatus;
 }
@@ -38,7 +50,7 @@ export class DebugTools {
   async getDebugInfo(): Promise<DebugInfo> {
     const memUsage = process.memoryUsage();
     const cacheStats = this.firewalla.getCacheStats();
-    const allMetrics = metricsCollector.getAllMetrics();
+    const allMetrics = metrics.snapshot();
     const health = await this.healthCheck.performHealthCheck();
 
     return {
@@ -58,11 +70,18 @@ export class DebugTools {
         keys: cacheStats.keys.slice(0, 10), // Show first 10 keys
       },
       metrics: {
-        total_metrics: allMetrics.length,
-        recent_metrics: allMetrics
-          .sort((a, b) => b.timestamp - a.timestamp)
-          .slice(0, 5)
-          .map(m => ({ name: m.name, value: m.value, timestamp: m.timestamp })),
+        total_metrics:
+          Object.keys(allMetrics.counters).length +
+          Object.keys(allMetrics.timings).length,
+        counters: allMetrics.counters,
+        timings: Object.fromEntries(
+          Object.entries(allMetrics.timings)
+            .sort(([, a], [, b]) => {
+              // Sort by count (most frequently called operations are most relevant)
+              return b.count - a.count;
+            })
+            .slice(0, 5)
+        ),
       },
       health,
     };
@@ -178,10 +197,12 @@ export class DebugTools {
   }
 
   clearMetrics(): { cleared_metrics: number } {
-    const allMetrics = metricsCollector.getAllMetrics();
-    const clearedMetrics = allMetrics.length;
+    const allMetrics = metrics.snapshot();
+    const clearedMetrics =
+      Object.keys(allMetrics.counters).length +
+      Object.keys(allMetrics.timings).length;
 
-    metricsCollector.clear();
+    metrics.clear();
 
     logger.info('Metrics cleared', { cleared_metrics: clearedMetrics });
 

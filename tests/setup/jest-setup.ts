@@ -238,23 +238,29 @@ export function withRetries<T>(testFn: () => Promise<T>, category: 'flaky' | 'ne
 }
 
 // Performance measurement utilities
-export function measurePerformance<T>(operation: () => Promise<T>): Promise<{ result: T; duration: number }> {
-  return new Promise(async (resolve, reject) => {
-    const start = Date.now();
+export async function measurePerformance<T>(operation: () => Promise<T>): Promise<{ result: T; duration: number }> {
+  const start = Date.now();
+  
+  try {
+    const result = await operation();
+    const duration = Date.now() - start;
     
-    try {
-      const result = await operation();
-      const duration = Date.now() - start;
-      
-      resolve({ result, duration });
-    } catch (error) {
-      reject(error);
+    return { result, duration };
+  } catch (error) {
+    const duration = Date.now() - start;
+    // Attach duration to error for performance tracking
+    if (error instanceof Error) {
+      (error as any).performanceDuration = duration;
     }
-  });
+    throw error;
+  }
 }
 
-// Environment info logging
-if (testConfig.logging.enableVerbose) {
+// Environment info logging (opt-in via env var to avoid noisy CI output)
+if (
+  testConfig.logging.enableVerbose &&
+  process.env.SHOW_JEST_SETUP_INFO === 'true'
+) {
   console.log(`Test Environment: ${testConfig.name}`);
   console.log(`Max Workers: ${testConfig.concurrency.maxWorkers}`);
   console.log(`Coverage Enabled: ${testConfig.coverage.enabled}`);

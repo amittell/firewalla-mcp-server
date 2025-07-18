@@ -12,16 +12,88 @@ import type {
   TargetList,
   SearchMetadata,
 } from '../../types.js';
-import { SafeAccess } from '../../validation/error-handler.js';
+import {
+  SafeAccess,
+  QuerySanitizer,
+  ParameterValidator,
+  createErrorResponse,
+  ErrorType,
+} from '../../validation/error-handler.js';
+import { getLimitValidationConfig } from '../../config/limits.js';
+import {
+  validateFirewallaQuerySyntax,
+  getExampleQueries,
+} from '../../utils/query-validator.js';
+import {
+  withToolTimeout,
+  TimeoutError,
+  createTimeoutErrorResponse,
+} from '../../utils/timeout-manager.js';
+import {
+  withRetryAndTimeout,
+  isRetryableError,
+} from '../../utils/retry-manager.js';
 import { createSearchTools } from '../search.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
-import type { SearchParams } from '../../search/types.js';
+import { SEARCH_FIELDS, type SearchParams } from '../../search/types.js';
 import type { ScoringCorrelationParams } from '../../validation/field-mapper.js';
-import {
-  ResponseStandardizer,
-  BackwardCompatibilityLayer,
-} from '../../utils/response-standardizer.js';
-import { shouldUseLegacyFormat } from '../../config/response-config.js';
+// ResponseStandardizer import removed - using direct response creation
+import { validateCountryCodes } from '../../utils/geographic.js';
+
+/**
+ * Derive alarm severity based on the alarm type.
+ * This mirrors the logic in security.ts to ensure consistency.
+ * @param alarmType - The type field from the alarm
+ * @returns The derived severity level (critical, high, medium, low) or 'medium' as default
+ */
+function deriveAlarmSeverityFromType(alarmType: any): string {
+  if (!alarmType || typeof alarmType !== 'string') {
+    return 'medium'; // Default severity for unknown types
+  }
+
+  // Normalize alarm type to uppercase and remove special characters
+  const normalizedType = alarmType.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+  const typeString = normalizedType.toLowerCase();
+
+  // Check for critical patterns
+  if (
+    typeString.includes('malware') ||
+    typeString.includes('virus') ||
+    typeString.includes('trojan')
+  ) {
+    return 'critical';
+  }
+
+  // Check for high severity patterns
+  if (
+    typeString.includes('intrusion') ||
+    typeString.includes('attack') ||
+    typeString.includes('exploit')
+  ) {
+    return 'high';
+  }
+
+  // Check for medium severity patterns
+  if (
+    typeString.includes('scan') ||
+    typeString.includes('suspicious') ||
+    typeString.includes('anomaly')
+  ) {
+    return 'medium';
+  }
+
+  // Check for low severity patterns
+  if (
+    typeString.includes('dns') ||
+    typeString.includes('http') ||
+    typeString.includes('status')
+  ) {
+    return 'low';
+  }
+
+  // Default to medium severity for unrecognized types
+  return 'medium';
+}
 
 // Base search interface to reduce duplication
 export interface BaseSearchArgs extends ToolArgs {
@@ -33,6 +105,7 @@ export interface BaseSearchArgs extends ToolArgs {
   sort_order?: 'asc' | 'desc';
   group_by?: string;
   aggregate?: boolean;
+  force_refresh?: boolean;
 }
 
 // Search argument interfaces for type safety
@@ -41,6 +114,18 @@ export interface SearchFlowsArgs extends BaseSearchArgs {
     start?: string;
     end?: string;
   };
+  geographic_filters?: {
+    countries?: string[];
+    continents?: string[];
+    regions?: string[];
+    cities?: string[];
+    asns?: string[];
+    hosting_providers?: string[];
+    exclude_vpn?: boolean;
+    exclude_cloud?: boolean;
+    min_risk_score?: number;
+  };
+  include_analytics?: boolean;
 }
 
 export interface SearchAlarmsArgs extends BaseSearchArgs {
@@ -48,6 +133,12 @@ export interface SearchAlarmsArgs extends BaseSearchArgs {
     start?: string;
     end?: string;
   };
+
+  /**
+   * Filter alarms by severity level.
+   * Allowed values: low | medium | high | critical
+   */
+  severity?: 'low' | 'medium' | 'high' | 'critical';
 }
 
 export interface SearchRulesArgs extends BaseSearchArgs {}
@@ -80,26 +171,6 @@ export interface GetCorrelationSuggestionsArgs extends ToolArgs {
   secondary_queries: string[];
 }
 
-export interface SearchFlowsByGeographyArgs extends ToolArgs {
-  query?: string;
-  geographic_filters?: {
-    countries?: string[];
-    continents?: string[];
-    regions?: string[];
-    cities?: string[];
-    asns?: string[];
-    hosting_providers?: string[];
-    exclude_cloud?: boolean;
-    exclude_vpn?: boolean;
-    min_risk_score?: number;
-  };
-  limit: number;
-  sort_by?: string;
-  sort_order?: 'asc' | 'desc';
-  group_by?: string;
-  aggregate?: boolean;
-}
-
 export interface SearchAlarmsByGeographyArgs extends ToolArgs {
   query?: string;
   geographic_filters?: {
@@ -126,11 +197,227 @@ export interface GetGeographicStatisticsArgs extends ToolArgs {
   limit?: number;
 }
 
+/**
+ * Common search parameter validation helper
+ */
+type CommonSearchValidationResult =
+  | {
+      isValid: false;
+      response: ToolResponse;
+    }
+  | {
+      isValid: true;
+      limit: number;
+      query: string;
+      cursor?: string;
+      groupBy?: string;
+    };
+
+function validateCommonSearchParameters(
+  args: BaseSearchArgs,
+  toolName: string,
+  entityType: 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists'
+): CommonSearchValidationResult {
+  // Validate optional limit parameter with default
+  const limitValidation = ParameterValidator.validateNumber(
+    args.limit,
+    'limit',
+    {
+      required: false,
+      defaultValue: 200,
+      ...getLimitValidationConfig(toolName),
+    }
+  );
+
+  if (!limitValidation.isValid) {
+    return {
+      isValid: false,
+      response: createErrorResponse(
+        toolName,
+        'Parameter validation failed',
+        ErrorType.VALIDATION_ERROR,
+        undefined,
+        limitValidation.errors
+      ),
+    };
+  }
+
+  // Validate required query parameter
+  const queryValidation = ParameterValidator.validateRequiredString(
+    args.query,
+    'query'
+  );
+
+  if (!queryValidation.isValid) {
+    return {
+      isValid: false,
+      response: createErrorResponse(
+        toolName,
+        'Query parameter validation failed',
+        ErrorType.VALIDATION_ERROR,
+        undefined,
+        queryValidation.errors
+      ),
+    };
+  }
+
+  // Validate query syntax
+  const querySyntaxValidation = validateFirewallaQuerySyntax(args.query);
+
+  if (!querySyntaxValidation.isValid) {
+    const examples = getExampleQueries(entityType);
+    return {
+      isValid: false,
+      response: createErrorResponse(
+        toolName,
+        'Invalid query syntax',
+        ErrorType.VALIDATION_ERROR,
+        {
+          query: args.query,
+          syntax_errors: querySyntaxValidation.errors,
+          examples: examples.slice(0, 3),
+          hint: 'Use field:value syntax with logical operators (AND, OR, NOT)',
+        },
+        querySyntaxValidation.errors
+      ),
+    };
+  }
+
+  // Validate field names in the query
+  const fieldValidation = QuerySanitizer.validateQueryFields(
+    args.query,
+    entityType
+  );
+
+  if (!fieldValidation.isValid) {
+    return {
+      isValid: false,
+      response: createErrorResponse(
+        toolName,
+        'Query contains invalid field names',
+        ErrorType.VALIDATION_ERROR,
+        {
+          query: args.query,
+          documentation:
+            entityType === 'alarms'
+              ? 'See /docs/error-handling-guide.md for troubleshooting'
+              : 'See /docs/query-syntax-guide.md for valid field names',
+        },
+        fieldValidation.errors
+      ),
+    };
+  }
+
+  // Validate cursor format if provided
+  if (args.cursor !== undefined) {
+    const cursorValidation = ParameterValidator.validateCursor(
+      args.cursor,
+      'cursor'
+    );
+    if (!cursorValidation.isValid) {
+      return {
+        isValid: false,
+        response: createErrorResponse(
+          toolName,
+          'Invalid cursor format',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          cursorValidation.errors
+        ),
+      };
+    }
+  }
+
+  // Validate group_by parameter if provided
+  if (args.group_by !== undefined) {
+    const groupByValidation = ParameterValidator.validateEnum(
+      args.group_by,
+      'group_by',
+      SEARCH_FIELDS[entityType],
+      false
+    );
+
+    if (!groupByValidation.isValid) {
+      return {
+        isValid: false,
+        response: createErrorResponse(
+          toolName,
+          'Invalid group_by field',
+          ErrorType.VALIDATION_ERROR,
+          {
+            group_by: args.group_by,
+            valid_fields: SEARCH_FIELDS[entityType],
+            documentation: 'See /docs/query-syntax-guide.md for valid fields',
+          },
+          groupByValidation.errors
+        ),
+      };
+    }
+  }
+
+  return {
+    isValid: true,
+    limit: args.limit,
+    query: args.query,
+    cursor: args.cursor,
+    groupBy: args.group_by,
+  };
+}
+
 export class SearchFlowsHandler extends BaseToolHandler {
   name = 'search_flows';
-  description =
-    'Advanced flow searching with direct API calls and enhanced reliability';
+  description = `Advanced network flow searching with powerful query syntax and enhanced reliability. Data cached for 15 seconds, use force_refresh=true for real-time network analysis.
+  
+Search through network traffic flows using complex queries with logical operators, wildcards, and field-specific filters. Features automatic boolean query translation for improved compatibility.
+
+REQUIRED PARAMETERS:
+- query: Search query string using flow field syntax
+
+OPTIONAL PARAMETERS:
+- limit: Maximum number of results to return (default: 200, max: 500)
+- force_refresh: Bypass cache for real-time data (default: false)
+- cursor: Pagination cursor from previous response
+- time_range: Time window for search (start/end timestamps)
+- sort_by: Field to sort results by
+- group_by: Field to group results by for aggregation
+- aggregate: Enable aggregation statistics
+
+QUERY EXAMPLES (with automatic boolean translation):
+- Boolean fields (both syntaxes supported): "blocked:true" OR "blocked=true", "allowed:false" OR "allowed=false" (automatically converted to backend format)
+- Basic field queries: "protocol:tcp", "source_ip:192.168.1.100", "destination_port:443"
+- Logical operators: "protocol:tcp AND blocked:false", "blocked=true OR allowed=false"
+- Wildcards: "source_ip:192.168.*", "destination_domain:*.facebook.com"
+- Ranges: "bytes:[1000 TO 50000]", "timestamp:>=2024-01-01"
+- Complex queries: "(protocol:tcp OR protocol:udp) AND source_ip:192.168.* NOT blocked=true"
+
+CACHE CONTROL:
+- Default: 15-second cache for optimal performance
+- Real-time: Use force_refresh=true for live network monitoring
+- Cache info included in responses for timing awareness
+
+PERFORMANCE TIPS:
+- Use specific time ranges for better performance: {"time_range": {"start": "2024-01-01T00:00:00Z", "end": "2024-01-02T00:00:00Z"}}
+- Limit results with reasonable values (100-1000) for faster responses
+- Use cursor for pagination with large datasets
+- Group by fields like "source_ip" or "protocol" for aggregated insights
+
+See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.md`;
   category = 'search' as const;
+
+  constructor() {
+    // Enable full standardization: geographic enrichment and field normalization for network flows
+    super({
+      enableGeoEnrichment: true, // Network flows have IP addresses that require geographic enrichment
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'flows',
+        entity_type: 'network_flows',
+        supports_geographic_enrichment: true,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -140,9 +427,134 @@ export class SearchFlowsHandler extends BaseToolHandler {
     const startTime = Date.now();
 
     try {
+      // Validate common search parameters
+      const validation = validateCommonSearchParameters(
+        searchArgs,
+        this.name,
+        'flows'
+      );
+
+      if (!validation.isValid) {
+        return validation.response;
+      }
+
+      // Validate force_refresh parameter if provided
+      const forceRefreshValidation = ParameterValidator.validateBoolean(
+        searchArgs.force_refresh,
+        'force_refresh',
+        false
+      );
+
+      if (!forceRefreshValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Force refresh parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          forceRefreshValidation.errors
+        );
+      }
+
+      // ------------------------------------------------------------
+      // WAVE-1: Severity handling
+      // ------------------------------------------------------------
+      let finalQuery = searchArgs.query;
+
+      if (searchArgs.severity !== undefined) {
+        // Validate severity enum value
+        const severityValidation = ParameterValidator.validateEnum(
+          searchArgs.severity,
+          'severity',
+          ['low', 'medium', 'high', 'critical'],
+          true
+        );
+
+        if (!severityValidation.isValid) {
+          return createErrorResponse(
+            this.name,
+            'Invalid severity parameter',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: searchArgs.severity,
+              valid_values: ['low', 'medium', 'high', 'critical'],
+            },
+            severityValidation.errors
+          );
+        }
+
+        // Append severity filter to the existing query (if any)
+        finalQuery = finalQuery
+          ? `${finalQuery} AND severity:${searchArgs.severity}`
+          : `severity:${searchArgs.severity}`;
+      }
+
+      // ------------------------------------------------------------
+      // Validate geographic_filters if provided
+      // ------------------------------------------------------------
+      if (searchArgs.geographic_filters !== undefined) {
+        // Validate it's an object
+        if (
+          typeof searchArgs.geographic_filters !== 'object' ||
+          searchArgs.geographic_filters === null
+        ) {
+          return createErrorResponse(
+            this.name,
+            'Invalid geographic_filters parameter',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: searchArgs.geographic_filters,
+              expected:
+                'object with optional fields: countries, continents, regions, cities, etc.',
+            }
+          );
+        }
+
+        // Validate country codes if provided
+        if (
+          searchArgs.geographic_filters.countries &&
+          searchArgs.geographic_filters.countries.length > 0
+        ) {
+          const countryValidation = validateCountryCodes(
+            searchArgs.geographic_filters.countries
+          );
+          if (!countryValidation.valid) {
+            return createErrorResponse(
+              this.name,
+              `Country code validation failed: Invalid country codes: ${countryValidation.invalid.join(', ')}`,
+              ErrorType.VALIDATION_ERROR,
+              {
+                invalid_codes: countryValidation.invalid,
+                valid_codes: countryValidation.valid,
+                documentation:
+                  'Country codes must be ISO 3166-1 alpha-2 format (e.g., US, CN, GB)',
+              }
+            );
+          }
+        }
+      }
+
+      // ------------------------------------------------------------
+      // Validate include_analytics parameter if provided
+      // ------------------------------------------------------------
+      const includeAnalyticsValidation = ParameterValidator.validateBoolean(
+        searchArgs.include_analytics,
+        'include_analytics',
+        false
+      );
+
+      if (!includeAnalyticsValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Include analytics parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          includeAnalyticsValidation.errors
+        );
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
-        query: searchArgs.query,
+        query: finalQuery,
         limit: searchArgs.limit,
         offset: searchArgs.offset,
         cursor: searchArgs.cursor,
@@ -151,12 +563,31 @@ export class SearchFlowsHandler extends BaseToolHandler {
         group_by: searchArgs.group_by,
         aggregate: searchArgs.aggregate,
         time_range: searchArgs.time_range,
+        force_refresh: forceRefreshValidation.sanitizedValue as boolean,
+        geographic_filters: searchArgs.geographic_filters,
+        include_analytics: includeAnalyticsValidation.sanitizedValue as boolean,
       };
-      const result = await searchTools.search_flows(searchParams);
+
+      // Use retry logic for search operations as they can be prone to timeouts
+      const result = await withRetryAndTimeout(
+        async () => searchTools.search_flows(searchParams),
+        this.name,
+        {
+          maxAttempts: 2, // Conservative retry for search operations
+          initialDelayMs: 2000, // Wait 2 seconds before retry
+          shouldRetry: (error, attempt) => {
+            // Retry on timeouts and network errors, but not on validation errors
+            if (error instanceof TimeoutError) {
+              return true;
+            }
+            return isRetryableError(error) && attempt === 1; // Only retry once for search
+          },
+        }
+      );
       const executionTime = Date.now() - startTime;
 
-      // Process flow data
-      const processedFlows = SafeAccess.safeArrayMap(
+      // Process flow data with enhanced standardization
+      let processedFlows = SafeAccess.safeArrayMap(
         (result as any).results,
         (flow: Flow) => ({
           timestamp: unixToISOStringOrNow(flow.ts),
@@ -165,9 +596,39 @@ export class SearchFlowsHandler extends BaseToolHandler {
             'source.ip',
             'unknown'
           ),
+          source_country: SafeAccess.getNestedValue(
+            flow as any,
+            'source.geo.country',
+            'unknown'
+          ),
+          source_city: SafeAccess.getNestedValue(
+            flow as any,
+            'source.geo.city',
+            'unknown'
+          ),
+          source_continent: SafeAccess.getNestedValue(
+            flow as any,
+            'source.geo.continent',
+            'unknown'
+          ),
           destination_ip: SafeAccess.getNestedValue(
             flow as any,
             'destination.ip',
+            'unknown'
+          ),
+          destination_country: SafeAccess.getNestedValue(
+            flow as any,
+            'destination.geo.country',
+            'unknown'
+          ),
+          destination_city: SafeAccess.getNestedValue(
+            flow as any,
+            'destination.geo.city',
+            'unknown'
+          ),
+          destination_continent: SafeAccess.getNestedValue(
+            flow as any,
+            'destination.geo.continent',
             'unknown'
           ),
           protocol: SafeAccess.getNestedValue(
@@ -189,6 +650,12 @@ export class SearchFlowsHandler extends BaseToolHandler {
         })
       );
 
+      // Apply geographic enrichment pipeline for IP addresses
+      processedFlows = await this.enrichGeoIfNeeded(processedFlows, [
+        'source_ip',
+        'destination_ip',
+      ]);
+
       // Create metadata for standardized response
       const metadata: SearchMetadata = {
         query: SafeAccess.getNestedValue(
@@ -202,7 +669,7 @@ export class SearchFlowsHandler extends BaseToolHandler {
           'execution_time_ms',
           executionTime
         ) as number,
-        cached: false, // TODO: Detect from result if available
+        cached: false,
         cursor: (result as any).next_cursor,
         hasMore: !!(result as any).next_cursor,
         limit: searchArgs.limit,
@@ -213,27 +680,65 @@ export class SearchFlowsHandler extends BaseToolHandler {
         ) as Record<string, any> | undefined,
       };
 
-      // Create standardized response
-      const standardResponse = ResponseStandardizer.toSearchResponse(
-        processedFlows,
-        metadata
-      );
+      // Create unified response with standardized metadata
+      const unifiedResponseData = {
+        flows: processedFlows,
+        metadata,
+        query_info: {
+          original_query: searchArgs.query,
+          final_query: finalQuery,
+          applied_filters: {
+            geographic: !!searchArgs.geographic_filters,
+            time_range: !!searchArgs.time_range,
+            analytics: !!searchArgs.include_analytics,
+          },
+        },
+      };
 
-      // Apply backward compatibility if needed
-      if (shouldUseLegacyFormat(this.name)) {
-        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
-          standardResponse,
-          this.name
+      // Return unified response
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
+      });
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000 // Default timeout from timeout-manager
         );
-        return this.createSuccessResponse(legacyResponse);
       }
 
-      return this.createSuccessResponse(standardResponse);
-    } catch (error: unknown) {
+      // Handle retry failure errors with enhanced context
+      if (error instanceof Error && error.name === 'RetryFailureError') {
+        const { retryContext } = error as any;
+        const { userGuidance } = error as any;
+
+        return createErrorResponse(
+          this.name,
+          `Search flows operation failed after ${retryContext?.attempts || 'multiple'} attempts: ${error.message}`,
+          ErrorType.SEARCH_ERROR,
+          {
+            retry_attempts: retryContext?.attempts,
+            total_duration_ms: retryContext?.totalDurationMs,
+            final_error:
+              retryContext?.originalError instanceof Error
+                ? retryContext.originalError.message
+                : 'Unknown error',
+          },
+          userGuidance || [
+            'Multiple retry attempts failed',
+            'Try reducing the scope of your search query',
+            'Check network connectivity and try again later',
+          ]
+        );
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to search flows: ${errorMessage}`
+      return createErrorResponse(
+        this.name,
+        `Failed to search flows: ${errorMessage}`,
+        ErrorType.SEARCH_ERROR
       );
     }
   }
@@ -241,9 +746,61 @@ export class SearchFlowsHandler extends BaseToolHandler {
 
 export class SearchAlarmsHandler extends BaseToolHandler {
   name = 'search_alarms';
-  description =
-    'Advanced alarm searching with direct API calls and enhanced reliability';
+  description = `Security alarm searching with powerful filtering and enhanced reliability. Data cached for 15 seconds, use force_refresh=true for real-time security data.
+
+Search through security alerts and alarms using flexible query syntax to identify threats and suspicious activities. Features automatic boolean query translation, enhanced schema harmonization with device information, and improved alarm ID resolution for seamless integration with get_specific_alarm and delete_alarm.
+
+REQUIRED PARAMETERS:
+- query: Search query string using alarm field syntax
+
+OPTIONAL PARAMETERS:
+- limit: Maximum number of results to return (default: 200, max: 500)
+- force_refresh: Bypass cache for real-time data (default: false)
+- cursor: Pagination cursor from previous response
+- sort_by: Field to sort results by
+- aggregate: Enable aggregation statistics
+
+QUERY EXAMPLES (with automatic boolean translation):
+- Boolean status (both syntaxes supported): "resolved:true" OR "resolved=true", "acknowledged:false" OR "acknowledged=false" (automatically converted to backend format)
+- Severity filtering: "severity:high", "severity:>=medium", "severity:critical"
+- IP-based searches: "source_ip:192.168.1.100", "destination_ip:10.0.*"
+- Type filtering: "type:intrusion_detection", "type:malware", "type:dns_anomaly"
+- Time-based: "timestamp:>=2024-01-01", "last_24_hours:true"
+- Complex combinations: "severity:high AND source_ip:192.168.* NOT resolved:true"
+
+CACHE CONTROL:
+- Default: 15-second cache for optimal performance
+- Real-time: Use force_refresh=true for incident response
+- Cache info included in responses for timing awareness
+
+COMMON USE CASES:
+- Active threats: "severity:>=high AND resolved:false"
+- Geographic threats: "country:China AND severity:medium"
+- Malware detection: "type:malware OR type:trojan OR type:virus"
+- Network intrusions: "type:intrusion AND source_ip:external"
+
+ERROR RECOVERY:
+- If no results, try broader time ranges or lower severity filters
+- Check field names against the API documentation
+- Use wildcards (*) for partial matches when exact queries fail
+
+See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`;
   category = 'search' as const;
+
+  constructor() {
+    // Enable full standardization: geographic enrichment and field normalization for security alarms
+    super({
+      enableGeoEnrichment: true, // Security alarms often contain IP addresses that require geographic enrichment
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'alarms',
+        entity_type: 'security_alarms',
+        supports_geographic_enrichment: true,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -253,6 +810,34 @@ export class SearchAlarmsHandler extends BaseToolHandler {
     const startTime = Date.now();
 
     try {
+      // Validate common search parameters
+      const validation = validateCommonSearchParameters(
+        searchArgs,
+        this.name,
+        'alarms'
+      );
+
+      if (!validation.isValid) {
+        return validation.response;
+      }
+
+      // Validate force_refresh parameter if provided
+      const forceRefreshValidation = ParameterValidator.validateBoolean(
+        searchArgs.force_refresh,
+        'force_refresh',
+        false
+      );
+
+      if (!forceRefreshValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Force refresh parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          forceRefreshValidation.errors
+        );
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -264,39 +849,143 @@ export class SearchAlarmsHandler extends BaseToolHandler {
         group_by: searchArgs.group_by,
         aggregate: searchArgs.aggregate,
         time_range: searchArgs.time_range,
+        force_refresh: forceRefreshValidation.sanitizedValue as boolean,
       };
-      const result = await searchTools.search_alarms(searchParams);
+
+      const result = await withToolTimeout(
+        async () => searchTools.search_alarms(searchParams),
+        this.name
+      );
       const executionTime = Date.now() - startTime;
 
-      // Process alarm data
-      const processedAlarms = SafeAccess.safeArrayMap(
+      // Process alarm data with enhanced standardization and schema harmonization
+      let processedAlarms = SafeAccess.safeArrayMap(
         (result as any).results,
-        (alarm: Alarm) => ({
-          timestamp: unixToISOStringOrNow(alarm.ts),
-          type: SafeAccess.getNestedValue(alarm as any, 'type', 'unknown'),
-          message: SafeAccess.getNestedValue(
-            alarm as any,
-            'message',
-            'No message'
-          ),
-          direction: SafeAccess.getNestedValue(
-            alarm as any,
-            'direction',
-            'unknown'
-          ),
-          protocol: SafeAccess.getNestedValue(
-            alarm as any,
-            'protocol',
-            'unknown'
-          ),
-          status: SafeAccess.getNestedValue(alarm as any, 'status', 'unknown'),
-          severity: SafeAccess.getNestedValue(
+        (alarm: Alarm) => {
+          // Try to extract device information from various possible locations
+          const deviceInfo = {
+            id: SafeAccess.getNestedValue(
+              alarm as any,
+              'device.id',
+              SafeAccess.getNestedValue(
+                alarm as any,
+                'deviceId',
+                SafeAccess.getNestedValue(alarm as any, 'mac', 'unknown')
+              )
+            ),
+            name: SafeAccess.getNestedValue(
+              alarm as any,
+              'device.name',
+              SafeAccess.getNestedValue(alarm as any, 'deviceName', 'unknown')
+            ),
+            ip: SafeAccess.getNestedValue(
+              alarm as any,
+              'device.ip',
+              SafeAccess.getNestedValue(
+                alarm as any,
+                'deviceIp',
+                SafeAccess.getNestedValue(alarm as any, 'ip', 'unknown')
+              )
+            ),
+            mac: SafeAccess.getNestedValue(
+              alarm as any,
+              'device.mac',
+              SafeAccess.getNestedValue(alarm as any, 'mac', 'unknown')
+            ),
+          };
+
+          // Enhanced severity mapping - try multiple field locations and type inference
+          let severity = SafeAccess.getNestedValue(
             alarm as any,
             'severity',
             'unknown'
-          ),
-        })
+          );
+          if (severity === 'unknown') {
+            severity = SafeAccess.getNestedValue(
+              alarm as any,
+              'priority',
+              'unknown'
+            );
+          }
+
+          // If still unknown, derive from alarm type
+          if (severity === 'unknown') {
+            const alarmType = SafeAccess.getNestedValue(
+              alarm as any,
+              'type',
+              ''
+            );
+            if (alarmType) {
+              severity = deriveAlarmSeverityFromType(alarmType);
+            }
+          }
+
+          const rawAid = SafeAccess.getNestedValue(alarm as any, 'aid', null);
+
+          // Use the actual alarm ID directly, properly handling 0 as a valid ID
+          const finalAid =
+            rawAid !== null && rawAid !== undefined
+              ? String(rawAid)
+              : 'unknown';
+
+          return {
+            aid: finalAid,
+            timestamp: unixToISOStringOrNow(alarm.ts),
+            type: SafeAccess.getNestedValue(alarm as any, 'type', 'unknown'),
+            message: SafeAccess.getNestedValue(
+              alarm as any,
+              'message',
+              'No message'
+            ),
+            direction: SafeAccess.getNestedValue(
+              alarm as any,
+              'direction',
+              'unknown'
+            ),
+            protocol: SafeAccess.getNestedValue(
+              alarm as any,
+              'protocol',
+              'unknown'
+            ),
+            status: SafeAccess.getNestedValue(
+              alarm as any,
+              'status',
+              'unknown'
+            ),
+            severity,
+            // Enhanced device information (only include if meaningful data found)
+            device:
+              deviceInfo.id !== 'unknown' || deviceInfo.name !== 'unknown'
+                ? deviceInfo
+                : undefined,
+            // Extract IP addresses for potential geographic enrichment
+            source_ip: SafeAccess.getNestedValue(
+              alarm as any,
+              'remote.ip',
+              SafeAccess.getNestedValue(
+                alarm as any,
+                'source_ip',
+                SafeAccess.getNestedValue(alarm as any, 'src', 'unknown')
+              )
+            ),
+            destination_ip: SafeAccess.getNestedValue(
+              alarm as any,
+              'destination.ip',
+              SafeAccess.getNestedValue(
+                alarm as any,
+                'destination_ip',
+                SafeAccess.getNestedValue(alarm as any, 'dst', 'unknown')
+              )
+            ),
+          };
+        }
       );
+
+      // Apply geographic enrichment pipeline for IP addresses in alarms
+      processedAlarms = await this.enrichGeoIfNeeded(processedAlarms, [
+        'source_ip',
+        'destination_ip',
+      ]);
 
       // Create metadata for standardized response
       const metadata: SearchMetadata = {
@@ -322,27 +1011,48 @@ export class SearchAlarmsHandler extends BaseToolHandler {
         ) as Record<string, any> | undefined,
       };
 
-      // Create standardized response
-      const standardResponse = ResponseStandardizer.toSearchResponse(
-        processedAlarms,
-        metadata
-      );
+      // Add schema harmonization warning for search vs active alarms
+      const schemaNote = {
+        warning:
+          'Search endpoint returns limited fields compared to get_active_alarms',
+        recommendation:
+          'Use get_active_alarms for complete device and alarm information',
+        differences: [
+          'Device objects may not be fully populated in search results',
+          "Some severity and status fields may show 'unknown' values",
+          'Geographic enrichment is applied but original data may be limited',
+        ],
+      };
 
-      // Apply backward compatibility if needed
-      if (shouldUseLegacyFormat(this.name)) {
-        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
-          standardResponse,
-          this.name
-        );
-        return this.createSuccessResponse(legacyResponse);
+      // Create unified response with standardized metadata
+      const unifiedResponseData = {
+        alarms: processedAlarms,
+        metadata,
+        schema_harmonization: schemaNote,
+        query_info: {
+          original_query: searchArgs.query,
+          applied_filters: {
+            time_range: !!searchArgs.time_range,
+            force_refresh: !!searchArgs.force_refresh,
+          },
+        },
+      };
+
+      // Return unified response
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
+      });
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
       }
 
-      return this.createSuccessResponse(standardResponse);
-    } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to search alarms: ${errorMessage}`
+      return createErrorResponse(
+        this.name,
+        `Failed to search alarms: ${errorMessage}`,
+        ErrorType.SEARCH_ERROR
       );
     }
   }
@@ -350,9 +1060,50 @@ export class SearchAlarmsHandler extends BaseToolHandler {
 
 export class SearchRulesHandler extends BaseToolHandler {
   name = 'search_rules';
-  description =
-    'Advanced rule searching with target, action, and status filters';
+  description = `Firewall rule searching with comprehensive filtering for actions, targets, and status.
+
+Search through firewall rules to manage policies, troubleshoot blocking issues, and analyze rule effectiveness.
+
+QUERY EXAMPLES:
+- Action filtering: "action:block", "action:allow", "action:timelimit"
+- Target searches: "target_value:*.facebook.com", "target_type:domain", "target_value:192.168.*"
+- Status queries: "enabled:true", "paused:false", "active:true"
+- Direction: "direction:inbound", "direction:outbound", "direction:bidirection"
+- Combined filters: "action:block AND target_value:*.social.* AND enabled:true"
+
+RULE MANAGEMENT EXAMPLES:
+- Social media blocks: "action:block AND (target_value:*.facebook.com OR target_value:*.twitter.com)"
+- Gaming restrictions: "action:timelimit AND target_category:gaming"
+- Security rules: "action:block AND target_type:malware_domain"
+- Active blocking rules: "action:block AND enabled:true AND paused:false"
+
+TROUBLESHOOTING:
+- Find conflicting rules: "target_value:example.com" (then check different actions)
+- Identify inactive rules: "enabled:false OR paused:true"
+- Review recent changes: "modified:>=yesterday"
+
+PERFORMANCE NOTES:
+- Rules are cached for 10 minutes for optimal performance
+- Use specific target_value searches for fastest results
+- Group by action or target_type for rule analysis
+
+For rule management operations, see pause_rule and resume_rule tools.`;
   category = 'search' as const;
+
+  constructor() {
+    // Enable field normalization for firewall rules (no geographic enrichment needed)
+    super({
+      enableGeoEnrichment: false, // Firewall rules don't typically contain IP addresses
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'rules',
+        entity_type: 'firewall_rules',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -362,6 +1113,17 @@ export class SearchRulesHandler extends BaseToolHandler {
     const startTime = Date.now();
 
     try {
+      // Validate common search parameters
+      const validation = validateCommonSearchParameters(
+        searchArgs,
+        this.name,
+        'rules'
+      );
+
+      if (!validation.isValid) {
+        return validation.response;
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -373,7 +1135,11 @@ export class SearchRulesHandler extends BaseToolHandler {
         group_by: searchArgs.group_by,
         aggregate: searchArgs.aggregate,
       };
-      const result = await searchTools.search_rules(searchParams);
+
+      const result = await withToolTimeout(
+        async () => searchTools.search_rules(searchParams),
+        this.name
+      );
       const executionTime = Date.now() - startTime;
 
       // Process rule data
@@ -426,27 +1192,35 @@ export class SearchRulesHandler extends BaseToolHandler {
         ) as Record<string, any> | undefined,
       };
 
-      // Create standardized response
-      const standardResponse = ResponseStandardizer.toSearchResponse(
-        processedRules,
-        metadata
-      );
+      // Create unified response with standardized metadata
+      const unifiedResponseData = {
+        rules: processedRules,
+        metadata,
+        query_info: {
+          original_query: searchArgs.query,
+          applied_filters: {
+            grouping: !!searchArgs.group_by,
+            sorting: !!searchArgs.sort_by,
+            aggregation: !!searchArgs.aggregate,
+          },
+        },
+      };
 
-      // Apply backward compatibility if needed
-      if (shouldUseLegacyFormat(this.name)) {
-        const legacyResponse = BackwardCompatibilityLayer.toLegacySearchFormat(
-          standardResponse,
-          this.name
-        );
-        return this.createSuccessResponse(legacyResponse);
+      // Return unified response
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: executionTime,
+      });
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
       }
 
-      return this.createSuccessResponse(standardResponse);
-    } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to search rules: ${errorMessage}`
+      return createErrorResponse(
+        this.name,
+        `Failed to search rules: ${errorMessage}`,
+        ErrorType.SEARCH_ERROR
       );
     }
   }
@@ -454,8 +1228,57 @@ export class SearchRulesHandler extends BaseToolHandler {
 
 export class SearchDevicesHandler extends BaseToolHandler {
   name = 'search_devices';
-  description =
-    'Advanced device searching with network, status, and usage filters';
+  description = `Network device searching with comprehensive filtering for status, usage patterns, and network properties. Data cached for 5 minutes, use force_refresh=true for real-time device status.
+
+Search through network devices to monitor connectivity, identify issues, and analyze usage patterns.
+
+REQUIRED PARAMETERS:
+- query: Search query string using device field syntax
+
+OPTIONAL PARAMETERS:
+- limit: Maximum number of results to return (default: 200, max: 500)
+- force_refresh: Bypass cache for real-time status (default: false)
+- cursor: Pagination cursor from previous response
+- time_range: Time window for search (start/end timestamps)
+- sort_by: Field to sort results by
+- group_by: Field to group results by for aggregation
+- aggregate: Enable aggregation statistics
+
+QUERY EXAMPLES:
+- Status filtering: "online:true", "online:false", "last_seen:>=yesterday"
+- Device identification: "mac_vendor:Apple", "name:*iPhone*", "ip:192.168.1.*"
+- Network properties: "network_id:main", "dhcp:true", "static_ip:true"
+- Usage patterns: "bandwidth_usage:>1000000", "active_connections:>10"
+- Device types: "device_type:smartphone", "os_type:iOS", "manufacturer:Samsung"
+
+CACHE CONTROL:
+- Default: 5-minute cache for optimal performance
+- Real-time: Use force_refresh=true for device troubleshooting
+- Cache info included in responses for timing awareness
+
+NETWORK MONITORING:
+- Offline devices: "online:false AND last_seen:>=24h" (recently offline)
+- Heavy bandwidth users: "bandwidth_usage:>5000000 AND online:true"
+- Unknown devices: "name:unknown OR mac_vendor:unknown"
+- Mobile devices: "device_type:smartphone OR device_type:tablet"
+- IoT devices: "device_category:IoT OR manufacturer:smart_*"
+
+TROUBLESHOOTING:
+- Connection issues: "online:false AND dhcp_errors:>0"
+- Security concerns: "new_device:true AND trust_level:low"
+- Performance problems: "packet_loss:>5 OR latency:>100"
+
+PAGINATION:
+- Use cursor-based pagination for large device lists
+- Supports up to 10,000 devices per query
+- Include offline devices with include_offline:true
+
+FIELD CONSISTENCY:
+- Device names normalized to remove unknown/null inconsistencies
+- IP addresses validated and standardized
+- Timestamps converted to ISO format for consistency
+
+See the Data Normalization Guide for field details.`;
   category = 'search' as const;
 
   async execute(
@@ -464,6 +1287,50 @@ export class SearchDevicesHandler extends BaseToolHandler {
   ): Promise<ToolResponse> {
     const searchArgs = args as SearchDevicesArgs;
     try {
+      // Validate common search parameters
+      const validation = validateCommonSearchParameters(
+        searchArgs,
+        this.name,
+        'devices'
+      );
+
+      if (!validation.isValid) {
+        return validation.response;
+      }
+
+      // Validate that both cursor and offset are not provided simultaneously
+      if (searchArgs.cursor !== undefined && searchArgs.offset !== undefined) {
+        return createErrorResponse(
+          this.name,
+          'Cannot provide both cursor and offset parameters simultaneously',
+          ErrorType.VALIDATION_ERROR,
+          {
+            provided_cursor: searchArgs.cursor,
+            provided_offset: searchArgs.offset,
+            documentation:
+              'Use either cursor-based pagination (cursor) or offset-based pagination (offset), but not both',
+          },
+          ['cursor and offset parameters are mutually exclusive']
+        );
+      }
+
+      // Validate force_refresh parameter if provided
+      const forceRefreshValidation = ParameterValidator.validateBoolean(
+        searchArgs.force_refresh,
+        'force_refresh',
+        false
+      );
+
+      if (!forceRefreshValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Force refresh parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          forceRefreshValidation.errors
+        );
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -475,51 +1342,73 @@ export class SearchDevicesHandler extends BaseToolHandler {
         group_by: searchArgs.group_by,
         aggregate: searchArgs.aggregate,
         time_range: searchArgs.time_range,
+        force_refresh: forceRefreshValidation.sanitizedValue as boolean,
       };
-      const result = await searchTools.search_devices(searchParams);
 
-      return this.createSuccessResponse({
-        count: SafeAccess.safeArrayAccess(
-          (result as any).results,
-          arr => arr.length,
-          0
-        ),
+      const result = await withToolTimeout(
+        async () => searchTools.search_devices(searchParams),
+        this.name
+      );
+
+      // Process and enrich device data with geographic information
+      const deviceData = await this.enrichGeoIfNeeded(
+        SafeAccess.safeArrayMap((result as any).results, (device: Device) => ({
+          id: SafeAccess.getNestedValue(device as any, 'id', 'unknown'),
+          name: SafeAccess.getNestedValue(
+            device as any,
+            'name',
+            'Unknown Device'
+          ),
+          ip: SafeAccess.getNestedValue(device as any, 'ip', 'unknown'),
+          online: SafeAccess.getNestedValue(device as any, 'online', false),
+          macVendor: SafeAccess.getNestedValue(
+            device as any,
+            'macVendor',
+            'unknown'
+          ),
+          lastSeen: SafeAccess.getNestedValue(device as any, 'lastSeen', 0),
+        })),
+        ['ip'] // Enrich the device IP addresses
+      );
+
+      const unifiedResponseData = {
+        devices: deviceData,
+        count: deviceData.length,
         query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
         execution_time_ms: SafeAccess.getNestedValue(
           result as any,
           'execution_time_ms',
           0
         ),
-        devices: SafeAccess.safeArrayMap(
-          (result as any).results,
-          (device: Device) => ({
-            id: SafeAccess.getNestedValue(device as any, 'id', 'unknown'),
-            name: SafeAccess.getNestedValue(
-              device as any,
-              'name',
-              'Unknown Device'
-            ),
-            ip: SafeAccess.getNestedValue(device as any, 'ip', 'unknown'),
-            online: SafeAccess.getNestedValue(device as any, 'online', false),
-            macVendor: SafeAccess.getNestedValue(
-              device as any,
-              'macVendor',
-              'unknown'
-            ),
-            lastSeen: SafeAccess.getNestedValue(device as any, 'lastSeen', 0),
-          })
-        ),
         aggregations: SafeAccess.getNestedValue(
           result as any,
           'aggregations',
           null
         ),
-      });
+        query_info: {
+          original_query: searchArgs.query,
+          applied_filters: {
+            time_range: !!searchArgs.time_range,
+            force_refresh: !!searchArgs.force_refresh,
+            cursor_pagination: !!searchArgs.cursor,
+            offset_pagination: !!searchArgs.offset,
+          },
+        },
+      };
+
+      // Return unified response
+      return this.createUnifiedResponse(unifiedResponseData);
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to search devices: ${errorMessage}`
+      return createErrorResponse(
+        this.name,
+        `Failed to search devices: ${errorMessage}`,
+        ErrorType.SEARCH_ERROR
       );
     }
   }
@@ -527,9 +1416,59 @@ export class SearchDevicesHandler extends BaseToolHandler {
 
 export class SearchTargetListsHandler extends BaseToolHandler {
   name = 'search_target_lists';
-  description =
-    'Advanced target list searching with category and ownership filters';
+  description = `Target list searching with comprehensive filtering for categories, ownership, and content analysis.
+
+Search through Firewalla target lists including domains, IPs, and security categories for policy management and analysis.
+
+QUERY EXAMPLES:
+- Category filtering: "category:ad", "category:social_media", "category:malware"
+- Ownership: "owner:global", "owner:custom", "owner:user_defined"
+- Content type: "type:domain", "type:ip", "type:url_pattern"
+- Size filtering: "target_count:>100", "active_targets:>50"
+- Status queries: "enabled:true", "updated:>=2024-01-01"
+
+TARGET LIST MANAGEMENT:
+- Ad blocking lists: "category:ad AND enabled:true"
+- Security lists: "category:malware OR category:phishing OR category:threat"
+- Social media controls: "category:social_media AND owner:custom"
+- Custom domain lists: "owner:user_defined AND type:domain"
+- Large lists analysis: "target_count:>1000 AND category:security"
+
+CONTENT ANALYSIS:
+- Popular categories: group_by:"category" for category distribution
+- List effectiveness: "hit_count:>0 AND enabled:true"
+- Maintenance needed: "updated:<=30d AND enabled:true"
+- Unused lists: "hit_count:0 AND enabled:true"
+
+PERFORMANCE CONSIDERATIONS:
+- Target lists cached for 10 minutes for optimal performance
+- Use specific category filters for faster searches
+- Large lists (>10,000 targets) may have slower response times
+- Aggregate queries provide faster overview statistics
+
+FIELD NORMALIZATION:
+- Categories standardized to lowercase with consistent naming
+- Target counts validated as non-negative numbers
+- Timestamps normalized to ISO format
+- Unknown values replaced with "unknown" for consistency
+
+See the Target List Management guide for configuration details.`;
   category = 'search' as const;
+
+  constructor() {
+    // Enable field normalization for target lists (no geographic enrichment needed)
+    super({
+      enableGeoEnrichment: false, // Target lists don't typically contain IP addresses
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'target_lists',
+        entity_type: 'target_lists',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
 
   async execute(
     args: ToolArgs,
@@ -537,6 +1476,17 @@ export class SearchTargetListsHandler extends BaseToolHandler {
   ): Promise<ToolResponse> {
     const searchArgs = args as SearchTargetListsArgs;
     try {
+      // Validate common search parameters
+      const validation = validateCommonSearchParameters(
+        searchArgs,
+        this.name,
+        'target_lists'
+      );
+
+      if (!validation.isValid) {
+        return validation.response;
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -548,20 +1498,14 @@ export class SearchTargetListsHandler extends BaseToolHandler {
         group_by: searchArgs.group_by,
         aggregate: searchArgs.aggregate,
       };
-      const result = await searchTools.search_target_lists(searchParams);
 
-      return this.createSuccessResponse({
-        count: SafeAccess.safeArrayAccess(
-          (result as any).results,
-          arr => arr.length,
-          0
-        ),
-        query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
-        execution_time_ms: SafeAccess.getNestedValue(
-          result as any,
-          'execution_time_ms',
-          0
-        ),
+      const result = await withToolTimeout(
+        async () => searchTools.search_target_lists(searchParams),
+        this.name
+      );
+
+      // Create unified response with standardized target list data
+      const unifiedResponseData = {
         target_lists: SafeAccess.safeArrayMap(
           result.results,
           (list: TargetList) => ({
@@ -584,17 +1528,45 @@ export class SearchTargetListsHandler extends BaseToolHandler {
             ),
           })
         ),
+        count: SafeAccess.safeArrayAccess(
+          (result as any).results,
+          arr => arr.length,
+          0
+        ),
+        query_executed: SafeAccess.getNestedValue(result as any, 'query', ''),
+        execution_time_ms: SafeAccess.getNestedValue(
+          result as any,
+          'execution_time_ms',
+          0
+        ),
         aggregations: SafeAccess.getNestedValue(
           result as any,
           'aggregations',
           null
         ),
-      });
+        query_info: {
+          original_query: searchArgs.query,
+          applied_filters: {
+            grouping: !!searchArgs.group_by,
+            sorting: !!searchArgs.sort_by,
+            aggregation: !!searchArgs.aggregate,
+          },
+        },
+      };
+
+      // Return unified response
+      return this.createUnifiedResponse(unifiedResponseData);
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to search target lists: ${errorMessage}`
+      return createErrorResponse(
+        this.name,
+        `Failed to search target lists: ${errorMessage}`,
+        ErrorType.SEARCH_ERROR
       );
     }
   }
@@ -606,6 +1578,21 @@ export class SearchCrossReferenceHandler extends BaseToolHandler {
     'Multi-entity searches with correlation across different data types';
   category = 'search' as const;
 
+  constructor() {
+    // Enable field normalization for cross-reference searches (no geographic enrichment needed)
+    super({
+      enableGeoEnrichment: false, // Cross-reference tools work on metadata, not IP addresses directly
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'cross_reference',
+        entity_type: 'correlation_data',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
@@ -613,14 +1600,19 @@ export class SearchCrossReferenceHandler extends BaseToolHandler {
     const searchArgs = args as SearchCrossReferenceArgs;
     try {
       const searchTools = createSearchTools(firewalla);
-      const result = await searchTools.search_cross_reference({
-        primary_query: searchArgs.primary_query,
-        secondary_queries: searchArgs.secondary_queries,
-        correlation_field: searchArgs.correlation_field,
-        limit: searchArgs.limit,
-      });
+      const result = await withToolTimeout(
+        async () =>
+          searchTools.search_cross_reference({
+            primary_query: searchArgs.primary_query,
+            secondary_queries: searchArgs.secondary_queries,
+            correlation_field: searchArgs.correlation_field,
+            limit: searchArgs.limit,
+          }),
+        this.name
+      );
 
-      return this.createSuccessResponse({
+      // Create unified response with standardized correlation data
+      const unifiedResponseData = {
         primary_query: SafeAccess.getNestedValue(result, 'primary.query', ''),
         primary_results: SafeAccess.getNestedValue(result, 'primary.count', 0),
         correlations: SafeAccess.safeArrayMap(
@@ -645,8 +1637,20 @@ export class SearchCrossReferenceHandler extends BaseToolHandler {
           'execution_time_ms',
           0
         ),
-      });
+        query_info: {
+          primary_query: searchArgs.primary_query,
+          secondary_queries: searchArgs.secondary_queries,
+          correlation_field: searchArgs.correlation_field,
+        },
+      };
+
+      // Return unified response
+      return this.createUnifiedResponse(unifiedResponseData);
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
@@ -662,6 +1666,21 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
     'Advanced multi-field correlation with temporal windows and network scoping';
   category = 'search' as const;
 
+  constructor() {
+    // Enable field normalization for enhanced cross-reference searches (no geographic enrichment needed)
+    super({
+      enableGeoEnrichment: false, // Enhanced cross-reference tools work on metadata and correlations
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'enhanced_cross_reference',
+        entity_type: 'enhanced_correlation_data',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
@@ -669,96 +1688,305 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
     const searchArgs = args as SearchEnhancedCrossReferenceArgs;
     try {
       const searchTools = createSearchTools(firewalla);
-      const result = await searchTools.search_enhanced_cross_reference({
-        primary_query: searchArgs.primary_query,
-        secondary_queries: searchArgs.secondary_queries,
-        correlation_params: searchArgs.correlation_params,
-        limit: searchArgs.limit,
-      });
+      const result = await withToolTimeout(
+        async () =>
+          searchTools.search_enhanced_cross_reference({
+            primary_query: searchArgs.primary_query,
+            secondary_queries: searchArgs.secondary_queries,
+            correlation_params: searchArgs.correlation_params,
+            limit: searchArgs.limit,
+          }),
+        this.name
+      );
 
-      return this.createSuccessResponse({
-        primary_query: SafeAccess.getNestedValue(result, 'primary.query', ''),
-        secondary_queries: SafeAccess.safeArrayMap(
+      // Simplified correlation response structure for better user experience
+      const simplifiedResponse = {
+        // Basic query information
+        query_info: {
+          primary_query: SafeAccess.getNestedValue(result, 'primary.query', ''),
+          secondary_queries: SafeAccess.safeArrayMap(
+            SafeAccess.getNestedValue(result, 'correlations', []),
+            (corr: any) => SafeAccess.getNestedValue(corr, 'query', '')
+          ),
+          correlation_method: SafeAccess.getNestedValue(
+            result,
+            'correlation_summary.correlation_type',
+            'AND'
+          ),
+          correlation_fields: (
+            SafeAccess.getNestedValue(
+              result,
+              'correlation_summary.correlation_fields',
+              []
+            ) as string[]
+          ).join(', '),
+        },
+
+        // Summary statistics in simple format
+        summary: {
+          primary_results_count: SafeAccess.getNestedValue(
+            result,
+            'primary.count',
+            0
+          ),
+          total_correlated_items: SafeAccess.getNestedValue(
+            result,
+            'correlation_summary.total_correlated_count',
+            0
+          ),
+          correlations_found: SafeAccess.safeArrayAccess(
+            SafeAccess.getNestedValue(result, 'correlations', []),
+            arr => arr.length,
+            0
+          ),
+          execution_time_ms: SafeAccess.getNestedValue(
+            result,
+            'execution_time_ms',
+            0
+          ),
+          temporal_filtering_used: SafeAccess.getNestedValue(
+            result,
+            'correlation_summary.temporal_window_applied',
+            false
+          ),
+        },
+
+        // Simplified correlation results - focus on actionable information
+        correlations: SafeAccess.safeArrayMap(
           SafeAccess.getNestedValue(result, 'correlations', []),
-          (corr: any) => SafeAccess.getNestedValue(corr, 'query', '')
-        ),
-        correlation_fields: SafeAccess.getNestedValue(
-          result,
-          'correlation_summary.correlation_fields',
-          []
-        ),
-        correlation_type: SafeAccess.getNestedValue(
-          result,
-          'correlation_summary.correlation_type',
-          'AND'
-        ),
-        primary_results: SafeAccess.getNestedValue(result, 'primary.count', 0),
-        correlated_results: SafeAccess.getNestedValue(
-          result,
-          'correlation_summary.total_correlated_count',
-          0
-        ),
-        correlation_stats: SafeAccess.getNestedValue(
-          result,
-          'correlation_summary',
-          {}
-        ),
-        temporal_filter_applied: SafeAccess.getNestedValue(
-          result,
-          'correlation_summary.temporal_window_applied',
-          false
-        ),
-        execution_time_ms: SafeAccess.getNestedValue(
-          result,
-          'execution_time_ms',
-          0
-        ),
-        correlation_params: SafeAccess.getNestedValue(
-          result,
-          'correlation_params',
-          {}
-        ),
-        results: SafeAccess.safeArrayMap(
-          SafeAccess.getNestedValue(result, 'correlations', []),
-          (correlation: any) => ({
-            entity_type: SafeAccess.getNestedValue(
+          (correlation: any) => {
+            const correlationResults = SafeAccess.getNestedValue(
               correlation,
-              'entity_type',
-              'unknown'
-            ),
-            query: SafeAccess.getNestedValue(correlation, 'query', ''),
-            count: SafeAccess.getNestedValue(correlation, 'count', 0),
-            correlation_stats: SafeAccess.getNestedValue(
-              correlation,
-              'correlation_stats',
-              {}
-            ),
-            correlation_results: SafeAccess.safeArrayMap(
-              SafeAccess.getNestedValue(correlation, 'results', []),
-              (item: any) => ({
-                correlation_strength: SafeAccess.getNestedValue(
-                  item,
-                  'correlation_strength',
-                  0
+              'results',
+              []
+            ) as any[];
+            const topResults = correlationResults.slice(0, 5); // Show top 5 matches only
+
+            return {
+              query: SafeAccess.getNestedValue(correlation, 'query', ''),
+              entity_type: SafeAccess.getNestedValue(
+                correlation,
+                'entity_type',
+                'unknown'
+              ),
+              matches_found: SafeAccess.getNestedValue(correlation, 'count', 0),
+
+              // Simplified correlation matches - key information only
+              top_matches: SafeAccess.safeArrayMap(topResults, (item: any) => ({
+                correlation_strength: Math.round(
+                  (SafeAccess.getNestedValue(
+                    item,
+                    'correlation_strength',
+                    0
+                  ) as number) * 100
+                ), // Convert to percentage
+                matched_on: (
+                  SafeAccess.getNestedValue(
+                    item,
+                    'matched_fields',
+                    []
+                  ) as string[]
+                ).join(', '),
+                summary: this.extractItemSummary(
+                  SafeAccess.getNestedValue(item, 'data', {})
                 ),
-                matched_fields: SafeAccess.getNestedValue(
-                  item,
-                  'matched_fields',
-                  []
+              })),
+
+              // Simple statistics
+              stats: {
+                average_correlation: Math.round(
+                  (correlationResults.reduce(
+                    (sum: number, item: any) =>
+                      sum +
+                      (SafeAccess.getNestedValue(
+                        item,
+                        'correlation_strength',
+                        0
+                      ) as number),
+                    0
+                  ) /
+                    Math.max(correlationResults.length, 1)) *
+                    100
                 ),
-                data: SafeAccess.getNestedValue(item, 'data', item),
-              })
-            ),
-          })
+                strongest_match: Math.round(
+                  Math.max(
+                    ...correlationResults.map(
+                      (item: any) =>
+                        SafeAccess.getNestedValue(
+                          item,
+                          'correlation_strength',
+                          0
+                        ) as number
+                    ),
+                    0
+                  ) * 100
+                ),
+              },
+            };
+          }
         ),
-      });
+
+        // User guidance for interpreting results
+        interpretation: {
+          correlation_quality: this.assessCorrelationQuality(result),
+          recommendations: this.generateCorrelationRecommendations(result),
+        },
+      };
+
+      // Return unified response with enhanced correlation data
+      return this.createUnifiedResponse(simplifiedResponse);
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
         `Failed to execute enhanced cross reference search: ${errorMessage}`
       );
     }
+  }
+
+  /**
+   * Extract a simple summary from correlation item data
+   */
+  private extractItemSummary(data: any): string {
+    if (!data || typeof data !== 'object') {
+      return 'No details available';
+    }
+
+    // Extract key identifying information
+    const parts: string[] = [];
+
+    if (data.source_ip) {
+      parts.push(`IP: ${data.source_ip}`);
+    }
+    if (data.destination_ip) {
+      parts.push(`→ ${data.destination_ip}`);
+    }
+    if (data.protocol) {
+      parts.push(`(${data.protocol})`);
+    }
+    if (data.action) {
+      parts.push(`Action: ${data.action}`);
+    }
+    if (data.severity) {
+      parts.push(`Severity: ${data.severity}`);
+    }
+    if (data.type) {
+      parts.push(`Type: ${data.type}`);
+    }
+    if (data.device?.name) {
+      parts.push(`Device: ${data.device.name}`);
+    }
+
+    return parts.length > 0 ? parts.join(' ') : 'Correlation match found';
+  }
+
+  /**
+   * Assess the overall quality of correlations found
+   */
+  private assessCorrelationQuality(result: any): string {
+    const correlations = SafeAccess.getNestedValue(
+      result,
+      'correlations',
+      []
+    ) as any[];
+    if (correlations.length === 0) {
+      return 'No correlations found';
+    }
+
+    const totalMatches = correlations.reduce(
+      (sum: number, corr: any) =>
+        sum + (SafeAccess.getNestedValue(corr, 'count', 0) as number),
+      0
+    );
+
+    const avgStrength =
+      correlations.reduce((sum: number, corr: any) => {
+        const results = SafeAccess.getNestedValue(corr, 'results', []) as any[];
+        const avgForCorr =
+          results.reduce(
+            (s: number, item: any) =>
+              s +
+              (SafeAccess.getNestedValue(
+                item,
+                'correlation_strength',
+                0
+              ) as number),
+            0
+          ) / Math.max(results.length, 1);
+        return sum + avgForCorr;
+      }, 0) / correlations.length;
+
+    if (avgStrength > 0.8) {
+      return `Excellent (${totalMatches} strong correlations found)`;
+    }
+    if (avgStrength > 0.6) {
+      return `Good (${totalMatches} moderate correlations found)`;
+    }
+    if (avgStrength > 0.4) {
+      return `Fair (${totalMatches} weak correlations found)`;
+    }
+    return `Poor (${totalMatches} very weak correlations found)`;
+  }
+
+  /**
+   * Generate actionable recommendations based on correlation results
+   */
+  private generateCorrelationRecommendations(result: any): string[] {
+    const recommendations: string[] = [];
+    const correlations = SafeAccess.getNestedValue(
+      result,
+      'correlations',
+      []
+    ) as any[];
+    const primaryCount = SafeAccess.getNestedValue(
+      result,
+      'primary.count',
+      0
+    ) as number;
+
+    if (correlations.length === 0) {
+      recommendations.push(
+        'No correlations found. Try broader correlation fields or different time windows.',
+        'Consider using fuzzy matching or expanding the search criteria.',
+        'Verify that the primary query returns meaningful results first.'
+      );
+    } else {
+      const totalCorrelated = SafeAccess.getNestedValue(
+        result,
+        'correlation_summary.total_correlated_count',
+        0
+      ) as number;
+      const correlationRate = totalCorrelated / Math.max(primaryCount, 1);
+
+      if (correlationRate > 0.5) {
+        recommendations.push(
+          'High correlation rate detected - consider investigating these patterns.',
+          'Strong correlations suggest related security events or network patterns.'
+        );
+      } else if (correlationRate > 0.1) {
+        recommendations.push(
+          'Moderate correlations found - review the strongest matches first.',
+          'Consider refining correlation fields for more precise results.'
+        );
+      } else {
+        recommendations.push(
+          'Low correlation rate - results may be coincidental.',
+          'Try different correlation fields or adjust time windows.',
+          'Focus on the highest correlation strength matches only.'
+        );
+      }
+
+      recommendations.push(
+        'Review top matches with correlation strength > 70% for actionable insights.',
+        'Use correlation results to guide further investigation or rule creation.'
+      );
+    }
+
+    return recommendations;
   }
 }
 
@@ -768,6 +1996,21 @@ export class GetCorrelationSuggestionsHandler extends BaseToolHandler {
     'Get intelligent field combination recommendations for cross-reference searches';
   category = 'search' as const;
 
+  constructor() {
+    // Enable field normalization for correlation suggestions (no geographic enrichment needed)
+    super({
+      enableGeoEnrichment: false, // Correlation suggestions work on field analysis, not IP addresses
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'correlation_suggestions',
+        entity_type: 'field_recommendations',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
@@ -775,12 +2018,17 @@ export class GetCorrelationSuggestionsHandler extends BaseToolHandler {
     const searchArgs = args as GetCorrelationSuggestionsArgs;
     try {
       const searchTools = createSearchTools(firewalla);
-      const result = await searchTools.get_correlation_suggestions({
-        primary_query: searchArgs.primary_query,
-        secondary_queries: searchArgs.secondary_queries,
-      });
+      const result = await withToolTimeout(
+        async () =>
+          searchTools.get_correlation_suggestions({
+            primary_query: searchArgs.primary_query,
+            secondary_queries: searchArgs.secondary_queries,
+          }),
+        this.name
+      );
 
-      return this.createSuccessResponse({
+      // Create unified response with correlation suggestions
+      const unifiedResponseData = {
         entity_types: SafeAccess.getNestedValue(result, 'entity_types', []),
         suggested_combinations: SafeAccess.safeArrayMap(
           result.combinations,
@@ -818,140 +2066,23 @@ export class GetCorrelationSuggestionsHandler extends BaseToolHandler {
           'execution_time_ms',
           0
         ),
-      });
+        query_info: {
+          primary_query: searchArgs.primary_query,
+          secondary_queries: searchArgs.secondary_queries,
+        },
+      };
+
+      // Return unified response
+      return this.createUnifiedResponse(unifiedResponseData);
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
         `Failed to get correlation suggestions: ${errorMessage}`
-      );
-    }
-  }
-}
-
-export class SearchFlowsByGeographyHandler extends BaseToolHandler {
-  name = 'search_flows_by_geography';
-  description =
-    'Advanced geographic flow search with location-based filtering and analysis';
-  category = 'search' as const;
-
-  async execute(
-    args: ToolArgs,
-    firewalla: FirewallaClient
-  ): Promise<ToolResponse> {
-    const searchArgs = args as SearchFlowsByGeographyArgs;
-    try {
-      const searchTools = createSearchTools(firewalla);
-      const result = await searchTools.search_flows_by_geography({
-        query: searchArgs.query,
-        geographic_filters: searchArgs.geographic_filters,
-        limit: searchArgs.limit,
-        sort_by: searchArgs.sort_by,
-        sort_order: searchArgs.sort_order,
-        group_by: searchArgs.group_by,
-        aggregate: searchArgs.aggregate,
-      });
-
-      return this.createSuccessResponse({
-        query_executed: SafeAccess.getNestedValue(result, 'query', ''),
-        count: SafeAccess.safeArrayAccess(result.results, arr => arr.length, 0),
-        geographic_analysis: {
-          total_flows: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.total_flows',
-            0
-          ),
-          unique_countries: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.unique_countries',
-            0
-          ),
-          unique_continents: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.unique_continents',
-            0
-          ),
-          cloud_provider_flows: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.cloud_provider_flows',
-            0
-          ),
-          vpn_flows: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.vpn_flows',
-            0
-          ),
-          high_risk_flows: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.high_risk_flows',
-            0
-          ),
-          top_countries: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.top_countries',
-            {}
-          ),
-          top_asns: SafeAccess.getNestedValue(
-            result,
-            'geographic_analysis.top_asns',
-            {}
-          ),
-        },
-        flows: SafeAccess.safeArrayMap(result.results, (flow: Flow) => ({
-          timestamp: unixToISOStringOrNow(flow.ts),
-          source_ip: SafeAccess.getNestedValue(
-            flow as any,
-            'source.ip',
-            'unknown'
-          ),
-          destination_ip: SafeAccess.getNestedValue(
-            flow as any,
-            'destination.ip',
-            'unknown'
-          ),
-          protocol: SafeAccess.getNestedValue(
-            flow as any,
-            'protocol',
-            'unknown'
-          ),
-          bytes: SafeAccess.getNestedValue(flow as any, 'bytes', 0),
-          geographic_data: {
-            country: SafeAccess.getNestedValue(
-              flow as any,
-              'geo.country',
-              'unknown'
-            ),
-            continent: SafeAccess.getNestedValue(
-              flow as any,
-              'geo.continent',
-              'unknown'
-            ),
-            city: SafeAccess.getNestedValue(flow as any, 'geo.city', 'unknown'),
-            asn: SafeAccess.getNestedValue(flow as any, 'geo.asn', 'unknown'),
-            is_cloud: SafeAccess.getNestedValue(
-              flow as any,
-              'geo.isCloud',
-              false
-            ),
-            is_vpn: SafeAccess.getNestedValue(flow as any, 'geo.isVPN', false),
-            risk_score: SafeAccess.getNestedValue(
-              flow as any,
-              'geo.riskScore',
-              0
-            ),
-          },
-        })),
-        execution_time_ms: SafeAccess.getNestedValue(
-          result,
-          'execution_time_ms',
-          0
-        ),
-      });
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(
-        `Failed to search flows by geography: ${errorMessage}`
       );
     }
   }
@@ -962,6 +2093,21 @@ export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
   description = 'Geographic alarm search with location-based threat analysis';
   category = 'search' as const;
 
+  constructor() {
+    // Enable full standardization: geographic enrichment and field normalization for geographic alarms
+    super({
+      enableGeoEnrichment: true, // Geographic alarm searches specifically deal with IP addresses and locations
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'geographic_alarms',
+        entity_type: 'geographic_security_data',
+        supports_geographic_enrichment: true,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
@@ -969,13 +2115,17 @@ export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
     const searchArgs = args as SearchAlarmsByGeographyArgs;
     try {
       const searchTools = createSearchTools(firewalla);
-      const result = await searchTools.search_alarms_by_geography({
-        query: searchArgs.query,
-        geographic_filters: searchArgs.geographic_filters,
-        limit: searchArgs.limit,
-        sort_by: searchArgs.sort_by,
-        group_by: searchArgs.group_by,
-      });
+      const result = await withToolTimeout(
+        async () =>
+          searchTools.search_alarms_by_geography({
+            query: searchArgs.query,
+            geographic_filters: searchArgs.geographic_filters,
+            limit: searchArgs.limit,
+            sort_by: searchArgs.sort_by,
+            group_by: searchArgs.group_by,
+          }),
+        this.name
+      );
 
       return this.createSuccessResponse({
         query_executed: SafeAccess.getNestedValue(result, 'query', ''),
@@ -1086,6 +2236,10 @@ export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
         ),
       });
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
@@ -1101,20 +2255,92 @@ export class GetGeographicStatisticsHandler extends BaseToolHandler {
     'Comprehensive geographic statistics and analytics for flows and alarms';
   category = 'search' as const;
 
+  constructor() {
+    // Enable field normalization for geographic statistics (no direct IP enrichment needed)
+    super({
+      enableGeoEnrichment: false, // Geographic statistics work on pre-computed geographic data
+      enableFieldNormalization: true, // Ensure consistent snake_case field naming across all responses
+      additionalMeta: {
+        data_source: 'geographic_statistics',
+        entity_type: 'geographic_analytics',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
   async execute(
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     const searchArgs = args as GetGeographicStatisticsArgs;
     try {
+      // Validate entity_type parameter
+      const entityTypeValidation = ParameterValidator.validateEnum(
+        searchArgs.entity_type,
+        'entity_type',
+        ['flows', 'alarms'],
+        true // required parameter
+      );
+
+      if (!entityTypeValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Invalid entity_type parameter',
+          ErrorType.VALIDATION_ERROR,
+          {
+            provided_value: searchArgs.entity_type,
+            valid_values: ['flows', 'alarms'],
+            documentation: 'entity_type must be either "flows" or "alarms"',
+          },
+          entityTypeValidation.errors
+        );
+      }
+
+      // Validate group_by parameter if provided
+      if (searchArgs.group_by !== undefined) {
+        const groupByValidation = ParameterValidator.validateEnum(
+          searchArgs.group_by,
+          'group_by',
+          ['country', 'continent', 'region', 'asn', 'provider'],
+          false // optional parameter
+        );
+
+        if (!groupByValidation.isValid) {
+          return createErrorResponse(
+            this.name,
+            'Invalid group_by parameter',
+            ErrorType.VALIDATION_ERROR,
+            {
+              provided_value: searchArgs.group_by,
+              valid_values: [
+                'country',
+                'continent',
+                'region',
+                'asn',
+                'provider',
+              ],
+              documentation:
+                'group_by must be one of: country, continent, region, asn, provider',
+            },
+            groupByValidation.errors
+          );
+        }
+      }
+
       const searchTools = createSearchTools(firewalla);
-      const result = await searchTools.get_geographic_statistics({
-        entity_type: searchArgs.entity_type,
-        time_range: searchArgs.time_range,
-        analysis_type: searchArgs.analysis_type,
-        group_by: searchArgs.group_by,
-        limit: searchArgs.limit,
-      });
+      const result = await withToolTimeout(
+        async () =>
+          searchTools.get_geographic_statistics({
+            entity_type: searchArgs.entity_type,
+            time_range: searchArgs.time_range,
+            analysis_type: searchArgs.analysis_type,
+            group_by: searchArgs.group_by,
+            limit: searchArgs.limit,
+          }),
+        this.name
+      );
 
       return this.createSuccessResponse({
         entity_type: SafeAccess.getNestedValue(
@@ -1150,6 +2376,10 @@ export class GetGeographicStatisticsHandler extends BaseToolHandler {
         ),
       });
     } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(

@@ -89,6 +89,19 @@ export interface SearchParams {
     start?: string;
     end?: string;
   };
+  force_refresh?: boolean; // Bypass cache for real-time data
+  geographic_filters?: {
+    countries?: string[];
+    continents?: string[];
+    regions?: string[];
+    cities?: string[];
+    asns?: string[];
+    hosting_providers?: string[];
+    exclude_cloud?: boolean;
+    exclude_vpn?: boolean;
+    min_risk_score?: number;
+  };
+  include_analytics?: boolean; // Include geographic analysis in response
 }
 
 /**
@@ -174,11 +187,16 @@ export const SEARCH_FIELDS = {
     'source_ip',
     'destination_ip',
     'protocol',
+    'port',
     'direction',
     'blocked',
     'bytes',
+    'download',
+    'upload',
+    'duration',
     'timestamp',
     'device_ip',
+    'device_id',
     'region',
     'category',
     // Enhanced geographic fields
@@ -192,6 +210,7 @@ export const SEARCH_FIELDS = {
     'hosting_provider',
     'asn',
     'is_cloud_provider',
+    'is_cloud',
     'is_proxy',
     'is_vpn',
     'geographic_risk_score',
@@ -215,14 +234,22 @@ export const SEARCH_FIELDS = {
     'type',
     'source_ip',
     'destination_ip',
+    'remote_ip',
+    'device_ip',
+    'protocol',
+    'port',
     'timestamp',
     'status',
+    'direction',
     'description',
+    'message',
     // Enhanced geographic fields
     'country',
     'country_code',
     'continent',
     'city',
+    'remote_country',
+    'remote_continent',
     'timezone',
     'isp',
     'organization',
@@ -232,6 +259,7 @@ export const SEARCH_FIELDS = {
     'is_proxy',
     'is_vpn',
     'geographic_risk_score',
+    'geo_risk_score',
     'geo_location',
     // Application-level fields
     'user_agent',
@@ -248,22 +276,37 @@ export const SEARCH_FIELDS = {
     'activity_level',
   ],
   rules: [
+    'id',
+    'name',
+    'description',
     'action',
     'target_type',
+    'target.type', // User-friendly alias for target_type
     'target_value',
+    'target.value', // User-friendly alias for target_value
     'direction',
     'status',
+    'category',
     'hit_count',
+    'last_hit',
+    'enabled',
     'created_at',
     'updated_at',
   ],
   devices: [
+    'id',
     'name',
     'ip',
+    'mac',
     'mac_vendor',
     'online',
+    'device_type',
+    'os',
     'network_name',
     'group_name',
+    'last_seen',
+    'bandwidth_usage',
+    'connection_count',
     'total_download',
     'total_upload',
   ],

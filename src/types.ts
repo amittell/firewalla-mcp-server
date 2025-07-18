@@ -276,6 +276,7 @@ export interface Flow {
 /**
  * Paginated network flow data response
  * @interface FlowData
+ * @deprecated Consider using StandardPaginatedResponse<Flow> for consistent pagination
  */
 export interface FlowData {
   /** Array of network flows */
@@ -1009,4 +1010,96 @@ export interface ResponseTransformConfig {
 
   /** Metadata fields to include in legacy format */
   legacyMetadataFields?: string[];
+}
+
+/**
+ * Data Validation and Normalization Types
+ * Re-exported from data validation utilities for convenience
+ */
+
+// Re-export validation types from data-validator module
+export type {
+  TypeValidationResult,
+  ValidationResult,
+} from './utils/data-validator.js';
+
+/**
+ * Configuration for data normalization behavior
+ */
+export interface NormalizationConfig {
+  /** Default value to use when normalizing unknown fields */
+  defaultUnknownValue: string;
+  /** Whether to preserve null values or convert them */
+  preserveNull: boolean;
+  /** Whether to convert empty strings to null */
+  emptyStringToNull: boolean;
+  /** Whether to trim whitespace from string values */
+  trimStrings: boolean;
+}
+
+/**
+ * Result of field value sanitization
+ */
+export interface SanitizationResult {
+  /** The sanitized value */
+  value: any;
+  /** Whether the value was modified during sanitization */
+  wasModified: boolean;
+  /** Description of what was modified, if any */
+  modifications: string[];
+}
+
+/**
+ * UNIFIED RESPONSE FORMAT FOR MCP TOOLS
+ *
+ * Enforces extreme consistency across all MCP tool responses with:
+ * - Consistent success/error structure
+ * - Automatic snake_case field normalization
+ * - Geographic enrichment metadata
+ * - Execution tracking and request identification
+ */
+
+/**
+ * Unified response interface for all MCP tools
+ * Replaces ad-hoc response formats with consistent structure
+ */
+export interface ToolResponseUnified<T = any> {
+  /** Whether the operation was successful */
+  success: true;
+
+  /** The actual data payload (automatically normalized to snake_case) */
+  data: T;
+
+  /** Standardized metadata for all responses */
+  meta: {
+    /** Unique request identifier for tracking */
+    request_id: string;
+
+    /** Execution time in milliseconds */
+    execution_time_ms: number;
+
+    /** Handler name that generated this response */
+    handler: string;
+
+    /** Timestamp when response was generated (ISO 8601) */
+    timestamp: string;
+
+    /** Number of results returned (for arrays) */
+    count?: number;
+
+    /** Whether geographic enrichment was applied */
+    geo_enriched?: boolean;
+
+    /** Whether field normalization was applied */
+    field_normalized?: boolean;
+
+    /** Cache status */
+    cached?: boolean;
+
+    /** Data source identifier */
+    data_source?: string;
+
+    /** Additional handler-specific metadata */
+    [key: string]: any;
+  };
 }

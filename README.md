@@ -2,31 +2,48 @@
 
 A Model Context Protocol (MCP) server that enables Claude to access and analyze your Firewalla firewall data in real-time.
 
+## Why Firewalla MCP Server?
+
+**🚀 Simple Network Security Integration**
+- **28 Tools** for network monitoring and analysis
+- **23 Direct API Endpoints** + **5 Convenience Wrappers**
+- **Advanced Search** with query syntax and filters
+- **Clean, Verified Architecture** with corrected API schemas
+
 ## Features
 
 - **Real-time Firewall Data**: Query security alerts, network flows, and device status  
 - **Security Analysis**: Get insights on threats, blocked attacks, and network anomalies  
 - **Bandwidth Monitoring**: Track top bandwidth consumers and usage patterns  
 - **Rule Management**: View and temporarily pause firewall rules  
-- **Target Lists**: Access CloudFlare and CrowdSec security intelligence
-- **Advanced Search**: Complex query syntax with filters, logical operators, and correlations  
+- **Target Lists**: Manage custom security target lists and categories
+- **Search Tools**: Query syntax with filters and logical operators
 
-## Architecture
+## Client Setup Guides
+
+| Client | Quick Start | Full Guide |
+|--------|-------------|------------|
+| **Claude Desktop** | `npm i -g firewalla-mcp-server` → Configure MCP | [📖 Setup Guide](docs/clients/claude-desktop.md) |
+| **Claude Code** | `npm i -g firewalla-mcp-server` → CLI integration | [📖 Setup Guide](docs/clients/claude-code.md) |
+| **VS Code** | Install MCP extension → Configure server | [📖 Setup Guide](docs/clients/vscode.md) |
+| **Cursor** | Install Claude Code → VSIX method | [📖 Setup Guide](docs/clients/cursor.md) |
+| **Roocode** | Install MCP support → Configure server | [📖 Setup Guide](docs/clients/roocode.md) |
+| **Cline** | Configure in VS Code → Enable MCP | [📖 Setup Guide](docs/clients/cline.md) |
+  
+
+## How It Works
 
 ```
-┌─────────────────┐    MCP Protocol     ┌─────────────────┐    HTTPS API    ┌─────────────────┐
-│                 │    (stdio/JSON-RPC) │                 │                 │                 │
-│   Claude Code   │◄───────────────────►│   MCP Server    │◄───────────────►│ Firewalla MSP   │
-│                 │                     │   (Node.js)     │                 │      API        │
-└─────────────────┘                     └─────────────────┘                 └─────────────────┘
+Claude Desktop/Code ↔ MCP Server ↔ Firewalla API
 ```
+
+The MCP server acts as a bridge between Claude and your Firewalla firewall, translating Claude's requests into Firewalla API calls and returning the results in a format Claude can understand.
 
 ## Prerequisites
 
 - Node.js 18+ and npm
-- Active Firewalla MSP (Managed Security Portal) account
-- Valid MSP subscription plan
-- MSP API access token
+- Firewalla MSP account with API access
+- Your Firewalla device online and connected
 
 ## Quick Start
 
@@ -110,62 +127,16 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
 }
 ```
 
-**If using Docker:**
-```json
-{
-  "mcpServers": {
-    "firewalla": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm",
-        "-e", "FIREWALLA_MSP_TOKEN=your_msp_access_token_here",
-        "-e", "FIREWALLA_MSP_ID=yourdomain.firewalla.net", 
-        "-e", "FIREWALLA_BOX_ID=your_box_gid_here",
-        "firewalla-mcp-server"
-      ]
-    }
-  }
-}
-```
-
-> **Note**: The args array above is passed verbatim to Docker. When copying to shell scripts, quoting may differ.
 
 **Config file locations:**
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
-## Docker Usage
+### 5. Next Steps
 
-### Building the Docker Image
-
-To use the Docker configuration option above, first build the image:
-
-```bash
-# Build the Docker image
-docker build -t firewalla-mcp-server .
-
-# Optional: Tag with semantic version
-docker build -t firewalla-mcp-server:1.0.0 .
-
-# Push to registry (if deploying to remote)
-docker tag firewalla-mcp-server your-registry/firewalla-mcp-server:latest
-docker push your-registry/firewalla-mcp-server:latest
-```
-
-### Advanced Docker Deployment
-
-For production server deployments, you can use the included deployment script:
-
-```bash
-# Deploy with automated testing and security scanning
-./scripts/deploy.sh
-```
-
-The deployment script provides:
-- Automated testing and linting
-- Security scanning with Trivy
-- Docker Compose configuration
-- Health checks and monitoring
+- See **[USAGE.md](USAGE.md)** for practical examples and common queries
+- Check **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** if you encounter issues
+- Review client-specific setup guides in [docs/clients/](docs/clients/)
 
 ## Usage Examples
 
@@ -185,7 +156,7 @@ npm run mcp:start
 ```
 
 **2. Test with Claude**
-Open Claude Code and try these starter queries:
+Open Claude Desktop and try these starter queries:
 
 **Basic Health Check:**
 ```text
@@ -246,13 +217,14 @@ search for: high severity alarms from IP range 10.0.0.* in the last 24 hours
 ```text
 "Show me firewall rules that blocked the most connections this week"
 ```
-*Uses: `get_most_active_rules` + `search_flows` for blocked traffic*
+*Uses: `get_network_rules` + `search_flows` for blocked traffic analysis*
 
 **Device Behavior Analysis:**
 ```text
 "Find all devices that were online yesterday but are offline now"
 ```
 *Uses: `search_devices` with temporal queries + `get_offline_devices`*
+
 
 ### Troubleshooting Common Issues
 
@@ -274,64 +246,27 @@ If responses are slow:
 2. Use more specific time ranges
 3. Check your network connection to the MSP API
 
-## Available MCP Components
+## Available Tools (29 total)
 
-### Tools (Actions Claude can perform)
+### Core Tools
+- **Security**: Get alarms, analyze threats, delete alerts
+- **Network**: Monitor traffic flows, track bandwidth usage
+- **Devices**: Check device status, find offline devices
+- **Rules**: Manage firewall rules, pause/resume rules
+- **Search**: Advanced search across all data types
+- **Analytics**: Statistics, trends, and geographic analysis
+- **Target Management**: Create, update, and delete security target lists
 
-#### Security Monitoring
-- `get_active_alarms` - Retrieve current security alerts with complete alarm data, IDs, and descriptions
-- `get_specific_alarm` - Get detailed information for a specific alarm ID
-- `delete_alarm` - Remove specific security alarms
-
-#### Network Analysis
-- `get_flow_data` - Query network traffic flows with detailed connection data and device context
-- `get_bandwidth_usage` - Get top bandwidth consuming devices with detailed usage statistics
-- `get_offline_devices` - List offline devices with last seen timestamps
-
-#### Device Management
-- `get_device_status` - Check device status with comprehensive information including names, types, and vendors
-- `get_boxes` - List all Firewalla devices with status and version information
-
-#### Rule Management
-- `get_network_rules` - Retrieve firewall rules with complete rule names, conditions, and metadata
-- `get_network_rules_summary` - Overview statistics and counts by category
-- `get_most_active_rules` - Rules with the highest hit counts for traffic analysis
-- `get_recent_rules` - Recently created or modified firewall rules
-- `pause_rule` - Temporarily disable specific firewall rules
-- `resume_rule` - Re-enable previously paused firewall rules
-
-#### Threat Intelligence
-- `get_target_lists` - Access CloudFlare and CrowdSec security target lists
-
-#### Statistics and Trends
-- `get_simple_statistics` - Basic statistics about boxes, alarms, and rules with health scores
-- `get_statistics_by_region` - Flow statistics grouped by country/region
-- `get_statistics_by_box` - Per-device statistics with activity scores
-- `get_flow_trends` - Historical flow data trends over time
-- `get_alarm_trends` - Historical alarm frequency and patterns
-- `get_rule_trends` - Rule activity trends and stability metrics
-
-#### Advanced Search
-- `search_flows` - Advanced flow searching with complex query syntax
-- `search_alarms` - Alarm searching with severity, time, and IP filters
-- `search_rules` - Rule searching with target, action, and status filters
-- `search_devices` - Device searching with network, status, and usage filters
-- `search_target_lists` - Target list searching with category and ownership filters
-- `search_cross_reference` - Multi-entity searches with correlation across data types
-
-### Resources (Data Claude can access)
-- `firewall_summary` - Overview of firewall status and health
-- `device_inventory` - List of all managed devices
-- `security_metrics` - Real-time security statistics
-- `network_topology` - Network structure and connections
-- `recent_threats` - Latest security events and blocked attempts
-
-### Prompts (Pre-defined interactions)
-- `security_report` - Generate comprehensive security status report
-- `threat_analysis` - Analyze recent alarms and suspicious activity
-- `bandwidth_analysis` - Investigate high bandwidth usage patterns
-- `device_investigation` - Deep dive into specific device activity
-- `network_health_check` - Overall network status assessment
+### Quick Reference
+```
+Security: get_active_alarms, delete_alarm, get_specific_alarm
+Network: get_flow_data, get_bandwidth_usage, get_offline_devices  
+Devices: get_device_status, get_boxes, search_devices
+Rules: get_network_rules, pause_rule, resume_rule, get_target_lists
+Search: search_flows, search_alarms, search_rules, search_target_lists
+Analytics: get_simple_statistics, get_flow_insights, get_flow_trends, get_alarm_trends
+Management: create_target_list, update_target_list, delete_target_list
+```
 
 ## Development
 
@@ -353,7 +288,7 @@ npm run lint:fix     # Fix ESLint issues
 - **Dependency Resolution**: Handles package dependencies automatically  
 - **No global installation required**: Works without global installation
 - **MCP Standard**: Follows Model Context Protocol conventions
-- **Cross-Platform**: Works consistently across different environments
+- **Reliable**: Works consistently across different environments
 
 **Alternative execution methods:**
 ```bash
@@ -379,7 +314,7 @@ firewalla-mcp-server/
 │   └── prompts/            # MCP prompt implementations
 ├── tests/                  # Test files
 ├── docs/
-│   └── firewalla-api-reference.md  # Complete API documentation
+│   └── firewalla-api-reference.md  # API documentation
 ├── CLAUDE.md              # Comprehensive development guide
 ├── SPEC.md                # Technical specifications
 └── README.md              # This file
@@ -387,19 +322,11 @@ firewalla-mcp-server/
 
 ## Documentation
 
-The project uses a streamlined documentation structure:
-
-- **`README.md`** (this file) - Project overview, quick start, and basic usage
-- **`CLAUDE.md`** - Comprehensive development guide including:
-  - Search functionality and improvements
-  - Geographic features and multi-value support
-  - Advanced correlation and field mapping
-  - Implementation patterns and troubleshooting
-  - Complete tool examples and testing procedures
-- **`docs/firewalla-api-reference.md`** - Complete Firewalla MSP API v2 documentation
-- **`SPEC.md`** - Technical specifications and architecture details
-
-For development work, start with `CLAUDE.md` which contains all essential commands, patterns, and advanced features.
+- **README.md** (this file) - Setup and basic usage
+- **[USAGE.md](USAGE.md)** - Simple usage guide with examples
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
+- **docs/clients/** - Client-specific setup guides  
+- **CLAUDE.md** - Development guide and commands
 
 ## Security
 
@@ -409,31 +336,55 @@ For development work, start with `CLAUDE.md` which contains all essential comman
 - Input validation prevents injection attacks
 - All API communications use HTTPS
 
+## Known Behaviors and Limitations
+
+### Category Classification
+- **Flow Categories**: Many network flows may show as empty category ("") in the Firewalla API response. This is expected behavior - Firewalla categorizes traffic when it recognizes the domain/service (e.g., "av" for audio/video, "social" for social media).
+- **Target List Categories**: Some target lists may show category as "unknown". This is normal for user-created or certain system lists.
+- **Timeline**: Category classification happens at the Firewalla device level and may take time to build up meaningful categorization data.
+
+### Data Characteristics
+- **Response Sizes**: The `get_recent_flow_activity` tool returns up to 400 recent flows. For larger datasets or historical analysis, use `search_flows` with time filters for more targeted queries.
+- **Geographic Data**: IP geolocation is enriched by the MCP server and includes country, city, and risk scores when available.
+
 ## Troubleshooting
 
-### Common Issues
+### Quick Fixes
 
-**Authentication Errors**
-- Verify your MSP token is valid and not expired
-- Check that your Box ID is correct
-- Ensure network connectivity to MSP API
+**Server won't start:**
+```bash
+# Clean and rebuild
+npm run clean
+npm run build
 
-**Connection Issues**
-- Confirm the MCP server is running
-- Check Claude Code MCP configuration
-- Verify no port conflicts
+# If build fails, try:
+npm install
+npm run build
+```
 
-**Performance Issues**
-- Monitor API rate limits in logs
-- Check caching configuration
-- Review concurrent request handling
+**Authentication errors:**
+- Check your MSP token is valid
+- Verify Box ID format (long UUID)
+- Confirm MSP domain is correct
+
+**No data returned:**
+- Try broader queries: "last week" vs "last hour"
+- Check if Firewalla is online
+- Test with: "show me basic statistics"
+
+**Slow responses:**
+- Add limits: "top 10 devices"
+- Use shorter time ranges
+- Restart the server
 
 ### Debug Mode
 
-Enable debug logging:
+Enable detailed logging:
 ```bash
 DEBUG=mcp:* npm run mcp:start
 ```
+
+For more detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## Contributing
 
@@ -444,191 +395,17 @@ DEBUG=mcp:* npm run mcp:start
 5. Run the test suite
 6. Submit a pull request
 
-## Recent Improvements
+## What's New
 
-### Enhanced Data Mapping (v1.0.0)
-All MCP tools now return complete, well-structured data:
-
-**Core Tool Improvements:**
-- `get_active_alarms`: Complete alarm information with IDs, descriptions, and source/destination IPs
-- `get_device_status`: Detailed device profiles with names, types, vendors, and operating systems  
-- `get_network_rules`: Full rule specifications with names, conditions, and comprehensive metadata
-- `get_flow_data`: Rich connection details with applications, device names, and traffic statistics
-
-### Advanced Analytics (v1.0.0)
-**New Statistics and Trends Tools:**
-- Health scoring system for network assessment
-- Regional flow analysis with country-level breakdowns
-- Per-device activity scores and monitoring
-- Historical trend analysis for flows, alarms, and rules
-- Comprehensive offline device tracking
-
-### Advanced Search Engine (v1.0.0)
-**Powerful Query Capabilities:**
-- Complex search syntax with logical operators (AND, OR, NOT)
-- Field-specific filters with wildcards and ranges
-- Cross-reference searches for data correlation
-- Time-based filtering with flexible date ranges
-- Post-processing filters for comprehensive results
-- Aggregation and statistical analysis
-
-**Search Examples:**
-```text
-severity:high AND source_ip:192.168.*
-timestamp:>2024-01-01 AND bytes:>=1000000
-target_value:*.facebook.com OR mac_vendor:Apple*
-```
-
-### Architecture Improvements
-- Environment-based configuration (no hardcoded values)
-- Full TypeScript compliance maintained
-- Comprehensive test coverage with simulation testing
-- Robust caching and rate limiting
-- Modular filter system with extensible architecture
-
-## v1.0.0 Implementation Features
-
-### Mandatory Limit Parameters
-
-**REQUIRED**: All paginated tools now require explicit `limit` parameter. This prevents artificial defaults that mask missing parameters.
-
-**Affected Tools:**
-- `get_active_alarms`
-- `get_flow_data`  
-- `get_device_status`
-- `get_bandwidth_usage` (parameter renamed from `top` to `limit`)
-- `get_network_rules`
-- `get_most_active_rules`
-- `get_recent_rules`
-- All search tools (`search_flows`, `search_alarms`, etc.)
-
-**Migration:**
-```typescript
-// Before (would default to 50-200 results)
-await get_device_status({});
-
-// After (explicit limit required)  
-await get_device_status({ limit: 100 });
-```
-
-**Error Response:**
-Tools will now return clear error: `"limit parameter is required"` when limit is missing.
-
-## New Features (v1.0.0)
-
-### Enterprise-Grade Validation Framework
-
-**Standardized Error Handling:**
-- Consistent error format: `{error: true, message: string, tool: string}`
-- Enhanced parameter validation with type checking
-- Comprehensive null safety throughout codebase
-- Input sanitization preventing injection attacks
-
-### Performance Monitoring & Optimization
-
-**DEBUG Environment Variable:**
-```bash
-# Enable comprehensive debugging
-DEBUG=firewalla:* npm run mcp:start
-
-# Enable specific debugging
-DEBUG=cache,performance,api npm run mcp:start
-```
-
-**Multi-Tier Caching System:**
-- Real-time data (alarms/flows): 30s TTL
-- Medium-frequency data (devices): 2m TTL  
-- Stable data (rules): 10m TTL
-- Static data (statistics): 1h TTL
-
-**Performance Metrics:**
-- Response time tracking with P95/P99 percentiles
-- Error rate monitoring by operation type
-- Memory usage optimization with LRU eviction
-- Query performance analysis and optimization
-
-### Enhanced Security & Reliability
-
-**Critical Bug Fixes:**
-- Fixed null pointer exceptions in rule management
-- Corrected success status reporting for pause/resume operations  
-- Enhanced alarm detection with better field mapping
-- Improved bandwidth usage error handling
-
-**Security Enhancements:**
-- Query sanitization preventing injection attacks
-- Enhanced input validation for all parameters
-- Defensive programming patterns throughout
-- Cross-reference field mapping improvements
-
-### Developer Experience Improvements
-
-**Comprehensive Logging:**
-- Pipeline stage debugging for data flow analysis
-- Performance bottleneck identification
-- API request/response logging with timing
-- Error tracking with detailed context
-
-**Validation Utilities:**
-- `ParameterValidator` for consistent validation patterns
-- `SafeAccess` utilities preventing null pointer exceptions
-- `FieldMapper` for cross-reference compatibility
-- `ErrorHandler` for standardized error responses
-
-## Publishing to npm
-
-This package is configured for npm publishing. To publish your own version:
-
-### 1. Prepare for Publishing
-
-```bash
-# Make sure you're logged into npm
-npm login
-
-# Test the package build
-npm run build
-npm test
-
-# Check what will be included in the package
-npm pack --dry-run
-```
-
-### 2. Publish to npm
-
-```bash
-# For first release
-npm publish
-
-# For updates, bump version first
-npm run version:patch  # 1.0.0 -> 1.0.1
-npm run version:minor  # 1.0.0 -> 1.1.0  
-npm run version:major  # 1.0.0 -> 2.0.0
-
-# Then publish
-npm publish
-```
-
-### 3. Post-Publishing
-
-Once published, users can install with:
-
-```bash
-# Install locally (recommended for MCP servers)
-npm install firewalla-mcp-server
-
-# Or install globally
-npm install -g firewalla-mcp-server
-```
-
-### Package Features
-
-- **MCP Convention Compliant** - Uses `npx` for execution as per MCP standards  
-- **Optimized Bundle** - Only includes dist/, README, LICENSE via .npmignore  
-- **Automated Build** - Pre-publish hooks ensure clean builds  
-- **Security Scanning** - Trivy scan integrated into CI pipeline  
-- **Semantic Versioning** - Built-in version management scripts  
-- **TypeScript Support** - Full type safety with compiled output  
-- **Environment Variables** - Secure credential management  
+**Version 1.0.0:**
+- 29 tools with API-verified schemas
+- 24 direct API endpoints + 5 convenience wrappers
+- NEW: get_flow_insights for category-based traffic analysis
+- Advanced search with logical operators (AND, OR, NOT)
+- All limits corrected to API maximum (500)
+- Required parameters added for proper API calls
+- Better caching for faster responses
+- Handles high-volume networks (300k+ flows/day)  
 
 ## License
 

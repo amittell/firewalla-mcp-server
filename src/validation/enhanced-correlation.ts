@@ -28,7 +28,7 @@
  * - Invalid weights (non-numbers) properly fall back to defaults
  */
 
-import { getFieldValue, normalizeFieldValue, type EntityType, type MappableEntity } from './field-mapper.js';
+import { getFieldValue, normalizeFieldValue, type EntityType, type MappableEntity, type FieldValue } from './field-mapper.js';
 
 /**
  * Utility function for consistent rounding to 3 decimal places
@@ -653,4 +653,116 @@ function generateEnhancedStats(
     fuzzyMatchingEnabled: fuzzyEnabled,
     totalProcessingTime: processingTime
   };
+}
+
+/**
+ * Type guard to check if a value is a valid FieldValue
+ */
+function isValidFieldValue(value: unknown): value is FieldValue {
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value === null || value === undefined;
+}
+
+/**
+ * Simple client-side correlation function that matches entities based on a single field
+ * This function provides basic correlation without API calls
+ * 
+ * @param primaryResults - Array of primary results (e.g., flows)
+ * @param secondaryResults - Array of secondary results (e.g., alarms)
+ * @param correlationField - Field name to correlate on (e.g., 'source_ip')
+ * @returns Array of correlated results with both primary and secondary data
+ */
+export function correlateResults(
+  primaryResults: MappableEntity[],
+  secondaryResults: MappableEntity[],
+  correlationField: string
+): Array<{
+  primary: MappableEntity;
+  secondary: MappableEntity;
+  correlationType: 'exact' | 'fuzzy';
+  correlationScore: number;
+}> {
+  const correlatedResults: Array<{
+    primary: MappableEntity;
+    secondary: MappableEntity;
+    correlationType: 'exact' | 'fuzzy';
+    correlationScore: number;
+  }> = [];
+
+  // Build a map of primary values for efficient lookup
+  const primaryValueMap = new Map<unknown, MappableEntity[]>();
+  
+  for (const primaryItem of primaryResults) {
+    // Get field value - supports nested paths like 'remote.ip'
+    const value = getNestedFieldValue(primaryItem, correlationField);
+    if (value !== undefined && value !== null && value !== '' && isValidFieldValue(value)) {
+      const normalizedValue = normalizeFieldValue(value, correlationField);
+      
+      if (!primaryValueMap.has(normalizedValue)) {
+        primaryValueMap.set(normalizedValue, []);
+      }
+      primaryValueMap.get(normalizedValue)!.push(primaryItem);
+    }
+  }
+
+  // Correlate secondary results
+  for (const secondaryItem of secondaryResults) {
+    const secondaryValue = getNestedFieldValue(secondaryItem, correlationField);
+    if (secondaryValue !== undefined && secondaryValue !== null && secondaryValue !== '' && isValidFieldValue(secondaryValue)) {
+      const normalizedSecondaryValue = normalizeFieldValue(secondaryValue, correlationField);
+      
+      // Check for exact match first
+      if (primaryValueMap.has(normalizedSecondaryValue)) {
+        const matchingPrimaries = primaryValueMap.get(normalizedSecondaryValue)!;
+        for (const primary of matchingPrimaries) {
+          correlatedResults.push({
+            primary,
+            secondary: secondaryItem,
+            correlationType: 'exact',
+            correlationScore: 1.0
+          });
+        }
+      } else if (correlationField.includes('ip')) {
+        // For IP fields, try fuzzy subnet matching
+        for (const [primaryValue, primaryItems] of primaryValueMap.entries()) {
+          if (typeof primaryValue === 'string' && typeof normalizedSecondaryValue === 'string') {
+            const similarity = calculateIPSimilarity(normalizedSecondaryValue, primaryValue);
+            if (similarity >= 0.5) { // At least /16 subnet match
+              for (const primary of primaryItems) {
+                correlatedResults.push({
+                  primary,
+                  secondary: secondaryItem,
+                  correlationType: 'fuzzy',
+                  correlationScore: similarity
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Sort by correlation score (highest first)
+  correlatedResults.sort((a, b) => b.correlationScore - a.correlationScore);
+  
+  return correlatedResults;
+}
+
+/**
+ * Get nested field value from an object using dot notation
+ * Handles paths like 'remote.ip' or 'device.mac'
+ */
+function getNestedFieldValue(obj: any, path: string): unknown {
+  const parts = path.split('.');
+  let current = obj;
+  
+  for (const part of parts) {
+    if (current && typeof current === 'object' && part in current) {
+      current = current[part];
+    } else {
+      return undefined;
+    }
+  }
+  
+  return current;
 }
