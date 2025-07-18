@@ -601,14 +601,28 @@ export class FirewallaMCPServer {
                   type: 'array',
                   items: {
                     type: 'string',
-                    enum: ['ad', 'edu', 'games', 'gamble', 'intel', 'p2p', 
-                           'porn', 'private', 'social', 'shopping', 'video', 'vpn'],
+                    enum: [
+                      'ad',
+                      'edu',
+                      'games',
+                      'gamble',
+                      'intel',
+                      'p2p',
+                      'porn',
+                      'private',
+                      'social',
+                      'shopping',
+                      'video',
+                      'vpn',
+                    ],
                   },
-                  description: 'Filter to specific content categories (optional)',
+                  description:
+                    'Filter to specific content categories (optional)',
                 },
                 include_blocked: {
                   type: 'boolean',
-                  description: 'Include blocked traffic analysis (default: false)',
+                  description:
+                    'Include blocked traffic analysis (default: false)',
                   default: false,
                 },
               },

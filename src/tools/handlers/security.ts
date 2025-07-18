@@ -387,10 +387,13 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
           const timestampNormalized = normalizeTimestamps(alarm);
           const finalAlarm = timestampNormalized.data;
 
-          const rawAid = SafeAccess.getNestedValue(finalAlarm, 'aid', 0);
+          const rawAid = SafeAccess.getNestedValue(finalAlarm, 'aid', null);
 
-          // Use the actual alarm ID directly
-          const finalAid = rawAid ? String(rawAid) : 'unknown';
+          // Use the actual alarm ID directly, properly handling 0 as a valid ID
+          const finalAid =
+            rawAid !== null && rawAid !== undefined
+              ? String(rawAid)
+              : 'unknown';
 
           return {
             aid: finalAid,

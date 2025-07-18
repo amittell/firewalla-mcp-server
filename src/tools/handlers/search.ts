@@ -907,27 +907,26 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
               'unknown'
             );
           }
-          
+
           // If still unknown, derive from alarm type
           if (severity === 'unknown') {
-            const alarmType = SafeAccess.getNestedValue(alarm as any, 'type', '');
+            const alarmType = SafeAccess.getNestedValue(
+              alarm as any,
+              'type',
+              ''
+            );
             if (alarmType) {
               severity = deriveAlarmSeverityFromType(alarmType);
             }
           }
 
-          const rawAid = SafeAccess.getNestedValue(
-            alarm as any,
-            'aid',
-            'unknown'
-          );
+          const rawAid = SafeAccess.getNestedValue(alarm as any, 'aid', null);
 
-          // Generate composite ID if the raw ID is non-unique
-          let finalAid = 'unknown';
-          if (rawAid !== 'unknown') {
-            // Use the actual alarm ID directly
-            finalAid = String(rawAid);
-          }
+          // Use the actual alarm ID directly, properly handling 0 as a valid ID
+          const finalAid =
+            rawAid !== null && rawAid !== undefined
+              ? String(rawAid)
+              : 'unknown';
 
           return {
             aid: finalAid,

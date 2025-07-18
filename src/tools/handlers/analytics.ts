@@ -9,7 +9,11 @@ import {
   SafeAccess,
   ErrorType,
 } from '../../validation/error-handler.js';
-import { unixToISOString, getCurrentTimestamp } from '../../utils/timestamp.js';
+import {
+  unixToISOString,
+  safeUnixToISOString,
+  getCurrentTimestamp,
+} from '../../utils/timestamp.js';
 import { logger } from '../../monitoring/logger.js';
 import { withToolTimeout } from '../../utils/timeout-manager.js';
 import {
@@ -581,7 +585,10 @@ export class GetRecentFlowActivityHandler extends BaseToolHandler {
 
   private static readonly MAX_FLOWS = 2000;
   private static readonly FLOWS_PER_PAGE = 500;
-  private static readonly MAX_PAGES = Math.ceil(GetRecentFlowActivityHandler.MAX_FLOWS / GetRecentFlowActivityHandler.FLOWS_PER_PAGE);
+  private static readonly MAX_PAGES = Math.ceil(
+    GetRecentFlowActivityHandler.MAX_FLOWS /
+      GetRecentFlowActivityHandler.FLOWS_PER_PAGE
+  );
 
   constructor() {
     super({
@@ -610,7 +617,10 @@ export class GetRecentFlowActivityHandler extends BaseToolHandler {
       let pagesProcessed = 0;
 
       // Fetch up to 2000 flows in 4 pages of 500 each
-      while (pagesProcessed < GetRecentFlowActivityHandler.MAX_PAGES && allFlows.length < GetRecentFlowActivityHandler.MAX_FLOWS) {
+      while (
+        pagesProcessed < GetRecentFlowActivityHandler.MAX_PAGES &&
+        allFlows.length < GetRecentFlowActivityHandler.MAX_FLOWS
+      ) {
         const currentCursor = cursor;
         const pageData = await withToolTimeout(
           async () =>
@@ -633,7 +643,10 @@ export class GetRecentFlowActivityHandler extends BaseToolHandler {
         pagesProcessed++;
 
         // Break if no more pages available or we hit our limit
-        if (!cursor || allFlows.length >= GetRecentFlowActivityHandler.MAX_FLOWS) {
+        if (
+          !cursor ||
+          allFlows.length >= GetRecentFlowActivityHandler.MAX_FLOWS
+        ) {
           break;
         }
       }
@@ -642,19 +655,26 @@ export class GetRecentFlowActivityHandler extends BaseToolHandler {
       const flows = allFlows.slice(0, GetRecentFlowActivityHandler.MAX_FLOWS);
 
       if (flows.length === 0) {
-        return this.createUnifiedResponse({
-          flows_analyzed: 0,
-          time_span_minutes: 0,
-          activity_summary: 'No recent flows found',
-          flows: [],
-          limitations: {
-            data_scope: 'Current activity snapshot only',
-            not_suitable_for: ['Historical analysis', 'Daily patterns', 'Trend analysis'],
-            time_frame: 'Last 10-20 minutes for high-volume networks',
+        return this.createUnifiedResponse(
+          {
+            flows_analyzed: 0,
+            time_span_minutes: 0,
+            activity_summary: 'No recent flows found',
+            flows: [],
+            limitations: {
+              data_scope: 'Current activity snapshot only',
+              not_suitable_for: [
+                'Historical analysis',
+                'Daily patterns',
+                'Trend analysis',
+              ],
+              time_frame: 'Last 10-20 minutes for high-volume networks',
+            },
           },
-        }, {
-          executionTimeMs: Date.now() - startTime,
-        });
+          {
+            executionTimeMs: Date.now() - startTime,
+          }
+        );
       }
 
       // Calculate time span of the flows
@@ -672,7 +692,7 @@ export class GetRecentFlowActivityHandler extends BaseToolHandler {
       flows.forEach(flow => {
         const protocol = flow.protocol || 'unknown';
         const region = flow.region || flow.country || 'unknown';
-        
+
         protocolCounts.set(protocol, (protocolCounts.get(protocol) || 0) + 1);
         regionCounts.set(region, (regionCounts.get(region) || 0) + 1);
       });
@@ -681,12 +701,20 @@ export class GetRecentFlowActivityHandler extends BaseToolHandler {
       const topProtocols = Array.from(protocolCounts.entries())
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
-        .map(([protocol, count]) => ({ protocol, count, percentage: Math.round((count / flows.length) * 100) }));
+        .map(([protocol, count]) => ({
+          protocol,
+          count,
+          percentage: Math.round((count / flows.length) * 100),
+        }));
 
       const topRegions = Array.from(regionCounts.entries())
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
-        .map(([region, count]) => ({ region, count, percentage: Math.round((count / flows.length) * 100) }));
+        .map(([region, count]) => ({
+          region,
+          count,
+          percentage: Math.round((count / flows.length) * 100),
+        }));
 
       const unifiedResponseData = {
         flows_analyzed: flows.length,
@@ -703,7 +731,7 @@ export class GetRecentFlowActivityHandler extends BaseToolHandler {
         },
         flows: flows.map(flow => ({
           timestamp: flow.ts,
-          timestamp_iso: unixToISOString(flow.ts),
+          timestamp_iso: safeUnixToISOString(flow.ts, 'Never'),
           protocol: flow.protocol,
           direction: flow.direction,
           blocked: flow.block,
@@ -720,20 +748,21 @@ export class GetRecentFlowActivityHandler extends BaseToolHandler {
           sample_size: `${flows.length} flows from last ${timeSpanMinutes} minutes`,
           not_suitable_for: [
             'Daily/weekly/monthly analysis',
-            'Historical trend identification', 
+            'Historical trend identification',
             'Peak usage time analysis',
-            'Long-term pattern detection'
+            'Long-term pattern detection',
           ],
           suitable_for: [
             'Current network state assessment',
             'Immediate security analysis',
             'Recent protocol distribution',
             'Active threat detection',
-            'Real-time activity monitoring'
+            'Real-time activity monitoring',
           ],
-          performance_note: flows.length >= GetRecentFlowActivityHandler.MAX_FLOWS ? 
-            `Limited to ${GetRecentFlowActivityHandler.MAX_FLOWS} flows for performance` : 
-            'All available recent flows included',
+          performance_note:
+            flows.length >= GetRecentFlowActivityHandler.MAX_FLOWS
+              ? `Limited to ${GetRecentFlowActivityHandler.MAX_FLOWS} flows for performance`
+              : 'All available recent flows included',
         },
       };
 
@@ -797,19 +826,33 @@ export class GetFlowInsightsHandler extends BaseToolHandler {
           required: false,
         }
       );
-      
+
       // Validate allowed category values if provided
       const allowedCategories = [
-        'ad', 'edu', 'games', 'gamble', 'intel', 'p2p',
-        'porn', 'private', 'social', 'shopping', 'video', 'vpn'
+        'ad',
+        'edu',
+        'games',
+        'gamble',
+        'intel',
+        'p2p',
+        'porn',
+        'private',
+        'social',
+        'shopping',
+        'video',
+        'vpn',
       ];
-      
+
       if (categoriesValidation.isValid && categoriesValidation.sanitizedValue) {
         const categories = categoriesValidation.sanitizedValue as string[];
-        const invalidCategories = categories.filter(cat => !allowedCategories.includes(cat));
+        const invalidCategories = categories.filter(
+          cat => !allowedCategories.includes(cat)
+        );
         if (invalidCategories.length > 0) {
           categoriesValidation.isValid = false;
-          categoriesValidation.errors = [`Invalid categories: ${invalidCategories.join(', ')}`];
+          categoriesValidation.errors = [
+            `Invalid categories: ${invalidCategories.join(', ')}`,
+          ];
         }
       }
       const includeBlockedValidation = ParameterValidator.validateBoolean(
@@ -833,8 +876,14 @@ export class GetFlowInsightsHandler extends BaseToolHandler {
         );
       }
 
-      const period = periodValidation.sanitizedValue as '1h' | '24h' | '7d' | '30d';
-      const categories = categoriesValidation.sanitizedValue as string[] | undefined;
+      const period = periodValidation.sanitizedValue as
+        | '1h'
+        | '24h'
+        | '7d'
+        | '30d';
+      const categories = categoriesValidation.sanitizedValue as
+        | string[]
+        | undefined;
       const includeBlocked = includeBlockedValidation.sanitizedValue as boolean;
 
       const startTime = Date.now();
@@ -852,30 +901,31 @@ export class GetFlowInsightsHandler extends BaseToolHandler {
       const unifiedResponseData = {
         period,
         analysis_time: getCurrentTimestamp(),
-        
+
         // Category breakdown with human-readable formatting
         content_categories: insights.categoryBreakdown.map(cat => ({
           category: cat.category,
           flow_count: cat.count,
           total_bytes: cat.bytes,
-          total_mb: Math.round(cat.bytes / 1048576 * 100) / 100,
+          total_mb: Math.round((cat.bytes / 1048576) * 100) / 100,
           top_domains: cat.topDomains.map(dom => ({
             domain: dom.domain,
             visits: dom.count,
-            bandwidth_mb: Math.round(dom.bytes / 1048576 * 100) / 100,
+            bandwidth_mb: Math.round((dom.bytes / 1048576) * 100) / 100,
           })),
         })),
-        
+
         // Top bandwidth consumers
         top_bandwidth_devices: insights.topDevices.map(dev => ({
           device: dev.device,
-          total_bandwidth_mb: Math.round(dev.totalBytes / 1048576 * 100) / 100,
+          total_bandwidth_mb:
+            Math.round((dev.totalBytes / 1048576) * 100) / 100,
           category_usage: dev.categories.map(cat => ({
             category: cat.category,
-            bandwidth_mb: Math.round(cat.bytes / 1048576 * 100) / 100,
+            bandwidth_mb: Math.round((cat.bytes / 1048576) * 100) / 100,
           })),
         })),
-        
+
         // Blocked traffic summary if requested
         ...(insights.blockedSummary && {
           blocked_traffic: {
@@ -883,14 +933,21 @@ export class GetFlowInsightsHandler extends BaseToolHandler {
             blocked_by_category: insights.blockedSummary.byCategory,
           },
         }),
-        
+
         // Summary statistics
         summary: {
           total_categories: insights.categoryBreakdown.length,
-          total_bandwidth_gb: Math.round(
-            insights.categoryBreakdown.reduce((sum, cat) => sum + cat.bytes, 0) / 1073741824 * 100
-          ) / 100,
-          most_active_category: insights.categoryBreakdown[0]?.category || 'none',
+          total_bandwidth_gb:
+            Math.round(
+              (insights.categoryBreakdown.reduce(
+                (sum, cat) => sum + cat.bytes,
+                0
+              ) /
+                1073741824) *
+                100
+            ) / 100,
+          most_active_category:
+            insights.categoryBreakdown[0]?.category || 'none',
           top_bandwidth_consumer: insights.topDevices[0]?.device || 'none',
         },
       };

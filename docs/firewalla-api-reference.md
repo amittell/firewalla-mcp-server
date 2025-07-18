@@ -707,90 +707,197 @@ The Firewalla MSP API supports advanced search capabilities across multiple reso
 
 ### Search Query Syntax
 
-#### Basic Searches
+The query syntax follows the same format as the MSP web UI. Each query is composed of one or multiple space-separated search terms.
+
+**Syntax Definition:**
 ```bash
-# Field-specific searches
-box.name:"Gold Plus"
-mac:"AA:BB:CC:DD:EE:FF"
-protocol:tcp
+query = search-term [ " " search-term ]*
+search-term = literal-search | numeric-search
+literal-search = [ [ "-" ] qualifier ":" ] literal-match
+qualifier = <property-path> | <property-alias>
+literal-match = literal [ "," literal ]*
+literal = <string> | <quoted-string>
+numeric-search = qualifier ":" numeric-match
+numeric-match = [ ">" | ">=" | "<" | "<=" ] <number> [ <unit> ] | <number> [ <unit> ] "-" <number> [ <unit> ]
 ```
 
-#### Numeric Searches
+**Example Full Query:**
+```bash
+box.name:"Gold Plus",Purple mac:"AA:BB:CC:DD:EE:FF" Total:>50MB
+```
+
+#### Literal Search
+```bash
+# Basic field searches
+device.name:iphone
+status:active
+category:social,video  # Multiple values with comma
+
+# Case sensitive matching
+box.name:FirewallaGold
+```
+
+#### Wildcard Search
+```bash
+# Use * for fuzzy matching
+device.name:*iphone*     # Matches "iphone-12", "joe-iphone", etc.
+domain:*.facebook.com    # Matches any Facebook subdomain
+device.ip:192.168.*      # Matches any IP in 192.168.x.x range
+```
+
+#### Quoted Search
+```bash
+# For strings with whitespace, comma, asterisk, or colon
+box.name:"Gold Plus"
+box.name:"Firewalla,GSE"
+
+# Escape quotes, backslashes, and asterisks within quoted strings
+box.name:"\"fire"              # Contains quote
+box.name:"Fire\\walla:GSE"     # Contains backslash and colon
+box.name:"Firewalla Gold\*"    # Contains asterisk
+```
+
+#### Numeric Search
 ```bash
 # Comparison operators
-Total:>50MB
-bytes:>=1000000
-count:<10
+download:>10MB          # Greater than
+upload:>=1000000        # Greater than or equal to
+count:<10               # Less than
+total:<=50MB            # Less than or equal to
 
 # Range searches
-duration:[300 TO 600]
+download:1000-2000      # Between values
+ts:1695196894.395-1695604487.633  # Time range
 ```
 
-#### Wildcard Searches
+#### Exclusive Search
 ```bash
-# Use * for wildcards
-domain:*.facebook.com
-ip:192.168.*
-name:*laptop*
-```
-
-#### Quoted Searches
-```bash
-# Exact phrase matching
-message:"security threat detected"
-device.name:"John's iPhone"
+# Exclude results with hyphen prefix
+-status:active          # Exclude active status
+-category:ad            # Exclude ads
 ```
 
 ### Supported Units
 
-The API supports various data units:
-- **B**: Bytes
-- **KB**: Kilobytes
-- **MB**: Megabytes
-- **GB**: Gigabytes
-- **TB**: Terabytes
+Data transfer qualifiers support the following units:
+```
+B (Byte)
+KB (KiloByte) = 1000 B
+MB (MegaByte) = 1000 KB
+GB (GigaByte) = 1000 MB
+TB (TeraByte) = 1000 GB
+```
 
 ### Search Qualifiers
 
-Common search qualifiers across different resources:
-
-#### Device Qualifiers
-- `mac`: MAC address
-- `ip`: IP address
-- `name`: Device name
-- `online`: Online status (true/false)
-- `vendor`: MAC vendor
-
-#### Flow Qualifiers
-- `protocol`: tcp/udp
-- `direction`: inbound/outbound/local
-- `blocked`: true/false
-- `bytes`: Data transfer amount
-- `domain`: Destination domain
-- `region`: Country code
+The Firewalla MSP API provides comprehensive search qualifiers for each resource type. Below are the complete lists from the official documentation:
 
 #### Alarm Qualifiers
-- `type`: Alarm type number
-- `severity`: Alarm severity
-- `resolved`: Resolution status
-- `source_ip`: Source IP address
+
+| Qualifier | Alias | Description | Example |
+|-----------|-------|-------------|---------|
+| `ts` | | Timestamp of alarm | `ts:<1695196894.395` |
+| `type` | AlarmType | Alarm type (1-16) | `type:1,2,3` or `AlarmType:"Security Activity,Abnormal Upload"` |
+| `status` | | Alarm status | `status:active` |
+| `box.id` | | Box ID | `box.id:00000000-0000-0000-0000-000000000000` |
+| `box.name` | Box | Box name | `box.name:FirewallaGold` |
+| `box.group.id` | | MSP group ID | `box.group.id:1` |
+| `device.id` | Mac | Device MAC address | `device.id:"mac:AA:BB:CC:DD:EE:FF"` |
+| `device.name` | Device | Device name | `device.name:iphone` |
+| `device.network.id` | | Device network ID | `device.network.id:00000000-1111-1111-1111-000000000000` |
+| `device.network.name` | Network | Device network name | `device.network.name:Guest` |
+| `remote.category` | Category | Remote host category | `remote.category:porn,game` |
+| `remote.domain` | Domain | Remote domain | `remote.domain:google.com` |
+| `remote.region` | Region | Remote region (ISO country code) | `remote.region:US` |
+| `transfer.download` | Download | Data downloaded (with units) | `transfer.download:>10MB` |
+| `transfer.upload` | Upload | Data uploaded (with units) | `transfer.upload:>10MB` |
+| `transfer.total` | Total | Total data transfer (with units) | `transfer.total:>50MB` |
+
+#### Flow Qualifiers
+
+| Qualifier | Alias | Description | Example |
+|-----------|-------|-------------|---------|
+| `ts` | | Timestamp of flow | `ts:<1695196894.395` |
+| `status` | | Flow status | `status:ok` |
+| `direction` | | Traffic direction | `direction:outbound` |
+| `box.id` | | Box ID | `box.id:00000000-0000-0000-0000-000000000000` |
+| `box.name` | Box | Box name | `box.name:FirewallaGold` |
+| `box.group.id` | | MSP group ID | `box.group.id:1` |
+| `device.id` | Mac | Device MAC address | `device.id:"mac:AA:BB:CC:DD:EE:FF"` |
+| `device.name` | Device | Device name | `device.name:iphone` |
+| `network.id` | | Network ID | `network.id:00000000-1111-1111-1111-000000000000` |
+| `network.name` | Network | Network name | `network.name:Guest` |
+| `category` | Category | Content category | `category:porn,game` |
+| `domain` | Domain | Domain name | `domain:google.com` |
+| `region` | Region | Region (ISO country code) | `region:US` |
+| `sport` | SourcePort | Source port | `sport:123` |
+| `dport` | DestinationPort | Destination port | `dport:123` |
+| `download` | Download | Data downloaded (with units) | `download:>10MB` |
+| `upload` | Upload | Data uploaded (with units) | `upload:>10MB` |
+| `total` | Total | Total data transfer (with units) | `total:>50MB` |
 
 #### Rule Qualifiers
-- `action`: allow/block/timelimit
-- `target`: Rule target
-- `status`: active/paused
+
+| Qualifier | Description | Example |
+|-----------|-------------|---------|
+| `status` | Rule status | `status:active` |
+| `action` | Rule action | `action:block` |
+| `box.id` | Box ID | `box.id:00000000-0000-0000-0000-000000000000` |
+| `box.group.id` | MSP group ID | `box.group.id:1` |
+| `device.id` | Device ID | `device.id:"AA:BB:CC:DD:EE:FF"` |
+
+### Advanced Search Features
+
+#### Multiple Search Terms
+Combine multiple search terms with spaces (implicit AND):
+```bash
+status:active box.name:FirewallaGold category:social
+```
+
+#### Exclusion with Hyphen
+Exclude results by prefixing search terms with hyphen (-):
+```bash
+-status:active          # Exclude active alarms
+category:social -region:CN  # Social media traffic, excluding China
+```
+
+#### Unqualified Search
+Search terms without qualifiers search across a subset of properties (varies by resource type):
+```bash
+iphone                  # Searches device names, MAC addresses, etc.
+```
 
 ### Pagination Support
 
-All search endpoints support pagination via the `cursor` parameter:
+All search endpoints support cursor-based pagination. Each response (except the last) includes a base64 encoded `next_cursor`. Use this cursor in subsequent requests to get the next page of results.
 
+**JavaScript Example:**
 ```javascript
-// First request
-GET /v2/flows?query=protocol:tcp&limit=100
+const params = {
+    query: `status:active box:${box}`,
+    cursor: null,
+    limit: 10
+}
+const alarms = [];
 
-// Next page using cursor from response
-GET /v2/flows?query=protocol:tcp&limit=100&cursor=next_cursor_token
+while (1) {
+    const { results, next_cursor } = await httpClient({
+        method: 'get',
+        url: `/alarms`,
+        params: params
+    }).then(r => r.data);
+    alarms.push(...results);
+    if (!next_cursor) break;
+    params.cursor = next_cursor;
+}
 ```
+
+**Important Notes:**
+- Query strings must be URL encoded when sending requests
+- `next_cursor` values are opaque - do not modify them
+- Set `cursor` parameter to `null` or omit it for the first request
+- Use `limit` parameter to control page size (default: 200, max: 500)
+- Always check for `next_cursor` in response to determine if more pages exist
 
 ---
 

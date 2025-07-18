@@ -122,7 +122,10 @@ export function setupResources(
                             )
                           : 0,
                       devices: safeResults.map(device => ({
-                        id: device?.id || 'unknown',
+                        id:
+                          device?.id !== null && device?.id !== undefined
+                            ? String(device.id)
+                            : 'unknown',
                         name: device?.name || 'Unknown Device',
                         ip_address: device?.ip || 'N/A',
                         mac_vendor: device?.macVendor || 'Unknown',

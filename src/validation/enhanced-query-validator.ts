@@ -77,6 +77,8 @@ const ENTITY_VALIDATION_CONFIGS: Record<EntityType, EntityValidationConfig> = {
     requiredFields: ['action', 'target_value'],
     fieldAliases: {
       'target': 'target_value',
+      'target.type': 'target_type',
+      'target.value': 'target_value',
       'rule_action': 'action'
     }
   },

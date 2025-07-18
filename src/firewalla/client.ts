@@ -585,19 +585,14 @@ export class FirewallaClient {
       params.cursor = cursor;
     }
 
-    // Add box parameter for filtering if configured
-    if (this.config.boxId) {
-      params.box = this.config.boxId;
-    }
-
-    // Use global endpoint with box parameter for filtering
-    const endpoint = `/v2/alarms`;
+    // Apply box filter through the query parameter
+    params.query = this.addBoxFilter(params.query as string | undefined);
 
     const response = await this.request<{
       count: number;
       results: any[];
       next_cursor?: string;
-    }>('GET', endpoint, params, !force_refresh);
+    }>('GET', '/v2/alarms', params, !force_refresh);
 
     // Basic response validation
     if (!response || typeof response !== 'object') {
@@ -689,10 +684,8 @@ export class FirewallaClient {
       params.cursor = cursor;
     }
 
-    // Add box parameter for filtering
-    if (this.config.boxId) {
-      params.box = this.config.boxId;
-    }
+    // Apply box filter through the query parameter
+    params.query = this.addBoxFilter(params.query as string | undefined);
 
     const response = await this.request<{
       count: number;
@@ -732,7 +725,10 @@ export class FirewallaClient {
           duration: item.duration || 0,
           count: item.count || item.packets || 1,
           device: {
-            id: item.device?.id || 'unknown',
+            id:
+              item.device?.id !== null && item.device?.id !== undefined
+                ? String(item.device.id)
+                : 'unknown',
             ip: item.device?.ip || item.srcIP || 'unknown',
             name: item.device?.name || 'Unknown Device',
           },
@@ -806,10 +802,12 @@ export class FirewallaClient {
       const dataFetcher = async (): Promise<Device[]> => {
         const params: Record<string, unknown> = {};
 
-        // Use global endpoint with box parameter for filtering
-        if (this.config.boxId) {
-          params.box = this.config.boxId;
+        // Apply box filter through the query parameter
+        const boxQuery = this.addBoxFilter();
+        if (boxQuery) {
+          params.query = boxQuery;
         }
+
         const endpoint = `/v2/devices`;
 
         // API returns direct array of devices
@@ -1046,9 +1044,10 @@ export class FirewallaClient {
         sortBy: 'ts:desc',
         limit: Math.min(validatedTop * 10, 1000), // Get more data for client-side grouping
       };
-      if (this.config.boxId) {
-        params.box = this.config.boxId;
-      }
+
+      // Apply box filter through the query parameter
+      params.query = this.addBoxFilter(params.query as string | undefined);
+
       const endpoint = '/v2/flows';
 
       const response = await this.request<{
@@ -1165,10 +1164,8 @@ export class FirewallaClient {
       params.limit = limit;
     }
 
-    // Use global endpoint with box parameter for filtering
-    if (this.config.boxId) {
-      params.box = this.config.boxId;
-    }
+    // Apply box filter through the query parameter
+    params.query = this.addBoxFilter(params.query as string | undefined);
 
     const response = await this.request<{
       count: number;
@@ -1247,10 +1244,8 @@ export class FirewallaClient {
       params.limit = limit;
     }
 
-    // Use global endpoint with box parameter for filtering
-    if (this.config.boxId) {
-      params.box = this.config.boxId;
-    }
+    // Apply box filter through the query parameter
+    params.query = this.addBoxFilter(params.query as string | undefined);
 
     const response = await this.request<
       TargetList[] | { results: TargetList[] }
@@ -1365,20 +1360,21 @@ export class FirewallaClient {
     threat_level: 'low' | 'medium' | 'high' | 'critical';
     last_threat_detected: string;
   }> {
-    // Aggregate security data from real endpoints since /metrics/security doesn't exist
-    const [alarms, flows] = await Promise.all([
-      this.getActiveAlarms(undefined, undefined, 'ts:desc', 1000),
-      this.getFlowData(undefined, undefined, 'ts:desc', 1000),
-    ]);
+    // Optimized: Use server-side filtering instead of client-side filtering
+    const last24Hours = Math.floor(Date.now() / 1000 - 24 * 60 * 60);
 
-    const activeAlarms = alarms.results.filter(alarm => alarm.status === 1);
-    const blockedFlows = flows.results.filter(flow => flow.block);
-    const recentAlarms = alarms.results.filter(
-      alarm => alarm.ts > Date.now() / 1000 - 24 * 60 * 60 // Last 24 hours
-    );
+    const [allAlarms, activeAlarms, blockedFlows, recentAlarms] =
+      await Promise.all([
+        this.getActiveAlarms(undefined, undefined, 'ts:desc', 1000), // Total alarms
+        this.getActiveAlarms('status:1', undefined, 'ts:desc', 1000), // Active alarms only
+        this.getFlowData('block:true', undefined, 'ts:desc', 1000), // Blocked flows only
+        this.getActiveAlarms(`ts:>=${last24Hours}`, undefined, 'ts:desc', 1000), // Recent alarms
+      ]);
 
     // Determine threat level based on recent alarms
-    const criticalAlarms = recentAlarms.filter(alarm => alarm.type >= 5).length;
+    const criticalAlarms = recentAlarms.results.filter(
+      alarm => alarm.type >= 5
+    ).length;
     let threat_level: 'low' | 'medium' | 'high' | 'critical' = 'low';
     if (criticalAlarms > 10) {
       threat_level = 'critical';
@@ -1389,14 +1385,17 @@ export class FirewallaClient {
     }
 
     return {
-      total_alarms: alarms.count,
-      active_alarms: activeAlarms.length,
-      blocked_connections: blockedFlows.length,
-      suspicious_activities: recentAlarms.length,
+      total_alarms: allAlarms.count,
+      active_alarms: activeAlarms.count,
+      blocked_connections: blockedFlows.count,
+      suspicious_activities: recentAlarms.count,
       threat_level,
-      last_threat_detected: recentAlarms[0]?.ts
-        ? new Date(recentAlarms[0].ts * 1000).toISOString()
-        : new Date().toISOString(),
+      last_threat_detected:
+        recentAlarms.results.length > 0 && recentAlarms.results[0]?.ts
+          ? typeof recentAlarms.results[0].ts === 'string'
+            ? recentAlarms.results[0].ts
+            : new Date(recentAlarms.results[0].ts * 1000).toISOString()
+          : new Date().toISOString(),
     };
   }
 
@@ -1461,43 +1460,54 @@ export class FirewallaClient {
       severity: string;
     }>
   > {
-    // Build threats from alarm and flow data since /threats/recent doesn't exist
-    const timeThreshold = Date.now() / 1000 - hours * 60 * 60;
+    // Optimized: Use server-side timestamp filtering instead of client-side filtering
+    const timeThreshold = Math.floor(Date.now() / 1000 - hours * 60 * 60);
 
     const [alarms, blockedFlows] = await Promise.all([
-      this.getActiveAlarms(undefined, undefined, 'ts:desc', 1000),
+      this.getActiveAlarms(`ts:>=${timeThreshold}`, undefined, 'ts:desc', 1000),
       this.getFlowData(
-        `ts:${timeThreshold}-${Math.floor(Date.now() / 1000)}`,
+        `block:true AND ts:>=${timeThreshold}`,
         undefined,
         'ts:desc',
-        1000
+        50
       ),
     ]);
 
     // Convert recent alarms to threat format
-    const threats = alarms.results
-      .filter(alarm => alarm.ts > timeThreshold)
-      .map(alarm => ({
-        timestamp: new Date(alarm.ts * 1000).toISOString(),
+    const threats = alarms.results.map(alarm => {
+      // Handle both string and number timestamp formats
+      const timestamp =
+        typeof alarm.ts === 'string'
+          ? alarm.ts
+          : new Date(alarm.ts * 1000).toISOString();
+
+      return {
+        timestamp,
         type: alarm.message || 'Security Alert',
         source_ip: alarm.device?.ip || 'unknown',
         destination_ip: alarm.remote?.ip || 'unknown',
         action_taken: alarm.status === 1 ? 'blocked' : 'logged',
         severity: alarm.type >= 5 ? 'high' : alarm.type >= 3 ? 'medium' : 'low',
-      }));
+      };
+    });
 
     // Add blocked flows as threats
-    const blockedThreats = blockedFlows.results
-      .filter(flow => flow.block && flow.ts > timeThreshold)
-      .slice(0, 50) // Limit to avoid overwhelming response
-      .map(flow => ({
-        timestamp: new Date(flow.ts * 1000).toISOString(),
+    const blockedThreats = blockedFlows.results.map(flow => {
+      // Handle both string and number timestamp formats
+      const timestamp =
+        typeof flow.ts === 'string'
+          ? flow.ts
+          : new Date(flow.ts * 1000).toISOString();
+
+      return {
+        timestamp,
         type: 'Blocked Connection',
         source_ip: flow.device.ip,
         destination_ip: flow.destination?.ip || 'unknown',
         action_taken: 'blocked',
         severity: 'medium',
-      }));
+      };
+    });
 
     return [...threats, ...blockedThreats].slice(0, 100); // Limit total results
   }
@@ -1978,27 +1988,17 @@ export class FirewallaClient {
     results: SimpleStats[];
     next_cursor?: string;
   }> {
-    const [boxes, alarms, rules] = await Promise.all([
-      this.getBoxes(),
-      this.getActiveAlarms(),
-      this.getNetworkRules(),
-    ]);
-
-    const onlineBoxes = boxes.results.filter(
-      (box: any) => box.status === 'online' || box.online
-    ).length;
-    const offlineBoxes = boxes.results.length - onlineBoxes;
-
-    const stats = {
-      onlineBoxes,
-      offlineBoxes,
-      alarms: alarms.count,
-      rules: rules.count,
-    };
+    // Optimized: Use single /v2/stats/simple endpoint instead of 3 API calls
+    const response = await this.request<{
+      onlineBoxes: number;
+      offlineBoxes: number;
+      alarms: number;
+      rules: number;
+    }>('GET', '/v2/stats/simple');
 
     return {
       count: 1,
-      results: [stats],
+      results: [response],
     };
   }
 
@@ -2124,12 +2124,12 @@ export class FirewallaClient {
       // Get flow data for the period using global endpoint with box parameter
       const params: Record<string, unknown> = {
         query: `ts:${begin}-${end}`,
-        limit: 500, // API maximum limit
+        limit: 10000,
         sortBy: 'ts:asc',
       };
-      if (this.config.boxId) {
-        params.box = this.config.boxId;
-      }
+
+      // Apply box filter through the query parameter
+      params.query = this.addBoxFilter(params.query as string | undefined);
       const flowResponse = await this.request<{
         count: number;
         results: any[];
@@ -2246,13 +2246,11 @@ export class FirewallaClient {
 
       // Get alarm data for the period using global endpoint with box parameter
       const params: Record<string, unknown> = {
-        query: `ts:${begin}-${end}`,
         limit: 10000,
         sortBy: 'ts:asc',
       };
-      if (this.config.boxId) {
-        params.box = this.config.boxId;
-      }
+      // Add box.id filter to query
+      params.query = this.addBoxFilter(`ts:${begin}-${end}`);
       const alarmResponse = await this.request<{
         count: number;
         results: any[];
@@ -2750,7 +2748,7 @@ export class FirewallaClient {
     // Simplified: just use the query as provided, add box filter only if needed
     const params: Record<string, unknown> = {
       limit: searchQuery.limit || 200, // Use API default
-      sortBy: searchQuery.sort_by || 'ts:desc',
+      sort_by: searchQuery.sort_by || 'ts:desc',
     };
 
     // Add query if provided
@@ -2759,7 +2757,7 @@ export class FirewallaClient {
     }
 
     if (searchQuery.group_by) {
-      params.groupBy = searchQuery.group_by;
+      params.group_by = searchQuery.group_by;
     }
     if (searchQuery.cursor) {
       params.cursor = searchQuery.cursor;
@@ -2768,10 +2766,8 @@ export class FirewallaClient {
       params.aggregate = true;
     }
 
-    // Add box parameter for filtering
-    if (this.config.boxId) {
-      params.box = this.config.boxId;
-    }
+    // Add box.id filter to query
+    params.query = this.addBoxFilter(params.query as string | undefined);
 
     // Add time range if specified
     if (options.time_range) {
@@ -2784,7 +2780,7 @@ export class FirewallaClient {
           ? Math.floor(new Date(options.time_range.end).getTime() / 1000)
           : options.time_range.end;
 
-      const timeQuery = `timestamp:${startTs}-${endTs}`;
+      const timeQuery = `ts:${startTs}-${endTs}`;
       params.query = params.query
         ? `${params.query} AND ${timeQuery}`
         : timeQuery;
@@ -2833,7 +2829,10 @@ export class FirewallaClient {
         duration: item.duration || 0,
         count: item.count || item.packets || 1,
         device: {
-          id: item.device?.id || 'unknown',
+          id:
+            item.device?.id !== null && item.device?.id !== undefined
+              ? String(item.device.id)
+              : 'unknown',
           ip: item.device?.ip || item.srcIP || 'unknown',
           name: item.device?.name || 'Unknown Device',
         },
@@ -2938,7 +2937,7 @@ export class FirewallaClient {
       };
 
       if (searchQuery.group_by && typeof searchQuery.group_by === 'string') {
-        params.groupBy = searchQuery.group_by.trim();
+        params.group_by = searchQuery.group_by.trim();
       }
       if (searchQuery.cursor && typeof searchQuery.cursor === 'string') {
         params.cursor = searchQuery.cursor.trim();
@@ -2980,8 +2979,12 @@ export class FirewallaClient {
         limit,
       };
 
-      // Note: The box parameter is not supported by the alarms endpoint
-      // Box filtering happens automatically based on API authentication
+      // Add box.id filter to query for proper filtering
+      if (params.query) {
+        params.query = this.addBoxFilter(params.query as string);
+      } else {
+        params.query = this.addBoxFilter();
+      }
 
       // Only include query if it's meaningful
       if (params.query && params.query !== 'undefined') {
@@ -3248,7 +3251,7 @@ export class FirewallaClient {
       };
 
       if (searchQuery.group_by && typeof searchQuery.group_by === 'string') {
-        params.groupBy = searchQuery.group_by.trim();
+        params.group_by = searchQuery.group_by.trim();
       }
       if (searchQuery.cursor && typeof searchQuery.cursor === 'string') {
         params.cursor = searchQuery.cursor.trim();
@@ -3268,6 +3271,9 @@ export class FirewallaClient {
           ? `${params.query} AND hit.count:>=${minHits}`
           : `hit.count:>=${minHits}`;
       }
+
+      // Apply box filter through the query parameter
+      params.query = this.addBoxFilter(params.query as string | undefined);
 
       // Enhanced API request with better error handling
       let response;
@@ -3547,7 +3553,7 @@ export class FirewallaClient {
       };
 
       if (searchQuery.group_by && typeof searchQuery.group_by === 'string') {
-        params.groupBy = searchQuery.group_by.trim();
+        params.group_by = searchQuery.group_by.trim();
       }
       if (searchQuery.cursor && typeof searchQuery.cursor === 'string') {
         params.cursor = searchQuery.cursor.trim();
@@ -3562,6 +3568,9 @@ export class FirewallaClient {
           ? `${params.query} AND online:true`
           : 'online:true';
       }
+
+      // Apply box filter through the query parameter
+      params.query = this.addBoxFilter(params.query as string | undefined);
 
       // Enhanced API request with better error handling
       let response;
@@ -3847,7 +3856,7 @@ export class FirewallaClient {
       };
 
       if (searchQuery.group_by && typeof searchQuery.group_by === 'string') {
-        params.groupBy = searchQuery.group_by.trim();
+        params.group_by = searchQuery.group_by.trim();
       }
       if (searchQuery.cursor && typeof searchQuery.cursor === 'string') {
         params.cursor = searchQuery.cursor.trim();
@@ -3891,6 +3900,9 @@ export class FirewallaClient {
             : ownerFilter;
         }
       }
+
+      // Apply box filter through the query parameter
+      params.query = this.addBoxFilter(params.query as string | undefined);
 
       // Enhanced API request with better error handling
       let response;
@@ -4665,7 +4677,13 @@ export class FirewallaClient {
       const response = await this.request<{
         success: boolean;
         message: string;
-      }>('POST', `/v2/rules/${validatedRuleId}/pause`, params, false);
+      }>(
+        'POST',
+        `/v2/rules/${validatedRuleId}/pause`,
+        {}, // empty query params
+        params, // body payload with duration & box
+        false
+      );
 
       return {
         success: response?.success ?? true, // Default to true if API doesn't return success field
@@ -4713,7 +4731,13 @@ export class FirewallaClient {
       const response = await this.request<{
         success: boolean;
         message: string;
-      }>('POST', `/v2/rules/${validatedRuleId}/resume`, params, false);
+      }>(
+        'POST',
+        `/v2/rules/${validatedRuleId}/resume`,
+        {}, // empty query params
+        params, // body payload with box
+        false
+      );
 
       return {
         success: response?.success ?? true, // Default to true if API doesn't return success field
@@ -4747,6 +4771,27 @@ export class FirewallaClient {
 
     const queries = values.map(value => `${fieldName}:"${value}"`);
     return queries.length === 1 ? queries[0] : `(${queries.join(' OR ')})`;
+  }
+
+  /**
+   * Helper method to add box.id qualifier to search queries
+   *
+   * @param query - Existing query string (optional)
+   * @returns Query string with box.id filter added, or just box.id filter if no query
+   * @private
+   */
+  private addBoxFilter(query?: string): string | undefined {
+    if (!this.config.boxId) {
+      return query;
+    }
+
+    const boxFilter = `box.id:${this.config.boxId}`;
+
+    if (!query || query.trim() === '') {
+      return boxFilter;
+    }
+
+    return `${query} ${boxFilter}`;
   }
 
   /**
@@ -4948,27 +4993,39 @@ export class FirewallaClient {
           break;
       }
 
-      // Get category breakdown
+      // Get category breakdown with error handling
       const categoryQuery = `ts:${begin}-${end}${options?.categories ? ` AND (${options.categories.map(c => `category:${c}`).join(' OR ')})` : ''}`;
-      
-      const categoryData = await this.searchFlows({
-        query: categoryQuery,
-        group_by: 'category,domain',
-        sort_by: 'bytes:desc',
-        limit: 500,
-      });
+
+      let categoryData;
+      try {
+        categoryData = await this.searchFlows({
+          query: categoryQuery,
+          group_by: 'category,domain',
+          sort_by: 'bytes:desc',
+          limit: 500,
+        });
+      } catch (error) {
+        logger.error(
+          'Failed to get category data in getFlowInsights:',
+          error instanceof Error ? error : new Error(String(error))
+        );
+        categoryData = { results: [], count: 0 };
+      }
 
       // Process category breakdown
-      const categoryMap = new Map<string, {
-        count: number;
-        bytes: number;
-        domains: Map<string, { count: number; bytes: number }>;
-      }>();
+      const categoryMap = new Map<
+        string,
+        {
+          count: number;
+          bytes: number;
+          domains: Map<string, { count: number; bytes: number }>;
+        }
+      >();
 
       categoryData.results.forEach((item: any) => {
         const category = item.category?.name || 'uncategorized';
         const domain = item.domain || 'unknown';
-        
+
         if (!categoryMap.has(category)) {
           categoryMap.set(category, {
             count: 0,
@@ -4976,11 +5033,11 @@ export class FirewallaClient {
             domains: new Map(),
           });
         }
-        
+
         const cat = categoryMap.get(category)!;
         cat.count += item.count || 1;
         cat.bytes += item.bytes || 0;
-        
+
         if (!cat.domains.has(domain)) {
           cat.domains.set(domain, { count: 0, bytes: 0 });
         }
@@ -4989,57 +5046,83 @@ export class FirewallaClient {
         dom.bytes += item.bytes || 0;
       });
 
-      // Get top devices by bandwidth
-      const deviceData = await this.searchFlows({
-        query: `ts:${begin}-${end}`,
-        group_by: 'device,category',
-        sort_by: 'bytes:desc',
-        limit: 200,
-      });
+      // Get top devices by bandwidth with error handling
+      let deviceData;
+      try {
+        deviceData = await this.searchFlows({
+          query: `ts:${begin}-${end}`,
+          group_by: 'device,category',
+          sort_by: 'bytes:desc',
+          limit: 200,
+        });
+      } catch (error) {
+        logger.error(
+          'Failed to get device data in getFlowInsights:',
+          error instanceof Error ? error : new Error(String(error))
+        );
+        deviceData = { results: [], count: 0 };
+      }
 
       // Process device data
-      const deviceMap = new Map<string, {
-        totalBytes: number;
-        categories: Map<string, number>;
-      }>();
+      const deviceMap = new Map<
+        string,
+        {
+          totalBytes: number;
+          categories: Map<string, number>;
+        }
+      >();
 
       deviceData.results.forEach((item: any) => {
         const deviceName = item.device?.name || item.device?.ip || 'unknown';
         const category = item.category?.name || 'uncategorized';
-        
+
         if (!deviceMap.has(deviceName)) {
           deviceMap.set(deviceName, {
             totalBytes: 0,
             categories: new Map(),
           });
         }
-        
+
         const dev = deviceMap.get(deviceName)!;
         dev.totalBytes += item.bytes || 0;
-        
+
         if (!dev.categories.has(category)) {
           dev.categories.set(category, 0);
         }
-        dev.categories.set(category, (dev.categories.get(category) || 0) + (item.bytes || 0));
+        dev.categories.set(
+          category,
+          (dev.categories.get(category) || 0) + (item.bytes || 0)
+        );
       });
 
-      // Get blocked flows summary if requested
+      // Get blocked flows summary if requested with error handling
       let blockedSummary;
       if (options?.includeBlocked) {
-        const blockedData = await this.searchFlows({
-          query: `ts:${begin}-${end} AND blocked:true`,
-          group_by: 'category',
-          sort_by: 'count:desc',
-          limit: 50,
-        });
+        try {
+          const blockedData = await this.searchFlows({
+            query: `ts:${begin}-${end} AND blocked:true`,
+            group_by: 'category',
+            sort_by: 'count:desc',
+            limit: 50,
+          });
 
-        blockedSummary = {
-          totalBlocked: blockedData.count,
-          byCategory: blockedData.results.map((item: any) => ({
-            category: item.category?.name || 'uncategorized',
-            count: item.count || 0,
-          })),
-        };
+          blockedSummary = {
+            totalBlocked: blockedData.count,
+            byCategory: blockedData.results.map((item: any) => ({
+              category: item.category?.name || 'uncategorized',
+              count: item.count || 0,
+            })),
+          };
+        } catch (error) {
+          logger.error(
+            'Failed to get blocked data in getFlowInsights:',
+            error instanceof Error ? error : new Error(String(error))
+          );
+          blockedSummary = {
+            totalBlocked: 0,
+            byCategory: [],
+          };
+        }
       }
 
       // Format results

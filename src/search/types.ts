@@ -281,7 +281,9 @@ export const SEARCH_FIELDS = {
     'description',
     'action',
     'target_type',
+    'target.type', // User-friendly alias for target_type
     'target_value',
+    'target.value', // User-friendly alias for target_value
     'direction',
     'status',
     'category',
