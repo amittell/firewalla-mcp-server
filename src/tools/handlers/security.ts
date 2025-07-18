@@ -349,8 +349,13 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         (arr: any[]) => arr,
         []
       ) as any[];
+      
+      
       // First normalize other fields, then handle severity derivation separately
       const normalizedAlarms = batchNormalize(alarmResults, {
+        aid: (v: any) => v, // Preserve alarm ID as-is from API
+        gid: (v: any) => v, // Preserve GID as-is from API
+        ts: (v: any) => v, // Preserve timestamp as-is from API
         type: (v: any) => sanitizeFieldValue(v, 'unknown').value,
         status: (v: any) => sanitizeFieldValue(v, 'unknown').value,
         message: (v: any) =>
@@ -379,39 +384,38 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
 
       const startTime = Date.now();
 
-      // Process alarm data with timestamps
+      // Process alarm data with timestamps but preserve original IDs
       const processedAlarms = SafeAccess.safeArrayMap(
-        finalNormalizedAlarms,
-        (alarm: any) => {
-          // Apply timestamp normalization to each alarm
+        alarmResults, // Use original client response, not normalized
+        (alarm: any, index: number) => {
+          // Apply timestamp normalization
           const timestampNormalized = normalizeTimestamps(alarm);
           const finalAlarm = timestampNormalized.data;
+          
+          // Get the corresponding normalized alarm for other fields
+          const normalizedAlarm = finalNormalizedAlarms[index] || {};
 
-          const rawAid = SafeAccess.getNestedValue(finalAlarm, 'aid', null);
-
-          // Use the actual alarm ID directly, properly handling 0 as a valid ID
-          const finalAid =
-            rawAid !== null && rawAid !== undefined
-              ? String(rawAid)
-              : 'unknown';
+          // Preserve original alarm ID from client response
+          const originalAid = alarm.aid; // Direct from client, not processed
+          
 
           return {
-            aid: finalAid,
+            aid: originalAid || 'unknown', // Use original from client
             timestamp: unixToISOStringOrNow(finalAlarm.ts),
-            type: finalAlarm.type, // Already normalized
-            status: finalAlarm.status, // Already normalized
-            message: finalAlarm.message, // Already normalized
-            direction: finalAlarm.direction, // Already normalized
-            protocol: finalAlarm.protocol, // Already normalized
-            gid: SafeAccess.getNestedValue(finalAlarm, 'gid', 'unknown'),
-            severity: finalAlarm.severity, // Already normalized
-            // Include conditional properties if present (now normalized)
-            ...(finalAlarm.device && { device: finalAlarm.device }),
-            ...(finalAlarm.remote && { remote: finalAlarm.remote }),
-            ...(finalAlarm.src && { src: finalAlarm.src }),
-            ...(finalAlarm.dst && { dst: finalAlarm.dst }),
-            ...(finalAlarm.port && { port: finalAlarm.port }),
-            ...(finalAlarm.dport && { dport: finalAlarm.dport }),
+            type: normalizedAlarm.type || finalAlarm.type || 'unknown',
+            status: normalizedAlarm.status || finalAlarm.status || 'unknown',
+            message: normalizedAlarm.message || finalAlarm.message || 'Unknown alarm',
+            direction: normalizedAlarm.direction || finalAlarm.direction || 'unknown',
+            protocol: normalizedAlarm.protocol || finalAlarm.protocol || 'unknown',
+            gid: alarm.gid || 'unknown', // Use original GID too
+            severity: normalizedAlarm.severity || 'medium', // Use normalized severity
+            // Include conditional properties (use normalized if available, fallback to original)
+            ...(normalizedAlarm.device || finalAlarm.device ? { device: normalizedAlarm.device || finalAlarm.device } : {}),
+            ...(normalizedAlarm.remote || finalAlarm.remote ? { remote: normalizedAlarm.remote || finalAlarm.remote } : {}),
+            ...(normalizedAlarm.src || finalAlarm.src ? { src: normalizedAlarm.src || finalAlarm.src } : {}),
+            ...(normalizedAlarm.dst || finalAlarm.dst ? { dst: normalizedAlarm.dst || finalAlarm.dst } : {}),
+            ...(normalizedAlarm.port || finalAlarm.port ? { port: normalizedAlarm.port || finalAlarm.port } : {}),
+            ...(normalizedAlarm.dport || finalAlarm.dport ? { dport: normalizedAlarm.dport || finalAlarm.dport } : {}),
           };
         }
       );

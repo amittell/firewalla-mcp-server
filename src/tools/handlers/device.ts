@@ -129,19 +129,22 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
 
       const startTime = Date.now();
 
-      // Process device data with timestamps
-      const processedDevices = normalizedDevices.map((device: any) => {
+      // Process device data with timestamps but preserve original IDs
+      const processedDevices = deviceResults.map((device: any, index: number) => {
         // Apply timestamp normalization to device data
         const timestampNormalized = normalizeTimestamps(device);
         const finalDevice = timestampNormalized.data;
+        
+        // Get normalized device for other fields
+        const normalizedDevice = normalizedDevices[index] || {};
 
         return {
-          id: SafeAccess.getNestedValue(finalDevice, 'id', 'unknown'),
-          gid: SafeAccess.getNestedValue(finalDevice, 'gid', 'unknown'),
-          name: finalDevice.name, // Already normalized
-          ip: finalDevice.ip, // Already normalized
-          macVendor: finalDevice.macVendor, // Already normalized
-          online: finalDevice.online, // Already normalized to boolean
+          id: device.id || device.mac || 'unknown', // Use original ID or MAC
+          gid: device.gid || 'unknown', // Use original GID
+          name: normalizedDevice.name || finalDevice.name || device.name || 'unknown',
+          ip: normalizedDevice.ip || finalDevice.ip || device.ip || 'unknown',
+          macVendor: normalizedDevice.macVendor || finalDevice.macVendor || device.macVendor || 'unknown',
+          online: normalizedDevice.online !== undefined ? normalizedDevice.online : (finalDevice.online !== undefined ? finalDevice.online : Boolean(device.online)),
           lastSeen: unixToISOStringOrNow(
             SafeAccess.getNestedValue(finalDevice, 'lastSeen', 0) as number
           ),
