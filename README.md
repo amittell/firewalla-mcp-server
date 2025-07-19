@@ -1,5 +1,7 @@
 # Firewalla MCP Server
 
+[![npm version](https://badge.fury.io/js/firewalla-mcp-server.svg)](https://www.npmjs.com/package/firewalla-mcp-server)
+
 A Model Context Protocol (MCP) server that enables Claude to access and analyze your Firewalla firewall data in real-time.
 
 ## Why Firewalla MCP Server?
