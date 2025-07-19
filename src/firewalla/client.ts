@@ -112,13 +112,6 @@ export class FirewallaClient {
   /** @private Geographic cache for IP geolocation lookups */
   private geoCache: GeographicCache;
 
-  /** @private Mapping of severity levels to alarm type numbers for query conversion */
-  private static readonly SEVERITY_TYPE_MAP: Record<string, number> = {
-    low: 1,
-    medium: 4,
-    high: 8,
-    critical: 12,
-  };
 
   /**
    * Creates a new Firewalla API client instance
@@ -220,27 +213,6 @@ export class FirewallaClient {
     );
   }
 
-  /**
-   * Converts severity-based queries to type-based queries for API compatibility
-   *
-   * The Firewalla API uses numeric alarm types instead of severity labels.
-   * This method converts human-readable severity queries like "severity:high"
-   * to API-compatible type queries like "type:>=8".
-   *
-   * @param query - The search query string that may contain severity filters
-   * @returns Converted query string with severity filters replaced by type filters
-   * @private
-   */
-  private convertSeverityToTypeQuery(query: string): string {
-    return query.replace(
-      /severity:(high|medium|low|critical)/gi,
-      (match: string, severity: string) => {
-        const minType =
-          FirewallaClient.SEVERITY_TYPE_MAP[severity.toLowerCase()];
-        return minType !== undefined ? `type:>=${minType}` : match;
-      }
-    );
-  }
 
   /**
    * Generates a unique cache key for API requests with enhanced collision prevention
@@ -577,10 +549,6 @@ export class FirewallaClient {
     };
 
     if (query) {
-      // Convert severity:X queries to type:>=X queries since API doesn't understand severity
-      if (typeof query === 'string') {
-        query = this.convertSeverityToTypeQuery(query);
-      }
       params.query = query;
     }
     if (groupBy) {
@@ -2971,25 +2939,6 @@ export class FirewallaClient {
           : 'status:1';
       }
 
-      // Convert severity:X queries to type:>=X queries since API doesn't understand severity
-      if (params.query && typeof params.query === 'string') {
-        params.query = this.convertSeverityToTypeQuery(params.query);
-      }
-
-      if (options.min_severity && typeof options.min_severity === 'string') {
-        const minSeverity =
-          FirewallaClient.SEVERITY_TYPE_MAP[options.min_severity.toLowerCase()];
-        if (minSeverity) {
-          params.query = params.query
-            ? `${params.query} AND type:>=${minSeverity}`
-            : `type:>=${minSeverity}`;
-        } else {
-          logger.debugNamespace(
-            'validation',
-            `Invalid severity level: ${options.min_severity}`
-          );
-        }
-      }
 
       // Build request parameters for GET endpoint
       // Use the standard /v2/alarms endpoint with query parameter

@@ -40,60 +40,6 @@ import type { ScoringCorrelationParams } from '../../validation/field-mapper.js'
 // ResponseStandardizer import removed - using direct response creation
 import { validateCountryCodes } from '../../utils/geographic.js';
 
-/**
- * Derive alarm severity based on the alarm type.
- * This mirrors the logic in security.ts to ensure consistency.
- * @param alarmType - The type field from the alarm
- * @returns The derived severity level (critical, high, medium, low) or 'medium' as default
- */
-function deriveAlarmSeverityFromType(alarmType: any): string {
-  if (!alarmType || typeof alarmType !== 'string') {
-    return 'medium'; // Default severity for unknown types
-  }
-
-  // Normalize alarm type to uppercase and remove special characters
-  const normalizedType = alarmType.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
-  const typeString = normalizedType.toLowerCase();
-
-  // Check for critical patterns
-  if (
-    typeString.includes('malware') ||
-    typeString.includes('virus') ||
-    typeString.includes('trojan')
-  ) {
-    return 'critical';
-  }
-
-  // Check for high severity patterns
-  if (
-    typeString.includes('intrusion') ||
-    typeString.includes('attack') ||
-    typeString.includes('exploit')
-  ) {
-    return 'high';
-  }
-
-  // Check for medium severity patterns
-  if (
-    typeString.includes('scan') ||
-    typeString.includes('suspicious') ||
-    typeString.includes('anomaly')
-  ) {
-    return 'medium';
-  }
-
-  // Check for low severity patterns
-  if (
-    typeString.includes('dns') ||
-    typeString.includes('http') ||
-    typeString.includes('status')
-  ) {
-    return 'low';
-  }
-
-  // Default to medium severity for unrecognized types
-  return 'medium';
-}
 
 // Base search interface to reduce duplication
 export interface BaseSearchArgs extends ToolArgs {
@@ -133,12 +79,6 @@ export interface SearchAlarmsArgs extends BaseSearchArgs {
     start?: string;
     end?: string;
   };
-
-  /**
-   * Filter alarms by severity level.
-   * Allowed values: low | medium | high | critical
-   */
-  severity?: 'low' | 'medium' | 'high' | 'critical';
 }
 
 export interface SearchRulesArgs extends BaseSearchArgs {}
@@ -455,38 +395,7 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
         );
       }
 
-      // ------------------------------------------------------------
-      // WAVE-1: Severity handling
-      // ------------------------------------------------------------
-      let finalQuery = searchArgs.query;
-
-      if (searchArgs.severity !== undefined) {
-        // Validate severity enum value
-        const severityValidation = ParameterValidator.validateEnum(
-          searchArgs.severity,
-          'severity',
-          ['low', 'medium', 'high', 'critical'],
-          true
-        );
-
-        if (!severityValidation.isValid) {
-          return createErrorResponse(
-            this.name,
-            'Invalid severity parameter',
-            ErrorType.VALIDATION_ERROR,
-            {
-              provided_value: searchArgs.severity,
-              valid_values: ['low', 'medium', 'high', 'critical'],
-            },
-            severityValidation.errors
-          );
-        }
-
-        // Append severity filter to the existing query (if any)
-        finalQuery = finalQuery
-          ? `${finalQuery} AND severity:${searchArgs.severity}`
-          : `severity:${searchArgs.severity}`;
-      }
+      const finalQuery = searchArgs.query;
 
       // ------------------------------------------------------------
       // Validate geographic_filters if provided
@@ -762,11 +671,10 @@ OPTIONAL PARAMETERS:
 
 QUERY EXAMPLES (with automatic boolean translation):
 - Boolean status (both syntaxes supported): "resolved:true" OR "resolved=true", "acknowledged:false" OR "acknowledged=false" (automatically converted to backend format)
-- Severity filtering: "severity:high", "severity:>=medium", "severity:critical"
 - IP-based searches: "source_ip:192.168.1.100", "destination_ip:10.0.*"
-- Type filtering: "type:intrusion_detection", "type:malware", "type:dns_anomaly"
+- Type filtering: "type:8", "type:9", "type:10" (use numeric alarm types)
 - Time-based: "timestamp:>=2024-01-01", "last_24_hours:true"
-- Complex combinations: "severity:high AND source_ip:192.168.* NOT resolved:true"
+- Complex combinations: "type:8 AND source_ip:192.168.* NOT resolved:true"
 
 CACHE CONTROL:
 - Default: 15-second cache for optimal performance
@@ -774,13 +682,13 @@ CACHE CONTROL:
 - Cache info included in responses for timing awareness
 
 COMMON USE CASES:
-- Active threats: "severity:>=high AND resolved:false"
-- Geographic threats: "country:China AND severity:medium"
-- Malware detection: "type:malware OR type:trojan OR type:virus"
-- Network intrusions: "type:intrusion AND source_ip:external"
+- Active security alerts: "type:1 AND resolved:false"
+- Geographic threats: "country:China AND type:2"
+- Video/Gaming/Porn activity: "type:8 OR type:9 OR type:10"
+- VPN issues: "type:13" (VPN Connection Error)
 
 ERROR RECOVERY:
-- If no results, try broader time ranges or lower severity filters
+- If no results, try broader time ranges or different type filters
 - Check field names against the API documentation
 - Use wildcards (*) for partial matches when exact queries fail
 
@@ -894,31 +802,6 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
             ),
           };
 
-          // Enhanced severity mapping - try multiple field locations and type inference
-          let severity = SafeAccess.getNestedValue(
-            alarm as any,
-            'severity',
-            'unknown'
-          );
-          if (severity === 'unknown') {
-            severity = SafeAccess.getNestedValue(
-              alarm as any,
-              'priority',
-              'unknown'
-            );
-          }
-
-          // If still unknown, derive from alarm type
-          if (severity === 'unknown') {
-            const alarmType = SafeAccess.getNestedValue(
-              alarm as any,
-              'type',
-              ''
-            );
-            if (alarmType) {
-              severity = deriveAlarmSeverityFromType(alarmType);
-            }
-          }
 
           const rawAid = SafeAccess.getNestedValue(alarm as any, 'aid', null);
 
@@ -952,7 +835,6 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
               'status',
               'unknown'
             ),
-            severity,
             // Enhanced device information (only include if meaningful data found)
             device:
               deviceInfo.id !== 'unknown' || deviceInfo.name !== 'unknown'
@@ -1871,9 +1753,6 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
     if (data.action) {
       parts.push(`Action: ${data.action}`);
     }
-    if (data.severity) {
-      parts.push(`Severity: ${data.severity}`);
-    }
     if (data.type) {
       parts.push(`Type: ${data.type}`);
     }
@@ -2181,11 +2060,6 @@ export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
         alarms: SafeAccess.safeArrayMap(result.results, (alarm: Alarm) => ({
           timestamp: unixToISOStringOrNow(alarm.ts),
           type: SafeAccess.getNestedValue(alarm as any, 'type', 'unknown'),
-          severity: SafeAccess.getNestedValue(
-            alarm as any,
-            'severity',
-            'unknown'
-          ),
           message: SafeAccess.getNestedValue(
             alarm as any,
             'message',

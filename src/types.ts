@@ -593,8 +593,6 @@ export interface SearchOptions {
   exclude_fields?: string[];
   /** Whether to include resolved/inactive items */
   include_resolved?: boolean;
-  /** Minimum severity level for alarms */
-  min_severity?: 'low' | 'medium' | 'high' | 'critical';
   /** Minimum hit count for rules */
   min_hits?: number;
   /** Minimum number of targets in list (for target lists) */
