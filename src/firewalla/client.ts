@@ -445,7 +445,10 @@ export class FirewallaClient {
         }
         // For DELETE operations, the response might not have a 'data' field
         // In this case, return the entire response object as the result
-        result = response.data.data !== undefined ? response.data.data : (response.data as T);
+        result =
+          response.data.data !== undefined
+            ? response.data.data
+            : (response.data as T);
       } else {
         // Direct data response (more common with Firewalla API)
         result = response.data as T;
@@ -1951,8 +1954,10 @@ export class FirewallaClient {
         error instanceof Error ? error : new Error(String(error))
       );
       // Log detailed error information for debugging
-      logger.error(`DeleteAlarm detailed error info - alarmId: ${alarmId}, errorType: ${(error as any)?.constructor?.name}, errorMessage: ${error instanceof Error ? error.message : String(error)}`);
-      
+      logger.error(
+        `DeleteAlarm detailed error info - alarmId: ${alarmId}, errorType: ${(error as any)?.constructor?.name}, errorMessage: ${error instanceof Error ? error.message : String(error)}`
+      );
+
       // Enhanced error handling with specific error types
       if (error instanceof Error) {
         if (
@@ -1986,9 +1991,7 @@ export class FirewallaClient {
           );
         }
         // Include the actual error message for better debugging
-        throw new Error(
-          `Failed to delete alarm: ${error.message}`
-        );
+        throw new Error(`Failed to delete alarm: ${error.message}`);
       }
       throw new Error(
         `Failed to delete alarm: ${error instanceof Error ? error.message : 'Unknown error'}`
