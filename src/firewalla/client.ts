@@ -443,7 +443,9 @@ export class FirewallaClient {
         if (!response.data.success) {
           throw new Error(response.data.error || 'API request failed');
         }
-        result = response.data.data;
+        // For DELETE operations, the response might not have a 'data' field
+        // In this case, return the entire response object as the result
+        result = response.data.data !== undefined ? response.data.data : (response.data as T);
       } else {
         // Direct data response (more common with Firewalla API)
         result = response.data as T;
@@ -622,7 +624,7 @@ export class FirewallaClient {
       (item: any): Alarm => ({
         ts: item.ts || Math.floor(Date.now() / 1000),
         gid: item.gid || this.config.boxId,
-        aid: item.aid || 0,
+        aid: item.aid !== undefined && item.aid !== null ? item.aid : 0,
         type: item.type || 1,
         status: item.status || 1,
         message: item.message,
@@ -939,7 +941,7 @@ export class FirewallaClient {
 
   private transformDevice = (item: any): Device => {
     const device: Device = {
-      id: item.id || item.gid || item._id || 'unknown',
+      id: item.id || item.mac || item._id || 'unknown',
       gid: item.gid || this.config.boxId,
       name: item.name || item.hostname || item.deviceName || 'Unknown Device',
       ip: item.ip || item.ipAddress || item.localIP || 'unknown',
@@ -1900,17 +1902,23 @@ export class FirewallaClient {
       let responseMessage = `Alarm ${successfulId} deleted successfully`;
 
       if (response && typeof response === 'object') {
-        // Complex response object - check multiple success indicators
-        isSuccess = Boolean(
-          response.success ||
-            response.deleted ||
-            (response.status &&
-              ['deleted', 'removed', 'success', 'ok'].includes(
-                response.status.toLowerCase()
-              ))
-        );
-        if ('message' in response && response.message) {
-          responseMessage = response.message;
+        // Check if it's an empty object {} which indicates success
+        if (Object.keys(response).length === 0) {
+          isSuccess = true;
+          responseMessage = `Alarm ${successfulId} deleted successfully`;
+        } else {
+          // Complex response object - check multiple success indicators
+          isSuccess = Boolean(
+            response.success ||
+              response.deleted ||
+              (response.status &&
+                ['deleted', 'removed', 'success', 'ok'].includes(
+                  response.status.toLowerCase()
+                ))
+          );
+          if ('message' in response && response.message) {
+            responseMessage = response.message;
+          }
         }
       } else if (typeof response === 'string') {
         // String response - check for success keywords
@@ -1942,6 +1950,9 @@ export class FirewallaClient {
         'Error in deleteAlarm:',
         error instanceof Error ? error : new Error(String(error))
       );
+      // Log detailed error information for debugging
+      logger.error(`DeleteAlarm detailed error info - alarmId: ${alarmId}, errorType: ${(error as any)?.constructor?.name}, errorMessage: ${error instanceof Error ? error.message : String(error)}`);
+      
       // Enhanced error handling with specific error types
       if (error instanceof Error) {
         if (
@@ -1974,6 +1985,10 @@ export class FirewallaClient {
             `Cannot delete alarm '${alarmId}' due to conflict or dependency`
           );
         }
+        // Include the actual error message for better debugging
+        throw new Error(
+          `Failed to delete alarm: ${error.message}`
+        );
       }
       throw new Error(
         `Failed to delete alarm: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -3082,7 +3097,9 @@ export class FirewallaClient {
               : this.config.boxId;
 
           const aid =
-            item.aid && typeof item.aid === 'number' && item.aid >= 0
+            item.aid !== undefined &&
+            item.aid !== null &&
+            typeof item.aid === 'number'
               ? item.aid
               : 0;
 

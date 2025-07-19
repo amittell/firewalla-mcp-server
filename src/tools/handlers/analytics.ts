@@ -580,11 +580,11 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
 export class GetRecentFlowActivityHandler extends BaseToolHandler {
   name = 'get_recent_flow_activity';
   description =
-    'Get recent network flow activity snapshot (last 10-20 minutes of traffic). Returns up to 400 most recent flows for immediate analysis. IMPORTANT: This is NOT historical trend data - it shows current activity only. Use for "what\'s happening now" questions, not daily/weekly patterns. Ideal for: current security assessment, immediate network state, recent protocol distribution.';
+    'Get recent network flow activity snapshot (last 10-20 minutes of traffic). Returns up to 50 most recent flows for immediate analysis. IMPORTANT: This is NOT historical trend data - it shows current activity only. Use for "what\'s happening now" questions, not daily/weekly patterns. Ideal for: current security assessment, immediate network state, recent protocol distribution.';
   category = 'analytics' as const;
 
-  private static readonly MAX_FLOWS = 400;
-  private static readonly FLOWS_PER_PAGE = 200;
+  private static readonly MAX_FLOWS = 50;
+  private static readonly FLOWS_PER_PAGE = 50;
   private static readonly MAX_PAGES = Math.ceil(
     GetRecentFlowActivityHandler.MAX_FLOWS /
       GetRecentFlowActivityHandler.FLOWS_PER_PAGE
@@ -592,12 +592,12 @@ export class GetRecentFlowActivityHandler extends BaseToolHandler {
 
   constructor() {
     super({
-      enableGeoEnrichment: true, // Enable geographic enrichment for IP analysis
+      enableGeoEnrichment: false, // Disabled to stay within token limits
       enableFieldNormalization: true,
       additionalMeta: {
         data_source: 'recent_flow_activity',
         entity_type: 'current_network_snapshot',
-        supports_geographic_enrichment: true,
+        supports_geographic_enrichment: false,
         supports_field_normalization: true,
         standardization_version: '2.0.0',
         time_scope: 'recent_activity_only',

@@ -240,7 +240,10 @@ export function batchNormalize(
   }
 
   return items.map(item => {
-    const normalized: any = {};
+    // Start with all original fields
+    const normalized: any = { ...item };
+
+    // Apply transformations
     for (const [key, transformer] of Object.entries(transformers)) {
       // Only apply transformation if the field exists in the item
       if (key in item) {

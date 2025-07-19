@@ -130,39 +130,54 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
       const startTime = Date.now();
 
       // Process device data with timestamps but preserve original IDs
-      const processedDevices = deviceResults.map((device: any, index: number) => {
-        // Apply timestamp normalization to device data
-        const timestampNormalized = normalizeTimestamps(device);
-        const finalDevice = timestampNormalized.data;
-        
-        // Get normalized device for other fields
-        const normalizedDevice = normalizedDevices[index] || {};
+      const processedDevices = deviceResults.map(
+        (device: any, index: number) => {
+          // Apply timestamp normalization to device data
+          const timestampNormalized = normalizeTimestamps(device);
+          const finalDevice = timestampNormalized.data;
 
-        return {
-          id: device.id || device.mac || 'unknown', // Use original ID or MAC
-          gid: device.gid || 'unknown', // Use original GID
-          name: normalizedDevice.name || finalDevice.name || device.name || 'unknown',
-          ip: normalizedDevice.ip || finalDevice.ip || device.ip || 'unknown',
-          macVendor: normalizedDevice.macVendor || finalDevice.macVendor || device.macVendor || 'unknown',
-          online: normalizedDevice.online !== undefined ? normalizedDevice.online : (finalDevice.online !== undefined ? finalDevice.online : Boolean(device.online)),
-          lastSeen: unixToISOStringOrNow(
-            SafeAccess.getNestedValue(finalDevice, 'lastSeen', 0) as number
-          ),
-          ipReserved: SafeAccess.getNestedValue(
-            finalDevice,
-            'ipReserved',
-            false
-          ),
-          network: finalDevice.network, // Already normalized
-          group: finalDevice.group, // Already normalized
-          totalDownload: sanitizeByteCount(
-            SafeAccess.getNestedValue(finalDevice, 'totalDownload', 0)
-          ),
-          totalUpload: sanitizeByteCount(
-            SafeAccess.getNestedValue(finalDevice, 'totalUpload', 0)
-          ),
-        };
-      });
+          // Get normalized device for other fields
+          const normalizedDevice = normalizedDevices[index] || {};
+
+          return {
+            id: device.id || device.mac || 'unknown', // Use original ID or MAC
+            gid: device.gid || 'unknown', // Use original GID
+            name:
+              normalizedDevice.name ||
+              finalDevice.name ||
+              device.name ||
+              'unknown',
+            ip: normalizedDevice.ip || finalDevice.ip || device.ip || 'unknown',
+            macVendor:
+              normalizedDevice.macVendor ||
+              finalDevice.macVendor ||
+              device.macVendor ||
+              'unknown',
+            online:
+              normalizedDevice.online !== undefined
+                ? normalizedDevice.online
+                : finalDevice.online !== undefined
+                  ? finalDevice.online
+                  : Boolean(device.online),
+            lastSeen: unixToISOStringOrNow(
+              SafeAccess.getNestedValue(finalDevice, 'lastSeen', 0) as number
+            ),
+            ipReserved: SafeAccess.getNestedValue(
+              finalDevice,
+              'ipReserved',
+              false
+            ),
+            network: finalDevice.network, // Already normalized
+            group: finalDevice.group, // Already normalized
+            totalDownload: sanitizeByteCount(
+              SafeAccess.getNestedValue(finalDevice, 'totalDownload', 0)
+            ),
+            totalUpload: sanitizeByteCount(
+              SafeAccess.getNestedValue(finalDevice, 'totalUpload', 0)
+            ),
+          };
+        }
+      );
 
       // Apply geographic enrichment for IP addresses
       const enrichedDevices = await this.enrichGeoIfNeeded(processedDevices, [

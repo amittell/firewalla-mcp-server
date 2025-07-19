@@ -120,20 +120,22 @@ export class FirewallaMCPServer {
               required: ['alarm_id'],
             },
           },
-          {
-            name: 'delete_alarm',
-            description: 'Delete/dismiss a specific Firewalla alarm',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                alarm_id: {
-                  type: 'string',
-                  description: 'Alarm ID (required for API call)',
-                },
-              },
-              required: ['alarm_id'],
-            },
-          },
+          // Disabled: delete_alarm tool commented out because the Firewalla MSP API
+          // returns false success responses but doesn't actually delete alarms
+          // {
+          //   name: 'delete_alarm',
+          //   description: 'Delete/dismiss a specific Firewalla alarm',
+          //   inputSchema: {
+          //     type: 'object',
+          //     properties: {
+          //       alarm_id: {
+          //         type: 'string',
+          //         description: 'Alarm ID (required for API call)',
+          //       },
+          //     },
+          //     required: ['alarm_id'],
+          //   },
+          // },
           {
             name: 'get_flow_data',
             description: 'Query network traffic flows from Firewalla firewall',

@@ -13,9 +13,9 @@
  * - **Proper Schemas**: All limits set to API maximum (500), required parameters added
  * - **CRUD Operations**: Create, Read, Update, Delete operations for all resources
  *
- * 28-Tool Distribution:
- * - Direct API Endpoints (23 tools):
- *   * Security: 3 handlers (get_active_alarms, get_specific_alarm, delete_alarm)
+ * 27-Tool Distribution:
+ * - Direct API Endpoints (22 tools):
+ *   * Security: 2 handlers (get_active_alarms, get_specific_alarm)
  *   * Network: 1 handler (get_flow_data)
  *   * Device: 1 handler (get_device_status)
  *   * Rules: 8 handlers (get_network_rules, pause_rule, resume_rule, get_target_lists,
@@ -35,7 +35,7 @@ import type { ToolHandler } from './handlers/base.js';
 import {
   GetActiveAlarmsHandler,
   GetSpecificAlarmHandler,
-  DeleteAlarmHandler,
+  // DeleteAlarmHandler, // Disabled - API returns false success
 } from './handlers/security.js';
 import {
   GetFlowDataHandler,
@@ -73,15 +73,15 @@ import {
 } from './handlers/search.js';
 
 /**
- * Central registry for managing 28 MCP tool handlers with complete API coverage
+ * Central registry for managing 27 MCP tool handlers with complete API coverage
  *
  * Provides a clean, organized approach to tool registration and discovery for
- * the 28-tool architecture. Each tool handler maps to actual Firewalla API endpoints
- * with corrected schemas and proper parameter validation for 100% API coverage.
+ * the 27-tool architecture. Each tool handler maps to actual Firewalla API endpoints
+ * with corrected schemas and proper parameter validation for API coverage.
  *
  * The registry pattern enables:
- * - 28 complete tools (23 direct API + 5 convenience wrappers)
- * - 100% Firewalla API coverage including full CRUD operations
+ * - 27 complete tools (22 direct API + 5 convenience wrappers)
+ * - Comprehensive Firewalla API coverage including CRUD operations
  * - Clean separation between tool implementation and registration
  * - Type-safe tool discovery and execution
  * - API-verified tool schemas with corrected limits and required parameters
@@ -129,10 +129,12 @@ export class ToolRegistry {
   private registerHandlers(): void {
     // Direct API Endpoints (23 handlers)
 
-    // Security tools (3 handlers)
+    // Security tools (2 handlers - delete_alarm disabled)
     this.register(new GetActiveAlarmsHandler());
     this.register(new GetSpecificAlarmHandler());
-    this.register(new DeleteAlarmHandler());
+    // Disabled: DeleteAlarmHandler commented out because the Firewalla MSP API
+    // returns false success responses but doesn't actually delete alarms
+    // this.register(new DeleteAlarmHandler());
 
     // Network tools (1 handler - get_flow_data)
     this.register(new GetFlowDataHandler());

@@ -349,8 +349,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         (arr: any[]) => arr,
         []
       ) as any[];
-      
-      
+
       // First normalize other fields, then handle severity derivation separately
       const normalizedAlarms = batchNormalize(alarmResults, {
         aid: (v: any) => v, // Preserve alarm ID as-is from API
@@ -391,31 +390,45 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
           // Apply timestamp normalization
           const timestampNormalized = normalizeTimestamps(alarm);
           const finalAlarm = timestampNormalized.data;
-          
+
           // Get the corresponding normalized alarm for other fields
           const normalizedAlarm = finalNormalizedAlarms[index] || {};
 
           // Preserve original alarm ID from client response
           const originalAid = alarm.aid; // Direct from client, not processed
-          
 
           return {
             aid: originalAid || 'unknown', // Use original from client
             timestamp: unixToISOStringOrNow(finalAlarm.ts),
             type: normalizedAlarm.type || finalAlarm.type || 'unknown',
             status: normalizedAlarm.status || finalAlarm.status || 'unknown',
-            message: normalizedAlarm.message || finalAlarm.message || 'Unknown alarm',
-            direction: normalizedAlarm.direction || finalAlarm.direction || 'unknown',
-            protocol: normalizedAlarm.protocol || finalAlarm.protocol || 'unknown',
+            message:
+              normalizedAlarm.message || finalAlarm.message || 'Unknown alarm',
+            direction:
+              normalizedAlarm.direction || finalAlarm.direction || 'unknown',
+            protocol:
+              normalizedAlarm.protocol || finalAlarm.protocol || 'unknown',
             gid: alarm.gid || 'unknown', // Use original GID too
             severity: normalizedAlarm.severity || 'medium', // Use normalized severity
             // Include conditional properties (use normalized if available, fallback to original)
-            ...(normalizedAlarm.device || finalAlarm.device ? { device: normalizedAlarm.device || finalAlarm.device } : {}),
-            ...(normalizedAlarm.remote || finalAlarm.remote ? { remote: normalizedAlarm.remote || finalAlarm.remote } : {}),
-            ...(normalizedAlarm.src || finalAlarm.src ? { src: normalizedAlarm.src || finalAlarm.src } : {}),
-            ...(normalizedAlarm.dst || finalAlarm.dst ? { dst: normalizedAlarm.dst || finalAlarm.dst } : {}),
-            ...(normalizedAlarm.port || finalAlarm.port ? { port: normalizedAlarm.port || finalAlarm.port } : {}),
-            ...(normalizedAlarm.dport || finalAlarm.dport ? { dport: normalizedAlarm.dport || finalAlarm.dport } : {}),
+            ...(normalizedAlarm.device || finalAlarm.device
+              ? { device: normalizedAlarm.device || finalAlarm.device }
+              : {}),
+            ...(normalizedAlarm.remote || finalAlarm.remote
+              ? { remote: normalizedAlarm.remote || finalAlarm.remote }
+              : {}),
+            ...(normalizedAlarm.src || finalAlarm.src
+              ? { src: normalizedAlarm.src || finalAlarm.src }
+              : {}),
+            ...(normalizedAlarm.dst || finalAlarm.dst
+              ? { dst: normalizedAlarm.dst || finalAlarm.dst }
+              : {}),
+            ...(normalizedAlarm.port || finalAlarm.port
+              ? { port: normalizedAlarm.port || finalAlarm.port }
+              : {}),
+            ...(normalizedAlarm.dport || finalAlarm.dport
+              ? { dport: normalizedAlarm.dport || finalAlarm.dport }
+              : {}),
           };
         }
       );
@@ -606,78 +619,59 @@ export class DeleteAlarmHandler extends BaseToolHandler {
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
-    // Pre-flight validation - check parameters first
-    const alarmIdValidation = ParameterValidator.validateAlarmId(
-      args?.alarm_id,
-      'alarm_id'
-    );
-
-    if (!alarmIdValidation.isValid) {
-      return this.createErrorResponse(
-        'Parameter validation failed',
-        ErrorType.VALIDATION_ERROR,
-        undefined,
-        alarmIdValidation.errors
+    try {
+      // Pre-flight validation - check parameters first
+      const alarmIdValidation = ParameterValidator.validateAlarmId(
+        args?.alarm_id,
+        'alarm_id'
       );
-    }
 
-    const rawAlarmId = alarmIdValidation.sanitizedValue as string;
-    const alarmId = validateAlarmId(rawAlarmId);
+      if (!alarmIdValidation.isValid) {
+        return this.createErrorResponse(
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          alarmIdValidation.errors
+        );
+      }
 
-    // Use single timeout wrapper for the entire operation
-    return withToolTimeout(async () => {
+      const rawAlarmId = alarmIdValidation.sanitizedValue as string;
+      const alarmId = validateAlarmId(rawAlarmId);
+
       // First verify the alarm exists before attempting deletion
-      try {
-        const alarmCheck = await firewalla.getSpecificAlarm(alarmId);
+      const alarmCheck = await firewalla.getSpecificAlarm(alarmId);
 
-        if (
-          !alarmCheck ||
-          !alarmCheck.results ||
-          alarmCheck.results.length === 0
-        ) {
-          return this.createErrorResponse(
-            `Alarm with ID '${alarmId}' not found`,
-            ErrorType.API_ERROR,
-            undefined,
-            [`Alarm ID '${alarmId}' does not exist or has already been deleted`]
-          );
-        }
-      } catch (checkError: unknown) {
-        // If we can't retrieve the alarm, it likely doesn't exist
-        const checkErrorMessage =
-          checkError instanceof Error ? checkError.message : 'Unknown error';
-        if (
-          checkErrorMessage.includes('not found') ||
-          checkErrorMessage.includes('404')
-        ) {
-          return this.createErrorResponse(
-            `Alarm with ID '${alarmId}' not found`,
-            ErrorType.API_ERROR,
-            undefined,
-            [`Alarm ID '${alarmId}' does not exist or has already been deleted`]
-          );
-        }
-        // Re-throw other errors (network issues, auth problems, etc.)
-        throw checkError;
+      if (
+        !alarmCheck ||
+        !alarmCheck.results ||
+        alarmCheck.results.length === 0
+      ) {
+        return this.createErrorResponse(
+          `Alarm with ID '${alarmId}' not found`,
+          ErrorType.API_ERROR,
+          undefined,
+          [`Alarm ID '${alarmId}' does not exist or has already been deleted`]
+        );
       }
 
       // Alarm exists, proceed with deletion
       const response = await firewalla.deleteAlarm(alarmId);
 
-      const startTime = Date.now();
-
-      const unifiedResponseData = {
+      // Create a simple success response without the complex unified response
+      return this.createSuccessResponse({
         success: true,
         alarm_id: alarmId,
         message: 'Alarm deleted successfully',
         deleted_at: getCurrentTimestamp(),
-        details: response,
-      };
-
-      const executionTime = Date.now() - startTime;
-      return this.createUnifiedResponse(unifiedResponseData, {
-        executionTimeMs: executionTime,
+        api_response: response,
       });
-    }, 'delete_alarm');
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return this.createErrorResponse(
+        `Failed to delete alarm: ${errorMessage}`,
+        ErrorType.API_ERROR
+      );
+    }
   }
 }

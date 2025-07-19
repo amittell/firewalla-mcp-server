@@ -344,8 +344,11 @@ firewalla-mcp-server/
 - **Timeline**: Category classification happens at the Firewalla device level and may take time to build up meaningful categorization data.
 
 ### Data Characteristics
-- **Response Sizes**: The `get_recent_flow_activity` tool returns up to 400 recent flows. For larger datasets or historical analysis, use `search_flows` with time filters for more targeted queries.
+- **Response Sizes**: The `get_recent_flow_activity` tool returns up to 150 recent flows to stay within token limits. For larger datasets or historical analysis, use `search_flows` with time filters for more targeted queries.
 - **Geographic Data**: IP geolocation is enriched by the MCP server and includes country, city, and risk scores when available.
+
+### API Limitations
+- **Alarm Deletion**: The `delete_alarm` tool may not actually delete alarms even though the Firewalla API returns a success response. This appears to be a limitation of the MSP API where delete operations return `{"message": "success", "success": true}` but the alarm remains in the system. This may be due to permission restrictions or API design.
 
 ## Troubleshooting
 
