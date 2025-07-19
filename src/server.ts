@@ -410,7 +410,7 @@ export class FirewallaMCPServer {
           {
             name: 'search_flows',
             description:
-              'Search network flows with advanced query filters. Supports all flow fields including geographic filtering.',
+              'Search network flows with advanced query filters. Use this for: historical analysis, specific time ranges, complex filtering, or when you need more than 50 flows. Supports pagination, time-based queries (e.g., "ts:>1h" for last hour), and all flow fields including geographic filtering. For quick "what\'s happening now" snapshots, use get_recent_flow_activity instead.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -579,7 +579,7 @@ export class FirewallaMCPServer {
           {
             name: 'get_recent_flow_activity',
             description:
-              'Get recent network flow activity snapshot (last 10-20 minutes). Returns up to 400 most recent flows for immediate analysis. For larger datasets, use search_flows with time filters. CRITICAL: This is NOT historical trend data - shows current activity only. Use for "what\'s happening now" questions, not daily/weekly patterns. Perfect for: current security assessment, immediate network state, recent protocol distribution. AVOID for: historical analysis, daily patterns, trend identification.',
+              'Get recent network flow activity snapshot (last 10-20 minutes). Returns up to 50 most recent flows for immediate analysis. CRITICAL: This is a quick snapshot tool only. Use this for: "what\'s happening right now?", current security threats, immediate network issues. DO NOT use for: historical analysis (use search_flows), getting more than 50 flows (use search_flows with limit), daily/weekly patterns (use search_flows with time queries like "ts:>24h"). For comprehensive analysis, always prefer search_flows.',
             inputSchema: {
               type: 'object',
               properties: {},
