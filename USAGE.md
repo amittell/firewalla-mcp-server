@@ -93,7 +93,7 @@ The server supports powerful search queries:
 ### Weekly Review
 ```
 "Provide a weekly network summary:
-1. Total alarms and their severity
+1. Total alarms by type
 2. Bandwidth trends
 3. New devices added
 4. Rule effectiveness"

@@ -184,7 +184,7 @@ Open Claude Desktop and try these starter queries:
 **Investigating Suspicious Activity:**
 ```text
 "I noticed unusual traffic. Can you:
-1. Show me all high-severity alarms from the last 4 hours
+1. Show me all security and abnormal upload alarms from the last 4 hours
 2. Find any blocked connections to external IPs
 3. Check which devices had the most network activity"
 ```
@@ -209,9 +209,9 @@ Open Claude Desktop and try these starter queries:
 
 **Find Specific Threats:**
 ```text
-search for: high severity alarms from IP range 10.0.0.* in the last 24 hours
+search for: security activity alarms from IP range 10.0.0.* in the last 24 hours
 ```
-*Uses: `search_alarms` with query: "severity:high AND source_ip:10.0.0.* AND timestamp:>24h"*
+*Uses: `search_alarms` with query: "type:1 AND source_ip:10.0.0.* AND timestamp:>24h"*
 
 **Analyze Rule Effectiveness:**
 ```text
@@ -249,7 +249,7 @@ If responses are slow:
 ## Available Tools (29 total)
 
 ### Core Tools
-- **Security**: Get alarms, analyze threats, delete alerts
+- **Security**: Get alarms, analyze threats
 - **Network**: Monitor traffic flows, track bandwidth usage
 - **Devices**: Check device status, find offline devices
 - **Rules**: Manage firewall rules, pause/resume rules
@@ -259,7 +259,7 @@ If responses are slow:
 
 ### Quick Reference
 ```
-Security: get_active_alarms, delete_alarm, get_specific_alarm
+Security: get_active_alarms, get_specific_alarm
 Network: get_flow_data, get_bandwidth_usage, get_offline_devices  
 Devices: get_device_status, get_boxes, search_devices
 Rules: get_network_rules, pause_rule, resume_rule, get_target_lists

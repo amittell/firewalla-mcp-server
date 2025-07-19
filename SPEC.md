@@ -57,7 +57,7 @@ Query Parameters:
 GET /v2/boxes/{box_gid}/alarms
 Query Parameters:
 - status: active|resolved
-- severity: low|medium|high|critical
+- type: number (1-16)
 - limit: number (max 50)
 ```
 
@@ -80,7 +80,7 @@ Query Parameters:
 ### get_active_alarms
 **Purpose**: Retrieve current security alerts
 **Parameters**:
-- `severity` (optional): Filter by severity level
+- `query` (optional): Filter by alarm type (e.g., "type:1" for Security Activity)
 - `limit` (optional): Maximum number of results (default: 20)
 
 **Response Schema**:
@@ -88,8 +88,7 @@ Query Parameters:
 interface Alarm {
   id: string;
   timestamp: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  type: string;
+  type: number; // 1-16, see alarm type documentation
   description: string;
   source_ip?: string;
   destination_ip?: string;
@@ -198,7 +197,7 @@ interface Flow {
 **Name**: Analyze Threats
 **Description**: Deep dive into recent security threats and patterns
 **Arguments**:
-- `severity_threshold`: Minimum severity level ('medium', 'high', 'critical')
+- `type_filter`: Alarm type to analyze (1-16)
 
 ### bandwidth_analysis
 **Name**: Bandwidth Usage Analysis

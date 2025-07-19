@@ -24,8 +24,8 @@ A Model Context Protocol (MCP) server that provides Claude with access to Firewa
 - **5 Convenience Wrapper Tools**: Client-side enhanced functionality for common operations
 - **CRUD Operations**: Create, Read, Update, Delete operations for all resources
 
-### Tool Categories (29 total)
-- **Security (3 tools)**: get_active_alarms, get_specific_alarm, delete_alarm
+### Tool Categories (28 total)
+- **Security (2 tools)**: get_active_alarms, get_specific_alarm
 - **Network (1 tool)**: get_flow_data
 - **Device (1 tool)**: get_device_status
 - **Rules (8 tools)**: get_network_rules, pause_rule, resume_rule, get_target_lists, get_specific_target_list, create_target_list, update_target_list, delete_target_list
@@ -148,7 +148,7 @@ MCP_DEBUG_MODE=false                      # Debug logging (default: false)
 
 ### Core Search Tools (5 tools)
 - **search_flows**: Network flow searching with complex filters
-- **search_alarms**: Security alarm searching with severity/time/IP filters
+- **search_alarms**: Security alarm searching with type/time/IP filters
 - **search_rules**: Firewall rule searching with target/action/status filters
 - **search_devices**: Device searching with network/status/usage filters
 - **search_target_lists**: Target list searching with category/ownership filters
@@ -158,12 +158,12 @@ The server supports search queries using Firewalla API syntax:
 
 ```text
 # Basic field queries
-severity:high
+type:8                        # Video Activity
 source_ip:192.168.1.1
 protocol:tcp
 
 # Logical operators
-severity:high AND source_ip:192.168.*
+type:1 AND source_ip:192.168.*     # Security alerts from local network
 action:block OR action:timelimit
 
 # Wildcards and patterns
@@ -178,18 +178,18 @@ region:US AND protocol:tcp    # US TCP traffic
 
 # Ranges and comparisons
 bytes:[1000 TO 50000]
-severity:>=medium
+type:>=8                      # Video activity and above
 timestamp:>=2024-01-01
 
 # Complex queries
-(severity:high OR severity:critical) AND source_ip:192.168.* NOT resolved:true
+(type:8 OR type:9 OR type:10) AND source_ip:192.168.* NOT resolved:true
 ```
 
 ### Example Search Queries
 
 ```bash
-# Find high-severity alarms from specific IP range
-search_alarms query:"severity:>=high AND source_ip:192.168.*" limit:50
+# Find security activity alarms from specific IP range
+search_alarms query:"type:1 AND source_ip:192.168.*" limit:50
 
 # Find blocked flows over 1MB with geographic filtering
 search_flows query:"blocked:true AND bytes:>=1000000 AND region:CN" limit:100
@@ -202,7 +202,7 @@ search_devices query:"online:false AND mac_vendor:Apple" limit:30
 
 # Geographic security analysis examples
 search_flows query:"region:US AND protocol:tcp AND category:social" limit:50
-search_alarms query:"region:CN AND severity:high AND status:1" limit:25
+search_alarms query:"region:CN AND type:1 AND status:1" limit:25
 ```
 
 ## Flow Insights Tool

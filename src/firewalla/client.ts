@@ -112,7 +112,6 @@ export class FirewallaClient {
   /** @private Geographic cache for IP geolocation lookups */
   private geoCache: GeographicCache;
 
-
   /**
    * Creates a new Firewalla API client instance
    *
@@ -212,7 +211,6 @@ export class FirewallaClient {
       }
     );
   }
-
 
   /**
    * Generates a unique cache key for API requests with enhanced collision prevention
@@ -2938,7 +2936,6 @@ export class FirewallaClient {
           ? `${params.query} AND status:1`
           : 'status:1';
       }
-
 
       // Build request parameters for GET endpoint
       // Use the standard /v2/alarms endpoint with query parameter

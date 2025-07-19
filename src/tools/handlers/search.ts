@@ -40,7 +40,6 @@ import type { ScoringCorrelationParams } from '../../validation/field-mapper.js'
 // ResponseStandardizer import removed - using direct response creation
 import { validateCountryCodes } from '../../utils/geographic.js';
 
-
 // Base search interface to reduce duplication
 export interface BaseSearchArgs extends ToolArgs {
   query: string;
@@ -801,7 +800,6 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
               SafeAccess.getNestedValue(alarm as any, 'mac', 'unknown')
             ),
           };
-
 
           const rawAid = SafeAccess.getNestedValue(alarm as any, 'aid', null);
 
