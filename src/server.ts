@@ -4,11 +4,11 @@
  * @fileoverview Firewalla MCP Server
  *
  * This file implements the primary MCP server class that provides Claude with access to
- * Firewalla firewall data through 29 tools that map to Firewalla API endpoints.
+ * Firewalla firewall data through 28 tools that map to Firewalla API endpoints.
  * Tools include parameter validation and error handling.
  *
  * Architecture:
- * - 24 Direct API Endpoints
+ * - 23 Direct API Endpoints
  * - 5 Convenience Wrappers
  * - Limits set to API maximum (500)
  * - Required parameters for proper API calls
@@ -30,7 +30,7 @@ import { setupPrompts } from './prompts/index.js';
 import { logger } from './monitoring/logger.js';
 
 /**
- * Main MCP Server class for Firewalla integration with 29-tool architecture
+ * Main MCP Server class for Firewalla integration with 28-tool architecture
  */
 export class FirewallaMCPServer {
   private server: Server;
@@ -59,7 +59,7 @@ export class FirewallaMCPServer {
    * Sets up MCP protocol request handlers for 29-tool architecture
    */
   private setupHandlers(): void {
-    // List available tools - 29-Tool Complete API Coverage
+    // List available tools - 28-Tool Complete API Coverage
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
@@ -816,7 +816,7 @@ export class FirewallaMCPServer {
   async start(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    logger.info('Firewalla MCP Server running with 29 tools');
+    logger.info('Firewalla MCP Server running with 28 tools');
   }
 }
 

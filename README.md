@@ -294,7 +294,7 @@ If responses are slow:
 2. Use more specific time ranges
 3. Check your network connection to the MSP API
 
-## Available Tools (29 total)
+## Available Tools (28 total)
 
 ### Core Tools
 - **Security**: Get alarms, analyze threats
@@ -449,7 +449,7 @@ For more detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 ## What's New
 
 **Version 1.0.0:**
-- 29 tools with API-verified schemas
+- 28 tools with API-verified schemas
 - 24 direct API endpoints + 5 convenience wrappers
 - NEW: get_flow_insights for category-based traffic analysis
 - Advanced search with logical operators (AND, OR, NOT)

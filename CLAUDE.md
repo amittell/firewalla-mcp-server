@@ -15,12 +15,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Model Context Protocol (MCP) server that provides Claude with access to Firewalla firewall data. Features a **29-tool architecture** with advanced search capabilities, intelligent caching, and result aggregation.
+A Model Context Protocol (MCP) server that provides Claude with access to Firewalla firewall data. Features a **28-tool architecture** with advanced search capabilities.
 
 ## Architecture Overview
 
-### 29-Tool Architecture
-- **24 Direct API Tools**: Mapping to Firewalla MSP API endpoints
+### 28-Tool Architecture
+- **23 Direct API Tools**: Mapping to Firewalla MSP API endpoints
 - **5 Convenience Wrapper Tools**: Client-side enhanced functionality for common operations
 - **CRUD Operations**: Create, Read, Update, Delete operations for all resources
 
@@ -118,8 +118,8 @@ MCP_DEBUG_MODE=false                      # Debug logging (default: false)
 ```
 
 ### Tool Configuration
-- **WAVE0_ENABLED=false**: All 29 tools disabled (safe mode)
-- **WAVE0_ENABLED=true**: All 29 tools available
+- **WAVE0_ENABLED=false**: All 28 tools disabled (safe mode)
+- **WAVE0_ENABLED=true**: All 28 tools available
 - **MCP_DISABLED_TOOLS**: Selectively disable specific tools by name
 
 ## Testing Procedures
@@ -247,15 +247,15 @@ This file contains the complete, official Firewalla MSP API v2 documentation inc
 
 ## Architecture Notes
 
-### Clean 29-Tool Design
-- **Direct Implementation**: All 29 tools defined directly in TOOL_SCHEMAS
+### Clean 28-Tool Design
+- **Direct Implementation**: All 28 tools defined directly in TOOL_SCHEMAS
 - **API Mapping**: Mapping to all Firewalla MSP API endpoints
 - **Type Safety**: Full TypeScript implementation with strict validation
 - **Registry Pattern**: Clean tool registration with handler-based architecture
 
 ### Key Files
-- `src/server.ts`: Main MCP server with 29-tool TOOL_SCHEMAS architecture
-- `src/tools/registry.ts`: Tool registry with 29 handler definitions
+- `src/server.ts`: Main MCP server with 28-tool TOOL_SCHEMAS architecture
+- `src/tools/registry.ts`: Tool registry with 28 handler definitions
 - `src/firewalla/client.ts`: Firewalla API client with caching
 - `src/validation/`: Parameter validation and error handling
 
@@ -335,7 +335,7 @@ DEBUG=firewalla:* npm run dev
 - All tools must be defined in TOOL_SCHEMAS with proper schema
 - Add to appropriate tool category in feature flags
 - Include proper input validation and error handling
-- Follow the 29-tool architecture constraints
+- Follow the 28-tool architecture constraints
 - Implement direct API execution in the server
 
 ## Performance Considerations
@@ -363,7 +363,7 @@ DEBUG=cache npm run mcp:start
 ## Version Information
 
 - **Current Version**: 1.0.0
-- **Architecture**: 29-tool design (24 direct API + 5 convenience)
+- **Architecture**: 28-tool design (23 direct API + 5 convenience)
 - **API Support**: Firewalla MSP API v2 with CRUD operations
 - **Node.js**: Requires 18+
 - **TypeScript**: ES2020 target with strict mode
