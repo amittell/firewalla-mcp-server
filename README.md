@@ -61,6 +61,14 @@ npm install firewalla-mcp-server
 ```
 
 **Option B: Use Docker**
+
+**Warning: Not for production use – secrets visible in process list**
+
+The examples below pass credentials directly in the command line, which exposes them to process listing and shell history. For production use, consider these secure alternatives:
+- Use `--env-file` with a `.env` file: `docker run --env-file .env ...`
+- Set environment variables in your shell before running Docker
+- Use Docker secrets for orchestration environments
+
 ```bash
 # Using Docker Hub image
 docker run -it --rm \
@@ -76,6 +84,9 @@ docker run -it --rm \
   -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
   -e FIREWALLA_BOX_ID=your_box_id \
   firewalla-mcp-server
+
+# Recommended: Using env file (more secure)
+docker run -it --rm --env-file .env amittell/firewalla-mcp-server
 ```
 
 **Option C: Install from source**
