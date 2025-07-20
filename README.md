@@ -74,7 +74,7 @@ The examples below pass credentials directly in the command line, which exposes 
 docker run -it --rm \
   -e FIREWALLA_MSP_TOKEN=your_token \
   -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
-  -e FIREWALLA_BOX_ID=your_box_id \
+  -e FIREWALLA_BOX_ID=your_box_gid \
   amittell/firewalla-mcp-server
 
 # Or build locally
@@ -82,7 +82,7 @@ docker build -t firewalla-mcp-server .
 docker run -it --rm \
   -e FIREWALLA_MSP_TOKEN=your_token \
   -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
-  -e FIREWALLA_BOX_ID=your_box_id \
+  -e FIREWALLA_BOX_ID=your_box_gid \
   firewalla-mcp-server
 
 # Recommended: Using env file (more secure)
@@ -124,7 +124,7 @@ npm run mcp:start
 
 Add this configuration to your Claude Desktop `claude_desktop_config.json`:
 
-**If installed via npm:**
+#### If installed via npm:
 ```json
 {
   "mcpServers": {
@@ -141,7 +141,7 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
 }
 ```
 
-**If using Docker:**
+#### If using Docker:
 ```json
 {
   "mcpServers": {
@@ -150,7 +150,7 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
       "args": ["run", "-i", "--rm", 
         "-e", "FIREWALLA_MSP_TOKEN=your_token",
         "-e", "FIREWALLA_MSP_ID=yourdomain.firewalla.net",
-        "-e", "FIREWALLA_BOX_ID=your_box_id",
+        "-e", "FIREWALLA_BOX_ID=your_box_gid",
         "amittell/firewalla-mcp-server"
       ]
     }
@@ -158,7 +158,7 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
 }
 ```
 
-**If installed from source:**
+#### If installed from source:
 ```json
 {
   "mcpServers": {
