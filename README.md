@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that provides real-time access to Firewall
 
 ## Why Firewalla MCP Server?
 
-**Simple Network Security Integration**
+### Simple Network Security Integration
 - **28 Tools** for network monitoring and analysis
 - **23 Direct API Endpoints** + **5 Convenience Wrappers**
 - **Advanced Search** with query syntax and filters
@@ -51,7 +51,7 @@ The MCP server acts as a bridge between Claude and your Firewalla firewall, tran
 
 ### 1. Installation
 
-**Option A: Install from npm (Recommended)**
+### Option A: Install from npm (Recommended)
 ```bash
 # Install globally
 npm install -g firewalla-mcp-server
@@ -89,7 +89,7 @@ docker run -it --rm \
 docker run -it --rm --env-file .env amittell/firewalla-mcp-server
 ```
 
-**Option C: Install from source**
+### Option C: Install from source
 ```bash
 git clone https://github.com/amittell/firewalla-mcp-server.git
 cd firewalla-mcp-server
