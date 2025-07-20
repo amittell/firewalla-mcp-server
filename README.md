@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that provides real-time access to Firewall
 
 ## Why Firewalla MCP Server?
 
-**🚀 Simple Network Security Integration**
+**Simple Network Security Integration**
 - **28 Tools** for network monitoring and analysis
 - **23 Direct API Endpoints** + **5 Convenience Wrappers**
 - **Advanced Search** with query syntax and filters
@@ -25,12 +25,12 @@ A Model Context Protocol (MCP) server that provides real-time access to Firewall
 
 | Client | Quick Start | Full Guide |
 |--------|-------------|------------|
-| **Claude Desktop** | `npm i -g firewalla-mcp-server` → Configure MCP | [📖 Setup Guide](docs/clients/claude-desktop.md) |
-| **Claude Code** | `npm i -g firewalla-mcp-server` → CLI integration | [📖 Setup Guide](docs/clients/claude-code.md) |
-| **VS Code** | Install MCP extension → Configure server | [📖 Setup Guide](docs/clients/vscode.md) |
-| **Cursor** | Install Claude Code → VSIX method | [📖 Setup Guide](docs/clients/cursor.md) |
-| **Roocode** | Install MCP support → Configure server | [📖 Setup Guide](docs/clients/roocode.md) |
-| **Cline** | Configure in VS Code → Enable MCP | [📖 Setup Guide](docs/clients/cline.md) |
+| **Claude Desktop** | `npm i -g firewalla-mcp-server` → Configure MCP | [Setup Guide](docs/clients/claude-desktop.md) |
+| **Claude Code** | `npm i -g firewalla-mcp-server` → CLI integration | [Setup Guide](docs/clients/claude-code.md) |
+| **VS Code** | Install MCP extension → Configure server | [Setup Guide](docs/clients/vscode.md) |
+| **Cursor** | Install Claude Code → VSIX method | [Setup Guide](docs/clients/cursor.md) |
+| **Roocode** | Install MCP support → Configure server | [Setup Guide](docs/clients/roocode.md) |
+| **Cline** | Configure in VS Code → Enable MCP | [Setup Guide](docs/clients/cline.md) |
   
 
 ## How It Works
@@ -60,9 +60,9 @@ npm install -g firewalla-mcp-server
 npm install firewalla-mcp-server
 ```
 
-**Option B: Use Docker**
+### Option B: Use Docker
 
-**Warning: Not for production use – secrets visible in process list**
+> **Warning: Not for production use – secrets visible in process list**
 
 The examples below pass credentials directly in the command line, which exposes them to process listing and shell history. For production use, consider these secure alternatives:
 - Use `--env-file` with a `.env` file: `docker run --env-file .env ...`
@@ -124,7 +124,7 @@ npm run mcp:start
 
 Add this configuration to your Claude Desktop `claude_desktop_config.json`:
 
-#### If installed via npm:
+#### If installed via npm
 ```json
 {
   "mcpServers": {
@@ -141,7 +141,7 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
 }
 ```
 
-#### If using Docker:
+#### If using Docker
 ```json
 {
   "mcpServers": {
@@ -158,7 +158,7 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
 }
 ```
 
-#### If installed from source:
+#### If installed from source
 ```json
 {
   "mcpServers": {

@@ -2,16 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 🚨 CRITICAL: Before Any API Development
+## CRITICAL: Before Any API Development
 
 **READ FIRST**: `/docs/firewalla-api-reference.md` - Complete Firewalla API specification
 
 **Key Rules**:
-- ✅ ONLY use endpoints documented in `/docs/firewalla-api-reference.md`
-- ❌ NEVER assume endpoints exist without verification
-- ✅ ALWAYS use box-specific routing: `/v2/boxes/{box_gid}/{resource}`
-- ❌ NEVER use fictional endpoints like `/stats/simple` or `/trends/flows`
-- ✅ ALWAYS implement client-side aggregation for bandwidth/trends
+- ONLY use endpoints documented in `/docs/firewalla-api-reference.md`
+- NEVER assume endpoints exist without verification
+- ALWAYS use box-specific routing: `/v2/boxes/{box_gid}/{resource}`
+- NEVER use fictional endpoints like `/stats/simple` or `/trends/flows`
+- ALWAYS implement client-side aggregation for bandwidth/trends
 
 ## Project Overview
 
@@ -228,7 +228,7 @@ The `get_flow_insights` tool addresses the challenge of analyzing high-volume ne
 
 ## API Reference Documentation
 
-**📖 COMPREHENSIVE API REFERENCE**: `/docs/firewalla-api-reference.md`
+**COMPREHENSIVE API REFERENCE**: `/docs/firewalla-api-reference.md`
 
 This file contains the complete, official Firewalla MSP API v2 documentation including:
 - All verified endpoint URLs and parameters
