@@ -6,7 +6,7 @@ A Model Context Protocol (MCP) server that provides real-time access to Firewall
 
 ## Why Firewalla MCP Server?
 
-**🚀 Simple Network Security Integration**
+### Simple Network Security Integration
 - **28 Tools** for network monitoring and analysis
 - **23 Direct API Endpoints** + **5 Convenience Wrappers**
 - **Advanced Search** with query syntax and filters
@@ -25,12 +25,12 @@ A Model Context Protocol (MCP) server that provides real-time access to Firewall
 
 | Client | Quick Start | Full Guide |
 |--------|-------------|------------|
-| **Claude Desktop** | `npm i -g firewalla-mcp-server` → Configure MCP | [📖 Setup Guide](docs/clients/claude-desktop.md) |
-| **Claude Code** | `npm i -g firewalla-mcp-server` → CLI integration | [📖 Setup Guide](docs/clients/claude-code.md) |
-| **VS Code** | Install MCP extension → Configure server | [📖 Setup Guide](docs/clients/vscode.md) |
-| **Cursor** | Install Claude Code → VSIX method | [📖 Setup Guide](docs/clients/cursor.md) |
-| **Roocode** | Install MCP support → Configure server | [📖 Setup Guide](docs/clients/roocode.md) |
-| **Cline** | Configure in VS Code → Enable MCP | [📖 Setup Guide](docs/clients/cline.md) |
+| **Claude Desktop** | `npm i -g firewalla-mcp-server` → Configure MCP | [Setup Guide](docs/clients/claude-desktop.md) |
+| **Claude Code** | `npm i -g firewalla-mcp-server` → CLI integration | [Setup Guide](docs/clients/claude-code.md) |
+| **VS Code** | Install MCP extension → Configure server | [Setup Guide](docs/clients/vscode.md) |
+| **Cursor** | Install Claude Code → VSIX method | [Setup Guide](docs/clients/cursor.md) |
+| **Roocode** | Install MCP support → Configure server | [Setup Guide](docs/clients/roocode.md) |
+| **Cline** | Configure in VS Code → Enable MCP | [Setup Guide](docs/clients/cline.md) |
   
 
 ## How It Works
@@ -51,7 +51,7 @@ The MCP server acts as a bridge between Claude and your Firewalla firewall, tran
 
 ### 1. Installation
 
-**Option A: Install from npm (Recommended)**
+### Option A: Install from npm (Recommended)
 ```bash
 # Install globally
 npm install -g firewalla-mcp-server
@@ -60,7 +60,36 @@ npm install -g firewalla-mcp-server
 npm install firewalla-mcp-server
 ```
 
-**Option B: Install from source**
+### Option B: Use Docker
+
+> **Warning: Not for production use – secrets visible in process list**
+
+The examples below pass credentials directly in the command line, which exposes them to process listing and shell history. For production use, consider these secure alternatives:
+- Use `--env-file` with a `.env` file: `docker run --env-file .env ...`
+- Set environment variables in your shell before running Docker
+- Use Docker secrets for orchestration environments
+
+```bash
+# Using Docker Hub image
+docker run -it --rm \
+  -e FIREWALLA_MSP_TOKEN=your_token \
+  -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
+  -e FIREWALLA_BOX_ID=your_box_gid \
+  amittell/firewalla-mcp-server
+
+# Or build locally
+docker build -t firewalla-mcp-server .
+docker run -it --rm \
+  -e FIREWALLA_MSP_TOKEN=your_token \
+  -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
+  -e FIREWALLA_BOX_ID=your_box_gid \
+  firewalla-mcp-server
+
+# Recommended: Using env file (more secure)
+docker run -it --rm --env-file .env amittell/firewalla-mcp-server
+```
+
+### Option C: Install from source
 ```bash
 git clone https://github.com/amittell/firewalla-mcp-server.git
 cd firewalla-mcp-server
@@ -95,7 +124,7 @@ npm run mcp:start
 
 Add this configuration to your Claude Desktop `claude_desktop_config.json`:
 
-**If installed via npm:**
+#### If installed via npm
 ```json
 {
   "mcpServers": {
@@ -112,7 +141,24 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
 }
 ```
 
-**If installed from source:**
+#### If using Docker
+```json
+{
+  "mcpServers": {
+    "firewalla": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", 
+        "-e", "FIREWALLA_MSP_TOKEN=your_token",
+        "-e", "FIREWALLA_MSP_ID=yourdomain.firewalla.net",
+        "-e", "FIREWALLA_BOX_ID=your_box_gid",
+        "amittell/firewalla-mcp-server"
+      ]
+    }
+  }
+}
+```
+
+#### If installed from source
 ```json
 {
   "mcpServers": {
@@ -248,7 +294,7 @@ If responses are slow:
 2. Use more specific time ranges
 3. Check your network connection to the MSP API
 
-## Available Tools (29 total)
+## Available Tools (28 total)
 
 ### Core Tools
 - **Security**: Get alarms, analyze threats
@@ -403,7 +449,7 @@ For more detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 ## What's New
 
 **Version 1.0.0:**
-- 29 tools with API-verified schemas
+- 28 tools with API-verified schemas
 - 24 direct API endpoints + 5 convenience wrappers
 - NEW: get_flow_insights for category-based traffic analysis
 - Advanced search with logical operators (AND, OR, NOT)
