@@ -60,7 +60,25 @@ npm install -g firewalla-mcp-server
 npm install firewalla-mcp-server
 ```
 
-**Option B: Install from source**
+**Option B: Use Docker**
+```bash
+# Using Docker Hub image (when available)
+docker run -it --rm \
+  -e FIREWALLA_MSP_TOKEN=your_token \
+  -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
+  -e FIREWALLA_BOX_ID=your_box_id \
+  amittell/firewalla-mcp-server
+
+# Or build locally
+docker build -t firewalla-mcp-server .
+docker run -it --rm \
+  -e FIREWALLA_MSP_TOKEN=your_token \
+  -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
+  -e FIREWALLA_BOX_ID=your_box_id \
+  firewalla-mcp-server
+```
+
+**Option C: Install from source**
 ```bash
 git clone https://github.com/amittell/firewalla-mcp-server.git
 cd firewalla-mcp-server
@@ -107,6 +125,23 @@ Add this configuration to your Claude Desktop `claude_desktop_config.json`:
         "FIREWALLA_MSP_ID": "yourdomain.firewalla.net",
         "FIREWALLA_BOX_ID": "your_box_gid_here"
       }
+    }
+  }
+}
+```
+
+**If using Docker:**
+```json
+{
+  "mcpServers": {
+    "firewalla": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", 
+        "-e", "FIREWALLA_MSP_TOKEN=your_token",
+        "-e", "FIREWALLA_MSP_ID=yourdomain.firewalla.net",
+        "-e", "FIREWALLA_BOX_ID=your_box_id",
+        "amittell/firewalla-mcp-server"
+      ]
     }
   }
 }
