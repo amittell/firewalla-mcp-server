@@ -62,7 +62,7 @@ npm install firewalla-mcp-server
 
 **Option B: Use Docker**
 ```bash
-# Using Docker Hub image (when available)
+# Using Docker Hub image
 docker run -it --rm \
   -e FIREWALLA_MSP_TOKEN=your_token \
   -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
