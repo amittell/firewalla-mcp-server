@@ -43,9 +43,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker containerization support
 - TypeScript-first development with comprehensive type safety
 
+## [1.0.2] - 2025-07-20
+
+### Added
+- Full Docker support with multi-stage builds for security and optimization
+- Docker Hub publishing via GitHub Actions CI/CD pipeline
+- Multi-architecture Docker builds (linux/amd64, linux/arm64, linux/arm/v7)
+- Comprehensive Docker documentation with security warnings
+- Docker Compose configuration with security best practices
+- Non-root user (nodejs:1001) in Docker containers
+- Docker MCP Registry submission for Docker Desktop integration
+
+### Fixed
+- Corrected tool count documentation from 29 to 28 throughout codebase
+- Fixed markdown linting issues (MD036, MD026) in all documentation
+- Standardized environment variable naming (FIREWALLA_BOX_ID)
+- Removed emojis from documentation for consistency
+
+### Changed
+- Updated documentation to reflect actual tool count (28 tools: 23 direct API + 5 convenience)
+- Enhanced security warnings for Docker credential handling
+- Improved consistency in environment variable examples
+
+### Security
+- Added prominent warnings about Docker command-line credential exposure
+- Provided secure alternatives using --env-file and Docker secrets
+- Implemented read-only filesystem and tmpfs for Docker containers
+
+## [1.0.1] - 2025-07-14
+
+### Fixed
+- Minor documentation updates and clarifications
+- Updated npm package metadata
+
 ## [Unreleased]
 
 ### Planned
+- Make FIREWALLA_BOX_ID optional (see issue #27)
 - Enhanced correlation algorithms
 - Additional geographic data sources
 - Performance optimization for large datasets
