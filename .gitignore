@@ -371,6 +371,9 @@ models/
 .node-version
 .nvmrc.local
 
+# Cloned repositories for analysis
+node-firewalla/
+
 # Working documents and reports (not for public repo)
 *_REPORT.md
 *_ANALYSIS.md

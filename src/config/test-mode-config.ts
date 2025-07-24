@@ -1,6 +1,6 @@
 /**
  * @fileoverview Test mode configuration for Docker health checks
- * 
+ *
  * Provides a configuration that allows the server to start without real credentials
  * for Docker container health checks and testing purposes.
  */
