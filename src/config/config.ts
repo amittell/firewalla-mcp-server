@@ -24,7 +24,8 @@
 
 import * as dotenv from 'dotenv';
 import type { FirewallaConfig } from '../types';
-import { getRequiredEnvVar, getOptionalEnvInt } from '../utils/env.js';
+import { getRequiredEnvVar, getOptionalEnvInt, getOptionalEnvVar } from '../utils/env.js';
+import { getTestConfig } from './test-mode-config.js';
 
 dotenv.config();
 
@@ -47,6 +48,14 @@ dotenv.config();
  * ```
  */
 export function getConfig(): FirewallaConfig {
+  // Check if running in test mode (for Docker health checks)
+  const testMode = getOptionalEnvVar('MCP_TEST_MODE', 'false').toLowerCase() === 'true';
+  
+  if (testMode) {
+    console.log('Running in test mode - using dummy credentials');
+    return getTestConfig();
+  }
+
   const mspId = getRequiredEnvVar('FIREWALLA_MSP_ID');
 
   return {
