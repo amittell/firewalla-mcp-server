@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-07-24
+
+### Added
+- Test mode support via MCP_TEST_MODE environment variable
+- Docker health check compatibility for deployment platforms
+- Glama.ai directory integration support
+- Test configuration fallback for containerized environments
+
+### Changed
+- Extended configuration system to support test mode in both regular and production configs
+- Allow server to start without real credentials when MCP_TEST_MODE=true
+
 ## [1.0.0] - 2025-07-14
 
 ### Added
