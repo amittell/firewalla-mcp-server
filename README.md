@@ -1,6 +1,9 @@
 # Firewalla MCP Server
 
 [![npm version](https://badge.fury.io/js/firewalla-mcp-server.svg)](https://www.npmjs.com/package/firewalla-mcp-server)
+<a href="https://glama.ai/mcp/servers/@amittell/firewalla-mcp-server">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@amittell/firewalla-mcp-server/badge" alt="Glama MCP Server" />
+</a>
 
 A Model Context Protocol (MCP) server that provides real-time access to Firewalla firewall data through 28 specialized tools, compatible with any MCP client.
 
