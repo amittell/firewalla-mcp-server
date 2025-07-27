@@ -22,12 +22,17 @@ export interface ProductionConfig extends FirewallaConfig {
 
 export function getProductionConfig(): ProductionConfig {
   // Check if running in test mode
-  const testMode = getOptionalEnvVar('MCP_TEST_MODE', 'false').toLowerCase() === 'true';
-  
-  const mspId = testMode ? 'test.firewalla.net' : getRequiredEnvVar('FIREWALLA_MSP_ID');
-  
+  const testMode =
+    getOptionalEnvVar('MCP_TEST_MODE', 'false').toLowerCase() === 'true';
+
+  const mspId = testMode
+    ? 'test.firewalla.net'
+    : getRequiredEnvVar('FIREWALLA_MSP_ID');
+
   const baseConfig = {
-    mspToken: testMode ? 'test-token' : getRequiredEnvVar('FIREWALLA_MSP_TOKEN'),
+    mspToken: testMode
+      ? 'test-token'
+      : getRequiredEnvVar('FIREWALLA_MSP_TOKEN'),
     mspId,
     mspBaseUrl: `https://${mspId}`,
     boxId: testMode ? 'test-box-id' : getRequiredEnvVar('FIREWALLA_BOX_ID'),
