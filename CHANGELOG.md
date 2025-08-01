@@ -88,6 +88,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Minor documentation updates and clarifications
 - Updated npm package metadata
 
+## [1.1.1] - 2025-08-01
+
+### Security
+- **CRITICAL**: Fixed CVE-2025-7783 vulnerability in form-data dependency
+- Updated form-data from 4.0.3 to 4.0.4 to address predictable boundary generation
+- Rebuilt Docker images with patched dependencies
+
+### Changed
+- Updated package-lock.json with security patches
+- Docker image now includes the latest security fixes
+
 ## [Unreleased]
 
 ### Planned
