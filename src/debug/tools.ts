@@ -216,7 +216,7 @@ export class DebugTools {
     const issues: Array<{ level: 'error' | 'warning'; message: string }> = [];
 
     // Check environment variables
-    const requiredVars = ['FIREWALLA_MSP_TOKEN', 'FIREWALLA_BOX_ID'];
+    const requiredVars = ['FIREWALLA_MSP_TOKEN'];
     for (const varName of requiredVars) {
       if (
         process.env[varName] === undefined ||
@@ -228,6 +228,17 @@ export class DebugTools {
           message: `Missing required environment variable: ${varName}`,
         });
       }
+    }
+
+    // Check optional box ID - warn if not set
+    if (
+      !process.env.FIREWALLA_BOX_ID &&
+      !process.env.FIREWALLA_DEFAULT_BOX_ID
+    ) {
+      issues.push({
+        level: 'warning',
+        message: 'Neither FIREWALLA_BOX_ID nor FIREWALLA_DEFAULT_BOX_ID set - box ID will be required for specific operations',
+      });
     }
 
     // Check API connectivity
@@ -293,7 +304,8 @@ Cache Information:
 
 Configuration:
 - MSP Token: ${process.env.FIREWALLA_MSP_TOKEN !== undefined && process.env.FIREWALLA_MSP_TOKEN !== null && process.env.FIREWALLA_MSP_TOKEN !== '' ? 'Set' : 'Missing'}
-- Box ID: ${process.env.FIREWALLA_BOX_ID !== undefined && process.env.FIREWALLA_BOX_ID !== null && process.env.FIREWALLA_BOX_ID !== '' ? 'Set' : 'Missing'}
+- Box ID: ${process.env.FIREWALLA_BOX_ID !== undefined && process.env.FIREWALLA_BOX_ID !== null && process.env.FIREWALLA_BOX_ID !== '' ? 'Set' : 'Not Set (Optional)'}
+- Default Box ID: ${process.env.FIREWALLA_DEFAULT_BOX_ID !== undefined && process.env.FIREWALLA_DEFAULT_BOX_ID !== null && process.env.FIREWALLA_DEFAULT_BOX_ID !== '' ? 'Set' : 'Not Set'}
 - Base URL: ${process.env.FIREWALLA_MSP_BASE_URL ?? 'Default'}
 - Log Level: ${process.env.LOG_LEVEL ?? 'Default'}
 

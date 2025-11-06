@@ -4743,15 +4743,19 @@ export class FirewallaClient {
    * Helper method to add box.id qualifier to search queries
    *
    * @param query - Existing query string (optional)
+   * @param box_id - Specific box ID to filter by (optional, falls back to config.boxId)
    * @returns Query string with box.id filter added, or just box.id filter if no query
    * @private
    */
-  private addBoxFilter(query?: string): string | undefined {
-    if (!this.config.boxId) {
+  private addBoxFilter(query?: string, box_id?: string): string | undefined {
+    // Use provided box_id or fall back to config.boxId
+    const boxId = box_id || this.config.boxId;
+
+    if (!boxId) {
       return query;
     }
 
-    const boxFilter = `box.id:${this.config.boxId}`;
+    const boxFilter = `box.id:${boxId}`;
 
     if (!query || query.trim() === '') {
       return boxFilter;
