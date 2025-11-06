@@ -21,7 +21,10 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { ListToolsRequestSchema, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { randomUUID } from 'node:crypto';
+import { IncomingMessage, ServerResponse, createServer } from 'node:http';
 import { config } from './config/config.js';
 import { FirewallaClient } from './firewalla/client.js';
 import { setupTools } from './tools/index.js';
@@ -811,12 +814,192 @@ export class FirewallaMCPServer {
   }
 
   /**
-   * Starts the MCP server using stdio transport
+   * Starts the MCP server using configured transport (stdio or HTTP)
    */
   async start(): Promise<void> {
+    const transportType = config.transport.type;
+
+    if (transportType === 'stdio') {
+      await this.startStdioTransport();
+    } else if (transportType === 'http') {
+      await this.startHttpTransport();
+    } else {
+      throw new Error(`Unsupported transport type: ${transportType}`);
+    }
+  }
+
+  /**
+   * Starts the MCP server using stdio transport
+   */
+  private async startStdioTransport(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    logger.info('Firewalla MCP Server running with 28 tools');
+    logger.info('Firewalla MCP Server running with 28 tools on stdio transport');
+  }
+
+  /**
+   * Starts the MCP server using HTTP transport with StreamableHTTP
+   */
+  private async startHttpTransport(): Promise<void> {
+    const port = config.transport.port;
+    const path = config.transport.path;
+
+    // Map to store transports by session ID
+    const transports = new Map<string, StreamableHTTPServerTransport>();
+
+    // Helper function to parse JSON body from request
+    const parseJsonBody = (req: IncomingMessage): Promise<unknown> => {
+      return new Promise((resolve, reject) => {
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          try {
+            resolve(body ? JSON.parse(body) : null);
+          } catch (error) {
+            reject(new Error('Invalid JSON in request body'));
+          }
+        });
+        req.on('error', reject);
+      });
+    };
+
+    // Create HTTP server
+    const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+      // Only handle requests to our configured path
+      if (!req.url?.startsWith(path)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not found' }));
+        return;
+      }
+
+      const sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+      try {
+        if (req.method === 'POST') {
+          // Handle POST requests for MCP messages
+          const parsedBody = await parseJsonBody(req);
+
+          let transport: StreamableHTTPServerTransport;
+
+          if (sessionId && transports.has(sessionId)) {
+            // Reuse existing transport for this session
+            transport = transports.get(sessionId)!;
+          } else if (!sessionId && isInitializeRequest(parsedBody)) {
+            // New initialization request - create new transport
+            transport = new StreamableHTTPServerTransport({
+              sessionIdGenerator: () => randomUUID(),
+              onsessioninitialized: (newSessionId: string) => {
+                logger.info(`HTTP session initialized: ${newSessionId}`);
+                transports.set(newSessionId, transport);
+              },
+            });
+
+            // Set up cleanup handler
+            transport.onclose = () => {
+              const sid = transport.sessionId;
+              if (sid && transports.has(sid)) {
+                logger.info(`HTTP session closed: ${sid}`);
+                transports.delete(sid);
+              }
+            };
+
+            // Connect transport to server
+            await this.server.connect(transport);
+          } else {
+            // Invalid request - no session ID or not initialization request
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                error: {
+                  code: -32000,
+                  message: 'Bad Request: No valid session ID provided',
+                },
+                id: null,
+              })
+            );
+            return;
+          }
+
+          // Handle the request
+          await transport.handleRequest(req, res, parsedBody);
+        } else if (req.method === 'GET') {
+          // Handle GET requests for SSE streams
+          if (!sessionId || !transports.has(sessionId)) {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end('Invalid or missing session ID');
+            return;
+          }
+
+          const transport = transports.get(sessionId)!;
+          await transport.handleRequest(req, res);
+        } else if (req.method === 'DELETE') {
+          // Handle DELETE requests for session termination
+          if (!sessionId || !transports.has(sessionId)) {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end('Invalid or missing session ID');
+            return;
+          }
+
+          const transport = transports.get(sessionId)!;
+          await transport.handleRequest(req, res);
+        } else {
+          // Unsupported method
+          res.writeHead(405, { 'Content-Type': 'text/plain' });
+          res.end('Method Not Allowed');
+        }
+      } catch (error) {
+        logger.error('Error handling HTTP request:', error instanceof Error ? error : new Error(String(error)));
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: {
+                code: -32603,
+                message: 'Internal server error',
+              },
+              id: null,
+            })
+          );
+        }
+      }
+    });
+
+    // Start listening
+    await new Promise<void>((resolve) => {
+      httpServer.listen(port, () => {
+        logger.info(`Firewalla MCP Server running with 28 tools on HTTP transport`);
+        logger.info(`HTTP server listening on http://localhost:${port}${path}`);
+        resolve();
+      });
+    });
+
+    // Handle graceful shutdown
+    const shutdown = async () => {
+      logger.info('Shutting down HTTP server...');
+
+      // Close all active transports
+      for (const [sessionId, transport] of transports.entries()) {
+        try {
+          await transport.close();
+          transports.delete(sessionId);
+        } catch (error) {
+          logger.error(`Error closing transport for session ${sessionId}:`, error instanceof Error ? error : new Error(String(error)));
+        }
+      }
+
+      // Close HTTP server
+      httpServer.close(() => {
+        logger.info('HTTP server shut down complete');
+        process.exit(0);
+      });
+    };
+
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
   }
 }
 

@@ -16,6 +16,9 @@
  * - CACHE_TTL: Cache time-to-live in seconds (default: 300)
  * - DEFAULT_PAGE_SIZE: Default pagination page size (default: 100)
  * - MAX_PAGE_SIZE: Maximum allowed pagination page size (default: 10000)
+ * - MCP_TRANSPORT: Transport type (stdio or http, default: stdio)
+ * - MCP_HTTP_PORT: HTTP server port (default: 3000)
+ * - MCP_HTTP_PATH: HTTP server path (default: /mcp)
  *
  * @version 1.0.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
@@ -63,6 +66,12 @@ export function getConfig(): FirewallaConfig {
 
   const mspId = getRequiredEnvVar('FIREWALLA_MSP_ID');
 
+  // Transport configuration
+  const transportType = getOptionalEnvVar('MCP_TRANSPORT', 'stdio').toLowerCase();
+  if (transportType !== 'stdio' && transportType !== 'http') {
+    throw new Error(`Invalid MCP_TRANSPORT value: ${transportType}. Must be 'stdio' or 'http'.`);
+  }
+
   return {
     mspToken: getRequiredEnvVar('FIREWALLA_MSP_TOKEN'),
     mspId,
@@ -73,6 +82,11 @@ export function getConfig(): FirewallaConfig {
     cacheTtl: getOptionalEnvInt('CACHE_TTL', 300, 0, 3600), // 0s to 1 hour
     defaultPageSize: getOptionalEnvInt('DEFAULT_PAGE_SIZE', 100, 1, 10000), // 1 to 10000 items per page
     maxPageSize: getOptionalEnvInt('MAX_PAGE_SIZE', 10000, 100, 100000), // 100 to 100000 items per page
+    transport: {
+      type: transportType as 'stdio' | 'http',
+      port: getOptionalEnvInt('MCP_HTTP_PORT', 3000, 1, 65535), // 1 to 65535
+      path: getOptionalEnvVar('MCP_HTTP_PATH', '/mcp'),
+    },
   };
 }
 

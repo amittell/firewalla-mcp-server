@@ -44,12 +44,26 @@ npm run build
 ### Development
 ```bash
 npm run dev              # Build and start development server
-npm run build            # Build TypeScript to JavaScript  
+npm run build            # Build TypeScript to JavaScript
 npm run build:clean      # Clean build directory and rebuild
 npm run start            # Start built server
 npm run mcp:start        # Build and start MCP server
 npm run mcp:test         # Test MCP server connection
 npm run mcp:debug        # Debug MCP server with logging
+```
+
+### Transport Configuration
+The server supports two transport modes:
+
+**Stdio Transport (Default)**: Standard input/output for Claude Desktop and MCP clients
+```bash
+MCP_TRANSPORT=stdio npm run mcp:start
+```
+
+**HTTP Transport**: HTTP server for Docker containers and external access
+```bash
+MCP_TRANSPORT=http MCP_HTTP_PORT=3000 npm run mcp:start
+# Server will be accessible at http://localhost:3000/mcp
 ```
 
 ### Testing
