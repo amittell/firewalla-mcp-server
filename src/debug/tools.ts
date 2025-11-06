@@ -218,11 +218,7 @@ export class DebugTools {
     // Check environment variables
     const requiredVars = ['FIREWALLA_MSP_TOKEN'];
     for (const varName of requiredVars) {
-      if (
-        process.env[varName] === undefined ||
-        process.env[varName] === null ||
-        process.env[varName] === ''
-      ) {
+      if (!process.env[varName]) {
         issues.push({
           level: 'error',
           message: `Missing required environment variable: ${varName}`,
@@ -303,9 +299,9 @@ Cache Information:
 - Sample Keys: ${cacheStats.keys.slice(0, 5).join(', ')}
 
 Configuration:
-- MSP Token: ${process.env.FIREWALLA_MSP_TOKEN !== undefined && process.env.FIREWALLA_MSP_TOKEN !== null && process.env.FIREWALLA_MSP_TOKEN !== '' ? 'Set' : 'Missing'}
-- Box ID: ${process.env.FIREWALLA_BOX_ID !== undefined && process.env.FIREWALLA_BOX_ID !== null && process.env.FIREWALLA_BOX_ID !== '' ? 'Set' : 'Not Set (Optional)'}
-- Default Box ID: ${process.env.FIREWALLA_DEFAULT_BOX_ID !== undefined && process.env.FIREWALLA_DEFAULT_BOX_ID !== null && process.env.FIREWALLA_DEFAULT_BOX_ID !== '' ? 'Set' : 'Not Set'}
+- MSP Token: ${process.env.FIREWALLA_MSP_TOKEN ? 'Set' : 'Missing'}
+- Box ID: ${process.env.FIREWALLA_BOX_ID ? 'Set' : 'Not Set (Optional)'}
+- Default Box ID: ${process.env.FIREWALLA_DEFAULT_BOX_ID ? 'Set' : 'Not Set'}
 - Base URL: ${process.env.FIREWALLA_MSP_BASE_URL ?? 'Default'}
 - Log Level: ${process.env.LOG_LEVEL ?? 'Default'}
 
