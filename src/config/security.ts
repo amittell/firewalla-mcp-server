@@ -278,6 +278,14 @@ export class SecurityManager {
     if (boxId) {
       if (boxId.length < 10) {
         errors.push('FIREWALLA_BOX_ID appears to be too short');
+      } else if (
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(
+          boxId
+        )
+      ) {
+        warnings.push(
+          'FIREWALLA_BOX_ID does not appear to be a valid UUID format'
+        );
       }
     } else {
       warnings.push(

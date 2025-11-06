@@ -109,7 +109,7 @@ FIREWALLA_MSP_ID=yourdomain.firewalla.net
 - If no box ID is configured, API calls return data for all boxes you have access to
 - You can optionally set `FIREWALLA_BOX_ID` to filter all queries to a specific box by default
 - Use `FIREWALLA_DEFAULT_BOX_ID` for convenience tools that need a default box
-- Box GID format: UUID like `1eb71e38-3a95-4371-8903-ace24c83ab49`
+- Box GID format: UUID-like `1eb71e38-3a95-4371-8903-ace24c83ab49`
 
 ## Feature Flag System
 
