@@ -13,8 +13,9 @@
  * - Limits set to API maximum (500)
  * - Required parameters for proper API calls
  * - CRUD operations for all resources
+ * - Dual transport support (stdio and HTTP)
  *
- * @version 1.0.0
+ * @version 1.2.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
  * @since 2025-06-21
  */
@@ -43,7 +44,7 @@ export class FirewallaMCPServer {
     this.server = new Server(
       {
         name: 'firewalla-mcp-server',
-        version: '1.0.0',
+        version: '1.2.0',
       },
       {
         capabilities: {
