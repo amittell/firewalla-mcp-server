@@ -53,7 +53,10 @@ export function getProductionConfig(): ProductionConfig {
     transport: {
       type: transportType,
       port: getOptionalEnvInt('MCP_HTTP_PORT', 3000, 1, 65535), // 1 to 65535
-      path: getOptionalEnvVar('MCP_HTTP_PATH', '/mcp'),
+      path: (() => {
+        const rawPath = getOptionalEnvVar('MCP_HTTP_PATH', '/mcp');
+        return rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+      })(),
     },
   };
 

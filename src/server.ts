@@ -37,6 +37,8 @@ import { logger } from './monitoring/logger.js';
  * Main MCP Server class for Firewalla integration with 28-tool architecture
  */
 export class FirewallaMCPServer {
+  private static signalHandlersRegistered = false;
+
   private server: Server;
   private firewalla: FirewallaClient;
 
@@ -824,9 +826,9 @@ export class FirewallaMCPServer {
       await this.startStdioTransport();
     } else if (transportType === 'http') {
       await this.startHttpTransport();
-    } else {
-      throw new Error(`Unsupported transport type: ${transportType}`);
     }
+    // Note: TypeScript type system ensures transportType is 'stdio' | 'http'
+    // No else block needed - config validation ensures only valid values reach here
   }
 
   /**
@@ -847,11 +849,19 @@ export class FirewallaMCPServer {
     // Map to store transports by session ID
     const transports = new Map<string, StreamableHTTPServerTransport>();
 
-    // Helper function to parse JSON body from request
+    // Helper function to parse JSON body from request with size limit
     const parseJsonBody = async (req: IncomingMessage): Promise<unknown> => {
+      const MAX_BODY_SIZE = 1024 * 1024; // 1MB limit to prevent memory exhaustion
       return new Promise((resolve, reject) => {
         let body = '';
+        let size = 0;
         req.on('data', (chunk) => {
+          size += chunk.length;
+          if (size > MAX_BODY_SIZE) {
+            req.destroy();
+            reject(new Error('Request body too large (max 1MB)'));
+            return;
+          }
           body += chunk.toString();
         });
         req.on('end', () => {
@@ -889,13 +899,19 @@ export class FirewallaMCPServer {
               transport = transports.get(sessionId)!;
             } else if (!sessionId && isInitializeRequest(parsedBody)) {
               // New initialization request - create new transport
+              // Generate session ID immediately to prevent race condition
+              const newSessionId = randomUUID();
               transport = new StreamableHTTPServerTransport({
-                sessionIdGenerator: () => randomUUID(),
-                onsessioninitialized: (newSessionId: string) => {
-                  logger.info(`HTTP session initialized: ${newSessionId}`);
-                  transports.set(newSessionId, transport);
+                sessionIdGenerator: () => newSessionId,
+                onsessioninitialized: (initializedSessionId: string) => {
+                  logger.info(`HTTP session initialized: ${initializedSessionId}`);
+                  // Transport already in map, no need to add again
                 },
               });
+
+              // Store transport immediately to prevent race condition
+              // This ensures the transport is available before handleRequest is called
+              transports.set(newSessionId, transport);
 
               // Set up cleanup handler
               transport.onclose = () => {
@@ -970,8 +986,16 @@ export class FirewallaMCPServer {
       })();
     });
 
-    // Start listening
-    await new Promise<void>((resolve) => {
+    // Start listening with error handling
+    await new Promise<void>((resolve, reject) => {
+      httpServer.on('error', (err) => {
+        logger.error(
+          'HTTP server error (port conflict or permission issue):',
+          err instanceof Error ? err : new Error(String(err))
+        );
+        reject(err);
+      });
+
       httpServer.listen(port, () => {
         logger.info(`Firewalla MCP Server running with 28 tools on HTTP transport`);
         logger.info(`HTTP server listening on http://localhost:${port}${path}`);
@@ -980,7 +1004,15 @@ export class FirewallaMCPServer {
     });
 
     // Handle graceful shutdown
+    let isShuttingDown = false;
     const shutdown = () => {
+      // Prevent duplicate shutdown sequences
+      if (isShuttingDown) {
+        logger.warn('Shutdown already in progress, ignoring signal');
+        return;
+      }
+      isShuttingDown = true;
+
       void (async () => {
         logger.info('Shutting down HTTP server...');
 
@@ -994,16 +1026,31 @@ export class FirewallaMCPServer {
           }
         }
 
-        // Close HTTP server
-        httpServer.close(() => {
-          logger.info('HTTP server shut down complete');
-          process.exit(0);
+        // Close HTTP server with error handling and timeout
+        const shutdownTimeout = setTimeout(() => {
+          logger.error('HTTP server shutdown timed out, forcing exit');
+          process.exit(1);
+        }, 10000); // 10 second timeout
+
+        httpServer.close((err) => {
+          clearTimeout(shutdownTimeout);
+          if (err) {
+            logger.error('Error during HTTP server shutdown:', err instanceof Error ? err : new Error(String(err)));
+            process.exit(1);
+          } else {
+            logger.info('HTTP server shut down complete');
+            process.exit(0);
+          }
         });
       })();
     };
 
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
+    // Track signal handler registration to prevent duplicates
+    if (!FirewallaMCPServer.signalHandlersRegistered) {
+      process.on('SIGINT', shutdown);
+      process.on('SIGTERM', shutdown);
+      FirewallaMCPServer.signalHandlersRegistered = true;
+    }
   }
 }
 
