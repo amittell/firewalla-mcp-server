@@ -22,8 +22,8 @@ export interface FirewallaConfig {
   mspId: string;
   /** Full MSP base URL (alternative to mspId for direct URL specification) */
   mspBaseUrl?: string;
-  /** Unique identifier for the Firewalla box/device */
-  boxId: string;
+  /** Unique identifier for the Firewalla box/device (optional - can be provided per-call or as default) */
+  boxId?: string;
   /** API request timeout in milliseconds (default: 30000) */
   apiTimeout: number;
   /** Maximum number of API requests per minute (default: 100) */

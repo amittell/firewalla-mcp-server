@@ -101,9 +101,15 @@ npm run setup:hooks      # Install git hooks
 1. Create `.env` file in project root
 2. Add the following environment variables:
 ```env
+# Required
 FIREWALLA_MSP_TOKEN=your_msp_access_token_here
 FIREWALLA_MSP_ID=yourdomain.firewalla.net
-FIREWALLA_BOX_ID=your_box_gid_here
+
+# Optional - can be retrieved via get_boxes tool
+# FIREWALLA_BOX_ID=your_box_gid_here
+
+# Optional - default box ID for convenience
+# FIREWALLA_DEFAULT_BOX_ID=your_default_box_gid_here
 ```
 
 ### Getting MSP Credentials
@@ -111,7 +117,13 @@ FIREWALLA_BOX_ID=your_box_gid_here
 2. Navigate to Account Settings > API Settings
 3. Generate a personal access token
 4. Note your MSP domain (e.g., `yourdomain.firewalla.net`)
-5. Find your Box GID (Global ID) in the box details - this is the long identifier that looks like `1eb71e38-3a95-4371-8903-ace24c83ab49`
+
+### About Box IDs
+- **Box ID is now optional** - you can retrieve available boxes using the `get_boxes` tool
+- If no box ID is configured, API calls return data for all boxes you have access to
+- You can optionally set `FIREWALLA_BOX_ID` to filter all queries to a specific box by default
+- Use `FIREWALLA_DEFAULT_BOX_ID` for convenience tools that need a default box
+- Box GID format: UUID-like `1eb71e38-3a95-4371-8903-ace24c83ab49`
 
 ## Feature Flag System
 

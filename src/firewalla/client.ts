@@ -254,7 +254,10 @@ export class FirewallaClient {
       .update(paramStr)
       .digest('hex')
       .substring(0, 32);
-    return `fw:${this.config.boxId}:${method}:${endpoint.replace(/[^a-zA-Z0-9]/g, '_')}:${paramHash}`;
+
+    // Use 'all-boxes' when no box ID is configured to avoid cache key collisions
+    const boxKey = this.config.boxId || 'all-boxes';
+    return `fw:${boxKey}:${method}:${endpoint.replace(/[^a-zA-Z0-9]/g, '_')}:${paramHash}`;
   }
 
   /**
