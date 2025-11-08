@@ -41,6 +41,22 @@ import { setupPrompts } from './prompts/index.js';
 import { logger } from './monitoring/logger.js';
 
 /**
+ * UUID v4 validation regex pattern
+ */
+const UUID_V4_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Validates that a string is a properly formatted UUID v4
+ *
+ * @param value - The string to validate
+ * @returns True if the value is a valid UUID v4, false otherwise
+ */
+function isValidUUID(value: string): boolean {
+  return UUID_V4_REGEX.test(value);
+}
+
+/**
  * Main MCP Server class for Firewalla integration with 28-tool architecture
  */
 export class FirewallaMCPServer {
@@ -896,6 +912,22 @@ export class FirewallaMCPServer {
           }
 
           const sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+          // Validate session ID format if present
+          if (sessionId && !isValidUUID(sessionId)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                error: {
+                  code: -32000,
+                  message: 'Invalid session ID format (must be UUID v4)',
+                },
+                id: null,
+              })
+            );
+            return;
+          }
 
           try {
             if (req.method === 'POST') {

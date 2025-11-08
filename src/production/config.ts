@@ -4,6 +4,7 @@ import {
   getRequiredEnvVar,
   getOptionalEnvVar,
   getOptionalEnvInt,
+  parseTransportConfig,
 } from '../utils/env.js';
 
 // Configure dotenv to load environment variables
@@ -29,20 +30,6 @@ export function getProductionConfig(): ProductionConfig {
     ? 'test.firewalla.net'
     : getRequiredEnvVar('FIREWALLA_MSP_ID');
 
-  // Transport configuration
-  const transportTypeRaw = getOptionalEnvVar(
-    'MCP_TRANSPORT',
-    'stdio'
-  ).toLowerCase();
-  let transportType: 'stdio' | 'http';
-  if (transportTypeRaw === 'stdio' || transportTypeRaw === 'http') {
-    transportType = transportTypeRaw;
-  } else {
-    throw new Error(
-      `Invalid MCP_TRANSPORT value: ${transportTypeRaw}. Must be 'stdio' or 'http'.`
-    );
-  }
-
   const baseConfig = {
     mspToken: testMode
       ? 'test-token'
@@ -55,14 +42,7 @@ export function getProductionConfig(): ProductionConfig {
     cacheTtl: getOptionalEnvInt('CACHE_TTL', 300, 0, 3600), // 0s to 1 hour
     defaultPageSize: getOptionalEnvInt('DEFAULT_PAGE_SIZE', 100, 1, 10000), // 1 to 10000 items per page
     maxPageSize: getOptionalEnvInt('MAX_PAGE_SIZE', 10000, 100, 100000), // 100 to 100000 items per page
-    transport: {
-      type: transportType,
-      port: getOptionalEnvInt('MCP_HTTP_PORT', 3000, 1, 65535), // 1 to 65535
-      path: (() => {
-        const rawPath = getOptionalEnvVar('MCP_HTTP_PATH', '/mcp');
-        return rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
-      })(),
-    },
+    transport: parseTransportConfig(),
   };
 
   return {

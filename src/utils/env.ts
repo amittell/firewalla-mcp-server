@@ -112,3 +112,46 @@ export function getOptionalEnvBoolean(
   });
   return defaultValue;
 }
+
+/**
+ * Parses transport configuration from environment variables
+ *
+ * Extracts shared logic for parsing MCP_TRANSPORT, MCP_HTTP_PORT, and MCP_HTTP_PATH
+ * to prevent duplication between config files.
+ *
+ * @returns Parsed transport configuration object
+ * @throws {Error} If transport type is invalid
+ */
+export function parseTransportConfig(): {
+  type: 'stdio' | 'http';
+  port: number;
+  path: string;
+} {
+  // Parse and validate transport type
+  const transportTypeRaw = getOptionalEnvVar(
+    'MCP_TRANSPORT',
+    'stdio'
+  ).toLowerCase();
+  let transportType: 'stdio' | 'http';
+
+  if (transportTypeRaw === 'stdio' || transportTypeRaw === 'http') {
+    transportType = transportTypeRaw;
+  } else {
+    throw new Error(
+      `Invalid MCP_TRANSPORT value: ${transportTypeRaw}. Must be 'stdio' or 'http'.`
+    );
+  }
+
+  // Parse port with validation
+  const port = getOptionalEnvInt('MCP_HTTP_PORT', 3000, 1, 65535);
+
+  // Parse and normalize path (ensure leading slash)
+  const rawPath = getOptionalEnvVar('MCP_HTTP_PATH', '/mcp');
+  const path = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+
+  return {
+    type: transportType,
+    port,
+    path,
+  };
+}
