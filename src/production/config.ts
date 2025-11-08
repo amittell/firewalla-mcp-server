@@ -30,12 +30,17 @@ export function getProductionConfig(): ProductionConfig {
     : getRequiredEnvVar('FIREWALLA_MSP_ID');
 
   // Transport configuration
-  const transportTypeRaw = getOptionalEnvVar('MCP_TRANSPORT', 'stdio').toLowerCase();
+  const transportTypeRaw = getOptionalEnvVar(
+    'MCP_TRANSPORT',
+    'stdio'
+  ).toLowerCase();
   let transportType: 'stdio' | 'http';
   if (transportTypeRaw === 'stdio' || transportTypeRaw === 'http') {
     transportType = transportTypeRaw;
   } else {
-    throw new Error(`Invalid MCP_TRANSPORT value: ${transportTypeRaw}. Must be 'stdio' or 'http'.`);
+    throw new Error(
+      `Invalid MCP_TRANSPORT value: ${transportTypeRaw}. Must be 'stdio' or 'http'.`
+    );
   }
 
   const baseConfig = {

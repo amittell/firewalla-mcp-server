@@ -23,9 +23,16 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { ListToolsRequestSchema, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import {
+  ListToolsRequestSchema,
+  isInitializeRequest,
+} from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'node:crypto';
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
 import { config } from './config/config.js';
 import { FirewallaClient } from './firewalla/client.js';
 import { setupTools } from './tools/index.js';
@@ -837,7 +844,9 @@ export class FirewallaMCPServer {
   private async startStdioTransport(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    logger.info('Firewalla MCP Server running with 28 tools on stdio transport');
+    logger.info(
+      'Firewalla MCP Server running with 28 tools on stdio transport'
+    );
   }
 
   /**
@@ -855,7 +864,7 @@ export class FirewallaMCPServer {
       return new Promise((resolve, reject) => {
         let body = '';
         let size = 0;
-        req.on('data', (chunk) => {
+        req.on('data', chunk => {
           size += chunk.length;
           if (size > MAX_BODY_SIZE) {
             req.destroy();
@@ -876,119 +885,126 @@ export class FirewallaMCPServer {
     };
 
     // Create HTTP server
-    const httpServer = createServer((req: IncomingMessage, res: ServerResponse) => {
-      void (async () => {
-        // Only handle requests to our configured path
-        if (!req.url?.startsWith(path)) {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Not found' }));
-          return;
-        }
+    const httpServer = createServer(
+      (req: IncomingMessage, res: ServerResponse) => {
+        void (async () => {
+          // Only handle requests to our configured path
+          if (!req.url?.startsWith(path)) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Not found' }));
+            return;
+          }
 
-        const sessionId = req.headers['mcp-session-id'] as string | undefined;
+          const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
-        try {
-          if (req.method === 'POST') {
-            // Handle POST requests for MCP messages
-            const parsedBody = await parseJsonBody(req);
+          try {
+            if (req.method === 'POST') {
+              // Handle POST requests for MCP messages
+              const parsedBody = await parseJsonBody(req);
 
-            let transport: StreamableHTTPServerTransport;
+              let transport: StreamableHTTPServerTransport;
 
-            if (sessionId && transports.has(sessionId)) {
-              // Reuse existing transport for this session
-              transport = transports.get(sessionId)!;
-            } else if (!sessionId && isInitializeRequest(parsedBody)) {
-              // New initialization request - create new transport
-              // Generate session ID immediately to prevent race condition
-              const newSessionId = randomUUID();
-              transport = new StreamableHTTPServerTransport({
-                sessionIdGenerator: () => newSessionId,
-                onsessioninitialized: (initializedSessionId: string) => {
-                  logger.info(`HTTP session initialized: ${initializedSessionId}`);
-                  // Transport already in map, no need to add again
-                },
-              });
+              if (sessionId && transports.has(sessionId)) {
+                // Reuse existing transport for this session
+                transport = transports.get(sessionId)!;
+              } else if (!sessionId && isInitializeRequest(parsedBody)) {
+                // New initialization request - create new transport
+                // Generate session ID immediately to prevent race condition
+                const newSessionId = randomUUID();
+                transport = new StreamableHTTPServerTransport({
+                  sessionIdGenerator: () => newSessionId,
+                  onsessioninitialized: (initializedSessionId: string) => {
+                    logger.info(
+                      `HTTP session initialized: ${initializedSessionId}`
+                    );
+                    // Transport already in map, no need to add again
+                  },
+                });
 
-              // Store transport immediately to prevent race condition
-              // This ensures the transport is available before handleRequest is called
-              transports.set(newSessionId, transport);
+                // Store transport immediately to prevent race condition
+                // This ensures the transport is available before handleRequest is called
+                transports.set(newSessionId, transport);
 
-              // Set up cleanup handler
-              transport.onclose = () => {
-                const sid = transport.sessionId;
-                if (sid && transports.has(sid)) {
-                  logger.info(`HTTP session closed: ${sid}`);
-                  transports.delete(sid);
-                }
-              };
+                // Set up cleanup handler
+                transport.onclose = () => {
+                  const sid = transport.sessionId;
+                  if (sid && transports.has(sid)) {
+                    logger.info(`HTTP session closed: ${sid}`);
+                    transports.delete(sid);
+                  }
+                };
 
-              // Connect transport to server
-              await this.server.connect(transport);
+                // Connect transport to server
+                await this.server.connect(transport);
+              } else {
+                // Invalid request - no session ID or not initialization request
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(
+                  JSON.stringify({
+                    jsonrpc: '2.0',
+                    error: {
+                      code: -32000,
+                      message: 'Bad Request: No valid session ID provided',
+                    },
+                    id: null,
+                  })
+                );
+                return;
+              }
+
+              // Handle the request
+              await transport.handleRequest(req, res, parsedBody);
+            } else if (req.method === 'GET') {
+              // Handle GET requests for SSE streams
+              if (!sessionId || !transports.has(sessionId)) {
+                res.writeHead(400, { 'Content-Type': 'text/plain' });
+                res.end('Invalid or missing session ID');
+                return;
+              }
+
+              const transport = transports.get(sessionId)!;
+              await transport.handleRequest(req, res);
+            } else if (req.method === 'DELETE') {
+              // Handle DELETE requests for session termination
+              if (!sessionId || !transports.has(sessionId)) {
+                res.writeHead(400, { 'Content-Type': 'text/plain' });
+                res.end('Invalid or missing session ID');
+                return;
+              }
+
+              const transport = transports.get(sessionId)!;
+              await transport.handleRequest(req, res);
             } else {
-              // Invalid request - no session ID or not initialization request
-              res.writeHead(400, { 'Content-Type': 'application/json' });
+              // Unsupported method
+              res.writeHead(405, { 'Content-Type': 'text/plain' });
+              res.end('Method Not Allowed');
+            }
+          } catch (error) {
+            logger.error(
+              'Error handling HTTP request:',
+              error instanceof Error ? error : new Error(String(error))
+            );
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
               res.end(
                 JSON.stringify({
                   jsonrpc: '2.0',
                   error: {
-                    code: -32000,
-                    message: 'Bad Request: No valid session ID provided',
+                    code: -32603,
+                    message: 'Internal server error',
                   },
                   id: null,
                 })
               );
-              return;
             }
-
-            // Handle the request
-            await transport.handleRequest(req, res, parsedBody);
-          } else if (req.method === 'GET') {
-            // Handle GET requests for SSE streams
-            if (!sessionId || !transports.has(sessionId)) {
-              res.writeHead(400, { 'Content-Type': 'text/plain' });
-              res.end('Invalid or missing session ID');
-              return;
-            }
-
-            const transport = transports.get(sessionId)!;
-            await transport.handleRequest(req, res);
-          } else if (req.method === 'DELETE') {
-            // Handle DELETE requests for session termination
-            if (!sessionId || !transports.has(sessionId)) {
-              res.writeHead(400, { 'Content-Type': 'text/plain' });
-              res.end('Invalid or missing session ID');
-              return;
-            }
-
-            const transport = transports.get(sessionId)!;
-            await transport.handleRequest(req, res);
-          } else {
-            // Unsupported method
-            res.writeHead(405, { 'Content-Type': 'text/plain' });
-            res.end('Method Not Allowed');
           }
-        } catch (error) {
-          logger.error('Error handling HTTP request:', error instanceof Error ? error : new Error(String(error)));
-          if (!res.headersSent) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(
-              JSON.stringify({
-                jsonrpc: '2.0',
-                error: {
-                  code: -32603,
-                  message: 'Internal server error',
-                },
-                id: null,
-              })
-            );
-          }
-        }
-      })();
-    });
+        })();
+      }
+    );
 
     // Start listening with error handling
     await new Promise<void>((resolve, reject) => {
-      httpServer.on('error', (err) => {
+      httpServer.on('error', err => {
         logger.error(
           'HTTP server error (port conflict or permission issue):',
           err instanceof Error ? err : new Error(String(err))
@@ -997,7 +1013,9 @@ export class FirewallaMCPServer {
       });
 
       httpServer.listen(port, () => {
-        logger.info(`Firewalla MCP Server running with 28 tools on HTTP transport`);
+        logger.info(
+          `Firewalla MCP Server running with 28 tools on HTTP transport`
+        );
         logger.info(`HTTP server listening on http://localhost:${port}${path}`);
         resolve();
       });
@@ -1022,7 +1040,10 @@ export class FirewallaMCPServer {
             await transport.close();
             transports.delete(sessionId);
           } catch (error) {
-            logger.error(`Error closing transport for session ${sessionId}:`, error instanceof Error ? error : new Error(String(error)));
+            logger.error(
+              `Error closing transport for session ${sessionId}:`,
+              error instanceof Error ? error : new Error(String(error))
+            );
           }
         }
 
@@ -1032,10 +1053,13 @@ export class FirewallaMCPServer {
           process.exit(1);
         }, 10000); // 10 second timeout
 
-        httpServer.close((err) => {
+        httpServer.close(err => {
           clearTimeout(shutdownTimeout);
           if (err) {
-            logger.error('Error during HTTP server shutdown:', err instanceof Error ? err : new Error(String(err)));
+            logger.error(
+              'Error during HTTP server shutdown:',
+              err instanceof Error ? err : new Error(String(err))
+            );
             process.exit(1);
           } else {
             logger.info('HTTP server shut down complete');
