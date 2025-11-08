@@ -134,6 +134,14 @@ describe('SecurityManager', () => {
 
     it('should validate required environment variables', () => {
       process.env.FIREWALLA_MSP_TOKEN = 'valid-token-123456789';
+
+      const result = security.validateEnvironmentVars();
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should validate with optional box ID', () => {
+      process.env.FIREWALLA_MSP_TOKEN = 'valid-token-123456789';
       process.env.FIREWALLA_BOX_ID = 'valid-box-id-123';
 
       const result = security.validateEnvironmentVars();
@@ -141,29 +149,36 @@ describe('SecurityManager', () => {
       expect(result.errors).toHaveLength(0);
     });
 
-    it('should detect missing environment variables', () => {
+    it('should detect missing required environment variables', () => {
       delete process.env.FIREWALLA_MSP_TOKEN;
       delete process.env.FIREWALLA_BOX_ID;
 
       const result = security.validateEnvironmentVars();
       expect(result.valid).toBe(false);
       expect(result.errors).toContain('Missing required environment variable: FIREWALLA_MSP_TOKEN');
-      expect(result.errors).toContain('Missing required environment variable: FIREWALLA_BOX_ID');
+      // BOX_ID is now optional, so it should only be a warning
+      expect(result.errors).not.toContain('Missing required environment variable: FIREWALLA_BOX_ID');
     });
 
-    it('should detect short environment variables', () => {
+    it('should detect short token', () => {
       process.env.FIREWALLA_MSP_TOKEN = 'short';
-      process.env.FIREWALLA_BOX_ID = 'short';
 
       const result = security.validateEnvironmentVars();
       expect(result.valid).toBe(false);
       expect(result.errors).toContain('Environment variable FIREWALLA_MSP_TOKEN appears to be too short');
-      expect(result.errors).toContain('Environment variable FIREWALLA_BOX_ID appears to be too short');
+    });
+
+    it('should detect short box ID when provided', () => {
+      process.env.FIREWALLA_MSP_TOKEN = 'valid-token-123456789';
+      process.env.FIREWALLA_BOX_ID = 'short';
+
+      const result = security.validateEnvironmentVars();
+      expect(result.valid).toBe(false);
+      expect(result.errors).toContain('FIREWALLA_BOX_ID appears to be too short');
     });
 
     it('should detect invalid token format', () => {
       process.env.FIREWALLA_MSP_TOKEN = 'invalid@token#format!';
-      process.env.FIREWALLA_BOX_ID = 'valid-box-id-123';
 
       const result = security.validateEnvironmentVars();
       expect(result.valid).toBe(false);

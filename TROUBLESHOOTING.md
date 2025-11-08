@@ -38,7 +38,7 @@ export PATH=~/.npm-global/bin:$PATH
 
 **Check your credentials:**
 1. Verify MSP token is valid (log into MSP portal)
-2. Check Box ID format (should be long UUID like `1eb71e38-3a95-4371-8903-ace24c83ab49`)
+2. Check Box ID format (should be UUID-like `1eb71e38-3a95-4371-8903-ace24c83ab49`)
 3. Confirm MSP domain is correct (`yourdomain.firewalla.net`)
 
 **Test credentials manually:**

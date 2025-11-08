@@ -257,7 +257,7 @@ export class SecurityManager {
   } {
     const errors: string[] = [];
     const warnings: string[] = [];
-    const required = ['FIREWALLA_MSP_TOKEN', 'FIREWALLA_BOX_ID'];
+    const required = ['FIREWALLA_MSP_TOKEN'];
 
     for (const envVar of required) {
       if (!process.env[envVar]) {
@@ -273,12 +273,32 @@ export class SecurityManager {
       errors.push('FIREWALLA_MSP_TOKEN contains invalid characters');
     }
 
-    // Check for FIREWALLA_DEFAULT_BOX_ID if convenience tools are used
-    if (!process.env.FIREWALLA_DEFAULT_BOX_ID) {
-      warnings.push(
-        'FIREWALLA_DEFAULT_BOX_ID not set - convenience tools will require explicit box_id parameters'
-      );
+    // Validate FIREWALLA_BOX_ID if provided
+    const boxId = process.env.FIREWALLA_BOX_ID;
+    if (boxId) {
+      if (boxId.length < 10) {
+        errors.push('FIREWALLA_BOX_ID appears to be too short');
+      } else if (
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(
+          boxId
+        )
+      ) {
+        warnings.push(
+          'FIREWALLA_BOX_ID does not appear to be a valid UUID format'
+        );
+      }
     } else {
+      warnings.push(
+        'FIREWALLA_BOX_ID not set - box ID must be provided per-call or via FIREWALLA_DEFAULT_BOX_ID'
+      );
+    }
+
+    // Check for FIREWALLA_DEFAULT_BOX_ID if convenience tools are used
+    if (!process.env.FIREWALLA_DEFAULT_BOX_ID && !boxId) {
+      warnings.push(
+        'Neither FIREWALLA_BOX_ID nor FIREWALLA_DEFAULT_BOX_ID set - box ID will be required for all operations'
+      );
+    } else if (process.env.FIREWALLA_DEFAULT_BOX_ID) {
       // Validate default box ID format
       const defaultBoxId = process.env.FIREWALLA_DEFAULT_BOX_ID;
       if (

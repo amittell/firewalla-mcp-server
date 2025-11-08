@@ -724,7 +724,7 @@ const errorResponseTimes = {
   "tool": "firewalla_client",
   "errorType": "authentication_error",
   "details": {
-    "requiredVars": ["FIREWALLA_MSP_TOKEN", "FIREWALLA_MSP_ID", "FIREWALLA_BOX_ID"]
+    "requiredVars": ["FIREWALLA_MSP_TOKEN", "FIREWALLA_MSP_ID"]
   }
 }
 ```

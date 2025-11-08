@@ -105,16 +105,19 @@ npm run build
 Create a `.env` file with your Firewalla credentials:
 
 ```env
+# Required
 FIREWALLA_MSP_TOKEN=your_msp_access_token_here
 FIREWALLA_MSP_ID=yourdomain.firewalla.net
-FIREWALLA_BOX_ID=your_box_gid_here
+
+# Optional - filters all queries to a specific box
+# FIREWALLA_BOX_ID=your_box_gid_here
 ```
 
 **Getting Your Credentials:**
 1. Log into your Firewalla MSP portal at `https://yourdomain.firewalla.net`
 2. Your MSP ID is the full domain (e.g., `company123.firewalla.net`)
 3. Generate an access token in API settings
-4. Find your Box GID (Group ID) in device settings - this is your unique device identifier
+4. (Optional) Find your Box GID in device settings to filter queries to a specific box, or retrieve available boxes using the `get_boxes` tool
 
 ### 3. Build and Start
 
