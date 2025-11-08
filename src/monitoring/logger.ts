@@ -52,7 +52,7 @@ export interface LogEntry {
 
 export class StructuredLogger {
   private service = 'firewalla-mcp-server';
-  private version = '1.0.0';
+  private version = '1.2.0';
   private logLevel: LogEntry['level'];
 
   constructor(logLevel?: LogEntry['level']) {

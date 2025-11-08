@@ -1,4 +1,17 @@
 /**
+ * Transport configuration for MCP server
+ * @interface TransportConfig
+ */
+export interface TransportConfig {
+  /** Transport type: 'stdio' or 'http' (default: 'stdio') */
+  type: 'stdio' | 'http';
+  /** HTTP server port (default: 3000, only used when type is 'http') */
+  port: number;
+  /** HTTP server path (default: '/mcp', only used when type is 'http') */
+  path: string;
+}
+
+/**
  * Configuration interface for Firewalla MSP API client
  * @interface FirewallaConfig
  */
@@ -21,6 +34,8 @@ export interface FirewallaConfig {
   defaultPageSize: number;
   /** Maximum allowed pagination page size (default: 10000) */
   maxPageSize: number;
+  /** Transport configuration for MCP server */
+  transport: TransportConfig;
 }
 
 /**

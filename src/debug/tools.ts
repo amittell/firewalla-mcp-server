@@ -233,7 +233,8 @@ export class DebugTools {
     ) {
       issues.push({
         level: 'warning',
-        message: 'Neither FIREWALLA_BOX_ID nor FIREWALLA_DEFAULT_BOX_ID set - box ID will be required for specific operations',
+        message:
+          'Neither FIREWALLA_BOX_ID nor FIREWALLA_DEFAULT_BOX_ID set - box ID will be required for specific operations',
       });
     }
 

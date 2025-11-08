@@ -16,6 +16,9 @@
  * - CACHE_TTL: Cache time-to-live in seconds (default: 300)
  * - DEFAULT_PAGE_SIZE: Default pagination page size (default: 100)
  * - MAX_PAGE_SIZE: Maximum allowed pagination page size (default: 10000)
+ * - MCP_TRANSPORT: Transport type (stdio or http, default: stdio)
+ * - MCP_HTTP_PORT: HTTP server port (default: 3000)
+ * - MCP_HTTP_PATH: HTTP server path (default: /mcp)
  *
  * @version 1.0.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
@@ -27,6 +30,7 @@ import type { FirewallaConfig } from '../types';
 import {
   getRequiredEnvVar,
   getOptionalEnvInt,
+  parseTransportConfig,
 } from '../utils/env.js';
 import { getTestConfig } from './test-mode-config.js';
 
@@ -56,6 +60,7 @@ export function getConfig(): FirewallaConfig {
     (process.env.MCP_TEST_MODE || 'false').toLowerCase() === 'true';
 
   if (testMode) {
+    // eslint-disable-next-line no-console
     console.log('Running in test mode - using dummy credentials');
     return getTestConfig();
   }
@@ -72,6 +77,7 @@ export function getConfig(): FirewallaConfig {
     cacheTtl: getOptionalEnvInt('CACHE_TTL', 300, 0, 3600), // 0s to 1 hour
     defaultPageSize: getOptionalEnvInt('DEFAULT_PAGE_SIZE', 100, 1, 10000), // 1 to 10000 items per page
     maxPageSize: getOptionalEnvInt('MAX_PAGE_SIZE', 10000, 100, 100000), // 100 to 100000 items per page
+    transport: parseTransportConfig(),
   };
 }
 

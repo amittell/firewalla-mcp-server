@@ -4,6 +4,7 @@ import {
   getRequiredEnvVar,
   getOptionalEnvVar,
   getOptionalEnvInt,
+  parseTransportConfig,
 } from '../utils/env.js';
 
 // Configure dotenv to load environment variables
@@ -35,12 +36,13 @@ export function getProductionConfig(): ProductionConfig {
       : getRequiredEnvVar('FIREWALLA_MSP_TOKEN'),
     mspId,
     mspBaseUrl: `https://${mspId}`,
-    boxId: testMode ? 'test-box-id' : (process.env.FIREWALLA_BOX_ID || undefined),
+    boxId: testMode ? 'test-box-id' : process.env.FIREWALLA_BOX_ID || undefined,
     apiTimeout: getOptionalEnvInt('API_TIMEOUT', 30000, 1000, 300000), // 1s to 5min
     rateLimit: getOptionalEnvInt('API_RATE_LIMIT', 100, 1, 1000), // 1 to 1000 requests per minute
     cacheTtl: getOptionalEnvInt('CACHE_TTL', 300, 0, 3600), // 0s to 1 hour
     defaultPageSize: getOptionalEnvInt('DEFAULT_PAGE_SIZE', 100, 1, 10000), // 1 to 10000 items per page
     maxPageSize: getOptionalEnvInt('MAX_PAGE_SIZE', 10000, 100, 100000), // 100 to 100000 items per page
+    transport: parseTransportConfig(),
   };
 
   return {

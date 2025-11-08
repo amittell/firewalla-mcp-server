@@ -13,15 +13,26 @@
  * - Limits set to API maximum (500)
  * - Required parameters for proper API calls
  * - CRUD operations for all resources
+ * - Dual transport support (stdio and HTTP)
  *
- * @version 1.0.0
+ * @version 1.2.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
  * @since 2025-06-21
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import {
+  ListToolsRequestSchema,
+  isInitializeRequest,
+} from '@modelcontextprotocol/sdk/types.js';
+import { randomUUID } from 'node:crypto';
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
 import { config } from './config/config.js';
 import { FirewallaClient } from './firewalla/client.js';
 import { setupTools } from './tools/index.js';
@@ -30,9 +41,27 @@ import { setupPrompts } from './prompts/index.js';
 import { logger } from './monitoring/logger.js';
 
 /**
+ * UUID v4 validation regex pattern
+ */
+const UUID_V4_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Validates that a string is a properly formatted UUID v4
+ *
+ * @param value - The string to validate
+ * @returns True if the value is a valid UUID v4, false otherwise
+ */
+function isValidUUID(value: string): boolean {
+  return UUID_V4_REGEX.test(value);
+}
+
+/**
  * Main MCP Server class for Firewalla integration with 28-tool architecture
  */
 export class FirewallaMCPServer {
+  private static signalHandlersRegistered = false;
+
   private server: Server;
   private firewalla: FirewallaClient;
 
@@ -40,7 +69,7 @@ export class FirewallaMCPServer {
     this.server = new Server(
       {
         name: 'firewalla-mcp-server',
-        version: '1.0.0',
+        version: '1.2.0',
       },
       {
         capabilities: {
@@ -811,12 +840,273 @@ export class FirewallaMCPServer {
   }
 
   /**
-   * Starts the MCP server using stdio transport
+   * Starts the MCP server using configured transport (stdio or HTTP)
    */
   async start(): Promise<void> {
+    const transportType = config.transport.type;
+
+    if (transportType === 'stdio') {
+      await this.startStdioTransport();
+    } else if (transportType === 'http') {
+      await this.startHttpTransport();
+    }
+    // Note: TypeScript type system ensures transportType is 'stdio' | 'http'
+    // No else block needed - config validation ensures only valid values reach here
+  }
+
+  /**
+   * Starts the MCP server using stdio transport
+   */
+  private async startStdioTransport(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    logger.info('Firewalla MCP Server running with 28 tools');
+    logger.info(
+      'Firewalla MCP Server running with 28 tools on stdio transport'
+    );
+  }
+
+  /**
+   * Starts the MCP server using HTTP transport with StreamableHTTP
+   */
+  private async startHttpTransport(): Promise<void> {
+    const { port, path } = config.transport;
+
+    // Map to store transports by session ID
+    const transports = new Map<string, StreamableHTTPServerTransport>();
+
+    // Helper function to parse JSON body from request with size limit
+    const parseJsonBody = async (req: IncomingMessage): Promise<unknown> => {
+      const MAX_BODY_SIZE = 1024 * 1024; // 1MB limit to prevent memory exhaustion
+      return new Promise((resolve, reject) => {
+        let body = '';
+        let size = 0;
+        req.on('data', chunk => {
+          size += chunk.length;
+          if (size > MAX_BODY_SIZE) {
+            req.destroy();
+            reject(new Error('Request body too large (max 1MB)'));
+            return;
+          }
+          body += chunk.toString();
+        });
+        req.on('end', () => {
+          try {
+            resolve(body ? JSON.parse(body) : null);
+          } catch (_error) {
+            reject(new Error('Invalid JSON in request body'));
+          }
+        });
+        req.on('error', reject);
+      });
+    };
+
+    // Create HTTP server
+    const httpServer = createServer(
+      (req: IncomingMessage, res: ServerResponse) => {
+        void (async () => {
+          // Only handle requests to our configured path
+          if (!req.url?.startsWith(path)) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Not found' }));
+            return;
+          }
+
+          const sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+          // Validate session ID format if present
+          if (sessionId && !isValidUUID(sessionId)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                error: {
+                  code: -32000,
+                  message: 'Invalid session ID format (must be UUID v4)',
+                },
+                id: null,
+              })
+            );
+            return;
+          }
+
+          try {
+            if (req.method === 'POST') {
+              // Handle POST requests for MCP messages
+              const parsedBody = await parseJsonBody(req);
+
+              let transport: StreamableHTTPServerTransport;
+
+              if (sessionId && transports.has(sessionId)) {
+                // Reuse existing transport for this session
+                transport = transports.get(sessionId)!;
+              } else if (!sessionId && isInitializeRequest(parsedBody)) {
+                // New initialization request - create new transport
+                // Generate session ID immediately to prevent race condition
+                const newSessionId = randomUUID();
+                transport = new StreamableHTTPServerTransport({
+                  sessionIdGenerator: () => newSessionId,
+                  onsessioninitialized: (initializedSessionId: string) => {
+                    logger.info(
+                      `HTTP session initialized: ${initializedSessionId}`
+                    );
+                    // Transport already in map, no need to add again
+                  },
+                });
+
+                // Store transport immediately to prevent race condition
+                // This ensures the transport is available before handleRequest is called
+                transports.set(newSessionId, transport);
+
+                // Set up cleanup handler
+                transport.onclose = () => {
+                  const sid = transport.sessionId;
+                  if (sid && transports.has(sid)) {
+                    logger.info(`HTTP session closed: ${sid}`);
+                    transports.delete(sid);
+                  }
+                };
+
+                // Connect transport to server
+                await this.server.connect(transport);
+              } else {
+                // Invalid request - no session ID or not initialization request
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(
+                  JSON.stringify({
+                    jsonrpc: '2.0',
+                    error: {
+                      code: -32000,
+                      message: 'Bad Request: No valid session ID provided',
+                    },
+                    id: null,
+                  })
+                );
+                return;
+              }
+
+              // Handle the request
+              await transport.handleRequest(req, res, parsedBody);
+            } else if (req.method === 'GET') {
+              // Handle GET requests for SSE streams
+              if (!sessionId || !transports.has(sessionId)) {
+                res.writeHead(400, { 'Content-Type': 'text/plain' });
+                res.end('Invalid or missing session ID');
+                return;
+              }
+
+              const transport = transports.get(sessionId)!;
+              await transport.handleRequest(req, res);
+            } else if (req.method === 'DELETE') {
+              // Handle DELETE requests for session termination
+              if (!sessionId || !transports.has(sessionId)) {
+                res.writeHead(400, { 'Content-Type': 'text/plain' });
+                res.end('Invalid or missing session ID');
+                return;
+              }
+
+              const transport = transports.get(sessionId)!;
+              await transport.handleRequest(req, res);
+            } else {
+              // Unsupported method
+              res.writeHead(405, { 'Content-Type': 'text/plain' });
+              res.end('Method Not Allowed');
+            }
+          } catch (error) {
+            logger.error(
+              'Error handling HTTP request:',
+              error instanceof Error ? error : new Error(String(error))
+            );
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(
+                JSON.stringify({
+                  jsonrpc: '2.0',
+                  error: {
+                    code: -32603,
+                    message: 'Internal server error',
+                  },
+                  id: null,
+                })
+              );
+            }
+          }
+        })();
+      }
+    );
+
+    // Start listening with error handling
+    await new Promise<void>((resolve, reject) => {
+      httpServer.on('error', err => {
+        logger.error(
+          'HTTP server error (port conflict or permission issue):',
+          err instanceof Error ? err : new Error(String(err))
+        );
+        reject(err);
+      });
+
+      httpServer.listen(port, () => {
+        logger.info(
+          `Firewalla MCP Server running with 28 tools on HTTP transport`
+        );
+        logger.info(`HTTP server listening on http://localhost:${port}${path}`);
+        resolve();
+      });
+    });
+
+    // Handle graceful shutdown
+    let isShuttingDown = false;
+    const shutdown = () => {
+      // Prevent duplicate shutdown sequences
+      if (isShuttingDown) {
+        logger.warn('Shutdown already in progress, ignoring signal');
+        return;
+      }
+      isShuttingDown = true;
+
+      void (async () => {
+        logger.info('Shutting down HTTP server...');
+
+        // Close all active transports
+        for (const [sessionId, transport] of transports.entries()) {
+          try {
+            await transport.close();
+            transports.delete(sessionId);
+          } catch (error) {
+            logger.error(
+              `Error closing transport for session ${sessionId}:`,
+              error instanceof Error ? error : new Error(String(error))
+            );
+          }
+        }
+
+        // Close HTTP server with error handling and timeout
+        const shutdownTimeout = setTimeout(() => {
+          logger.error('HTTP server shutdown timed out, forcing exit');
+          process.exit(1);
+        }, 10000); // 10 second timeout
+
+        httpServer.close(err => {
+          clearTimeout(shutdownTimeout);
+          if (err) {
+            logger.error(
+              'Error during HTTP server shutdown:',
+              err instanceof Error ? err : new Error(String(err))
+            );
+            process.exit(1);
+          } else {
+            logger.info('HTTP server shut down complete');
+            process.exit(0);
+          }
+        });
+      })();
+    };
+
+    // Track signal handler registration to prevent duplicates
+    if (!FirewallaMCPServer.signalHandlersRegistered) {
+      process.on('SIGINT', shutdown);
+      process.on('SIGTERM', shutdown);
+      FirewallaMCPServer.signalHandlersRegistered = true;
+    }
   }
 }
 

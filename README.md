@@ -72,6 +72,7 @@ The examples below pass credentials directly in the command line, which exposes 
 - Set environment variables in your shell before running Docker
 - Use Docker secrets for orchestration environments
 
+**Stdio Transport (Default - for Claude Desktop integration):**
 ```bash
 # Using Docker Hub image
 docker run -it --rm \
@@ -90,6 +91,46 @@ docker run -it --rm \
 
 # Recommended: Using env file (more secure)
 docker run -it --rm --env-file .env amittell/firewalla-mcp-server
+```
+
+**HTTP Transport (for standalone Docker containers and external access):**
+```bash
+# Run with HTTP transport on port 3000
+docker run -d --name firewalla-mcp \
+  -p 3000:3000 \
+  -e MCP_TRANSPORT=http \
+  -e MCP_HTTP_PORT=3000 \
+  -e FIREWALLA_MSP_TOKEN=your_token \
+  -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
+  -e FIREWALLA_BOX_ID=your_box_gid \
+  amittell/firewalla-mcp-server
+
+# The server will be accessible at http://localhost:3000/mcp
+
+# Using env file (recommended)
+docker run -d --name firewalla-mcp \
+  -p 3000:3000 \
+  --env-file .env \
+  amittell/firewalla-mcp-server
+
+# For docker-compose
+cat > docker-compose.yml << EOF
+version: '3.8'
+services:
+  firewalla-mcp:
+    image: amittell/firewalla-mcp-server
+    ports:
+      - "3000:3000"
+    environment:
+      - MCP_TRANSPORT=http
+      - MCP_HTTP_PORT=3000
+      - FIREWALLA_MSP_TOKEN=\${FIREWALLA_MSP_TOKEN}
+      - FIREWALLA_MSP_ID=\${FIREWALLA_MSP_ID}
+      - FIREWALLA_BOX_ID=\${FIREWALLA_BOX_ID}
+    restart: unless-stopped
+EOF
+
+docker-compose up -d
 ```
 
 ### Option C: Install from source
@@ -118,6 +159,34 @@ FIREWALLA_MSP_ID=yourdomain.firewalla.net
 2. Your MSP ID is the full domain (e.g., `company123.firewalla.net`)
 3. Generate an access token in API settings
 4. (Optional) Find your Box GID in device settings to filter queries to a specific box, or retrieve available boxes using the `get_boxes` tool
+
+#### Transport Configuration
+
+The MCP server supports two transport modes:
+
+**Stdio Transport (Default)**: Standard input/output communication for Claude Desktop and similar MCP clients
+```env
+MCP_TRANSPORT=stdio
+```
+
+**HTTP Transport**: HTTP server mode for Docker containers, MCP orchestrators, and external access
+```env
+MCP_TRANSPORT=http
+MCP_HTTP_PORT=3000          # Default: 3000
+MCP_HTTP_PATH=/mcp          # Default: /mcp
+```
+
+**When to use HTTP transport:**
+- Running in Docker containers independently
+- Accessing from MCP orchestrators (e.g., open-webui)
+- Multiple clients need to connect to the same server instance
+- Network-based access to the MCP server
+
+**When to use stdio transport:**
+- Claude Desktop integration (default)
+- Claude Code CLI integration
+- Single-process MCP client setups
+- Standard MCP client configurations
 
 ### 3. Build and Start
 

@@ -22,5 +22,10 @@ export function getTestConfig(): FirewallaConfig {
     cacheTtl: 300,
     defaultPageSize: 100,
     maxPageSize: 10000,
+    transport: {
+      type: 'stdio',
+      port: 3000,
+      path: '/mcp',
+    },
   };
 }
