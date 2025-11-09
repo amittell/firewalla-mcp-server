@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2025-08-01
+
+### Security
+- **CRITICAL**: Fixed CVE-2025-7783 vulnerability in form-data dependency
+- Updated form-data from 4.0.3 to 4.0.4 to address predictable boundary generation
+- Rebuilt Docker images with patched dependencies
+
+### Changed
+- Updated package-lock.json with security patches
+- Docker image now includes the latest security fixes
+
+## [1.2.0] - 2025-07-30
+
+### Added
+- HTTP transport support for standalone operation in Docker containers
+- Dual transport support (stdio and HTTP) with automatic selection
+- Session management with UUID-based IDs for HTTP mode
+- MCP orchestrator compatibility (e.g., open-webui)
+- New environment variables: MCP_TRANSPORT, MCP_HTTP_PORT, MCP_HTTP_PATH
+- Optional FIREWALLA_BOX_ID for MSP connections (resolves #27)
+
+### Changed
+- Made FIREWALLA_BOX_ID optional for MSP connections
+- Enhanced configuration system to support transport selection
+- Improved HTTP transport robustness and error handling
+- Added transport configuration parsing utilities
+- Updated documentation for HTTP transport and optional box ID
+
+### Fixed
+- Resolved linting issues in HTTP transport implementation
+- Improved code quality and removed redundant checks
+- Applied Prettier formatting throughout codebase
+
 ## [1.1.0] - 2025-07-24
 
 ### Added

@@ -1,14 +1,15 @@
-# Version 1.2.0 Release Notes
+# Version 1.2.1 Release Notes
 
 ## Summary
-HTTP Transport Support - Run MCP server standalone in Docker containers and with MCP orchestrators.
+Security patch release - Includes all features from v1.2.0 plus critical CVE fix in form-data dependency.
 
 ## Version Bump Status
-✅ **Version bumped**: 1.1.0 → 1.2.0
-✅ **package.json**: Updated to 1.2.0
-✅ **src/server.ts**: Updated to 1.2.0
-✅ **src/monitoring/logger.ts**: Updated to 1.2.0
-✅ **Git tag created**: v1.2.0 (local only - push after merge)
+✅ **Version bumped**: 1.2.0 → 1.2.1
+✅ **package.json**: Updated to 1.2.1
+✅ **package-lock.json**: Updated to 1.2.1
+✅ **Dockerfile**: Updated to 1.2.1
+✅ **src/monitoring/logger.ts**: Updated to 1.2.1
+✅ **Git tag**: v1.2.1 (to be created)
 
 ## Publishing Checklist
 
@@ -20,8 +21,9 @@ After merging to main branch:
 git checkout main
 git pull origin main
 
-# 2. Push the tag
-git push origin v1.2.0
+# 2. Create and push the tag
+git tag -a v1.2.1 -m "Version 1.2.1 - Security patch for CVE-2025-7783"
+git push origin v1.2.1
 
 # 3. Publish to npm
 npm publish
@@ -35,15 +37,15 @@ After merging to main branch:
 
 ```bash
 # 1. Build Docker image with version tag
-docker build -t amittell/firewalla-mcp-server:1.2.0 .
+docker build -t amittell/firewalla-mcp-server:1.2.1 .
 docker build -t amittell/firewalla-mcp-server:latest .
 
 # 2. Push to DockerHub
-docker push amittell/firewalla-mcp-server:1.2.0
+docker push amittell/firewalla-mcp-server:1.2.1
 docker push amittell/firewalla-mcp-server:latest
 
 # 3. Verify the images
-docker pull amittell/firewalla-mcp-server:1.2.0
+docker pull amittell/firewalla-mcp-server:1.2.1
 ```
 
 ### Automated CI/CD (if configured)
@@ -52,14 +54,20 @@ If you have GitHub Actions or CI/CD configured:
 - Tag push will trigger automated Docker build and push
 - Verify workflows complete successfully
 
-## What's New in 1.2.0
+## What's New in 1.2.1
 
-### Features
+### Security Fixes
+- 🔒 **CRITICAL**: Fixed CVE-2025-7783 in form-data dependency
+- 🔒 Updated form-data from 4.0.3 to 4.0.4
+- 🔒 Addresses predictable boundary generation vulnerability
+
+### Features (from 1.2.0)
 - ✨ HTTP transport mode for standalone operation
 - ✨ Dual transport support (stdio and HTTP)
 - ✨ Session management with UUID-based IDs
 - ✨ Docker container support with HTTP mode
 - ✨ MCP orchestrator compatibility (e.g., open-webui)
+- ✨ Optional FIREWALLA_BOX_ID for MSP connections
 
 ### Configuration
 - New: `MCP_TRANSPORT` environment variable (stdio/http)
@@ -103,7 +111,9 @@ docker run -d -p 3000:3000 \
 ```
 
 ## Resolves
+- CVE-2025-7783: Predictable boundary generation in form-data
 - GitHub Issue #28: HTTP transport support for Docker containers
+- GitHub Issue #27: Make FIREWALLA_BOX_ID optional for MSP connections
 
 ## Contributors
 - Implementation: Claude AI (Anthropic)

@@ -69,7 +69,7 @@ CMD ["node", "dist/server.js"]
 # Labels for metadata
 LABEL org.opencontainers.image.title="Firewalla MCP Server"
 LABEL org.opencontainers.image.description="MCP server for Firewalla MSP API integration"
-LABEL org.opencontainers.image.version="1.1.1"
+LABEL org.opencontainers.image.version="1.2.1"
 LABEL org.opencontainers.image.authors="Alex Mittell <mittell@me.com>"
 LABEL org.opencontainers.image.source="https://github.com/amittell/firewalla-mcp-server"
 LABEL org.opencontainers.image.licenses="MIT"
