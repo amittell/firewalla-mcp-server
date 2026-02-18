@@ -66,7 +66,18 @@ export class FirewallaMCPServer {
   private firewalla: FirewallaClient;
 
   constructor() {
-    this.server = new Server(
+    this.firewalla = new FirewallaClient(config);
+    this.server = this.createServerInstance();
+  }
+
+  /**
+   * Creates a new MCP Server instance with all handlers registered.
+   * Used once for stdio transport, and per-session for HTTP transport
+   * (each HTTP session needs its own Server instance to avoid
+   * "Already connected to a transport" errors).
+   */
+  private createServerInstance(): Server {
+    const server = new Server(
       {
         name: 'firewalla-mcp-server',
         version: '1.2.0',
@@ -80,16 +91,16 @@ export class FirewallaMCPServer {
       }
     );
 
-    this.firewalla = new FirewallaClient(config);
-    this.setupHandlers();
+    this.registerHandlers(server);
+    return server;
   }
 
   /**
-   * Sets up MCP protocol request handlers for 29-tool architecture
+   * Registers all MCP protocol request handlers on a Server instance
    */
-  private setupHandlers(): void {
+  private registerHandlers(server: Server): void {
     // List available tools - 28-Tool Complete API Coverage
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
           // Direct API Endpoints (24 tools)
@@ -830,13 +841,13 @@ export class FirewallaMCPServer {
     });
 
     // Set up tool handlers using the registry
-    setupTools(this.server, this.firewalla);
+    setupTools(server, this.firewalla);
 
     // Set up resources
-    setupResources(this.server, this.firewalla);
+    setupResources(server, this.firewalla);
 
     // Set up prompts
-    setupPrompts(this.server, this.firewalla);
+    setupPrompts(server, this.firewalla);
   }
 
   /**
@@ -871,8 +882,9 @@ export class FirewallaMCPServer {
   private async startHttpTransport(): Promise<void> {
     const { port, path } = config.transport;
 
-    // Map to store transports by session ID
+    // Map to store transports and their associated server instances by session ID
     const transports = new Map<string, StreamableHTTPServerTransport>();
+    const servers = new Map<string, Server>();
 
     // Helper function to parse JSON body from request with size limit
     const parseJsonBody = async (req: IncomingMessage): Promise<unknown> => {
@@ -960,14 +972,25 @@ export class FirewallaMCPServer {
                 // Set up cleanup handler
                 transport.onclose = () => {
                   const sid = transport.sessionId;
-                  if (sid && transports.has(sid)) {
-                    logger.info(`HTTP session closed: ${sid}`);
-                    transports.delete(sid);
+                  if (sid) {
+                    if (transports.has(sid)) {
+                      logger.info(`HTTP session closed: ${sid}`);
+                      transports.delete(sid);
+                    }
+                    if (servers.has(sid)) {
+                      servers.delete(sid);
+                    }
                   }
                 };
 
-                // Connect transport to server
-                await this.server.connect(transport);
+                // Create a new Server instance for this session
+                // Each HTTP session needs its own Server to avoid
+                // "Already connected to a transport" errors
+                const sessionServer = this.createServerInstance();
+                servers.set(newSessionId, sessionServer);
+
+                // Connect transport to session-specific server
+                await sessionServer.connect(transport);
               } else {
                 // Invalid request - no session ID or not initialization request
                 res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1066,11 +1089,12 @@ export class FirewallaMCPServer {
       void (async () => {
         logger.info('Shutting down HTTP server...');
 
-        // Close all active transports
+        // Close all active transports and their server instances
         for (const [sessionId, transport] of transports.entries()) {
           try {
             await transport.close();
             transports.delete(sessionId);
+            servers.delete(sessionId);
           } catch (error) {
             logger.error(
               `Error closing transport for session ${sessionId}:`,
