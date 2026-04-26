@@ -39,6 +39,7 @@ import { setupTools } from './tools/index.js';
 import { setupResources } from './resources/index.js';
 import { setupPrompts } from './prompts/index.js';
 import { logger } from './monitoring/logger.js';
+import { initializeHttpSession } from './http-session.js';
 
 /**
  * UUID v4 validation regex pattern
@@ -965,32 +966,13 @@ export class FirewallaMCPServer {
                   },
                 });
 
-                // Store transport immediately to prevent race condition
-                // This ensures the transport is available before handleRequest is called
-                transports.set(newSessionId, transport);
-
-                // Set up cleanup handler
-                transport.onclose = () => {
-                  const sid = transport.sessionId;
-                  if (sid) {
-                    if (transports.has(sid)) {
-                      logger.info(`HTTP session closed: ${sid}`);
-                      transports.delete(sid);
-                    }
-                    if (servers.has(sid)) {
-                      servers.delete(sid);
-                    }
-                  }
-                };
-
-                // Create a new Server instance for this session
-                // Each HTTP session needs its own Server to avoid
-                // "Already connected to a transport" errors
-                const sessionServer = this.createServerInstance();
-                servers.set(newSessionId, sessionServer);
-
-                // Connect transport to session-specific server
-                await sessionServer.connect(transport);
+                await initializeHttpSession({
+                  sessionId: newSessionId,
+                  transport,
+                  transports,
+                  servers,
+                  createServerInstance: () => this.createServerInstance(),
+                });
               } else {
                 // Invalid request - no session ID or not initialization request
                 res.writeHead(400, { 'Content-Type': 'application/json' });
