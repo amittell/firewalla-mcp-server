@@ -1016,7 +1016,7 @@ export class FirewallaClient {
       const params: Record<string, unknown> = {
         query: `ts:${begin}-${end}`,
         sortBy: 'ts:desc',
-        limit: Math.min(validatedTop * 10, 1000), // Get more data for client-side grouping
+        limit: Math.min(validatedTop * 10, 500), // Firewalla /v2/flows max page size is 500
       };
 
       // Apply box filter through the query parameter
@@ -2735,7 +2735,7 @@ export class FirewallaClient {
     // Simplified: just use the query as provided, add box filter only if needed
     const params: Record<string, unknown> = {
       limit: searchQuery.limit || 200, // Use API default
-      sort_by: searchQuery.sort_by || 'ts:desc',
+      sortBy: searchQuery.sort_by || 'ts:desc',
     };
 
     // Add query if provided
@@ -2744,7 +2744,7 @@ export class FirewallaClient {
     }
 
     if (searchQuery.group_by) {
-      params.group_by = searchQuery.group_by;
+      params.groupBy = searchQuery.group_by;
     }
     if (searchQuery.cursor) {
       params.cursor = searchQuery.cursor;
@@ -4760,7 +4760,7 @@ export class FirewallaClient {
       return boxFilter;
     }
 
-    return `${query} ${boxFilter}`;
+    return `${query} AND ${boxFilter}`;
   }
 
   /**

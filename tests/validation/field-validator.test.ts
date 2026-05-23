@@ -10,6 +10,13 @@ describe('FieldValidator', () => {
       expect(result.error).toBeUndefined();
     });
 
+    it('should allow documented Firewalla flow fields used by /v2/flows', () => {
+      for (const field of ['ts', 'gid', 'box.id', 'domain', 'total', 'block']) {
+        const result = FieldValidator.validateField(field, 'flows');
+        expect(result.isValid).toBe(true);
+      }
+    });
+
     it('should handle invalid field names', () => {
       const result = FieldValidator.validateField('invalid_field', 'flows');
       expect(result.isValid).toBe(false);
