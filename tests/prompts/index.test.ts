@@ -19,10 +19,11 @@ describe('MCP Prompts Setup', () => {
     mockFirewalla = new MockedFirewallaClient({} as any) as jest.Mocked<FirewallaClient>;
   });
 
-  it('should register GetPromptRequestSchema handler', () => {
+  it('should register ListPrompts and GetPrompt handlers', () => {
     setupPrompts(mockServer, mockFirewalla);
-    
-    expect(mockSetRequestHandler).toHaveBeenCalledTimes(1);
+
+    // list + get (clients call prompts/list at startup; see v1.3.0)
+    expect(mockSetRequestHandler).toHaveBeenCalledTimes(2);
     expect(mockSetRequestHandler).toHaveBeenCalledWith(
       expect.any(Object),
       expect.any(Function)

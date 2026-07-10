@@ -529,8 +529,14 @@ export class FirewallaMCPServer {
                   description:
                     'Search query using Firewalla syntax. Supported fields: action:allow/block/timelimit, target.type:domain/ip/device, target.value:*.facebook.com, status:active/paused, direction:bidirection/inbound/outbound, protocol:tcp/udp, gid:box_id, scope.type:device/network, notes:"description text". Examples: "action:block AND target.value:*.social.com", "status:paused", "target.type:domain AND action:block"',
                 },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of rules to return',
+                },
               },
-              required: [],
+              // the handler validates query as required -- advertise it so
+              // schema-following clients do not get a validation error on {}
+              required: ['query'],
             },
           },
           {

@@ -19,11 +19,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated `geoip-lite` 1.4 -> 2.0.3 (drops the vulnerable `ip-address`
   transitive, GHSA-v2v4-37r5-5v8g). `npm audit`: 13 vulnerabilities -> 0.
 
+### Fixed
+- Registered `resources/list` and `prompts/list` handlers: the server declared
+  the `resources` and `prompts` capabilities but only implemented read/get, so
+  clients that enumerate at startup (e.g. Claude Desktop) got MCP -32601.
+- `search_rules` schema now matches its handler: `query` is advertised as
+  required (the handler always validated it) and `limit` is documented.
+
 ### Changed
 - Adapted `unified-response.ts` to SDK >=1.29's discriminated-union content
   types (narrow before `.text`).
 - Refreshed in-range dev/runtime dependencies (jest 30.4, typescript-eslint
   8.63, nock 14.0.16, prettier 3.9, ts-jest 29.4.11, ...).
+- Added `scripts/functional-test.mjs`: live end-to-end harness exercising all
+  28 tools, 5 resources, 5 prompts over stdio, plus concurrent Streamable HTTP
+  sessions (validates the per-session Server fix).
 
 ## [1.2.1] - 2025-08-01
 

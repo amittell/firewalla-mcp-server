@@ -21,7 +21,10 @@
  */
 
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { ReadResourceRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import type { FirewallaClient } from '../firewalla/client.js';
 import { safeUnixToISOString } from '../utils/timestamp.js';
 
@@ -54,6 +57,44 @@ export function setupResources(
   server: Server,
   firewalla: FirewallaClient
 ): void {
+  // Enumerate the available resources. The server declares the `resources`
+  // capability, so clients (e.g. Claude Desktop) call resources/list at
+  // startup -- without this handler they get MCP error -32601.
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: [
+      {
+        uri: 'firewalla://summary',
+        name: 'Firewall Summary',
+        description: 'Real-time firewall health and performance metrics',
+        mimeType: 'application/json',
+      },
+      {
+        uri: 'firewalla://devices',
+        name: 'Device Inventory',
+        description: 'Complete device inventory with status and metadata',
+        mimeType: 'application/json',
+      },
+      {
+        uri: 'firewalla://metrics/security',
+        name: 'Security Metrics',
+        description: 'Aggregated security statistics and trends',
+        mimeType: 'application/json',
+      },
+      {
+        uri: 'firewalla://topology',
+        name: 'Network Topology',
+        description: 'Network structure and device relationships',
+        mimeType: 'application/json',
+      },
+      {
+        uri: 'firewalla://threats/recent',
+        name: 'Recent Threats',
+        description: 'Latest security events and blocked attempts',
+        mimeType: 'application/json',
+      },
+    ],
+  }));
+
   server.setRequestHandler(ReadResourceRequestSchema, async request => {
     const { uri } = request.params;
 

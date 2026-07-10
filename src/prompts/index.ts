@@ -1,5 +1,8 @@
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { GetPromptRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import type { FirewallaClient } from '../firewalla/client.js';
 import type { Device, NetworkRule } from '../types.js';
 import { unixToISOString, safeUnixToISOString } from '../utils/timestamp.js';
@@ -68,6 +71,50 @@ function getPeriodInHours(period: string): number {
 }
 
 export function setupPrompts(server: Server, firewalla: FirewallaClient): void {
+  // Enumerate the available prompts. The server declares the `prompts`
+  // capability, so clients call prompts/list at startup -- without this
+  // handler they get MCP error -32601.
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: [
+      {
+        name: 'security_report',
+        description: 'Comprehensive security report for a time period',
+        arguments: [
+          { name: 'period', description: "Report period: '24h', '7d' or '30d' (default 24h)", required: false },
+          { name: 'include_resolved', description: 'Include resolved alarms (boolean)', required: false },
+        ],
+      },
+      {
+        name: 'threat_analysis',
+        description: 'Deep analysis of recent threats and blocked attempts',
+        arguments: [
+          { name: 'period', description: "Lookback period: '24h', '7d' or '30d' (default 24h)", required: false },
+        ],
+      },
+      {
+        name: 'bandwidth_analysis',
+        description: 'Top bandwidth consumers and usage patterns',
+        arguments: [
+          { name: 'period', description: "Analysis period: '24h', '7d' or '30d'", required: true },
+          { name: 'threshold_mb', description: 'Highlight devices above this usage in MB (default 100)', required: false },
+        ],
+      },
+      {
+        name: 'device_investigation',
+        description: 'Investigate a specific device: flows, alarms, behavior',
+        arguments: [
+          { name: 'device_id', description: 'Device ID (MAC) to investigate', required: true },
+          { name: 'lookback_hours', description: 'Hours of history to inspect (default 24)', required: false },
+        ],
+      },
+      {
+        name: 'network_health_check',
+        description: 'Overall network health: summary, devices, metrics, topology, rules',
+        arguments: [],
+      },
+    ],
+  }));
+
   server.setRequestHandler(GetPromptRequestSchema, async request => {
     const { name, arguments: args } = request.params;
 
