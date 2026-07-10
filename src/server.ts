@@ -15,7 +15,7 @@
  * - CRUD operations for all resources
  * - Dual transport support (stdio and HTTP)
  *
- * @version 1.2.0
+ * @version 1.3.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
  * @since 2025-06-21
  */
@@ -81,7 +81,7 @@ export class FirewallaMCPServer {
     const server = new Server(
       {
         name: 'firewalla-mcp-server',
-        version: '1.2.0',
+        version: '1.3.0',
       },
       {
         capabilities: {

@@ -112,6 +112,16 @@ export const toToolResponse = toCallToolResult;
 /**
  * Simple wrapper to convert any tool handler to use unified responses
  */
+/**
+ * First content block's text, when it is a text block. SDK >=1.29 types
+ * `content` as a discriminated union (text | image | audio | resource), so
+ * `.text` must be narrowed before access.
+ */
+function firstContentText(result: CallToolResult): string | undefined {
+  const first = result.content[0];
+  return first && first.type === 'text' ? first.text : undefined;
+}
+
 export function withUnifiedResponse<
   T extends (...args: any[]) => Promise<CallToolResult>,
 >(handler: T, toolName: string): T {
@@ -124,7 +134,7 @@ export function withUnifiedResponse<
 
       // If it's already an error, convert to unified error format
       if (result.isError === true) {
-        const errorText = result.content[0]?.text || 'Unknown error';
+        const errorText = firstContentText(result) || 'Unknown error';
         let errorData: any;
         try {
           if (typeof errorText === 'string') {
@@ -148,14 +158,14 @@ export function withUnifiedResponse<
       // Convert successful response to unified format
       let data: any;
       try {
-        const textContent = result.content[0]?.text || '{}';
+        const textContent = firstContentText(result) || '{}';
         if (typeof textContent === 'string') {
           data = JSON.parse(textContent);
         } else {
           data = textContent || {};
         }
       } catch {
-        data = result.content[0]?.text || {};
+        data = firstContentText(result) || {};
       }
 
       const executionTimeMs = Date.now() - startTime;

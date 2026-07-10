@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-10
+
+### Added
+- Per-session MCP `Server` instances for the HTTP transport (PR #31): each
+  Streamable HTTP session gets its own Server, fixing "Already connected to a
+  transport" under concurrent sessions. New `initializeHttpSession` helper with
+  error cleanup + tests.
+
+### Security
+- Updated `@modelcontextprotocol/sdk` 1.13.2 -> 1.29.0 (fixes ReDoS
+  GHSA-8r9q-7v3j-jr4g) and `axios` 1.10 -> 1.18.1.
+- Updated `geoip-lite` 1.4 -> 2.0.3 (drops the vulnerable `ip-address`
+  transitive, GHSA-v2v4-37r5-5v8g). `npm audit`: 13 vulnerabilities -> 0.
+
+### Changed
+- Adapted `unified-response.ts` to SDK >=1.29's discriminated-union content
+  types (narrow before `.text`).
+- Refreshed in-range dev/runtime dependencies (jest 30.4, typescript-eslint
+  8.63, nock 14.0.16, prettier 3.9, ts-jest 29.4.11, ...).
+
 ## [1.2.1] - 2025-08-01
 
 ### Security
