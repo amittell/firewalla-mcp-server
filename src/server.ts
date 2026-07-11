@@ -15,7 +15,7 @@
  * - CRUD operations for all resources
  * - Dual transport support (stdio and HTTP)
  *
- * @version 1.2.0
+ * @version 1.3.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
  * @since 2025-06-21
  */
@@ -39,6 +39,7 @@ import { setupTools } from './tools/index.js';
 import { setupResources } from './resources/index.js';
 import { setupPrompts } from './prompts/index.js';
 import { logger } from './monitoring/logger.js';
+import { initializeHttpSession } from './http-session.js';
 
 /**
  * UUID v4 validation regex pattern
@@ -66,10 +67,21 @@ export class FirewallaMCPServer {
   private firewalla: FirewallaClient;
 
   constructor() {
-    this.server = new Server(
+    this.firewalla = new FirewallaClient(config);
+    this.server = this.createServerInstance();
+  }
+
+  /**
+   * Creates a new MCP Server instance with all handlers registered.
+   * Used once for stdio transport, and per-session for HTTP transport
+   * (each HTTP session needs its own Server instance to avoid
+   * "Already connected to a transport" errors).
+   */
+  private createServerInstance(): Server {
+    const server = new Server(
       {
         name: 'firewalla-mcp-server',
-        version: '1.2.0',
+        version: '1.3.0',
       },
       {
         capabilities: {
@@ -80,16 +92,16 @@ export class FirewallaMCPServer {
       }
     );
 
-    this.firewalla = new FirewallaClient(config);
-    this.setupHandlers();
+    this.registerHandlers(server);
+    return server;
   }
 
   /**
-   * Sets up MCP protocol request handlers for 29-tool architecture
+   * Registers all MCP protocol request handlers on a Server instance
    */
-  private setupHandlers(): void {
+  private registerHandlers(server: Server): void {
     // List available tools - 28-Tool Complete API Coverage
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
           // Direct API Endpoints (24 tools)
@@ -465,7 +477,8 @@ export class FirewallaMCPServer {
                   description: 'Pagination cursor from previous response',
                 },
               },
-              required: [],
+              // the shared search validator requires query -- advertise it
+              required: ['query'],
             },
           },
           {
@@ -502,7 +515,8 @@ export class FirewallaMCPServer {
                   description: 'Pagination cursor from previous response',
                 },
               },
-              required: [],
+              // the shared search validator requires query -- advertise it
+              required: ['query'],
             },
           },
           {
@@ -517,8 +531,14 @@ export class FirewallaMCPServer {
                   description:
                     'Search query using Firewalla syntax. Supported fields: action:allow/block/timelimit, target.type:domain/ip/device, target.value:*.facebook.com, status:active/paused, direction:bidirection/inbound/outbound, protocol:tcp/udp, gid:box_id, scope.type:device/network, notes:"description text". Examples: "action:block AND target.value:*.social.com", "status:paused", "target.type:domain AND action:block"',
                 },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of rules to return',
+                },
               },
-              required: [],
+              // the handler validates query as required -- advertise it so
+              // schema-following clients do not get a validation error on {}
+              required: ['query'],
             },
           },
           {
@@ -770,7 +790,8 @@ export class FirewallaMCPServer {
                   description: 'Filter devices under a specific Firewalla box',
                 },
               },
-              required: [],
+              // the shared search validator requires query -- advertise it
+              required: ['query'],
             },
           },
           {
@@ -801,7 +822,8 @@ export class FirewallaMCPServer {
                   description: 'Maximum number of target lists to return',
                 },
               },
-              required: [],
+              // the shared search validator requires query -- advertise it
+              required: ['query'],
             },
           },
           {
@@ -830,13 +852,13 @@ export class FirewallaMCPServer {
     });
 
     // Set up tool handlers using the registry
-    setupTools(this.server, this.firewalla);
+    setupTools(server, this.firewalla);
 
     // Set up resources
-    setupResources(this.server, this.firewalla);
+    setupResources(server, this.firewalla);
 
     // Set up prompts
-    setupPrompts(this.server, this.firewalla);
+    setupPrompts(server, this.firewalla);
   }
 
   /**
@@ -871,8 +893,30 @@ export class FirewallaMCPServer {
   private async startHttpTransport(): Promise<void> {
     const { port, path } = config.transport;
 
-    // Map to store transports by session ID
+    // Map to store transports and their associated server instances by session ID
     const transports = new Map<string, StreamableHTTPServerTransport>();
+    const servers = new Map<string, Server>();
+
+    // Abandoned-session reaper: transport.onclose only fires on an explicit
+    // client DELETE or shutdown, so clients that crash / lose network would pin
+    // their Server + transport in the maps forever. Stamp activity per request
+    // and close sessions idle past MCP_SESSION_IDLE_TIMEOUT_MS (default 30 min).
+    const lastActivity = new Map<string, number>();
+    const idleTimeoutMs = Number(process.env.MCP_SESSION_IDLE_TIMEOUT_MS) || 30 * 60 * 1000;
+    const reapEveryMs = Math.min(60_000, idleTimeoutMs);  // sweep at least as often as the timeout
+    const reaper = setInterval(() => {
+      const now = Date.now();
+      for (const [sid, seen] of lastActivity.entries()) {
+        if (!transports.has(sid)) {
+          lastActivity.delete(sid);           // closed elsewhere; drop the stamp
+        } else if (now - seen > idleTimeoutMs) {
+          logger.info(`Reaping idle HTTP session: ${sid}`);
+          lastActivity.delete(sid);
+          void transports.get(sid)?.close();  // onclose cleans transports/servers
+        }
+      }
+    }, reapEveryMs);
+    reaper.unref();
 
     // Helper function to parse JSON body from request with size limit
     const parseJsonBody = async (req: IncomingMessage): Promise<unknown> => {
@@ -912,6 +956,9 @@ export class FirewallaMCPServer {
           }
 
           const sessionId = req.headers['mcp-session-id'] as string | undefined;
+          if (sessionId && transports.has(sessionId)) {
+            lastActivity.set(sessionId, Date.now());
+          }
 
           // Validate session ID format if present
           if (sessionId && !isValidUUID(sessionId)) {
@@ -953,21 +1000,14 @@ export class FirewallaMCPServer {
                   },
                 });
 
-                // Store transport immediately to prevent race condition
-                // This ensures the transport is available before handleRequest is called
-                transports.set(newSessionId, transport);
-
-                // Set up cleanup handler
-                transport.onclose = () => {
-                  const sid = transport.sessionId;
-                  if (sid && transports.has(sid)) {
-                    logger.info(`HTTP session closed: ${sid}`);
-                    transports.delete(sid);
-                  }
-                };
-
-                // Connect transport to server
-                await this.server.connect(transport);
+                lastActivity.set(newSessionId, Date.now());
+                await initializeHttpSession({
+                  sessionId: newSessionId,
+                  transport,
+                  transports,
+                  servers,
+                  createServerInstance: () => this.createServerInstance(),
+                });
               } else {
                 // Invalid request - no session ID or not initialization request
                 res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1065,12 +1105,14 @@ export class FirewallaMCPServer {
 
       void (async () => {
         logger.info('Shutting down HTTP server...');
+        clearInterval(reaper);
 
-        // Close all active transports
+        // Close all active transports and their server instances
         for (const [sessionId, transport] of transports.entries()) {
           try {
             await transport.close();
             transports.delete(sessionId);
+            servers.delete(sessionId);
           } catch (error) {
             logger.error(
               `Error closing transport for session ${sessionId}:`,

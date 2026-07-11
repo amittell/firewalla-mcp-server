@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-10
+
+### Added
+- Per-session MCP `Server` instances for the HTTP transport (PR #31): each
+  Streamable HTTP session gets its own Server, fixing "Already connected to a
+  transport" under concurrent sessions. New `initializeHttpSession` helper with
+  error cleanup + tests.
+
+### Security
+- Updated `@modelcontextprotocol/sdk` 1.13.2 -> 1.29.0 (fixes ReDoS
+  GHSA-8r9q-7v3j-jr4g) and `axios` 1.10 -> 1.18.1.
+- Updated `geoip-lite` 1.4 -> 2.0.3 (drops the vulnerable `ip-address`
+  transitive, GHSA-v2v4-37r5-5v8g). `npm audit`: 13 vulnerabilities -> 0.
+
+### Fixed
+- Registered `resources/list` and `prompts/list` handlers: the server declared
+  the `resources` and `prompts` capabilities but only implemented read/get, so
+  clients that enumerate at startup (e.g. Claude Desktop) got MCP -32601.
+- All five `search_*` schemas now match the shared validator: `query` is
+  advertised as required (calling with `{}` always errored).
+- Prompt catalog is truthful and prompt arguments actually work: MCP prompt
+  argument values arrive as strings, so `threshold_mb` / `lookback_hours` are
+  now coerced (they previously could never take effect); `threat_analysis`
+  honors `period` (data and display) and advertises `severity_threshold`;
+  dead `include_resolved` removed from the catalog.
+- Idle HTTP sessions are reaped (`MCP_SESSION_IDLE_TIMEOUT_MS`, default 30
+  min): clients that vanish without a DELETE no longer pin per-session Server
+  instances forever.
+- `geoip-lite` stays on 1.4.x with an `ip-address@^10.2.0` override, keeping
+  `engines: node >=18` honest (geoip-lite 2.x requires Node 24) while the
+  audit remains clean.
+
+### Changed
+- Adapted `unified-response.ts` to SDK >=1.29's discriminated-union content
+  types (narrow before `.text`).
+- Refreshed in-range dev/runtime dependencies (jest 30.4, typescript-eslint
+  8.63, nock 14.0.16, prettier 3.9, ts-jest 29.4.11, ...).
+- Added `scripts/functional-test.mjs`: live end-to-end harness exercising all
+  28 tools, 5 resources, 5 prompts over stdio, plus concurrent Streamable HTTP
+  sessions (validates the per-session Server fix).
+
 ## [1.2.1] - 2025-08-01
 
 ### Security

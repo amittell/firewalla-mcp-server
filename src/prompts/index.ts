@@ -1,5 +1,8 @@
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { GetPromptRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import type { FirewallaClient } from '../firewalla/client.js';
 import type { Device, NetworkRule } from '../types.js';
 import { unixToISOString, safeUnixToISOString } from '../utils/timestamp.js';
@@ -68,6 +71,50 @@ function getPeriodInHours(period: string): number {
 }
 
 export function setupPrompts(server: Server, firewalla: FirewallaClient): void {
+  // Enumerate the available prompts. The server declares the `prompts`
+  // capability, so clients call prompts/list at startup -- without this
+  // handler they get MCP error -32601.
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: [
+      {
+        name: 'security_report',
+        description: 'Comprehensive security report for a time period',
+        arguments: [
+          { name: 'period', description: "Report period: '24h', '7d' or '30d' (default 24h)", required: false },
+        ],
+      },
+      {
+        name: 'threat_analysis',
+        description: 'Deep analysis of recent threats and blocked attempts',
+        arguments: [
+          { name: 'period', description: "Lookback period: '24h', '7d' or '30d' (default 24h)", required: false },
+          { name: 'severity_threshold', description: "Minimum alarm severity: 'low', 'medium' or 'high' (default medium)", required: false },
+        ],
+      },
+      {
+        name: 'bandwidth_analysis',
+        description: 'Top bandwidth consumers and usage patterns',
+        arguments: [
+          { name: 'period', description: "Analysis period: '24h', '7d' or '30d'", required: true },
+          { name: 'threshold_mb', description: 'Highlight devices above this usage in MB (default 100)', required: false },
+        ],
+      },
+      {
+        name: 'device_investigation',
+        description: 'Investigate a specific device: flows, alarms, behavior',
+        arguments: [
+          { name: 'device_id', description: 'Device ID (MAC) to investigate', required: true },
+          { name: 'lookback_hours', description: 'Hours of history to inspect (default 24)', required: false },
+        ],
+      },
+      {
+        name: 'network_health_check',
+        description: 'Overall network health: summary, devices, metrics, topology, rules',
+        arguments: [],
+      },
+    ],
+  }));
+
   server.setRequestHandler(GetPromptRequestSchema, async request => {
     const { name, arguments: args } = request.params;
 
@@ -145,10 +192,11 @@ Please analyze this data and provide:
         case 'threat_analysis': {
           const severityThreshold =
             (args?.severity_threshold as string) || 'medium';
+          const period = (args?.period as string) || '24h';
 
           const [alarms, threats, rules] = await Promise.all([
             firewalla.getActiveAlarms(severityThreshold),
-            firewalla.getRecentThreats(24),
+            firewalla.getRecentThreats(getPeriodInHours(period)),
             firewalla.getNetworkRules(),
           ]);
 
@@ -171,7 +219,7 @@ ${(Array.isArray(alarms.results) ? alarms.results : [])
   .join('\\n\\n')}
 
 **Recent Threat Patterns:**
-- Total threats in 24h: ${threats.length}
+- Total threats in ${period}: ${threats.length}
 - Unique source IPs: ${new Set(threats.map(t => t.source_ip)).size}
 - Most common threat types: ${Object.entries(threatPatterns.byType)
             .slice(0, 3)
@@ -206,8 +254,10 @@ Please provide:
 
         case 'bandwidth_analysis': {
           const period = args?.period as string;
+          // MCP prompt argument values are strings on the wire -- coerce
+          const thresholdMbRaw = Number(args?.threshold_mb);
           const thresholdMb =
-            typeof args?.threshold_mb === 'number' ? args.threshold_mb : 100;
+            Number.isFinite(thresholdMbRaw) && thresholdMbRaw > 0 ? thresholdMbRaw : 100;
 
           if (!period) {
             throw new Error(
@@ -284,8 +334,10 @@ Please analyze and provide:
 
         case 'device_investigation': {
           const deviceId = args?.device_id as string;
+          // MCP prompt argument values are strings on the wire -- coerce
+          const lookbackRaw = Number(args?.lookback_hours);
           const lookbackHours =
-            typeof args?.lookback_hours === 'number' ? args.lookback_hours : 24;
+            Number.isFinite(lookbackRaw) && lookbackRaw > 0 ? lookbackRaw : 24;
 
           if (!deviceId) {
             throw new Error(
