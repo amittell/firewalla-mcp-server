@@ -4,9 +4,15 @@ on:
   push:
     tags:
       - 'v*'
-  release:
-    types: [published]
   workflow_dispatch:
+
+# One build per tag ref. A tag push is the single source of truth for a release
+# (the `release: published` trigger was dropped — it double-fired alongside the
+# tag push). If a tag is re-pushed/moved, the in-flight build of that ref is
+# cancelled rather than stacking a duplicate.
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   REGISTRY: docker.io
