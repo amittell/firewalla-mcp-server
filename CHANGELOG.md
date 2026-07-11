@@ -23,8 +23,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Registered `resources/list` and `prompts/list` handlers: the server declared
   the `resources` and `prompts` capabilities but only implemented read/get, so
   clients that enumerate at startup (e.g. Claude Desktop) got MCP -32601.
-- `search_rules` schema now matches its handler: `query` is advertised as
-  required (the handler always validated it) and `limit` is documented.
+- All five `search_*` schemas now match the shared validator: `query` is
+  advertised as required (calling with `{}` always errored).
+- Prompt catalog is truthful and prompt arguments actually work: MCP prompt
+  argument values arrive as strings, so `threshold_mb` / `lookback_hours` are
+  now coerced (they previously could never take effect); `threat_analysis`
+  honors `period` (data and display) and advertises `severity_threshold`;
+  dead `include_resolved` removed from the catalog.
+- Idle HTTP sessions are reaped (`MCP_SESSION_IDLE_TIMEOUT_MS`, default 30
+  min): clients that vanish without a DELETE no longer pin per-session Server
+  instances forever.
+- `geoip-lite` stays on 1.4.x with an `ip-address@^10.2.0` override, keeping
+  `engines: node >=18` honest (geoip-lite 2.x requires Node 24) while the
+  audit remains clean.
 
 ### Changed
 - Adapted `unified-response.ts` to SDK >=1.29's discriminated-union content

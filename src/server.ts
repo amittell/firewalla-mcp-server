@@ -903,6 +903,7 @@ export class FirewallaMCPServer {
     // and close sessions idle past MCP_SESSION_IDLE_TIMEOUT_MS (default 30 min).
     const lastActivity = new Map<string, number>();
     const idleTimeoutMs = Number(process.env.MCP_SESSION_IDLE_TIMEOUT_MS) || 30 * 60 * 1000;
+    const reapEveryMs = Math.min(60_000, idleTimeoutMs);  // sweep at least as often as the timeout
     const reaper = setInterval(() => {
       const now = Date.now();
       for (const [sid, seen] of lastActivity.entries()) {
@@ -914,7 +915,7 @@ export class FirewallaMCPServer {
           void transports.get(sid)?.close();  // onclose cleans transports/servers
         }
       }
-    }, 60_000);
+    }, reapEveryMs);
     reaper.unref();
 
     // Helper function to parse JSON body from request with size limit
