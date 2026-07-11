@@ -194,7 +194,7 @@ export class BulkOperationManager {
               id,
               success: true,
               data: result,
-            } as BulkOperationItemResult;
+            };
           } catch (error) {
             let errorMessage = 'Unknown error occurred';
             let errorType = 'unknown_error';

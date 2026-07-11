@@ -430,7 +430,7 @@ export class PauseRuleHandler extends BaseToolHandler {
       const startTime = Date.now();
 
       const unifiedResponseData = {
-        success: SafeAccess.getNestedValue(result as any, 'success', false),
+        success: SafeAccess.getNestedValue(result, 'success', false),
         message: SafeAccess.getNestedValue(
           result,
           'message',
@@ -606,7 +606,7 @@ export class ResumeRuleHandler extends BaseToolHandler {
       const startTime = Date.now();
 
       const unifiedResponseData = {
-        success: SafeAccess.getNestedValue(result as any, 'success', false),
+        success: SafeAccess.getNestedValue(result, 'success', false),
         message: SafeAccess.getNestedValue(
           result,
           'message',

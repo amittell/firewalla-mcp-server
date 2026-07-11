@@ -424,7 +424,7 @@ export class FirewallaClient {
             : (response.data as T);
       } else {
         // Direct data response (more common with Firewalla API)
-        result = response.data as T;
+        result = response.data;
       }
 
       if (cacheable && method === 'GET') {

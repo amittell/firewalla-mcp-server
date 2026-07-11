@@ -301,7 +301,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
 
       // Calculate total count if requested
       let totalCount: number = SafeAccess.getNestedValue(
-        response as any,
+        response,
         'count',
         0
       ) as number;
@@ -326,7 +326,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
           );
 
           const pageCount = SafeAccess.getNestedValue(
-            nextPage as any,
+            nextPage,
             'count',
             0
           ) as number;
@@ -442,7 +442,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
       ]);
 
       const unifiedResponseData = {
-        count: SafeAccess.getNestedValue(response as any, 'count', 0),
+        count: SafeAccess.getNestedValue(response, 'count', 0),
         alarms: enrichedAlarms,
         next_cursor: response.next_cursor,
         total_count: totalCount,

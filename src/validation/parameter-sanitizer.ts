@@ -83,7 +83,7 @@ export class ParameterSanitizer {
         errors.push('Parameters cannot be null');
         return { isValid: false, errors };
       }
-      return { isValid: true, sanitizedArgs: {} as ToolArgs, errors: [] };
+      return { isValid: true, sanitizedArgs: {}, errors: [] };
     }
 
     if (args === undefined) {
@@ -91,7 +91,7 @@ export class ParameterSanitizer {
         errors.push('Parameters cannot be undefined');
         return { isValid: false, errors };
       }
-      return { isValid: true, sanitizedArgs: {} as ToolArgs, errors: [] };
+      return { isValid: true, sanitizedArgs: {}, errors: [] };
     }
 
     // Type check - must be an object
@@ -109,7 +109,7 @@ export class ParameterSanitizer {
     // Deep sanitization of object properties
     try {
       const sanitizedArgs = this.sanitizeObject(args, finalConfig);
-      return { isValid: true, sanitizedArgs: sanitizedArgs as ToolArgs, errors: [] };
+      return { isValid: true, sanitizedArgs, errors: [] };
     } catch (error) {
       if (error instanceof ParameterSanitizationError) {
         return { isValid: false, errors: error.errors };

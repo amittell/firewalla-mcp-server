@@ -7,13 +7,8 @@ import {
   TokenType,
   SEARCH_FIELDS,
   type QueryNode,
-  type FieldQuery,
-  type LogicalQuery,
-  type GroupQuery,
   type TokenTypeValue,
-  type WildcardQuery,
   type RangeQuery,
-  type ComparisonQuery,
   type Token,
   type QueryValidation,
 } from './types.js';
@@ -319,7 +314,7 @@ export class QueryParser {
         operator: 'OR',
         left,
         right,
-      } as LogicalQuery;
+      };
     }
 
     return left;
@@ -342,7 +337,7 @@ export class QueryParser {
         operator: 'AND',
         left,
         right,
-      } as LogicalQuery;
+      };
     }
 
     return left;
@@ -363,7 +358,7 @@ export class QueryParser {
         type: 'logical',
         operator: 'NOT',
         operand,
-      } as LogicalQuery;
+      };
     }
 
     return this.parsePrimary();
@@ -380,7 +375,7 @@ export class QueryParser {
         this.errors.push('Expected closing parenthesis');
         return undefined;
       }
-      return expr ? ({ type: 'group', query: expr } as GroupQuery) : undefined;
+      return expr ? ({ type: 'group', query: expr }) : undefined;
     }
 
     // Field query
@@ -395,7 +390,7 @@ export class QueryParser {
         type: 'field',
         field: '*',
         value: '*',
-      } as FieldQuery;
+      };
     }
 
     this.errors.push(`Unexpected token: ${this.peek().value}`);
@@ -432,14 +427,14 @@ export class QueryParser {
             field,
             operator,
             value: this.parseValue(value),
-          } as ComparisonQuery;
+          };
         }
         return {
           type: 'field',
           field,
           value,
-          operator: operator as '!=',
-        } as FieldQuery;
+          operator,
+        };
       }
     }
 
@@ -455,7 +450,7 @@ export class QueryParser {
         type: 'wildcard',
         field,
         pattern,
-      } as WildcardQuery;
+      };
     }
 
     if (this.match(TokenType.VALUE, TokenType.QUOTED_VALUE, TokenType.FIELD)) {
@@ -465,7 +460,7 @@ export class QueryParser {
         field,
         value,
         operator: '=',
-      } as FieldQuery;
+      };
     }
 
     this.errors.push(`Expected value after field '${field}:'`);
