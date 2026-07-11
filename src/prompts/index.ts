@@ -81,7 +81,6 @@ export function setupPrompts(server: Server, firewalla: FirewallaClient): void {
         description: 'Comprehensive security report for a time period',
         arguments: [
           { name: 'period', description: "Report period: '24h', '7d' or '30d' (default 24h)", required: false },
-          { name: 'include_resolved', description: 'Include resolved alarms (boolean)', required: false },
         ],
       },
       {
@@ -89,6 +88,7 @@ export function setupPrompts(server: Server, firewalla: FirewallaClient): void {
         description: 'Deep analysis of recent threats and blocked attempts',
         arguments: [
           { name: 'period', description: "Lookback period: '24h', '7d' or '30d' (default 24h)", required: false },
+          { name: 'severity_threshold', description: "Minimum alarm severity: 'low', 'medium' or 'high' (default medium)", required: false },
         ],
       },
       {
@@ -192,10 +192,11 @@ Please analyze this data and provide:
         case 'threat_analysis': {
           const severityThreshold =
             (args?.severity_threshold as string) || 'medium';
+          const period = (args?.period as string) || '24h';
 
           const [alarms, threats, rules] = await Promise.all([
             firewalla.getActiveAlarms(severityThreshold),
-            firewalla.getRecentThreats(24),
+            firewalla.getRecentThreats(getPeriodInHours(period)),
             firewalla.getNetworkRules(),
           ]);
 
@@ -218,7 +219,7 @@ ${(Array.isArray(alarms.results) ? alarms.results : [])
   .join('\\n\\n')}
 
 **Recent Threat Patterns:**
-- Total threats in 24h: ${threats.length}
+- Total threats in ${period}: ${threats.length}
 - Unique source IPs: ${new Set(threats.map(t => t.source_ip)).size}
 - Most common threat types: ${Object.entries(threatPatterns.byType)
             .slice(0, 3)
@@ -253,8 +254,10 @@ Please provide:
 
         case 'bandwidth_analysis': {
           const period = args?.period as string;
+          // MCP prompt argument values are strings on the wire -- coerce
+          const thresholdMbRaw = Number(args?.threshold_mb);
           const thresholdMb =
-            typeof args?.threshold_mb === 'number' ? args.threshold_mb : 100;
+            Number.isFinite(thresholdMbRaw) && thresholdMbRaw > 0 ? thresholdMbRaw : 100;
 
           if (!period) {
             throw new Error(
@@ -331,8 +334,10 @@ Please analyze and provide:
 
         case 'device_investigation': {
           const deviceId = args?.device_id as string;
+          // MCP prompt argument values are strings on the wire -- coerce
+          const lookbackRaw = Number(args?.lookback_hours);
           const lookbackHours =
-            typeof args?.lookback_hours === 'number' ? args.lookback_hours : 24;
+            Number.isFinite(lookbackRaw) && lookbackRaw > 0 ? lookbackRaw : 24;
 
           if (!deviceId) {
             throw new Error(

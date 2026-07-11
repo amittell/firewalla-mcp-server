@@ -175,8 +175,12 @@ async function stdioPhase() {
       if (res.isError) {
         const msg = payload?.error ?? JSON.stringify(payload).slice(0, 80);
         // missing seed (no alarms today etc.) is a data condition, not a code failure
-        const dataCond = /not found|no .* found|invalid|required|validation/i.test(JSON.stringify(payload)) &&
-          Object.values(args).some(v => v === undefined || v === 'test' || v === '5' || v === 5);
+        // Only a placeholder-ID probe may be excused as a graceful error --
+        // limit=5 must NOT qualify, or genuine schema drift gets masked.
+        const usedPlaceholder = Object.entries(args).some(
+          ([k, v]) => k !== 'limit' && (v === 'test' || v === undefined));
+        const dataCond = usedPlaceholder &&
+          /not found|no .* found|invalid|required|validation/i.test(JSON.stringify(payload));
         record('stdio', tool.name, dataCond ? 'OK' : 'ERR', `${dataCond ? 'graceful error on absent data: ' : ''}${msg}`);
       } else {
         const count = payload?.meta?.count;

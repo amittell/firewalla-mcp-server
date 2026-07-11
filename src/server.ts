@@ -477,7 +477,8 @@ export class FirewallaMCPServer {
                   description: 'Pagination cursor from previous response',
                 },
               },
-              required: [],
+              // the shared search validator requires query -- advertise it
+              required: ['query'],
             },
           },
           {
@@ -514,7 +515,8 @@ export class FirewallaMCPServer {
                   description: 'Pagination cursor from previous response',
                 },
               },
-              required: [],
+              // the shared search validator requires query -- advertise it
+              required: ['query'],
             },
           },
           {
@@ -788,7 +790,8 @@ export class FirewallaMCPServer {
                   description: 'Filter devices under a specific Firewalla box',
                 },
               },
-              required: [],
+              // the shared search validator requires query -- advertise it
+              required: ['query'],
             },
           },
           {
@@ -819,7 +822,8 @@ export class FirewallaMCPServer {
                   description: 'Maximum number of target lists to return',
                 },
               },
-              required: [],
+              // the shared search validator requires query -- advertise it
+              required: ['query'],
             },
           },
           {
@@ -893,6 +897,26 @@ export class FirewallaMCPServer {
     const transports = new Map<string, StreamableHTTPServerTransport>();
     const servers = new Map<string, Server>();
 
+    // Abandoned-session reaper: transport.onclose only fires on an explicit
+    // client DELETE or shutdown, so clients that crash / lose network would pin
+    // their Server + transport in the maps forever. Stamp activity per request
+    // and close sessions idle past MCP_SESSION_IDLE_TIMEOUT_MS (default 30 min).
+    const lastActivity = new Map<string, number>();
+    const idleTimeoutMs = Number(process.env.MCP_SESSION_IDLE_TIMEOUT_MS) || 30 * 60 * 1000;
+    const reaper = setInterval(() => {
+      const now = Date.now();
+      for (const [sid, seen] of lastActivity.entries()) {
+        if (!transports.has(sid)) {
+          lastActivity.delete(sid);           // closed elsewhere; drop the stamp
+        } else if (now - seen > idleTimeoutMs) {
+          logger.info(`Reaping idle HTTP session: ${sid}`);
+          lastActivity.delete(sid);
+          void transports.get(sid)?.close();  // onclose cleans transports/servers
+        }
+      }
+    }, 60_000);
+    reaper.unref();
+
     // Helper function to parse JSON body from request with size limit
     const parseJsonBody = async (req: IncomingMessage): Promise<unknown> => {
       const MAX_BODY_SIZE = 1024 * 1024; // 1MB limit to prevent memory exhaustion
@@ -931,6 +955,9 @@ export class FirewallaMCPServer {
           }
 
           const sessionId = req.headers['mcp-session-id'] as string | undefined;
+          if (sessionId && transports.has(sessionId)) {
+            lastActivity.set(sessionId, Date.now());
+          }
 
           // Validate session ID format if present
           if (sessionId && !isValidUUID(sessionId)) {
@@ -972,6 +999,7 @@ export class FirewallaMCPServer {
                   },
                 });
 
+                lastActivity.set(newSessionId, Date.now());
                 await initializeHttpSession({
                   sessionId: newSessionId,
                   transport,
@@ -1076,6 +1104,7 @@ export class FirewallaMCPServer {
 
       void (async () => {
         logger.info('Shutting down HTTP server...');
+        clearInterval(reaper);
 
         // Close all active transports and their server instances
         for (const [sessionId, transport] of transports.entries()) {
