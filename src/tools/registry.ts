@@ -42,7 +42,10 @@ import {
   GetBandwidthUsageHandler,
   GetOfflineDevicesHandler,
 } from './handlers/network.js';
-import { GetDeviceStatusHandler } from './handlers/device.js';
+import {
+  GetDeviceStatusHandler,
+  RenameDeviceHandler,
+} from './handlers/device.js';
 import {
   GetNetworkRulesHandler,
   PauseRuleHandler,
@@ -53,6 +56,8 @@ import {
   UpdateTargetListHandler,
   DeleteTargetListHandler,
   GetNetworkRulesSummaryHandler,
+  CreateRuleHandler,
+  DeleteRuleHandler,
 } from './handlers/rules.js';
 import {
   GetBoxesHandler,
@@ -141,6 +146,7 @@ export class ToolRegistry {
 
     // Device tools (1 handler)
     this.register(new GetDeviceStatusHandler());
+    this.register(new RenameDeviceHandler());
 
     // Rule tools (8 handlers)
     this.register(new GetNetworkRulesHandler());
@@ -151,6 +157,8 @@ export class ToolRegistry {
     this.register(new CreateTargetListHandler());
     this.register(new UpdateTargetListHandler());
     this.register(new DeleteTargetListHandler());
+    this.register(new CreateRuleHandler());
+    this.register(new DeleteRuleHandler());
 
     // Search tools (5 handlers)
     this.register(new SearchFlowsHandler());

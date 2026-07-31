@@ -1297,6 +1297,89 @@ export class FirewallaClient {
     );
   }
 
+  /**
+   * Create a new firewall rule
+   *
+   * @param ruleData - Rule definition matching the MSP v2 rule data model
+   * @returns The created rule as returned by the API
+   */
+  async createRule(ruleData: {
+    action: 'block' | 'allow';
+    target: { type: string; value?: string; dnsOnly?: boolean };
+    scope?: { type: string; value: string; port?: string };
+    direction?: 'bidirection' | 'inbound' | 'outbound';
+    protocol?: 'tcp' | 'udp';
+    notes?: string;
+    schedule?: { duration?: number; cronTime?: string };
+  }): Promise<NetworkRule> {
+    const body: Record<string, unknown> = {
+      action: ruleData.action,
+      target: ruleData.target,
+      gid: this.config.boxId,
+    };
+    if (ruleData.scope) {
+      body.scope = ruleData.scope;
+    }
+    if (ruleData.direction) {
+      body.direction = ruleData.direction;
+    }
+    if (ruleData.protocol) {
+      body.protocol = ruleData.protocol;
+    }
+    if (ruleData.notes) {
+      body.notes = ruleData.notes;
+    }
+    if (ruleData.schedule) {
+      body.schedule = ruleData.schedule;
+    }
+
+    return this.request<NetworkRule>('POST', `/v2/rules`, {}, body, false);
+  }
+
+  /**
+   * Delete a firewall rule permanently (MSP 2.11.0+)
+   *
+   * @param ruleId - ID of the rule to delete
+   */
+  async deleteRule(
+    ruleId: string
+  ): Promise<{ success: boolean; message: string }> {
+    const validatedRuleId = this.sanitizeInput(ruleId);
+    if (!validatedRuleId) {
+      throw new Error('Invalid rule ID provided');
+    }
+
+    return this.request<{ success: boolean; message: string }>(
+      'DELETE',
+      `/v2/rules/${validatedRuleId}`,
+      {},
+      undefined,
+      false
+    );
+  }
+
+  /**
+   * Rename a device. The MSP API only allows updating the `name` field
+   * (32 characters max); all other fields are ignored by the API.
+   *
+   * @param deviceId - Device ID (MAC address)
+   * @param name - New device name
+   */
+  async renameDevice(deviceId: string, name: string): Promise<Device> {
+    const validatedDeviceId = this.sanitizeInput(deviceId);
+    if (!validatedDeviceId) {
+      throw new Error('Invalid device ID provided');
+    }
+
+    return this.request<Device>(
+      'PATCH',
+      `/v2/boxes/${this.config.boxId}/devices/${encodeURIComponent(validatedDeviceId)}`,
+      {},
+      { name },
+      false
+    );
+  }
+
   async getFirewallSummary(): Promise<{
     status: string;
     uptime: number;

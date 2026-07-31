@@ -1815,3 +1815,285 @@ export class DeleteTargetListHandler extends BaseToolHandler {
     }
   }
 }
+
+/**
+ * Handler for creating a new firewall rule
+ */
+export class CreateRuleHandler extends BaseToolHandler {
+  name = 'create_rule';
+  description =
+    'Create a new firewall rule (block or allow). Target types: app, category, domain, internet, intranet, ip, net, region, remotePort, targetlist. Optionally scope the rule to a device (MAC address), group, user, or network, and schedule it with cron_time + duration.';
+  category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'rule_operations',
+        entity_type: 'rule_creation',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
+  async execute(
+    args: ToolArgs,
+    firewalla: FirewallaClient
+  ): Promise<ToolResponse> {
+    try {
+      const actionValidation = ParameterValidator.validateEnum(
+        args?.action,
+        'action',
+        ['block', 'allow'],
+        true
+      );
+      const targetTypeValidation = ParameterValidator.validateEnum(
+        args?.target_type,
+        'target_type',
+        [
+          'app',
+          'category',
+          'domain',
+          'internet',
+          'intranet',
+          'ip',
+          'net',
+          'region',
+          'remotePort',
+          'targetlist',
+        ],
+        true
+      );
+      // The `internet` target has no meaningful value; every other target
+      // type needs one (the domain, IP, CIDR, category code, etc.).
+      const targetValueValidation =
+        args?.target_type === 'internet'
+          ? ParameterValidator.validateOptionalString(
+              args?.target_value,
+              'target_value'
+            )
+          : ParameterValidator.validateRequiredString(
+              args?.target_value,
+              'target_value'
+            );
+      const scopeTypeValidation = ParameterValidator.validateEnum(
+        args?.scope_type,
+        'scope_type',
+        ['device', 'group', 'user', 'network'],
+        false
+      );
+      const scopeValueValidation = ParameterValidator.validateOptionalString(
+        args?.scope_value,
+        'scope_value'
+      );
+      const directionValidation = ParameterValidator.validateEnum(
+        args?.direction,
+        'direction',
+        ['bidirection', 'inbound', 'outbound'],
+        false
+      );
+      const protocolValidation = ParameterValidator.validateEnum(
+        args?.protocol,
+        'protocol',
+        ['tcp', 'udp'],
+        false
+      );
+      const notesValidation = ParameterValidator.validateOptionalString(
+        args?.notes,
+        'notes'
+      );
+      const durationValidation = ParameterValidator.validateNumber(
+        args?.duration,
+        'duration',
+        { required: false, min: 60, max: 31536000, integer: true }
+      );
+      const cronTimeValidation = ParameterValidator.validateOptionalString(
+        args?.cron_time,
+        'cron_time'
+      );
+
+      const validationResult = ParameterValidator.combineValidationResults([
+        actionValidation,
+        targetTypeValidation,
+        targetValueValidation,
+        scopeTypeValidation,
+        scopeValueValidation,
+        directionValidation,
+        protocolValidation,
+        notesValidation,
+        durationValidation,
+        cronTimeValidation,
+      ]);
+
+      if (!validationResult.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          validationResult.errors
+        );
+      }
+
+      const scopeType = scopeTypeValidation.sanitizedValue as
+        | string
+        | undefined;
+      const scopeValue = scopeValueValidation.sanitizedValue as
+        | string
+        | undefined;
+
+      if ((scopeType && !scopeValue) || (!scopeType && scopeValue)) {
+        return createErrorResponse(
+          this.name,
+          'scope_type and scope_value must be provided together',
+          ErrorType.VALIDATION_ERROR,
+          { scope_type: scopeType, scope_value: scopeValue },
+          [
+            'Provide both scope_type (device/group/user/network) and scope_value (e.g. a MAC address for device scope)',
+            'Or omit both to apply the rule to all devices',
+          ]
+        );
+      }
+
+      const target: { type: string; value?: string; dnsOnly?: boolean } = {
+        type: targetTypeValidation.sanitizedValue as string,
+      };
+      if (targetValueValidation.sanitizedValue) {
+        target.value = targetValueValidation.sanitizedValue as string;
+      }
+
+      const ruleData: Parameters<FirewallaClient['createRule']>[0] = {
+        action: actionValidation.sanitizedValue as 'block' | 'allow',
+        target,
+      };
+      if (scopeType && scopeValue) {
+        ruleData.scope = { type: scopeType, value: scopeValue };
+      }
+      if (directionValidation.sanitizedValue) {
+        ruleData.direction = directionValidation.sanitizedValue as
+          | 'bidirection'
+          | 'inbound'
+          | 'outbound';
+      }
+      if (protocolValidation.sanitizedValue) {
+        ruleData.protocol = protocolValidation.sanitizedValue as 'tcp' | 'udp';
+      }
+      if (notesValidation.sanitizedValue) {
+        ruleData.notes = notesValidation.sanitizedValue as string;
+      }
+      const duration = durationValidation.sanitizedValue as number | undefined;
+      const cronTime = cronTimeValidation.sanitizedValue as string | undefined;
+      if (duration !== undefined || cronTime) {
+        ruleData.schedule = {};
+        if (duration !== undefined) {
+          ruleData.schedule.duration = duration;
+        }
+        if (cronTime) {
+          ruleData.schedule.cronTime = cronTime;
+        }
+      }
+
+      const response = await withToolTimeout(
+        async () => firewalla.createRule(ruleData),
+        this.name
+      );
+
+      return this.createUnifiedResponse(response);
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return createErrorResponse(
+        this.name,
+        `Failed to create rule: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { action: args?.action, target_type: args?.target_type }
+      );
+    }
+  }
+}
+
+/**
+ * Handler for permanently deleting a firewall rule (MSP 2.11.0+)
+ */
+export class DeleteRuleHandler extends BaseToolHandler {
+  name = 'delete_rule';
+  description =
+    'Permanently delete a firewall rule. Unlike pause_rule this cannot be undone; the rule must be recreated to restore it. Requires MSP 2.11.0 or later.';
+  category = 'rule' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'rule_operations',
+        entity_type: 'rule_deletion',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
+  async execute(
+    args: ToolArgs,
+    firewalla: FirewallaClient
+  ): Promise<ToolResponse> {
+    try {
+      const ruleIdValidation = ParameterValidator.validateRuleId(
+        args?.rule_id,
+        'rule_id'
+      );
+
+      if (!ruleIdValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          ruleIdValidation.errors
+        );
+      }
+
+      const ruleId = ruleIdValidation.sanitizedValue as string;
+
+      // Verify the rule exists so a typo'd ID fails loudly instead of
+      // returning a misleading success from the API.
+      const statusCheck = await checkRuleStatus(ruleId, this.name, firewalla);
+      if (!statusCheck.exists) {
+        return statusCheck.errorResponse!;
+      }
+
+      const response = await withToolTimeout(
+        async () => firewalla.deleteRule(ruleId),
+        this.name
+      );
+
+      return this.createUnifiedResponse({
+        ...response,
+        rule_id: ruleId,
+        deleted: true,
+      });
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return createErrorResponse(
+        this.name,
+        `Failed to delete rule: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { rule_id: args?.rule_id }
+      );
+    }
+  }
+}

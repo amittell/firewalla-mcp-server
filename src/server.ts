@@ -333,6 +333,115 @@ export class FirewallaMCPServer {
             },
           },
           {
+            name: 'create_rule',
+            description:
+              'Create a new firewall rule (block or allow) with optional device/group/network scope and cron schedule',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                action: {
+                  type: 'string',
+                  enum: ['block', 'allow'],
+                  description: 'Rule action',
+                },
+                target_type: {
+                  type: 'string',
+                  enum: [
+                    'app',
+                    'category',
+                    'domain',
+                    'internet',
+                    'intranet',
+                    'ip',
+                    'net',
+                    'region',
+                    'remotePort',
+                    'targetlist',
+                  ],
+                  description: 'What the rule matches',
+                },
+                target_value: {
+                  type: 'string',
+                  description:
+                    'Target value: domain name, IP, CIDR, category code (e.g. games, social, vpn), app id (e.g. tiktok), ISO region code, port, or target list id. Not needed for target_type internet.',
+                },
+                scope_type: {
+                  type: 'string',
+                  enum: ['device', 'group', 'user', 'network'],
+                  description:
+                    'Optional scope: limit the rule to one device, device group, user, or network',
+                },
+                scope_value: {
+                  type: 'string',
+                  description:
+                    'Scope identifier, e.g. device MAC address, group id, or network id. Required when scope_type is set.',
+                },
+                direction: {
+                  type: 'string',
+                  enum: ['bidirection', 'inbound', 'outbound'],
+                  description: 'Traffic direction (default: bidirection)',
+                },
+                protocol: {
+                  type: 'string',
+                  enum: ['tcp', 'udp'],
+                  description: 'Protocol filter (optional, default: both)',
+                },
+                notes: {
+                  type: 'string',
+                  description: 'Free-text note stored on the rule',
+                },
+                duration: {
+                  type: 'number',
+                  description:
+                    'Seconds the rule stays in effect each activation (60 to 31536000). With cron_time this creates a recurring window.',
+                  minimum: 60,
+                  maximum: 31536000,
+                },
+                cron_time: {
+                  type: 'string',
+                  description:
+                    "Cron expression for recurring activation, e.g. '0 21 * * *' for 9pm daily. Combine with duration.",
+                },
+              },
+              required: ['action', 'target_type'],
+            },
+          },
+          {
+            name: 'delete_rule',
+            description:
+              'Permanently delete a firewall rule (cannot be undone; MSP 2.11.0+). Use pause_rule for a temporary disable.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                rule_id: {
+                  type: 'string',
+                  description: 'Rule ID to delete',
+                },
+              },
+              required: ['rule_id'],
+            },
+          },
+          {
+            name: 'rename_device',
+            description:
+              'Rename a network device (the only device field the MSP API allows changing; 32 characters max)',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                device_id: {
+                  type: 'string',
+                  description: 'Device ID (MAC address)',
+                },
+                name: {
+                  type: 'string',
+                  description: 'New device name (max 32 characters)',
+                  maxLength: 32,
+                },
+              },
+              required: ['device_id', 'name'],
+            },
+          },
+          {
             name: 'create_target_list',
             description: 'Create a new target list',
             inputSchema: {
