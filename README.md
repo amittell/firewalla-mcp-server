@@ -74,7 +74,13 @@ The examples below pass credentials directly in the command line, which exposes 
 
 **Stdio Transport (Default - for Claude Desktop integration):**
 ```bash
-# Using Docker Hub image
+# Using Docker Hub image (minimal config)
+docker run -it --rm \
+  -e FIREWALLA_MSP_TOKEN=your_token \
+  -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
+  amittell/firewalla-mcp-server
+
+# Or with optional box filter
 docker run -it --rm \
   -e FIREWALLA_MSP_TOKEN=your_token \
   -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
@@ -86,7 +92,6 @@ docker build -t firewalla-mcp-server .
 docker run -it --rm \
   -e FIREWALLA_MSP_TOKEN=your_token \
   -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
-  -e FIREWALLA_BOX_ID=your_box_gid \
   firewalla-mcp-server
 
 # Recommended: Using env file (more secure)
@@ -102,8 +107,10 @@ docker run -d --name firewalla-mcp \
   -e MCP_HTTP_PORT=3000 \
   -e FIREWALLA_MSP_TOKEN=your_token \
   -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
-  -e FIREWALLA_BOX_ID=your_box_gid \
   amittell/firewalla-mcp-server
+
+# Add FIREWALLA_BOX_ID if you want to filter to a specific box
+# -e FIREWALLA_BOX_ID=your_box_gid \
 
 # The server will be accessible at http://localhost:3000/mcp
 
@@ -126,7 +133,8 @@ services:
       - MCP_HTTP_PORT=3000
       - FIREWALLA_MSP_TOKEN=\${FIREWALLA_MSP_TOKEN}
       - FIREWALLA_MSP_ID=\${FIREWALLA_MSP_ID}
-      - FIREWALLA_BOX_ID=\${FIREWALLA_BOX_ID}
+      # Optional: filter to specific box
+      # - FIREWALLA_BOX_ID=\${FIREWALLA_BOX_ID}
     restart: unless-stopped
 EOF
 
