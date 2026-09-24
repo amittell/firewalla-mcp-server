@@ -9,7 +9,8 @@ import type { ValidationResult } from '../types.js';
  * Firewalla query syntax patterns
  */
 const FIELD_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_.]*$/;
-const OPERATOR_PATTERN = /^(:|=|!=|>|<|>=|<=)$/;
+// `:>`, `:>=`, `:<`, `:<=` are the MSP API's numeric comparisons (e.g. `download:>10MB`)
+const OPERATOR_PATTERN = /^(:|=|!=|>|<|>=|<=|:>|:>=|:<|:<=)$/;
 const LOGICAL_OPERATORS = ['AND', 'OR', 'NOT'];
 
 interface QueryToken {

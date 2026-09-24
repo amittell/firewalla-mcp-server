@@ -231,3 +231,30 @@ export function parseFlexibleTimestamp(input: unknown): Date | null {
     return null;
   }
 }
+
+const RELATIVE_UNIT_SECONDS: Record<string, number> = {
+  s: 1,
+  m: 60,
+  h: 3600,
+  d: 86400,
+  w: 604800,
+};
+
+/**
+ * Rewrites relative `ts` comparisons into the Unix-seconds form the MSP API
+ * accepts: `ts:>1h` -> `ts:>1735689600` (one hour before `nowSeconds`).
+ * Absolute epochs and ranges pass through unchanged.
+ */
+export function translateRelativeTimestamps(
+  query: string,
+  nowSeconds: number = Math.floor(Date.now() / 1000)
+): string {
+  if (!query || typeof query !== 'string') {
+    return query;
+  }
+  return query.replace(
+    /\bts:(>=|<=|>|<)(\d+)([smhdw])\b/g,
+    (_match, op: string, amount: string, unit: string) =>
+      `ts:${op}${nowSeconds - Number(amount) * RELATIVE_UNIT_SECONDS[unit]}`
+  );
+}
