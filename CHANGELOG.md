@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Intended for the next minor release, because it raises the minimum Node.js version.
 
+### Added
+- Opt-in write tools `create_rule`, `delete_rule` and `rename_device` (#37,
+  from @mefrati75). Off unless `FIREWALLA_ENABLE_WRITE_TOOLS=true`, and marked
+  with MCP tool annotations (`destructiveHint: true` on `create_rule` and
+  `delete_rule`). `create_rule` and `rename_device` take a `gid` or fall back to
+  `FIREWALLA_BOX_ID`, and refuse without calling the API when neither is set:
+  the MSP API applies a rule with no `gid` to every box in the account.
+  `delete_rule` needs MSP 2.11.0+ and checks the rule exists first.
+
 ### Changed
 - **Node.js 24 or later is now required** (`engines.node` `>=24.0.0`, was
   `>=18.0.0`). `geoip-lite` 2.x requires Node 24. CI and the Docker image
@@ -24,6 +33,10 @@ Intended for the next minor release, because it raises the minimum Node.js versi
   `glob@7.2.3` (#32). All three came from geoip-lite
   1.4.10, which pins `rimraf 2.5.2 - 2.7.1` for its `updatedb` script;
   geoip-lite 2.x drops rimraf.
+- `pause_rule`, `resume_rule` and `delete_rule` accept short rule IDs and the
+  `<box-gid>:<n>` form; `validateRuleId` required 8-64 characters.
+- The startup log no longer hard-codes "28 tools"; the registry log reports
+  the actual count.
 
 ### Security
 - Lockfile refreshed with `npm audit fix`: `npm audit` goes from 10 (4

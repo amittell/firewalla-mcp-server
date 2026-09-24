@@ -237,3 +237,114 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
     }
   }
 }
+
+/**
+ * Handler for renaming a device
+ */
+export class RenameDeviceHandler extends BaseToolHandler {
+  name = 'rename_device';
+  description =
+    'Rename a network device on one box (gid, or FIREWALLA_BOX_ID). The MSP API only supports changing the name (32 characters max); other device fields cannot be modified. Requires device_id (MAC address).';
+  category = 'device' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'devices',
+        entity_type: 'device_rename_operation',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
+  async execute(
+    args: ToolArgs,
+    firewalla: FirewallaClient
+  ): Promise<ToolResponse> {
+    try {
+      const deviceIdValidation = ParameterValidator.validateRequiredString(
+        args?.device_id,
+        'device_id'
+      );
+      const nameValidation = ParameterValidator.validateRequiredString(
+        args?.name,
+        'name'
+      );
+      const gidValidation = ParameterValidator.validateOptionalString(
+        args?.gid,
+        'gid'
+      );
+
+      const validationResult = ParameterValidator.combineValidationResults([
+        deviceIdValidation,
+        nameValidation,
+        gidValidation,
+      ]);
+
+      if (!validationResult.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          validationResult.errors
+        );
+      }
+
+      const deviceId = deviceIdValidation.sanitizedValue as string;
+      const name = nameValidation.sanitizedValue as string;
+      const gid =
+        (gidValidation.sanitizedValue as string | undefined) ??
+        firewalla.getDefaultBoxId();
+      if (!gid) {
+        return createErrorResponse(
+          this.name,
+          'No box to rename the device on',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          ['Pass gid, or set FIREWALLA_BOX_ID']
+        );
+      }
+
+      // API limit: the name field accepts at most 32 characters
+      if (name.length > 32) {
+        return createErrorResponse(
+          this.name,
+          'Device name must be 32 characters or fewer',
+          ErrorType.VALIDATION_ERROR,
+          { name_length: name.length, max_length: 32 }
+        );
+      }
+
+      const response = await withToolTimeout(
+        async () => firewalla.renameDevice(deviceId, name, gid),
+        this.name
+      );
+
+      return this.createUnifiedResponse({
+        device: response,
+        device_id: deviceId,
+        gid,
+        new_name: name,
+        renamed: true,
+      });
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return createErrorResponse(
+        this.name,
+        `Failed to rename device: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { device_id: args?.device_id, name: args?.name }
+      );
+    }
+  }
+}

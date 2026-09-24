@@ -25,6 +25,8 @@
  *     get_statistics_by_box, get_flow_trends, get_alarm_trends, get_rule_trends)
  * - Convenience Wrappers (5 tools):
  *   * get_bandwidth_usage, get_offline_devices, search_devices, search_target_lists, get_network_rules_summary
+ * - Write tools (3, opt-in with FIREWALLA_ENABLE_WRITE_TOOLS=true):
+ *   * create_rule, delete_rule, rename_device
  *
  * @version 1.0.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
@@ -32,6 +34,7 @@
  */
 
 import type { ToolHandler } from './handlers/base.js';
+import { writeToolsEnabled } from '../config/write-tools.js';
 import {
   GetActiveAlarmsHandler,
   GetSpecificAlarmHandler,
@@ -42,7 +45,10 @@ import {
   GetBandwidthUsageHandler,
   GetOfflineDevicesHandler,
 } from './handlers/network.js';
-import { GetDeviceStatusHandler } from './handlers/device.js';
+import {
+  GetDeviceStatusHandler,
+  RenameDeviceHandler,
+} from './handlers/device.js';
 import {
   GetNetworkRulesHandler,
   PauseRuleHandler,
@@ -53,6 +59,8 @@ import {
   UpdateTargetListHandler,
   DeleteTargetListHandler,
   GetNetworkRulesSummaryHandler,
+  CreateRuleHandler,
+  DeleteRuleHandler,
 } from './handlers/rules.js';
 import {
   GetBoxesHandler,
@@ -96,7 +104,7 @@ import {
  * // Get tools by category
  * const searchTools = registry.getToolsByCategory('search');
  *
- * // List all available tools (returns 28 tools)
+ * // List all available tools (28, or 31 with write tools enabled)
  * const allTools = registry.getToolNames();
  * ```
  *
@@ -110,10 +118,12 @@ export class ToolRegistry {
   /**
    * Creates a new tool registry and automatically registers all available handlers
    *
+   * @param options.enableWriteTools - Register create_rule, delete_rule and
+   *   rename_device. Defaults to FIREWALLA_ENABLE_WRITE_TOOLS=true.
    * @constructor
    */
-  constructor() {
-    this.registerHandlers();
+  constructor(options: { enableWriteTools?: boolean } = {}) {
+    this.registerHandlers(options.enableWriteTools ?? writeToolsEnabled());
   }
 
   /**
@@ -126,7 +136,7 @@ export class ToolRegistry {
    * @private
    * @returns {void}
    */
-  private registerHandlers(): void {
+  private registerHandlers(enableWriteTools: boolean): void {
     // Direct API Endpoints (23 handlers)
 
     // Security tools (2 handlers - delete_alarm disabled)
@@ -151,6 +161,14 @@ export class ToolRegistry {
     this.register(new CreateTargetListHandler());
     this.register(new UpdateTargetListHandler());
     this.register(new DeleteTargetListHandler());
+
+    // Write tools (3 handlers): change rules and device names on the box,
+    // so they are opt-in
+    if (enableWriteTools) {
+      this.register(new CreateRuleHandler());
+      this.register(new DeleteRuleHandler());
+      this.register(new RenameDeviceHandler());
+    }
 
     // Search tools (5 handlers)
     this.register(new SearchFlowsHandler());

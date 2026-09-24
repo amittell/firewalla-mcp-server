@@ -696,8 +696,9 @@ export class ParameterValidator {
     // Common patterns: UUID format, or alphanumeric with specific prefixes
     const validPatterns = [
       /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i, // UUID
+      /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}:[a-zA-Z0-9_-]+$/i, // Compound box-gid:sequence returned by rule create (canonical MSP form)
       /^rule_[a-zA-Z0-9_-]+$/i, // Rule prefix format
-      /^[a-zA-Z0-9_-]{8,64}$/i, // General alphanumeric ID (8-64 chars)
+      /^[a-zA-Z0-9_-]{1,64}$/i, // General alphanumeric ID (sequence numbers can be short)
     ];
 
     const isValidFormat = validPatterns.some(pattern => pattern.test(ruleId));

@@ -1297,6 +1297,109 @@ export class FirewallaClient {
     );
   }
 
+  /**
+   * The box configured with FIREWALLA_BOX_ID, if any
+   */
+  getDefaultBoxId(): string | undefined {
+    return this.config.boxId;
+  }
+
+  /**
+   * Create a new firewall rule
+   *
+   * @param ruleData - Rule definition matching the MSP v2 rule data model
+   * @param gid - Box the rule applies to. The API applies a rule with no gid
+   *   (and no group) to every box in the MSP account, so callers must pass one.
+   * @returns The created rule as returned by the API
+   */
+  async createRule(ruleData: {
+    action: 'block' | 'allow';
+    target: { type: string; value?: string; dnsOnly?: boolean };
+    scope?: { type: string; value: string; port?: string };
+    direction?: 'bidirection' | 'inbound' | 'outbound';
+    protocol?: 'tcp' | 'udp';
+    notes?: string;
+    schedule?: { duration?: number; cronTime?: string };
+  }, gid: string): Promise<NetworkRule> {
+    if (!gid) {
+      throw new Error('createRule requires a box gid');
+    }
+    const body: Record<string, unknown> = {
+      action: ruleData.action,
+      target: ruleData.target,
+      gid,
+    };
+    if (ruleData.scope) {
+      body.scope = ruleData.scope;
+    }
+    if (ruleData.direction) {
+      body.direction = ruleData.direction;
+    }
+    if (ruleData.protocol) {
+      body.protocol = ruleData.protocol;
+    }
+    if (ruleData.notes) {
+      body.notes = ruleData.notes;
+    }
+    if (ruleData.schedule) {
+      body.schedule = ruleData.schedule;
+    }
+
+    return this.request<NetworkRule>('POST', `/v2/rules`, {}, body, false);
+  }
+
+  /**
+   * Delete a firewall rule permanently (MSP 2.11.0+)
+   *
+   * @param ruleId - ID of the rule to delete
+   */
+  async deleteRule(
+    ruleId: string
+  ): Promise<{ success: boolean; message: string }> {
+    const validatedRuleId = this.sanitizeInput(ruleId);
+    if (!validatedRuleId) {
+      throw new Error('Invalid rule ID provided');
+    }
+
+    return this.request<{ success: boolean; message: string }>(
+      'DELETE',
+      `/v2/rules/${validatedRuleId}`,
+      {},
+      undefined,
+      false
+    );
+  }
+
+  /**
+   * Rename a device. The MSP API only allows updating the `name` field
+   * (32 characters max); all other fields are ignored by the API.
+   *
+   * @param deviceId - Device ID (MAC address)
+   * @param name - New device name
+   * @param gid - Box the device belongs to
+   */
+  async renameDevice(
+    deviceId: string,
+    name: string,
+    gid: string
+  ): Promise<Device> {
+    const validatedDeviceId = this.sanitizeInput(deviceId);
+    if (!validatedDeviceId) {
+      throw new Error('Invalid device ID provided');
+    }
+    if (!gid) {
+      throw new Error('renameDevice requires a box gid');
+    }
+
+    return this.request<Device>(
+      'PATCH',
+      `/v2/boxes/${encodeURIComponent(gid)}/devices/${encodeURIComponent(validatedDeviceId)}`,
+      {},
+      { name },
+      false
+    );
+  }
+
   async getFirewallSummary(): Promise<{
     status: string;
     uptime: number;
