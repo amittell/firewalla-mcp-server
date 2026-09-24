@@ -10,6 +10,7 @@ import type { SearchParams, SearchResult } from '../search/types.js';
 import type { SearchOptions } from '../types.js';
 import type { FirewallaClient } from '../firewalla/client.js';
 import { translateBooleanQuery } from '../utils/simple-boolean-translator.js';
+import { translateRelativeTimestamps } from '../utils/timestamp.js';
 import { ParameterValidator, SafeAccess } from '../validation/error-handler.js';
 import { EnhancedQueryValidator } from '../validation/enhanced-query-validator.js';
 import {
@@ -995,8 +996,10 @@ export class SearchEngine {
         );
       }
 
-      // Apply boolean field translation before building query string
-      const translatedQuery = translateBooleanQuery(params.query, 'flows');
+      // Apply boolean and relative-time translation before building query string
+      const translatedQuery = translateRelativeTimestamps(
+        translateBooleanQuery(params.query, 'flows')
+      );
 
       // Build query string with time range if provided
       let queryString = translatedQuery;

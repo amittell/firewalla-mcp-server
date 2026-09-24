@@ -184,6 +184,7 @@ export interface FilterResult {
  */
 export const SEARCH_FIELDS = {
   flows: [
+    'ts', // MSP API timestamp qualifier: ts:<epoch>, ts:>=<epoch>, ts:<start>-<end>
     'source_ip',
     'destination_ip',
     'protocol',
@@ -230,6 +231,7 @@ export const SEARCH_FIELDS = {
     'activity_level',
   ],
   alarms: [
+    'ts',
     'severity',
     'type',
     'source_ip',

@@ -5,7 +5,7 @@ Connect your Firewalla firewall data directly to Claude Desktop for real-time se
 ## Prerequisites
 
 - Claude Desktop app installed
-- Node.js 18+ for running the MCP server
+- Node.js 24+ for running the MCP server
 - Active Firewalla MSP account with API access
 
 ## Quick Setup

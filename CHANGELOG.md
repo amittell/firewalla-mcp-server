@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Intended for the next minor release, because it raises the minimum Node.js version.
+
 ### Added
 - Opt-in write tools `create_rule`, `delete_rule` and `rename_device` (#37,
   from @mefrati75). Off unless `FIREWALLA_ENABLE_WRITE_TOOLS=true`, and marked
@@ -16,11 +18,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the MSP API applies a rule with no `gid` to every box in the account.
   `delete_rule` needs MSP 2.11.0+ and checks the rule exists first.
 
+### Changed
+- **Node.js 24 or later is now required** (`engines.node` `>=24.0.0`, was
+  `>=18.0.0`). `geoip-lite` 2.x requires Node 24. CI and the Docker image
+  (`node:24-alpine`) move to Node 24 as well. Stay on 1.3.x for Node 18-22.
+- `geoip-lite` 1.4.10 -> 2.0.3, and the `geoip-lite > ip-address` override is
+  gone (2.0.3 depends on `ip-address ^10.2.0` itself). npm only applies
+  `overrides` from the root project, so the override never reached npm or npx
+  installs, which resolved `ip-address@5.9.4` under geoip-lite.
+
 ### Fixed
+- Installing the package (`npm install -g`, npx) no longer prints
+  `npm warn deprecated` for `inflight@1.0.6`, `rimraf@2.7.1` and
+  `glob@7.2.3` (#32). All three came from geoip-lite
+  1.4.10, which pins `rimraf 2.5.2 - 2.7.1` for its `updatedb` script;
+  geoip-lite 2.x drops rimraf.
 - `pause_rule`, `resume_rule` and `delete_rule` accept short rule IDs and the
   `<box-gid>:<n>` form; `validateRuleId` required 8-64 characters.
 - The startup log no longer hard-codes "28 tools"; the registry log reports
   the actual count.
+
+### Security
+- Lockfile refreshed with `npm audit fix`: `npm audit` goes from 10 (4
+  moderate, 6 high) on 1.3.0 to 0.
 
 ## [1.3.0] - 2026-07-10
 
@@ -33,8 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Updated `@modelcontextprotocol/sdk` 1.13.2 -> 1.29.0 (fixes ReDoS
   GHSA-8r9q-7v3j-jr4g) and `axios` 1.10 -> 1.18.1.
-- Updated `geoip-lite` 1.4 -> 2.0.3 (drops the vulnerable `ip-address`
-  transitive, GHSA-v2v4-37r5-5v8g). `npm audit`: 13 vulnerabilities -> 0.
+- Pinned `ip-address` to `^10.2.0` under `geoip-lite` 1.4.10 with an npm
+  override (GHSA-v2v4-37r5-5v8g). `npm audit`: 13 vulnerabilities -> 0.
 
 ### Fixed
 - Registered `resources/list` and `prompts/list` handlers: the server declared

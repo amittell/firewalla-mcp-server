@@ -17,16 +17,16 @@ if command -v node &> /dev/null; then
     NODE_VERSION=$(node --version)
     echo -e "${GREEN}✓ Node.js found: $NODE_VERSION${NC}"
     
-    # Check if version is 18+
+    # Check if version is 24+
     MAJOR_VERSION=$(echo $NODE_VERSION | cut -d. -f1 | sed 's/v//')
-    if [ $MAJOR_VERSION -ge 18 ]; then
-        echo -e "${GREEN}✓ Node.js version is 18 or higher${NC}"
+    if [ $MAJOR_VERSION -ge 24 ]; then
+        echo -e "${GREEN}✓ Node.js version is 24 or higher${NC}"
     else
-        echo -e "${RED}✗ Node.js version is less than 18. Please upgrade.${NC}"
+        echo -e "${RED}✗ Node.js version is less than 24. Please upgrade.${NC}"
     fi
 else
     echo -e "${RED}✗ Node.js not found in PATH${NC}"
-    echo "  Please install Node.js 18 or higher"
+    echo "  Please install Node.js 24 or higher"
 fi
 echo ""
 

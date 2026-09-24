@@ -3673,6 +3673,18 @@ export class FirewallaClient {
               device.online || device.isOnline || device.connected
             );
 
+            // `ip:` takes an exact address or a `*` wildcard (172.16.2.*)
+            const matchesIp = (pattern: string): boolean => {
+              if (!pattern.includes('*')) {
+                return ip === pattern;
+              }
+              const escaped = pattern
+                .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+                .replace(/\*/g, '.*');
+              return new RegExp(`^${escaped}$`).test(ip);
+            };
+            const ipTerm = /^ip:(\S+)$/;
+
             // Handle AND/OR logic in queries
             const andParts = query.split(' and ');
 
@@ -3681,6 +3693,10 @@ export class FirewallaClient {
               return andParts.every(part => {
                 const trimmedPart = part.trim();
 
+                const ipMatch = ipTerm.exec(trimmedPart);
+                if (ipMatch) {
+                  return matchesIp(ipMatch[1]);
+                }
                 if (trimmedPart.includes('mac_vendor:')) {
                   const vendor = trimmedPart
                     .split('mac_vendor:')[1]
@@ -3722,6 +3738,10 @@ export class FirewallaClient {
             }
 
             // Handle single field patterns (original logic)
+            const singleIpMatch = ipTerm.exec(query);
+            if (singleIpMatch) {
+              return matchesIp(singleIpMatch[1]);
+            }
             if (query.includes('mac_vendor:')) {
               const vendor = query
                 .split('mac_vendor:')[1]

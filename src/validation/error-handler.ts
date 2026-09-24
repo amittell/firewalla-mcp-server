@@ -1367,8 +1367,8 @@ export class QuerySanitizer {
     // FieldValidator is now imported at the top of the file
     
     // Extract field names from query using simple regex
-    // Matches patterns like "field_name:" or "field_name:value"
-    const fieldPattern = /(\w+):/g;
+    // Matches patterns like "field_name:" or "device.ip:value"
+    const fieldPattern = /([\w.]+):/g;
     const foundFields: string[] = [];
     let match;
     
@@ -1442,8 +1442,13 @@ export class QuerySanitizer {
     const invalidFields: string[] = [];
     const suggestions: string[] = [];
 
-    // Validate each field
+    // Validate each field. Dot-separated property paths (source.ip, target.type)
+    // are native MSP API qualifiers that follow the resource's data model, so the
+    // API is the authority on them; only flat names are checked here.
     for (const field of foundFields) {
+      if (field.includes('.')) {
+        continue;
+      }
       const validation = FieldValidator.validateField(field, entityType as any);
       if (!validation.isValid) {
         invalidFields.push(field);
