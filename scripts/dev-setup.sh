@@ -38,7 +38,7 @@ check_system_requirements() {
     # Check Node.js version
     if command -v node &> /dev/null; then
         local node_version=$(node --version | sed 's/v//')
-        local required_major=18
+        local required_major=24
         local current_major=$(echo "$node_version" | cut -d. -f1)
         
         if [[ $current_major -ge $required_major ]]; then

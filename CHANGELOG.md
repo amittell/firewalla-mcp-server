@@ -24,8 +24,6 @@ Intended for the next minor release, because it raises the minimum Node.js versi
   `glob@7.2.3` (#32). All three came from geoip-lite
   1.4.10, which pins `rimraf 2.5.2 - 2.7.1` for its `updatedb` script;
   geoip-lite 2.x drops rimraf.
-- The 1.3.0 notes below list both a geoip-lite 2.0.3 update and a 1.4.x pin.
-  1.3.0 shipped geoip-lite 1.4.10.
 
 ### Security
 - Lockfile refreshed with `npm audit fix`: `npm audit` goes from 10 (4
@@ -42,8 +40,8 @@ Intended for the next minor release, because it raises the minimum Node.js versi
 ### Security
 - Updated `@modelcontextprotocol/sdk` 1.13.2 -> 1.29.0 (fixes ReDoS
   GHSA-8r9q-7v3j-jr4g) and `axios` 1.10 -> 1.18.1.
-- Updated `geoip-lite` 1.4 -> 2.0.3 (drops the vulnerable `ip-address`
-  transitive, GHSA-v2v4-37r5-5v8g). `npm audit`: 13 vulnerabilities -> 0.
+- Pinned `ip-address` to `^10.2.0` under `geoip-lite` 1.4.10 with an npm
+  override (GHSA-v2v4-37r5-5v8g). `npm audit`: 13 vulnerabilities -> 0.
 
 ### Fixed
 - Registered `resources/list` and `prompts/list` handlers: the server declared
