@@ -1,0 +1,165 @@
+name: Publish to npm
+
+# Adapted from amittell/openclaw-scheduler's publish.yml. A `v*` tag on a commit
+# in main publishes with provenance through npm trusted publishing (OIDC, no
+# NPM_TOKEN secret), verifies the published package's signatures and
+# attestations, and creates the GitHub release from CHANGELOG.md.
+# Needs firewalla-mcp-server configured as a trusted publisher on npmjs.com for
+# this repository and workflow file.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify (Linux / Node 24)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tagged commit is contained in main
+        run: |
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          TAG_COMMIT="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+          if ! git merge-base --is-ancestor "$TAG_COMMIT" refs/remotes/origin/main; then
+            echo "Tag $GITHUB_REF_NAME points to $TAG_COMMIT, which is not contained in origin/main"
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify dependency signatures
+        run: npm audit signatures
+
+      - name: Lint, build and test
+        run: |
+          npm run lint:check
+          npm run build
+          npm run test:ci
+
+  publish:
+    name: Publish
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tagged commit is contained in main
+        run: |
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          TAG_COMMIT="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+          if ! git merge-base --is-ancestor "$TAG_COMMIT" refs/remotes/origin/main; then
+            echo "Tag $GITHUB_REF_NAME points to $TAG_COMMIT, which is not contained in origin/main"
+            exit 1
+          fi
+
+      - name: Require successful main CI for tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag_commit="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+          deadline=$((SECONDS + 1800))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?event=push&head_sha=${tag_commit}&per_page=20")"
+            status="$(printf '%s' "$run_json" | jq -r '[.workflow_runs[] | select(.head_branch == "main")] | sort_by(.run_number) | last | .status // "missing"')"
+            conclusion="$(printf '%s' "$run_json" | jq -r '[.workflow_runs[] | select(.head_branch == "main")] | sort_by(.run_number) | last | .conclusion // "pending"')"
+            if [ "$status" = "completed" ] && [ "$conclusion" = "success" ]; then
+              exit 0
+            fi
+            if [ "$status" = "completed" ] && [ "$conclusion" != "success" ]; then
+              echo "Main CI for $tag_commit completed with conclusion $conclusion"
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for successful main CI for $tag_commit"
+          exit 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p 'require("./package.json").version')"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $PKG_VERSION"
+            exit 1
+          fi
+
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          HEADING="$(grep -E "^## \[${VERSION//./\\.}\] - " CHANGELOG.md || true)"
+          if ! printf '%s' "$HEADING" | grep -Eq '^## \[[^]]+\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+            echo "CHANGELOG.md needs a dated '## [$VERSION] - YYYY-MM-DD' entry (found: '${HEADING:-none}')"
+            exit 1
+          fi
+          awk -v heading="$HEADING" '
+            $0 == heading { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          test -s "$RUNNER_TEMP/release-notes.md"
+
+      - name: Publish
+        run: npm publish --access public --provenance
+
+      - name: Verify published package signatures and provenance
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          for attempt in $(seq 1 30); do
+            if npm view "firewalla-mcp-server@${VERSION}" version > /dev/null 2>&1; then
+              break
+            fi
+            echo "Waiting for firewalla-mcp-server@${VERSION} on the registry (attempt ${attempt})"
+            sleep 10
+          done
+          mkdir -p "$RUNNER_TEMP/published"
+          cd "$RUNNER_TEMP/published"
+          npm init -y > /dev/null
+          npm install --save-exact --no-audit --no-fund "firewalla-mcp-server@${VERSION}"
+          npm audit signatures --include-attestations
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md" --generate-notes

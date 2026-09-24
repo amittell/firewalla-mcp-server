@@ -43,6 +43,7 @@ import { setupResources } from './resources/index.js';
 import { setupPrompts } from './prompts/index.js';
 import { logger } from './monitoring/logger.js';
 import { initializeHttpSession } from './http-session.js';
+import { PACKAGE_VERSION } from './utils/package-version.js';
 import { isWriteTool, writeToolsEnabled } from './config/write-tools.js';
 
 /**
@@ -85,7 +86,7 @@ export class FirewallaMCPServer {
     const server = new Server(
       {
         name: 'firewalla-mcp-server',
-        version: '1.3.0',
+        version: PACKAGE_VERSION,
       },
       {
         capabilities: {
