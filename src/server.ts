@@ -4,7 +4,8 @@
  * @fileoverview Firewalla MCP Server
  *
  * This file implements the primary MCP server class that provides Claude with access to
- * Firewalla firewall data through 28 tools that map to Firewalla API endpoints.
+ * Firewalla firewall data through 28 tools that map to Firewalla API endpoints,
+ * plus 3 opt-in write tools (FIREWALLA_ENABLE_WRITE_TOOLS=true).
  * Tools include parameter validation and error handling.
  *
  * Architecture:
@@ -40,6 +41,7 @@ import { setupResources } from './resources/index.js';
 import { setupPrompts } from './prompts/index.js';
 import { logger } from './monitoring/logger.js';
 import { initializeHttpSession } from './http-session.js';
+import { isWriteTool, writeToolsEnabled } from './config/write-tools.js';
 
 /**
  * UUID v4 validation regex pattern
@@ -335,7 +337,11 @@ export class FirewallaMCPServer {
           {
             name: 'create_rule',
             description:
-              'Create a new firewall rule (block or allow) with optional device/group/network scope and cron schedule',
+              'Create a new firewall rule (block or allow) on one box, with optional device/group/network scope and cron schedule. Needs gid or FIREWALLA_BOX_ID.',
+            annotations: {
+              readOnlyHint: false,
+              destructiveHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -363,7 +369,7 @@ export class FirewallaMCPServer {
                 target_value: {
                   type: 'string',
                   description:
-                    'Target value: domain name, IP, CIDR, category code (e.g. games, social, vpn), app id (e.g. tiktok), ISO region code, port, or target list id. Not needed for target_type internet.',
+                    'Target value: domain name, IP, CIDR, category code (e.g. games, social, vpn), app id (e.g. tiktok), ISO region code, port, or target list id. Omit for internet; for intranet, a network ID or omit for all local networks.',
                 },
                 scope_type: {
                   type: 'string',
@@ -393,14 +399,19 @@ export class FirewallaMCPServer {
                 duration: {
                   type: 'number',
                   description:
-                    'Seconds the rule stays in effect each activation (60 to 31536000). With cron_time this creates a recurring window.',
+                    'Seconds the rule stays in effect each activation (60 to 31536000). Required with cron_time, where it sets the length of each recurring window.',
                   minimum: 60,
                   maximum: 31536000,
                 },
                 cron_time: {
                   type: 'string',
                   description:
-                    "Cron expression for recurring activation, e.g. '0 21 * * *' for 9pm daily. Combine with duration.",
+                    "Cron expression for recurring activation, e.g. '0 21 * * *' for 9pm daily. Requires duration.",
+                },
+                gid: {
+                  type: 'string',
+                  description:
+                    'Box to create the rule on. Defaults to FIREWALLA_BOX_ID; the tool refuses when neither is set.',
                 },
               },
               required: ['action', 'target_type'],
@@ -410,6 +421,10 @@ export class FirewallaMCPServer {
             name: 'delete_rule',
             description:
               'Permanently delete a firewall rule (cannot be undone; MSP 2.11.0+). Use pause_rule for a temporary disable.',
+            annotations: {
+              readOnlyHint: false,
+              destructiveHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -424,7 +439,12 @@ export class FirewallaMCPServer {
           {
             name: 'rename_device',
             description:
-              'Rename a network device (the only device field the MSP API allows changing; 32 characters max)',
+              'Rename a network device (the only device field the MSP API allows changing; 32 characters max). Needs gid or FIREWALLA_BOX_ID.',
+            annotations: {
+              readOnlyHint: false,
+              destructiveHint: false,
+              idempotentHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -436,6 +456,11 @@ export class FirewallaMCPServer {
                   type: 'string',
                   description: 'New device name (max 32 characters)',
                   maxLength: 32,
+                },
+                gid: {
+                  type: 'string',
+                  description:
+                    'Box the device belongs to. Defaults to FIREWALLA_BOX_ID; the tool refuses when neither is set.',
                 },
               },
               required: ['device_id', 'name'],
@@ -956,7 +981,7 @@ export class FirewallaMCPServer {
               required: [],
             },
           },
-        ],
+        ].filter(tool => writeToolsEnabled() || !isWriteTool(tool.name)),
       };
     });
 
@@ -992,7 +1017,7 @@ export class FirewallaMCPServer {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     logger.info(
-      'Firewalla MCP Server running with 28 tools on stdio transport'
+      'Firewalla MCP Server running on stdio transport'
     );
   }
 
@@ -1195,7 +1220,7 @@ export class FirewallaMCPServer {
 
       httpServer.listen(port, () => {
         logger.info(
-          `Firewalla MCP Server running with 28 tools on HTTP transport`
+          `Firewalla MCP Server running on HTTP transport`
         );
         logger.info(`HTTP server listening on http://localhost:${port}${path}`);
         resolve();

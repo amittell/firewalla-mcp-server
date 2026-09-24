@@ -244,7 +244,7 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
 export class RenameDeviceHandler extends BaseToolHandler {
   name = 'rename_device';
   description =
-    'Rename a network device. The MSP API only supports changing the name (32 characters max); other device fields cannot be modified. Requires device_id (MAC address).';
+    'Rename a network device on one box (gid, or FIREWALLA_BOX_ID). The MSP API only supports changing the name (32 characters max); other device fields cannot be modified. Requires device_id (MAC address).';
   category = 'device' as const;
 
   constructor() {
@@ -274,10 +274,15 @@ export class RenameDeviceHandler extends BaseToolHandler {
         args?.name,
         'name'
       );
+      const gidValidation = ParameterValidator.validateOptionalString(
+        args?.gid,
+        'gid'
+      );
 
       const validationResult = ParameterValidator.combineValidationResults([
         deviceIdValidation,
         nameValidation,
+        gidValidation,
       ]);
 
       if (!validationResult.isValid) {
@@ -292,6 +297,18 @@ export class RenameDeviceHandler extends BaseToolHandler {
 
       const deviceId = deviceIdValidation.sanitizedValue as string;
       const name = nameValidation.sanitizedValue as string;
+      const gid =
+        (gidValidation.sanitizedValue as string | undefined) ??
+        firewalla.getDefaultBoxId();
+      if (!gid) {
+        return createErrorResponse(
+          this.name,
+          'No box to rename the device on',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          ['Pass gid, or set FIREWALLA_BOX_ID']
+        );
+      }
 
       // API limit: the name field accepts at most 32 characters
       if (name.length > 32) {
@@ -304,13 +321,14 @@ export class RenameDeviceHandler extends BaseToolHandler {
       }
 
       const response = await withToolTimeout(
-        async () => firewalla.renameDevice(deviceId, name),
+        async () => firewalla.renameDevice(deviceId, name, gid),
         this.name
       );
 
       return this.createUnifiedResponse({
         device: response,
         device_id: deviceId,
+        gid,
         new_name: name,
         renamed: true,
       });

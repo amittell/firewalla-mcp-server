@@ -1298,9 +1298,18 @@ export class FirewallaClient {
   }
 
   /**
+   * The box configured with FIREWALLA_BOX_ID, if any
+   */
+  getDefaultBoxId(): string | undefined {
+    return this.config.boxId;
+  }
+
+  /**
    * Create a new firewall rule
    *
    * @param ruleData - Rule definition matching the MSP v2 rule data model
+   * @param gid - Box the rule applies to. The API applies a rule with no gid
+   *   (and no group) to every box in the MSP account, so callers must pass one.
    * @returns The created rule as returned by the API
    */
   async createRule(ruleData: {
@@ -1311,11 +1320,14 @@ export class FirewallaClient {
     protocol?: 'tcp' | 'udp';
     notes?: string;
     schedule?: { duration?: number; cronTime?: string };
-  }): Promise<NetworkRule> {
+  }, gid: string): Promise<NetworkRule> {
+    if (!gid) {
+      throw new Error('createRule requires a box gid');
+    }
     const body: Record<string, unknown> = {
       action: ruleData.action,
       target: ruleData.target,
-      gid: this.config.boxId,
+      gid,
     };
     if (ruleData.scope) {
       body.scope = ruleData.scope;
@@ -1364,16 +1376,24 @@ export class FirewallaClient {
    *
    * @param deviceId - Device ID (MAC address)
    * @param name - New device name
+   * @param gid - Box the device belongs to
    */
-  async renameDevice(deviceId: string, name: string): Promise<Device> {
+  async renameDevice(
+    deviceId: string,
+    name: string,
+    gid: string
+  ): Promise<Device> {
     const validatedDeviceId = this.sanitizeInput(deviceId);
     if (!validatedDeviceId) {
       throw new Error('Invalid device ID provided');
     }
+    if (!gid) {
+      throw new Error('renameDevice requires a box gid');
+    }
 
     return this.request<Device>(
       'PATCH',
-      `/v2/boxes/${this.config.boxId}/devices/${encodeURIComponent(validatedDeviceId)}`,
+      `/v2/boxes/${encodeURIComponent(gid)}/devices/${encodeURIComponent(validatedDeviceId)}`,
       {},
       { name },
       false

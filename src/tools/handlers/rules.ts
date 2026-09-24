@@ -1822,7 +1822,7 @@ export class DeleteTargetListHandler extends BaseToolHandler {
 export class CreateRuleHandler extends BaseToolHandler {
   name = 'create_rule';
   description =
-    'Create a new firewall rule (block or allow). Target types: app, category, domain, internet, intranet, ip, net, region, remotePort, targetlist. Optionally scope the rule to a device (MAC address), group, user, or network, and schedule it with cron_time + duration.';
+    'Create a new firewall rule (block or allow) on one box (gid, or FIREWALLA_BOX_ID). Target types: app, category, domain, internet, intranet, ip, net, region, remotePort, targetlist. Optionally scope the rule to a device (MAC address), group, user, or network, and schedule it with cron_time + duration.';
   category = 'rule' as const;
 
   constructor() {
@@ -1867,10 +1867,10 @@ export class CreateRuleHandler extends BaseToolHandler {
         ],
         true
       );
-      // The `internet` target has no meaningful value; every other target
-      // type needs one (the domain, IP, CIDR, category code, etc.).
+      // MSP rule model: `internet` is always unset, `intranet` is a network
+      // ID or unset (all local networks), every other type needs a value.
       const targetValueValidation =
-        args?.target_type === 'internet'
+        args?.target_type === 'internet' || args?.target_type === 'intranet'
           ? ParameterValidator.validateOptionalString(
               args?.target_value,
               'target_value'
@@ -1914,6 +1914,10 @@ export class CreateRuleHandler extends BaseToolHandler {
         args?.cron_time,
         'cron_time'
       );
+      const gidValidation = ParameterValidator.validateOptionalString(
+        args?.gid,
+        'gid'
+      );
 
       const validationResult = ParameterValidator.combineValidationResults([
         actionValidation,
@@ -1926,6 +1930,7 @@ export class CreateRuleHandler extends BaseToolHandler {
         notesValidation,
         durationValidation,
         cronTimeValidation,
+        gidValidation,
       ]);
 
       if (!validationResult.isValid) {
@@ -1935,6 +1940,46 @@ export class CreateRuleHandler extends BaseToolHandler {
           ErrorType.VALIDATION_ERROR,
           undefined,
           validationResult.errors
+        );
+      }
+
+      const gid =
+        (gidValidation.sanitizedValue as string | undefined) ??
+        firewalla.getDefaultBoxId();
+      if (!gid) {
+        return createErrorResponse(
+          this.name,
+          'No box to apply the rule to',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          [
+            'Pass gid, or set FIREWALLA_BOX_ID',
+            'The MSP API applies a rule without a gid to every box in the account, including boxes added later',
+          ]
+        );
+      }
+
+      if (
+        args?.target_type === 'internet' &&
+        targetValueValidation.sanitizedValue !== undefined
+      ) {
+        return createErrorResponse(
+          this.name,
+          'target_value must be omitted when target_type is internet',
+          ErrorType.VALIDATION_ERROR,
+          { target_value: targetValueValidation.sanitizedValue }
+        );
+      }
+
+      const duration = durationValidation.sanitizedValue as number | undefined;
+      const cronTime = cronTimeValidation.sanitizedValue as string | undefined;
+      if (cronTime && duration === undefined) {
+        return createErrorResponse(
+          this.name,
+          'duration is required when cron_time is set',
+          ErrorType.VALIDATION_ERROR,
+          { cron_time: cronTime },
+          ['The MSP rule model requires schedule.duration whenever cronTime is set']
         );
       }
 
@@ -1984,8 +2029,6 @@ export class CreateRuleHandler extends BaseToolHandler {
       if (notesValidation.sanitizedValue) {
         ruleData.notes = notesValidation.sanitizedValue as string;
       }
-      const duration = durationValidation.sanitizedValue as number | undefined;
-      const cronTime = cronTimeValidation.sanitizedValue as string | undefined;
       if (duration !== undefined || cronTime) {
         ruleData.schedule = {};
         if (duration !== undefined) {
@@ -1997,7 +2040,7 @@ export class CreateRuleHandler extends BaseToolHandler {
       }
 
       const response = await withToolTimeout(
-        async () => firewalla.createRule(ruleData),
+        async () => firewalla.createRule(ruleData, gid),
         this.name
       );
 
