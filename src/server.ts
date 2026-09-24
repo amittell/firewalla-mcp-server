@@ -28,6 +28,8 @@ import {
   isInitializeRequest,
 } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'node:crypto';
+import { realpathSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import {
   createServer,
   type IncomingMessage,
@@ -1152,8 +1154,23 @@ export class FirewallaMCPServer {
   }
 }
 
-// Start the server if this file is run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Start the server if this file is run directly.
+// Resolve symlinks before comparing: when launched via a bin symlink (npx,
+// npm global install), process.argv[1] is the symlink path while
+// import.meta.url points at the real file, so a plain string comparison
+// never matches and the server silently does nothing.
+const isMainModule = (() => {
+  if (!process.argv[1]) {
+    return false;
+  }
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+  } catch {
+    return false;
+  }
+})();
+
+if (isMainModule) {
   const server = new FirewallaMCPServer();
   server.start().catch((error: unknown) => {
     logger.error(
