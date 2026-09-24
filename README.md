@@ -46,7 +46,7 @@ The MCP server acts as a bridge between Claude and your Firewalla firewall, tran
 
 ## Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 24+ and npm. The IP geolocation dependency (geoip-lite 2.x) requires Node 24; on Node 18-22, stay on firewalla-mcp-server 1.3.x.
 - Firewalla MSP account with API access
 - Your Firewalla device online and connected
 

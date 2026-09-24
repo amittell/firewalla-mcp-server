@@ -5,7 +5,7 @@ Integrate Firewalla network security monitoring into Cline for AI-powered securi
 ## Prerequisites
 
 - Cline extension installed in VS Code
-- Node.js 18+ and npm
+- Node.js 24+ and npm
 - Active Firewalla MSP account with API access
 - VS Code with Cline properly configured
 

@@ -5,7 +5,7 @@ Connect Firewalla network security data to VS Code for integrated security monit
 ## Prerequisites
 
 - VS Code with MCP extension support
-- Node.js 18+ and npm installed
+- Node.js 24+ and npm installed
 - Active Firewalla MSP account
 - MCP extension for VS Code installed
 
