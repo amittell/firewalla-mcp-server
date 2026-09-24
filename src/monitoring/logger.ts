@@ -1,5 +1,6 @@
 import { productionConfig } from '../production/config.js';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
+import { PACKAGE_VERSION } from '../utils/package-version.js';
 
 // DEBUG environment variable support
 const DEBUG_ENABLED =
@@ -52,7 +53,7 @@ export interface LogEntry {
 
 export class StructuredLogger {
   private service = 'firewalla-mcp-server';
-  private version = '1.2.1';
+  private version = PACKAGE_VERSION;
   private logLevel: LogEntry['level'];
 
   constructor(logLevel?: LogEntry['level']) {

@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Intended for the next minor release, because it raises the minimum Node.js version.
+## [1.4.0] - Unreleased
+
+Minor release: Node.js 24 is now the minimum.
 
 ### Added
 - Opt-in write tools `create_rule`, `delete_rule` and `rename_device` (#37,
@@ -17,6 +19,12 @@ Intended for the next minor release, because it raises the minimum Node.js versi
   `FIREWALLA_BOX_ID`, and refuse without calling the API when neither is set:
   the MSP API applies a rule with no `gid` to every box in the account.
   `delete_rule` needs MSP 2.11.0+ and checks the rule exists first.
+- CI `launch` job (#44): on ubuntu-latest, macos-latest and windows-latest it
+  packs the server and requires an answer to MCP `initialize` over stdio
+  through the global bin, `npx` and `node dist/server.js`.
+- `publish.yml`: a `v*` tag publishes to npm with provenance (npm trusted
+  publishing, no token secret), verifies the published package's signatures
+  and attestations, and creates the GitHub release from this file.
 
 ### Changed
 - **Node.js 24 or later is now required** (`engines.node` `>=24.0.0`, was
@@ -26,8 +34,19 @@ Intended for the next minor release, because it raises the minimum Node.js versi
   gone (2.0.3 depends on `ip-address ^10.2.0` itself). npm only applies
   `overrides` from the root project, so the override never reached npm or npx
   installs, which resolved `ip-address@5.9.4` under geoip-lite.
+- Docker examples in the README mark `FIREWALLA_BOX_ID` as optional (#39).
 
 ### Fixed
+- The server now starts under `npx`, global installs and on Windows (#36,
+  from @mefrati75). The entrypoint check compared `import.meta.url` with
+  `file://${process.argv[1]}`, which never matches through a bin symlink, or
+  on Windows at all, so 1.3.0 started, registered nothing and sat silent.
+- Search queries (#41, fixes #35): dot-separated MSP qualifiers
+  (`source.ip`, `destination.ip`, `device.ip`, `target.type`) and the numeric
+  operators `:>`, `:>=`, `:<`, `:<=` pass validation; `ts` is allowed for
+  flows and alarms and `ts:>1h`-style values become Unix seconds;
+  `search_flows` documents `source.ip`/`destination.ip`; and `search_devices`
+  `ip:` filters match (every `ip:` query returned 0 devices).
 - Installing the package (`npm install -g`, npx) no longer prints
   `npm warn deprecated` for `inflight@1.0.6`, `rimraf@2.7.1` and
   `glob@7.2.3` (#32). All three came from geoip-lite
@@ -35,6 +54,9 @@ Intended for the next minor release, because it raises the minimum Node.js versi
   geoip-lite 2.x drops rimraf.
 - `pause_rule`, `resume_rule` and `delete_rule` accept short rule IDs and the
   `<box-gid>:<n>` form; `validateRuleId` required 8-64 characters.
+- The logs and the MCP `serverInfo` report the package version, which
+  `npm version` now keeps in sync with package.json; the logger had `1.2.1`
+  hard-coded and `serverInfo` had `1.3.0`.
 - The startup log no longer hard-codes "28 tools"; the registry log reports
   the actual count.
 
