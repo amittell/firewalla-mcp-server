@@ -11,7 +11,8 @@ import {
   detectAndConvertTimestamp,
   convertTimestampWithDetection,
   isValidTimestamp,
-  parseFlexibleTimestamp
+  parseFlexibleTimestamp,
+  translateRelativeTimestamps
 } from '../../src/utils/timestamp.js';
 
 describe('Timestamp Utilities - Edge Cases', () => {
@@ -484,5 +485,25 @@ describe('Timestamp Utilities - Edge Cases', () => {
       expect(detectAndConvertTimestamp(0.1)).toBeNull();
       expect(detectAndConvertTimestamp(1)).toBeNull();
     });
+  });
+
+  describe('translateRelativeTimestamps', () => {
+    const now = 1735693200;
+
+    test.each([
+      ['ts:>1h', 'ts:>1735689600'],
+      ['ts:>=24h AND blocked:1', 'ts:>=1735606800 AND blocked:1'],
+      ['ts:<30m', 'ts:<1735691400'],
+      ['ts:>7d', 'ts:>1735088400'],
+    ])('rewrites %s', (input, expected) => {
+      expect(translateRelativeTimestamps(input, now)).toBe(expected);
+    });
+
+    test.each(['ts:>=1735689600', 'ts:1735689600-1735693200', 'protocol:tcp'])(
+      'leaves %s unchanged',
+      query => {
+        expect(translateRelativeTimestamps(query, now)).toBe(query);
+      }
+    );
   });
 });

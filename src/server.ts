@@ -448,14 +448,14 @@ export class FirewallaMCPServer {
           {
             name: 'search_flows',
             description:
-              'Search network flows with advanced query filters. Use this for: historical analysis, specific time ranges, complex filtering, or when you need more than 50 flows. Supports pagination, time-based queries (e.g., "ts:>1h" for last hour), and all flow fields including geographic filtering. For quick "what\'s happening now" snapshots, use get_recent_flow_activity instead.',
+              'Search network flows with advanced query filters. Use this for: historical analysis, specific time ranges, complex filtering, or when you need more than 50 flows. Supports pagination, time-based queries (e.g., "ts:>1h" for the last hour, or Unix seconds such as "ts:1735689600-1735693200"), and all flow fields including geographic filtering. For quick "what\'s happening now" snapshots, use get_recent_flow_activity instead.',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Supported fields: protocol:tcp/udp, direction:inbound/outbound/local, blocked:true/false, bytes:>1MB, domain:*.example.com, region:US (country code), category:social/games/porn/etc, gid:box_id, device.ip:192.168.*, source_ip:*, destination_ip:*. Examples: "region:US AND protocol:tcp", "blocked:true AND bytes:>1MB", "category:social OR category:games"',
+                    'Search query using Firewalla syntax. Supported fields: protocol:tcp/udp, direction:inbound/outbound/local, blocked:true/false, bytes:>1MB, domain:*.example.com, region:US (country code), category:social/games/porn/etc, gid:box_id, device.ip:192.168.*, source.ip:*, destination.ip:*, ts:>1h. Examples: "region:US AND protocol:tcp", "blocked:true AND bytes:>1MB", "category:social OR category:games"',
                 },
                 groupBy: {
                   type: 'string',
