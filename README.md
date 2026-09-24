@@ -389,7 +389,14 @@ Rules: get_network_rules, pause_rule, resume_rule, get_target_lists
 Search: search_flows, search_alarms, search_rules, search_target_lists
 Analytics: get_simple_statistics, get_flow_insights, get_flow_trends, get_alarm_trends
 Management: create_target_list, update_target_list, delete_target_list
+Write (opt-in): create_rule, delete_rule, rename_device
 ```
+
+### Write tools (opt-in)
+
+`create_rule`, `delete_rule` and `rename_device` change rules and device names on your box, so they are off by default. Set `FIREWALLA_ENABLE_WRITE_TOOLS=true` to register them. MCP clients that honor tool annotations will ask before calling them (`destructiveHint: true` on `create_rule` and `delete_rule`).
+
+`create_rule` and `rename_device` act on one box: pass `gid`, or set `FIREWALLA_BOX_ID`. With neither, they refuse without calling the API, because the MSP API applies a rule with no `gid` to every box in the account, including boxes added later. `delete_rule` needs MSP 2.11.0 or later.
 
 ## Development
 
@@ -524,7 +531,7 @@ For more detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 ## What's New
 
 **Version 1.0.0:**
-- 28 tools with API-verified schemas
+- 28 tools with API-verified schemas (31 with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)
 - 24 direct API endpoints + 5 convenience wrappers
 - NEW: get_flow_insights for category-based traffic analysis
 - Advanced search with logical operators (AND, OR, NOT)

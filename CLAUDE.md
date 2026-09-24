@@ -32,6 +32,7 @@ A Model Context Protocol (MCP) server that provides Claude with access to Firewa
 - **Search (3 tools)**: search_flows, search_alarms, search_rules
 - **Analytics (8 tools)**: get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_insights, get_flow_trends, get_alarm_trends, get_rule_trends
 - **Convenience Wrappers (5 tools)**: get_bandwidth_usage, get_offline_devices, search_devices, search_target_lists, get_network_rules_summary
+- **Write tools (3, opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)**: create_rule, delete_rule, rename_device. Not counted in the 28.
 
 ## Development Commands
 

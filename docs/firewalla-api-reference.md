@@ -161,6 +161,31 @@ Retrieve list of devices on the network.
 ]
 ```
 
+#### Update Device
+Rename a device. Only `name` can be changed; the API ignores every other field in the body.
+
+Source: https://docs.firewalla.net/api-reference/device/
+
+**Endpoint**: `PATCH https://{msp_domain}/v2/boxes/{gid}/devices/{id}`
+
+**Path Parameters**:
+- `gid` (string, required): Box GID
+- `id` (string, required): Device ID (MAC address)
+
+**Request Body**:
+```json
+{
+  "name": "Updated Device Name"
+}
+```
+
+**Parameters**:
+- `name` (string, required): New device name, 32 characters max
+
+**Response (200 Success)**: the updated device object.
+
+**MCP tool**: `rename_device` (opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`; takes `gid` or falls back to `FIREWALLA_BOX_ID`)
+
 ### Flow Management
 
 #### Get Flows
@@ -327,6 +352,56 @@ curl -X POST "https://yourdomain.firewalla.net/v2/rules/rule_123/resume" \
   -H "Content-Type: application/json" \
   -d '{"box": "box_gid_here"}'
 ```
+
+#### Create Rule
+Create a block or allow rule. Only `block` and `allow` are supported for creation.
+
+Source: https://docs.firewalla.net/api-reference/rule/ (request body) and https://docs.firewalla.net/data-models/rule/ (field rules)
+
+**Endpoint**: `POST https://{msp_domain}/v2/rules`
+
+**Request Body**: a Rule without `id`, `ts`, `updateTs` and `resumeTs`.
+```json
+{
+  "action": "block",
+  "direction": "bidirection",
+  "gid": "00000000-0000-0000-0000-000000000000",
+  "notes": "Block example.com",
+  "target": {
+    "type": "domain",
+    "value": "example.com",
+    "dnsOnly": true
+  },
+  "scope": {
+    "type": "device",
+    "value": "AA:BB:CC:DD:EE:FF"
+  }
+}
+```
+
+**Field rules from the MSP rule model**:
+- If neither `gid` nor `group` is provided, the rule applies to all boxes under the MSP account, including boxes added later.
+- `target.type`: `app`, `category`, `domain`, `internet`, `intranet`, `ip`, `net`, `region`, `remotePort`, `targetlist`. `internet` takes no value; `intranet` takes a network ID or no value (all local networks).
+- `scope.type`: `device`, `group`, `user`, `network`. No scope means all devices.
+- `schedule.duration` (seconds) must be present when `schedule.cronTime` is set.
+
+**Response (200 Success)**: the created rule, including its `id`.
+
+**MCP tool**: `create_rule` (opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`; takes `gid` or falls back to `FIREWALLA_BOX_ID`, and refuses when neither is set)
+
+#### Delete Rule
+Permanently delete a rule. Requires MSP 2.11.0 or later. Use Pause Rule to disable a rule temporarily.
+
+Source: https://docs.firewalla.net/api-reference/rule/
+
+**Endpoint**: `DELETE https://{msp_domain}/v2/rules/{id}`
+
+**Path Parameters**:
+- `id` (string, required): Rule ID
+
+**Responses**: 200 Success, 401 Permission Denied, 404 Not Found
+
+**MCP tool**: `delete_rule` (opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`; checks the rule exists before sending the DELETE)
 
 ### Statistics
 

@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Opt-in write tools `create_rule`, `delete_rule` and `rename_device` (#37,
+  from @mefrati75). Off unless `FIREWALLA_ENABLE_WRITE_TOOLS=true`, and marked
+  with MCP tool annotations (`destructiveHint: true` on `create_rule` and
+  `delete_rule`). `create_rule` and `rename_device` take a `gid` or fall back to
+  `FIREWALLA_BOX_ID`, and refuse without calling the API when neither is set:
+  the MSP API applies a rule with no `gid` to every box in the account.
+  `delete_rule` needs MSP 2.11.0+ and checks the rule exists first.
+
+### Fixed
+- `pause_rule`, `resume_rule` and `delete_rule` accept short rule IDs and the
+  `<box-gid>:<n>` form; `validateRuleId` required 8-64 characters.
+- The startup log no longer hard-codes "28 tools"; the registry log reports
+  the actual count.
+
 ## [1.3.0] - 2026-07-10
 
 ### Added
