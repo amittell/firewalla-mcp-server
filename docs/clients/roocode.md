@@ -5,7 +5,7 @@ Connect Firewalla network security data to Roocode for integrated security monit
 ## Prerequisites
 
 - Roocode IDE installed and configured
-- Node.js 18+ and npm
+- Node.js 24+ and npm
 - Active Firewalla MSP account with API credentials
 - MCP extension support in Roocode
 

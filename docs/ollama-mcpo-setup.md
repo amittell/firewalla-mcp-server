@@ -7,7 +7,7 @@ This guide helps you set up the Firewalla MCP Server with Ollama using MCPO (MCP
 - Ollama installed and running
 - Open-WebUI installed
 - MCPO server installed
-- Node.js 18+ installed
+- Node.js 24+ installed
 - Firewalla MCP server cloned/installed
 
 ## Common Issues and Solutions
@@ -178,7 +178,7 @@ If direct node execution fails, try using npx:
 
 ## Troubleshooting Checklist
 
-- [ ] Node.js 18+ is installed and in PATH
+- [ ] Node.js 24+ is installed and in PATH
 - [ ] Firewalla MCP server is built (`npm run build`)
 - [ ] All paths in config.json are absolute
 - [ ] Environment variables are set correctly

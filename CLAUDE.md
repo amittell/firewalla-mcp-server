@@ -391,7 +391,7 @@ DEBUG=cache npm run mcp:start
 - **Current Version**: 1.0.0
 - **Architecture**: 28-tool design (23 direct API + 5 convenience)
 - **API Support**: Firewalla MSP API v2 with CRUD operations
-- **Node.js**: Requires 18+
+- **Node.js**: Requires 24+
 - **TypeScript**: ES2020 target with strict mode
 
 **Remember**: The `/docs/firewalla-api-reference.md` file contains the complete, verified API specification. It is the single source of truth for all Firewalla API integration.

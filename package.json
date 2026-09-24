@@ -97,7 +97,7 @@
     "axios": "^1.10.0",
     "axios-retry": "^4.5.0",
     "dotenv": "^16.5.0",
-    "geoip-lite": "^1.4.10",
+    "geoip-lite": "^2.0.3",
     "zod": "^3.25.75"
   },
   "devDependencies": {
@@ -116,14 +116,9 @@
     "typescript": "^5.8.3"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=24.0.0"
   },
   "publishConfig": {
     "access": "public"
-  },
-  "overrides": {
-    "geoip-lite": {
-      "ip-address": "^10.2.0"
-    }
   }
 }
