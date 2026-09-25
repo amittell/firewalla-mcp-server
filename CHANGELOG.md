@@ -31,6 +31,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default). The client now drops cached rule reads after a pause or a resume.
 - The status check in `pause_rule`, `resume_rule` and `delete_rule` matches
   the rule by ID instead of taking the first rule the API returns.
+- The security counts in the `security_report` and `network_health_check`
+  prompts and in `firewalla://metrics/security` are exact totals. They were
+  counts of at most 1000 fetched alarms or flows, so the report showed "Total
+  Alarms: 1000". The client asks `/v2/alarms` and `/v2/flows` with `groupBy`,
+  which returns each group's total, and each count names its window: alarms
+  over the last 30 days (the API's default), blocked flows and recent alarms
+  over the last 24 hours. If the API ever returns items instead of groups,
+  the count is printed as "at least N". `last_threat_detected` is the time of
+  the newest Security Activity alarm, or `null`, instead of the current time
+  when there was none.
+- The `security_report` prompt listed "Active Alarms (200)" for the 200 most
+  recent alarms of any status; it now fetches 10 and says how many there are
+  in total. A recent threat list that reached its limit of 100 reads "at
+  least 100".
+- `get_simple_statistics` and `get_boxes` pass their `group` argument to the
+  API. The client dropped `group` from every `/v2` request, and `get_boxes`
+  read `group_id` while its schema offers `group`.
 
 ### Changed
 
@@ -39,6 +56,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `duration` argument (1 to 1440 minutes) and the `box` argument that both
   schemas required are gone. A caller that still passes `duration` gets the
   pause, plus `duration_ignored: true` and a note in the response.
+- `get_alarm_trends` reads `GET /v2/trends/alarms`, the documented series of
+  alarms generated per day, instead of fetching up to 10000 alarms and
+  counting them per hour. The API has one point per day for the last 30
+  days, so `period` (now in the tool schema, default `30d` instead of `24h`)
+  selects the days that overlap it: `24h` returns yesterday and today, and
+  `1h` today so far. The response keeps its fields and adds `interval`,
+  `source`, `scope`, `window`, `last_point_partial` and `note`. The trends
+  API takes no box, so with `FIREWALLA_BOX_ID` set the tool still covers
+  every box (or the `group`), and `scope` says so. The old `30d` counted only
+  the first 30 hours of the 30 days, and the `group` argument in the schema
+  was ignored.
+- `get_rule_trends` reports rules created per day from
+  `GET /v2/trends/rules`. The live API answers that endpoint with HTTP 400, so
+  the tool then counts the creation times of the rules in `GET /v2/rules` per
+  UTC day, and says so in `source` and `note`. It no longer builds an "active
+  rule count" from an estimated baseline, shifted toward the current count
+  when the two differed by more than 20%: each point is `rules_created`, and
+  the summary has
+  `total_rules_created`, `avg_rules_created_per_day`, `peak_rules_created` and
+  `days_with_new_rules` in place of `avg_active_rules`, `max_active_rules`,
+  `min_active_rules` and `rule_stability`. It takes the same `period` and
+  `group` as `get_alarm_trends`.
+- `get_statistics_by_region` reads `GET /v2/stats/topRegionsByBlockedFlows`,
+  as its schema already said, instead of counting the regions of the 200 most
+  recent flows, blocked or not. It passes `group` and `limit`; the API
+  returned no more than 5 regions.
+- `get_statistics_by_box` reads `GET /v2/stats/{type}`
+  (`topBoxesByBlockedFlows` by default, or `topBoxesBySecurityAlarms`), the
+  types its schema already offered, and fills in each box from `/v2/boxes`.
+  Each box's `value` is the statistic; it replaces `activity_score`, which
+  added the box's rule count to its share of the 200 most recent alarms.
+- The client's `getFlowTrends`, which no tool calls, reads
+  `GET /v2/trends/flows` (blocked flows per day) instead of paging up to 10000
+  flows.
+- The threat level in the `security_report` and `network_health_check`
+  prompts and in `firewalla://metrics/security` comes from the Security
+  Activity (type 1) alarms of the last 24 hours, the type
+  `/v2/stats/topBoxesBySecurityAlarms` counts. It counted every alarm of type
+  5 or above, which includes video, gaming and new-device alarms, so an
+  account with a hundred such alarms a day and no Security Activity alarm
+  read as critical. The security scores and the resource's recommendation
+  also count Security Activity alarms instead of every active alarm. Alarms
+  stay active until archived, and each cost 5 of the score's 100 points.
 
 ### Added
 

@@ -37,6 +37,10 @@ import {
   SearchOptions,
   CrossReferenceResult,
   Trend,
+  TrendPeriod,
+  TrendSeries,
+  BoxStatisticType,
+  SecurityMetricsSummary,
   SimpleStats,
   Statistics,
   GeographicData,
@@ -90,6 +94,56 @@ function flowCategory(item: any): string {
 
 /** Largest `limit` the MSP API accepts on its /v2 list endpoints */
 const MAX_API_PAGE_SIZE = 500;
+
+const DAY_SECONDS = 24 * 60 * 60;
+
+/** Days in a /v2/trends series (measured 2026-09-25) */
+const TREND_DAYS = 30;
+
+/** Length of each period the trend tools accept */
+const TREND_PERIOD_SECONDS: Record<TrendPeriod, number> = {
+  '1h': 60 * 60,
+  '24h': DAY_SECONDS,
+  '7d': 7 * DAY_SECONDS,
+  '30d': 30 * DAY_SECONDS,
+};
+
+function validTrendPeriod(period: unknown): TrendPeriod {
+  return typeof period === 'string' && period in TREND_PERIOD_SECONDS
+    ? (period as TrendPeriod)
+    : '30d';
+}
+
+/**
+ * Keep the days of an ascending daily series that overlap the last `period`,
+ * so the days returned cover all of it: 24h returns yesterday and today. A
+ * day runs to the next point's ts, and the last day to `now`.
+ */
+function selectTrendDays(
+  points: Trend[],
+  period: TrendPeriod,
+  now: number,
+  about: { source: string; scope: string; note?: string }
+): TrendSeries {
+  const since = now - TREND_PERIOD_SECONDS[period];
+  const results = points.filter((_point, i) => {
+    const end = i + 1 < points.length ? points[i + 1].ts : now;
+    return end > since;
+  });
+  const last = results[results.length - 1];
+  return {
+    count: results.length,
+    results,
+    next_cursor: undefined,
+    source: about.source,
+    scope: about.scope,
+    interval: 'day',
+    window_start: results[0]?.ts,
+    window_end: now,
+    last_point_partial: last !== undefined && last.ts + DAY_SECONDS > now,
+    ...(about.note && { note: about.note }),
+  };
+}
 
 /**
  * A single-box operation could not pick a box: the account has several and
@@ -399,7 +453,8 @@ export class FirewallaClient {
       return params;
     }
 
-    // Allowed scalar parameters for raw /v2/* endpoints
+    // Allowed scalar parameters for raw /v2/* endpoints. `group` (a box
+    // group ID) is documented on /v2/boxes, /v2/stats and /v2/trends.
     const allowedParams = [
       'query',
       'limit',
@@ -407,6 +462,7 @@ export class FirewallaClient {
       'groupBy',
       'cursor',
       'box',
+      'group',
     ];
 
     const filtered: Record<string, unknown> = {};
@@ -1609,52 +1665,128 @@ export class FirewallaClient {
     };
   }
 
-  async getSecurityMetrics(): Promise<{
-    total_alarms: number;
-    active_alarms: number;
-    blocked_connections: number;
-    suspicious_activities: number;
-    threat_level: 'low' | 'medium' | 'high' | 'critical';
-    last_threat_detected: string;
-  }> {
-    // Optimized: Use server-side filtering instead of client-side filtering
-    const last24Hours = Math.floor(Date.now() / 1000 - 24 * 60 * 60);
+  /**
+   * Count the alarms or flows matching `query`, split by `groupBy`. Given
+   * `groupBy`, /v2/alarms and /v2/flows answer with one row per group
+   * carrying the group's `count` and no `ts` (measured 2026-09-25), so the
+   * totals are exact however many items match; more groups than one page
+   * holds are paged, up to 20 pages. If the rows are items rather than
+   * groups, the counts are those of the first page, and `exact` is false when
+   * more pages exist.
+   */
+  private async countMatching(
+    endpoint: '/v2/alarms' | '/v2/flows',
+    query: string | undefined,
+    groupBy: 'status' | 'type' | 'box'
+  ): Promise<{ total: number; groups: Map<string, number>; exact: boolean }> {
+    const params: Record<string, unknown> = {
+      groupBy,
+      limit: MAX_API_PAGE_SIZE,
+    };
+    const scoped = this.addBoxFilter(query);
+    if (scoped) {
+      params.query = scoped;
+    }
+    const keyOf = (row: Record<string, unknown>): string =>
+      String(groupBy === 'box' ? (row.gid ?? row.box) : row[groupBy]);
+    const groups = new Map<string, number>();
+    let total = 0;
+    let cursor: string | undefined;
+    let grouped = true;
+    for (let pages = 0; pages < 20 && grouped; pages++) {
+      const page = await this.request<{
+        results?: Array<Record<string, unknown>>;
+        next_cursor?: string;
+      }>('GET', endpoint, cursor ? { ...params, cursor } : params);
+      const rows = Array.isArray(page?.results) ? page.results : [];
+      grouped = rows.every(
+        row => typeof row?.count === 'number' && row.ts === undefined
+      );
+      for (const row of rows) {
+        const n = grouped ? (row.count as number) : 1;
+        groups.set(keyOf(row), (groups.get(keyOf(row)) || 0) + n);
+        total += n;
+      }
+      cursor = rows.length > 0 ? page?.next_cursor : undefined;
+      if (!cursor) {
+        break;
+      }
+    }
+    return { total, groups, exact: !cursor };
+  }
 
-    const [allAlarms, activeAlarms, blockedFlows, recentAlarms] =
+  /**
+   * Security counts for the prompts and firewalla://metrics/security. Every
+   * count is an exact total from the API's grouped counts, over the window
+   * in `windows`: the API's default windows are 30 days for alarms and 24
+   * hours for flows. The threat level comes from Security Activity (type 1)
+   * alarms, the type /v2/stats/topBoxesBySecurityAlarms counts; the other
+   * types (video, gaming, new device and so on) are routine on most
+   * networks. Scoped to FIREWALLA_BOX_ID when it is set.
+   */
+  async getSecurityMetrics(): Promise<SecurityMetricsSummary> {
+    const now = Math.floor(Date.now() / 1000);
+    const dayAgo = now - 24 * 60 * 60;
+
+    const [byStatus, lastDayByType, blocked, newestSecurityAlarm] =
       await Promise.all([
-        this.getActiveAlarms(undefined, undefined, 'ts:desc', 1000), // Total alarms
-        this.getActiveAlarms('status:1', undefined, 'ts:desc', 1000), // Active alarms only
-        // Blocked flows: the API has no `block` qualifier and answers
-      // `block:true` with no results; `status:blocked` selects them
-      this.getFlowData('status:blocked', undefined, 'ts:desc', 1000),
-        this.getActiveAlarms(`ts:>=${last24Hours}`, undefined, 'ts:desc', 1000), // Recent alarms
+        this.countMatching('/v2/alarms', undefined, 'status'),
+        this.countMatching('/v2/alarms', `ts:${dayAgo}-${now}`, 'type'),
+        // The API has no `block` qualifier and answers `block:true` with no
+        // results; `status:blocked` selects blocked flows
+        this.countMatching('/v2/flows', 'status:blocked', 'box'),
+        this.request<{ results?: Array<{ ts?: unknown }> }>(
+          'GET',
+          '/v2/alarms',
+          {
+            query: this.addBoxFilter('type:1'),
+            sortBy: 'ts:desc',
+            limit: 1,
+          }
+        ),
       ]);
 
-    // Determine threat level based on recent alarms
-    const criticalAlarms = recentAlarms.results.filter(
-      alarm => alarm.type >= 5
-    ).length;
-    let threat_level: 'low' | 'medium' | 'high' | 'critical' = 'low';
-    if (criticalAlarms > 10) {
+    const securityAlarms = lastDayByType.groups.get('1') || 0;
+    let threat_level: SecurityMetricsSummary['threat_level'] = 'low';
+    if (securityAlarms > 10) {
       threat_level = 'critical';
-    } else if (criticalAlarms > 5) {
+    } else if (securityAlarms > 5) {
       threat_level = 'high';
-    } else if (criticalAlarms > 1) {
+    } else if (securityAlarms > 1) {
       threat_level = 'medium';
     }
 
+    const newestTs = Number(newestSecurityAlarm?.results?.[0]?.ts);
+    const lower_bounds: string[] = [];
+    if (!byStatus.exact) {
+      lower_bounds.push('total_alarms', 'active_alarms');
+    }
+    if (!blocked.exact) {
+      lower_bounds.push('blocked_connections');
+    }
+    if (!lastDayByType.exact) {
+      lower_bounds.push('suspicious_activities', 'security_alarms');
+    }
+
     return {
-      total_alarms: allAlarms.count,
-      active_alarms: activeAlarms.count,
-      blocked_connections: blockedFlows.count,
-      suspicious_activities: recentAlarms.count,
+      total_alarms: byStatus.total,
+      active_alarms: byStatus.groups.get('1') || 0,
+      blocked_connections: blocked.total,
+      suspicious_activities: lastDayByType.total,
+      security_alarms: securityAlarms,
       threat_level,
       last_threat_detected:
-        recentAlarms.results.length > 0 && recentAlarms.results[0]?.ts
-          ? typeof recentAlarms.results[0].ts === 'string'
-            ? recentAlarms.results[0].ts
-            : new Date(recentAlarms.results[0].ts * 1000).toISOString()
-          : new Date().toISOString(),
+        Number.isFinite(newestTs) && newestTs > 0
+          ? new Date(newestTs * 1000).toISOString()
+          : null,
+      windows: {
+        total_alarms: 'last 30 days',
+        active_alarms: 'last 30 days',
+        blocked_connections: 'last 24 hours',
+        suspicious_activities: 'last 24 hours',
+        security_alarms: 'last 24 hours',
+      },
+      lower_bounds,
     };
   }
 
@@ -2504,18 +2636,21 @@ export class FirewallaClient {
 
   // Statistics API Implementation
   @optimizeResponse('statistics')
-  async getSimpleStatistics(): Promise<{
+  async getSimpleStatistics(group?: string): Promise<{
     count: number;
     results: SimpleStats[];
     next_cursor?: string;
   }> {
-    // Optimized: Use single /v2/stats/simple endpoint instead of 3 API calls
+    const params: Record<string, unknown> = {};
+    if (group?.trim()) {
+      params.group = group.trim();
+    }
     const response = await this.request<{
       onlineBoxes: number;
       offlineBoxes: number;
       alarms: number;
       rules: number;
-    }>('GET', '/v2/stats/simple');
+    }>('GET', '/v2/stats/simple', params);
 
     return {
       count: 1,
@@ -2523,51 +2658,49 @@ export class FirewallaClient {
     };
   }
 
+  /**
+   * Top regions by blocked flows, from GET /v2/stats/topRegionsByBlockedFlows.
+   * Measured 2026-09-25: `limit` below 5 is honoured, and a larger `limit`
+   * still returned 5 regions.
+   */
   @optimizeResponse('statistics')
-  async getStatisticsByRegion(): Promise<{
+  async getStatisticsByRegion(
+    group?: string,
+    limit?: number
+  ): Promise<{
     count: number;
     results: Statistics[];
     next_cursor?: string;
   }> {
     try {
-      const flows = await this.getFlowData();
-
-      // Validate flows response structure
-      if (!flows?.results || !Array.isArray(flows.results)) {
-        logger.debugNamespace(
-          'validation',
-          'getStatisticsByRegion: flows data missing or invalid structure',
-          {
-            flows_exists: !!flows,
-            results_exists: !!(flows && flows.results),
-            results_is_array: !!(
-              flows &&
-              flows.results &&
-              Array.isArray(flows.results)
-            ),
-          }
-        );
-        return {
-          count: 0,
-          results: [],
-        };
+      const params: Record<string, unknown> = {};
+      if (group?.trim()) {
+        params.group = group.trim();
       }
-
-      // Group flows by region
-      const regionStats = new Map<string, number>();
-
-      flows.results.forEach(flow => {
-        const region = flow?.region || 'unknown';
-        regionStats.set(region, (regionStats.get(region) || 0) + 1);
-      });
-
-      // Convert to Statistics format
-      const results = Array.from(regionStats.entries()).map(
-        ([code, value]) => ({
-          meta: { code },
-          value,
-        })
+      if (limit !== undefined) {
+        params.limit = limit;
+      }
+      const response = await this.request<unknown>(
+        'GET',
+        '/v2/stats/topRegionsByBlockedFlows',
+        params
       );
+      if (!Array.isArray(response)) {
+        throw new Error(
+          'Unexpected response from /v2/stats/topRegionsByBlockedFlows: expected an array'
+        );
+      }
+      const results: Statistics[] = response
+        .filter(
+          (item: any) =>
+            item &&
+            typeof item.value === 'number' &&
+            typeof item.meta?.code === 'string'
+        )
+        .map((item: any) => ({
+          meta: { code: item.meta.code },
+          value: item.value,
+        }));
 
       return {
         count: results.length,
@@ -2584,527 +2717,260 @@ export class FirewallaClient {
     }
   }
 
-  // Trends API Implementation
+  /**
+   * GET /v2/trends/{kind}: the number of blocked flows captured, alarms
+   * generated or rules created each day. Measured 2026-09-25: 30 points in
+   * ascending ts order, one per day, each ts the start of a day in the
+   * account's time zone, the last point the current day so far. `group` (a
+   * box group ID) scopes it; the endpoint takes no box, so FIREWALLA_BOX_ID
+   * does not.
+   */
+  private async fetchTrend(
+    kind: 'flows' | 'alarms' | 'rules',
+    group?: string
+  ): Promise<Trend[]> {
+    const params: Record<string, unknown> = {};
+    if (group?.trim()) {
+      params.group = group.trim();
+    }
+    const response = await this.request<unknown>(
+      'GET',
+      `/v2/trends/${kind}`,
+      params
+    );
+    if (!Array.isArray(response)) {
+      throw new Error(
+        `Unexpected response from /v2/trends/${kind}: expected an array of {ts, value}`
+      );
+    }
+    return response
+      .filter(
+        (point: any) =>
+          point &&
+          Number.isFinite(point.ts) &&
+          point.ts > 0 &&
+          Number.isFinite(point.value) &&
+          point.value >= 0
+      )
+      .map((point: any) => ({ ts: point.ts, value: point.value }))
+      .sort((a, b) => a.ts - b.ts);
+  }
+
+  /**
+   * A documented daily trend cut to `period`. The trends API has one point
+   * per day, so a period shorter than a day returns the current day so far.
+   */
+  private async dailyTrend(
+    kind: 'flows' | 'alarms',
+    period: TrendPeriod,
+    group?: string
+  ): Promise<TrendSeries> {
+    const now = Math.floor(Date.now() / 1000);
+    const points = await this.fetchTrend(kind, group);
+    return selectTrendDays(points, validTrendPeriod(period), now, {
+      source: `GET /v2/trends/${kind}`,
+      scope: group?.trim() ? `box group ${group.trim()}` : 'all boxes',
+    });
+  }
+
+  /**
+   * Blocked flows per day from GET /v2/trends/flows. No tool calls this; it
+   * replaced client-side counting of up to 10000 flows.
+   */
   @optimizeResponse('trends')
   async getFlowTrends(
-    period: '1h' | '24h' | '7d' | '30d' = '24h',
-    interval: number = 3600
-  ): Promise<{ count: number; results: Trend[]; next_cursor?: string }> {
+    period: TrendPeriod = '30d',
+    group?: string
+  ): Promise<TrendSeries> {
     try {
-      // Enhanced input validation and sanitization
-      if (period && typeof period !== 'string') {
-        throw new Error('Period must be a string');
-      }
-
-      if (
-        interval !== undefined &&
-        (typeof interval !== 'number' || isNaN(interval))
-      ) {
-        throw new Error('Interval must be a valid number');
-      }
-
-      const validPeriods: Array<'1h' | '24h' | '7d' | '30d'> = [
-        '1h',
-        '24h',
-        '7d',
-        '30d',
-      ];
-      const validatedPeriod = validPeriods.includes(period) ? period : '24h';
-      const validatedInterval = Math.max(
-        60,
-        Math.min(Number(interval) || 3600, 86400)
-      ); // 60-86400 seconds as per schema
-
-      // Calculate time range for the period
-      const end = Math.floor(Date.now() / 1000);
-      let begin: number;
-      let dataPoints: number;
-
-      switch (validatedPeriod) {
-        case '1h':
-          begin = end - 60 * 60;
-          dataPoints = Math.floor(3600 / validatedInterval);
-          break;
-        case '24h':
-          begin = end - 24 * 60 * 60;
-          dataPoints = Math.floor((24 * 3600) / validatedInterval);
-          break;
-        case '7d':
-          begin = end - 7 * 24 * 60 * 60;
-          dataPoints = Math.floor((7 * 24 * 3600) / validatedInterval);
-          break;
-        case '30d':
-          begin = end - 30 * 24 * 60 * 60;
-          dataPoints = Math.floor((30 * 24 * 3600) / validatedInterval);
-          break;
-        default:
-          begin = end - 24 * 60 * 60;
-          dataPoints = Math.floor((24 * 3600) / validatedInterval);
-      }
-
-      // Get flow data for the period using global endpoint with box parameter
-      const params: Record<string, unknown> = {
-        query: `ts:${begin}-${end}`,
-        sortBy: 'ts:asc',
-      };
-
-      // Apply box filter through the query parameter
-      params.query = this.addBoxFilter(params.query as string | undefined);
-      const flowResponse = await this.requestPages<any>(
-        '/v2/flows',
-        params,
-        10000
-      );
-
-      // Group flows by time intervals
-      const trends: Trend[] = [];
-      const intervalGroups = new Map<number, number>();
-
-      // Initialize all intervals with 0
-      for (let i = 0; i < dataPoints; i++) {
-        const intervalStart = begin + i * validatedInterval;
-        intervalGroups.set(intervalStart, 0);
-      }
-
-      // Count flows in each interval
-      (flowResponse.results || []).forEach((flow: any) => {
-        const flowTime = flow.ts || 0;
-        if (flowTime >= begin && flowTime <= end) {
-          const intervalIndex = Math.floor(
-            (flowTime - begin) / validatedInterval
-          );
-          const intervalStart = begin + intervalIndex * validatedInterval;
-          if (intervalGroups.has(intervalStart)) {
-            intervalGroups.set(
-              intervalStart,
-              intervalGroups.get(intervalStart)! + 1
-            );
-          }
-        }
-      });
-
-      // Convert to trend format
-      for (const [intervalStart, count] of intervalGroups.entries()) {
-        trends.push({
-          ts: intervalStart + validatedInterval, // End of interval
-          value: count,
-        });
-      }
-
-      // Sort by timestamp
-      trends.sort((a, b) => a.ts - b.ts);
-
-      return {
-        count: trends.length,
-        results: trends,
-        next_cursor: undefined,
-      };
+      return await this.dailyTrend('flows', period, group);
     } catch (error) {
       logger.error(
         'Error in getFlowTrends:',
         error instanceof Error ? error : new Error(String(error))
       );
-      if (
-        error instanceof Error &&
-        (error.message.includes('Period') ||
-          error.message.includes('Interval') ||
-          error.message.includes('Invalid'))
-      ) {
-        throw error; // Re-throw validation errors
-      }
       throw new Error(
         `Failed to get flow trends for period ${period}: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }
 
+  /** Alarms generated per day from GET /v2/trends/alarms */
   @optimizeResponse('trends')
   async getAlarmTrends(
-    period: '1h' | '24h' | '7d' | '30d' = '24h'
-  ): Promise<{ count: number; results: Trend[]; next_cursor?: string }> {
+    period: TrendPeriod = '30d',
+    group?: string
+  ): Promise<TrendSeries> {
     try {
-      // Enhanced input validation and sanitization
-      if (period && typeof period !== 'string') {
-        throw new Error('Period must be a string');
-      }
-
-      const validPeriods: Array<'1h' | '24h' | '7d' | '30d'> = [
-        '1h',
-        '24h',
-        '7d',
-        '30d',
-      ];
-      const validatedPeriod = validPeriods.includes(period) ? period : '24h';
-
-      // Calculate time range for the period
-      const end = Math.floor(Date.now() / 1000);
-      let begin: number;
-      let dataPoints: number;
-      const intervalSeconds = 3600; // 1 hour intervals
-
-      switch (validatedPeriod) {
-        case '1h':
-          begin = end - 60 * 60;
-          dataPoints = 1;
-          break;
-        case '24h':
-          begin = end - 24 * 60 * 60;
-          dataPoints = 24;
-          break;
-        case '7d':
-          begin = end - 7 * 24 * 60 * 60;
-          dataPoints = 168;
-          break;
-        case '30d':
-          begin = end - 30 * 24 * 60 * 60;
-          dataPoints = 30;
-          break;
-        default:
-          begin = end - 24 * 60 * 60;
-          dataPoints = 24;
-      }
-
-      // Get alarm data for the period using global endpoint with box parameter
-      const params: Record<string, unknown> = {
-        sortBy: 'ts:asc',
-      };
-      // Add box.id filter to query
-      params.query = this.addBoxFilter(`ts:${begin}-${end}`);
-      const alarmResponse = await this.requestPages<any>(
-        '/v2/alarms',
-        params,
-        10000
-      );
-
-      // Group alarms by time intervals
-      const trends: Trend[] = [];
-      const intervalGroups = new Map<number, number>();
-
-      // Initialize all intervals with 0
-      for (let i = 0; i < dataPoints; i++) {
-        const intervalStart = begin + i * intervalSeconds;
-        intervalGroups.set(intervalStart, 0);
-      }
-
-      // Count alarms in each interval
-      (alarmResponse.results || []).forEach((alarm: any) => {
-        const alarmTime = alarm.ts || 0;
-        if (alarmTime >= begin && alarmTime <= end) {
-          const intervalIndex = Math.floor(
-            (alarmTime - begin) / intervalSeconds
-          );
-          const intervalStart = begin + intervalIndex * intervalSeconds;
-          if (intervalGroups.has(intervalStart)) {
-            intervalGroups.set(
-              intervalStart,
-              intervalGroups.get(intervalStart)! + 1
-            );
-          }
-        }
-      });
-
-      // Convert to trend format
-      for (const [intervalStart, count] of intervalGroups.entries()) {
-        trends.push({
-          ts: intervalStart + intervalSeconds, // End of interval
-          value: count,
-        });
-      }
-
-      // Sort by timestamp
-      trends.sort((a, b) => a.ts - b.ts);
-
-      return {
-        count: trends.length,
-        results: trends,
-        next_cursor: undefined,
-      };
+      return await this.dailyTrend('alarms', period, group);
     } catch (error) {
       logger.error(
         'Error in getAlarmTrends:',
         error instanceof Error ? error : new Error(String(error))
       );
-      if (
-        error instanceof Error &&
-        (error.message.includes('Period') || error.message.includes('Invalid'))
-      ) {
-        throw error; // Re-throw validation errors
-      }
       throw new Error(
         `Failed to get alarm trends for period ${period}: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }
 
+  /**
+   * Rules created per day from GET /v2/trends/rules. Measured 2026-09-25,
+   * that endpoint answered 400 with an empty body, with and without `group`,
+   * while the alarm and flow trends answered 200. On a 400 the days are
+   * counted from the creation times (`ts`) of the rules GET /v2/rules
+   * returns, per UTC day, and the series says so.
+   */
   @optimizeResponse('trends')
   async getRuleTrends(
-    period: '1h' | '24h' | '7d' | '30d' = '24h'
-  ): Promise<{ count: number; results: Trend[]; next_cursor?: string }> {
+    period: TrendPeriod = '30d',
+    group?: string
+  ): Promise<TrendSeries> {
+    const validated = validTrendPeriod(period);
+    const now = Math.floor(Date.now() / 1000);
+    const groupId = group?.trim() || undefined;
     try {
-      // Enhanced input validation and sanitization
-      if (period && typeof period !== 'string') {
-        throw new Error('Period must be a string');
-      }
-
-      const validPeriods: Array<'1h' | '24h' | '7d' | '30d'> = [
-        '1h',
-        '24h',
-        '7d',
-        '30d',
-      ];
-      const validatedPeriod = validPeriods.includes(period) ? period : '24h';
-
-      // Enhanced rule data retrieval with better error handling
-      let rules;
+      let points: Trend[];
+      let source = 'GET /v2/trends/rules';
+      let scope = groupId ? `box group ${groupId}` : 'all boxes';
+      let note: string | undefined;
       try {
-        rules = await this.getNetworkRules();
-      } catch (rulesError) {
-        logger.debugNamespace('api', 'Failed to get network rules for trends', {
-          error: rulesError,
-        });
-        rules = { results: [], count: 0 };
-      }
-
-      // Enhanced timestamp validation
-      const currentTime = Date.now();
-      const end = Math.floor(currentTime / 1000);
-      let begin: number;
-      let points: number;
-
-      switch (validatedPeriod) {
-        case '1h':
-          begin = end - 60 * 60;
-          points = 12;
-          break;
-        case '24h':
-          begin = end - 24 * 60 * 60;
-          points = 24;
-          break;
-        case '7d':
-          begin = end - 7 * 24 * 60 * 60;
-          points = 168;
-          break;
-        case '30d':
-          begin = end - 30 * 24 * 60 * 60;
-          points = 30;
-          break;
-        default:
-          begin = end - 24 * 60 * 60;
-          points = 24;
-      }
-
-      // Validate calculated values
-      if (begin >= end || begin <= 0) {
-        throw new Error(`Invalid time range: begin=${begin}, end=${end}`);
-      }
-
-      if (points <= 0) {
-        throw new Error(`Invalid points calculation: ${points}`);
-      }
-
-      const interval = Math.floor((end - begin) / Math.max(1, points));
-      if (interval <= 0) {
-        throw new Error(`Invalid interval calculation: ${interval}`);
-      }
-
-      const trends: Trend[] = [];
-
-      // Enhanced rule analysis with comprehensive null safety
-      if (!rules?.results || !Array.isArray(rules.results)) {
-        logger.debugNamespace('validation', 'Invalid rules response structure');
-        // Generate empty trends
-        for (let i = 0; i < points; i++) {
-          const intervalEnd = begin + (i + 1) * interval;
-          trends.push({ ts: intervalEnd, value: 0 });
+        points = await this.fetchTrend('rules', groupId);
+      } catch (error) {
+        if (!(
+          error instanceof Error && error.message.startsWith('Bad Request')
+        )) {
+          throw error;
         }
-      } else {
-        // Enhanced rule filtering and counting
-        const validRules = rules.results.filter(
-          rule =>
-            rule && typeof rule === 'object' && rule.id && rule.id !== 'unknown'
-        );
-
-        // Count active rules with better validation
-        const activeRules = validRules.filter(
-          rule =>
-            rule.status === 'active' ||
-            rule.status === undefined ||
-            rule.status === null
-        );
-
-        // Count rules by creation/update time for historical analysis
-        const rulesByTime = new Map<number, Set<string>>();
-        const baselineCount = activeRules.length;
-
-        validRules.forEach(rule => {
-          const creationTime = rule.ts || 0;
-          const updateTime = rule.updateTs || 0;
-          const relevantTime = Math.max(creationTime, updateTime);
-
-          if (relevantTime >= begin && relevantTime <= end) {
-            const intervalIndex = Math.floor((relevantTime - begin) / interval);
-            if (intervalIndex >= 0 && intervalIndex < points) {
-              const intervalEnd = begin + (intervalIndex + 1) * interval;
-              if (!rulesByTime.has(intervalEnd)) {
-                rulesByTime.set(intervalEnd, new Set());
-              }
-              rulesByTime.get(intervalEnd)!.add(rule.id);
-            }
-          }
-        });
-
-        // Generate trend points from the counted rules
-        let cumulativeRuleCount = Math.max(0, baselineCount - rulesByTime.size); // Estimate baseline
-
-        for (let i = 0; i < points; i++) {
-          const intervalEnd = begin + (i + 1) * interval;
-
-          // Add rules created/updated in this interval
-          const rulesInInterval = rulesByTime.get(intervalEnd)?.size || 0;
-          cumulativeRuleCount += rulesInInterval;
-
-          const finalCount = Math.max(0, cumulativeRuleCount);
-
-          if (intervalEnd > begin && intervalEnd <= end + interval) {
-            trends.push({
-              ts: intervalEnd,
-              value: finalCount,
-            });
-          } else {
-            logger.debugNamespace(
-              'validation',
-              `Invalid interval end timestamp: ${intervalEnd}`
-            );
-            trends.push({ ts: intervalEnd, value: finalCount });
-          }
+        points = await this.ruleCreationsPerDay(now, groupId);
+        source = 'GET /v2/rules';
+        if (!groupId && this.config.boxId) {
+          scope = `box ${this.config.boxId}`;
         }
-
-        // Ensure final count is reasonably close to actual active count
-        if (trends.length > 0 && baselineCount > 0) {
-          const lastTrend = trends[trends.length - 1];
-          const deviation = Math.abs(lastTrend.value - baselineCount);
-          if (deviation > baselineCount * 0.2) {
-            // If deviation > 20%, adjust
-            const adjustment =
-              Math.sign(baselineCount - lastTrend.value) *
-              Math.floor(deviation / 2);
-            trends.forEach(trend => {
-              trend.value = Math.max(0, trend.value + adjustment);
-            });
-          }
-        }
+        note =
+          'GET /v2/trends/rules answered 400, so each day counts the rules in GET /v2/rules whose creation time (ts) falls in it, by UTC day. Rules deleted since are not counted.';
       }
-
-      // Sort and validate final results
-      const validTrends = trends
-        .filter(
-          trend =>
-            trend &&
-            typeof trend.ts === 'number' &&
-            typeof trend.value === 'number' &&
-            trend.ts > 0 &&
-            trend.value >= 0
-        )
-        .sort((a, b) => a.ts - b.ts)
-        .slice(0, points); // Ensure we don't exceed expected points
-
-      // If we lost trends due to validation, fill with baseline
-      while (validTrends.length < points) {
-        const missingIndex = validTrends.length;
-        const missingTs = begin + (missingIndex + 1) * interval;
-        const baselineValue =
-          validTrends.length > 0
-            ? validTrends[validTrends.length - 1].value
-            : 0;
-        validTrends.push({ ts: missingTs, value: baselineValue });
-      }
-
-      return {
-        count: validTrends.length,
-        results: validTrends,
-        next_cursor: undefined,
-      };
+      return selectTrendDays(points, validated, now, { source, scope, note });
     } catch (error) {
       logger.error(
         'Error in getRuleTrends:',
         error instanceof Error ? error : new Error(String(error))
       );
-      if (
-        error instanceof Error &&
-        (error.message.includes('Period') || error.message.includes('Invalid'))
-      ) {
-        throw error; // Re-throw validation errors
-      }
       throw new Error(
         `Failed to get rule trends for period ${period}: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }
 
+  /**
+   * Rules created on each of the last 30 UTC days (today last), from the
+   * creation times of the rules GET /v2/rules returns. With `group`, only
+   * rules for that box group or for a box in it.
+   */
+  private async ruleCreationsPerDay(
+    now: number,
+    group?: string
+  ): Promise<Trend[]> {
+    const query = this.addBoxFilter(undefined);
+    const [rules, boxes] = await Promise.all([
+      this.request<{ results?: Array<Record<string, unknown>> }>(
+        'GET',
+        '/v2/rules',
+        query ? { query } : {}
+      ),
+      group ? this.getBoxes(group) : Promise.resolve(undefined),
+    ]);
+    const groupGids = boxes
+      ? new Set(boxes.results.map(box => box.gid))
+      : undefined;
+    const first =
+      Math.floor(now / DAY_SECONDS) * DAY_SECONDS -
+      (TREND_DAYS - 1) * DAY_SECONDS;
+    const counts: number[] = new Array(TREND_DAYS).fill(0);
+    for (const rule of Array.isArray(rules?.results) ? rules.results : []) {
+      if (
+        groupGids &&
+        rule.group !== group &&
+        !groupGids.has(String(rule.gid))
+      ) {
+        continue;
+      }
+      const ts = Number(rule.ts);
+      if (Number.isFinite(ts) && ts >= first && ts <= now) {
+        counts[Math.floor((ts - first) / DAY_SECONDS)]++;
+      }
+    }
+    return counts.map((value, i) => ({ ts: first + i * DAY_SECONDS, value }));
+  }
+
+  /**
+   * Top boxes by blocked flows or by security alarms, from GET
+   * /v2/stats/{type}, with each box's details from GET /v2/boxes. Measured
+   * 2026-09-25: topBoxesBySecurityAlarms counted Security Activity (type 1)
+   * alarms of the last 30 days, and topBoxesByBlockedFlows summed to within
+   * 0.1% of the 30 daily points of /v2/trends/flows.
+   */
   @optimizeResponse('statistics')
-  async getStatisticsByBox(): Promise<{
+  async getStatisticsByBox(
+    type: BoxStatisticType = 'topBoxesByBlockedFlows',
+    group?: string,
+    limit?: number
+  ): Promise<{
     count: number;
     results: Statistics[];
     next_cursor?: string;
   }> {
     try {
-      // Aggregate statistics from available endpoints
-      const [boxes, alarms, rules] = await Promise.all([
-        this.getBoxes().catch(() => ({ results: [], count: 0 })),
-        this.getActiveAlarms().catch(() => ({ results: [], count: 0 })),
-        this.getNetworkRules().catch(() => ({ results: [], count: 0 })),
+      const params: Record<string, unknown> = {};
+      if (group?.trim()) {
+        params.group = group.trim();
+      }
+      if (limit !== undefined) {
+        params.limit = limit;
+      }
+      const [response, boxes] = await Promise.all([
+        this.request<unknown>(
+          'GET',
+          `/v2/stats/${encodeURIComponent(type)}`,
+          params
+        ),
+        this.getBoxes(group?.trim() || undefined),
       ]);
-
-      // Group data by box
-      const boxStats = new Map<
-        string,
-        { box: any; alarmCount: number; ruleCount: number }
-      >();
-
-      boxes.results.forEach((box: any) => {
-        boxStats.set(box.id || box.gid, {
-          box,
-          alarmCount: 0,
-          ruleCount: 0,
+      if (!Array.isArray(response)) {
+        throw new Error(
+          `Unexpected response from /v2/stats/${type}: expected an array`
+        );
+      }
+      const byGid = new Map(boxes.results.map(box => [box.gid, box]));
+      const results: Statistics[] = response
+        .filter(
+          (item: any) =>
+            item &&
+            typeof item.value === 'number' &&
+            typeof item.meta?.gid === 'string'
+        )
+        .map((item: any): Statistics => {
+          const box = byGid.get(item.meta.gid);
+          return {
+            meta: {
+              mode: box?.mode ?? 'router',
+              version: box?.version ?? 'unknown',
+              online: box?.online ?? false,
+              lastSeen: box?.lastSeen,
+              license: box?.license ?? 'unknown',
+              publicIP: box?.publicIP ?? 'unknown',
+              group: box?.group,
+              location: box?.location ?? 'unknown',
+              deviceCount: box?.deviceCount ?? 0,
+              ruleCount: box?.ruleCount ?? 0,
+              alarmCount: box?.alarmCount ?? 0,
+              gid: item.meta.gid,
+              name: String(item.meta.name ?? box?.name ?? 'Unknown Box'),
+              model: String(item.meta.model ?? box?.model ?? 'unknown'),
+            },
+            value: item.value,
+          };
         });
-      });
-
-      // Count alarms per box
-      alarms.results.forEach((alarm: any) => {
-        if (alarm.gid && boxStats.has(alarm.gid)) {
-          boxStats.get(alarm.gid)!.alarmCount++;
-        }
-      });
-
-      // Count rules per box
-      rules.results.forEach((rule: any) => {
-        if (rule.gid && boxStats.has(rule.gid)) {
-          boxStats.get(rule.gid)!.ruleCount++;
-        }
-      });
-
-      // Convert to Statistics format
-      const results = Array.from(boxStats.values()).map(
-        (stat): Statistics => ({
-          meta: {
-            gid: stat.box.id || stat.box.gid,
-            name: stat.box.name,
-            model: stat.box.model || 'unknown',
-            mode: stat.box.mode || 'router',
-            version: stat.box.version || 'unknown',
-            online: Boolean(stat.box.online || stat.box.status === 'online'),
-            lastSeen: stat.box.lastSeen || stat.box.last_seen,
-            license: stat.box.license || 'unknown',
-            publicIP: stat.box.publicIP || stat.box.public_ip || 'unknown',
-            group: stat.box.group,
-            location: stat.box.location || 'unknown',
-            deviceCount: stat.box.deviceCount || stat.box.device_count || 0,
-            ruleCount: stat.ruleCount,
-            alarmCount: stat.alarmCount,
-          },
-          value: stat.alarmCount + stat.ruleCount, // Combined activity score
-        })
-      );
 
       return {
         count: results.length,

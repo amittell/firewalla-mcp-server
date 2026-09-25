@@ -482,6 +482,73 @@ export interface Trend {
   value: number;
 }
 
+/** Periods the trend tools accept */
+export type TrendPeriod = '1h' | '24h' | '7d' | '30d';
+
+/** The box types of GET /v2/stats/{type} */
+export type BoxStatisticType =
+  'topBoxesByBlockedFlows' | 'topBoxesBySecurityAlarms';
+
+/**
+ * A daily series from /v2/trends/{flows,alarms,rules}, cut to the days that
+ * overlap the requested period. The API has one point per day for the last
+ * 30 days; each point's ts is the start of its day.
+ * @interface TrendSeries
+ */
+export interface TrendSeries {
+  count: number;
+  results: Trend[];
+  next_cursor?: string;
+  /** Where the points came from, e.g. "GET /v2/trends/alarms" */
+  source: string;
+  /** What the counts cover: "all boxes", "box group <id>" or "box <gid>" */
+  scope: string;
+  /** Always "day": the trends API has no finer resolution */
+  interval: 'day';
+  /** Start of the first returned day (Unix seconds), if any */
+  window_start?: number;
+  /** When the series was read (Unix seconds); the last day runs to here */
+  window_end: number;
+  /** True when the last point is a day still in progress */
+  last_point_partial: boolean;
+  /** How the numbers were produced, when that is not obvious */
+  note?: string;
+}
+
+/**
+ * Security counts for the prompts and the security metrics resource. Each
+ * count covers the window named in `windows`; a count named in
+ * `lower_bounds` is only a floor.
+ * @interface SecurityMetricsSummary
+ */
+export interface SecurityMetricsSummary {
+  /** Alarms in the API's default alarm window (the last 30 days) */
+  total_alarms: number;
+  /** Of those, alarms with status 1 (active) */
+  active_alarms: number;
+  /** Blocked flows in the API's default flow window (the last 24 hours) */
+  blocked_connections: number;
+  /** Alarms of any type in the last 24 hours */
+  suspicious_activities: number;
+  /** Security Activity (type 1) alarms in the last 24 hours */
+  security_alarms: number;
+  /** From security_alarms: low 0-1, medium 2-5, high 6-10, critical 11+ */
+  threat_level: 'low' | 'medium' | 'high' | 'critical';
+  /** Time of the newest Security Activity alarm in the last 30 days */
+  last_threat_detected: string | null;
+  /** The window each count covers */
+  windows: Record<
+    | 'total_alarms'
+    | 'active_alarms'
+    | 'blocked_connections'
+    | 'suspicious_activities'
+    | 'security_alarms',
+    string
+  >;
+  /** Counts the API did not total, so the client counted one page of rows */
+  lower_bounds: string[];
+}
+
 /**
  * Statistics data - Data Model Compliant
  * @interface Statistics
