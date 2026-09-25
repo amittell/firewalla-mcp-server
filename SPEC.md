@@ -147,10 +147,12 @@ interface Flow {
 - `active_only` (optional): Only active rules (default: true)
 
 ### pause_rule
-**Purpose**: Temporarily disable specific firewall rule
+**Purpose**: Pause a specific firewall rule until `resume_rule` reactivates it
 **Parameters**:
 - `rule_id`: Rule identifier to pause
-- `duration` (optional): Pause duration in minutes (default: 60)
+
+The MSP API pause endpoint takes no duration, so a pause does not expire on
+its own. A `duration` argument is ignored, and the response says so.
 
 ### get_target_lists
 **Purpose**: Access security target lists

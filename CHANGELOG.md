@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+
 - `get_specific_alarm` reports "No boxes are visible to this MSP token" as a
   validation error with that message. The client rewrapped the box-selection
   error as a generic failure, and `withToolTimeout` rewrapped it again, so the
@@ -19,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   list writes, so for example `get_network_rules` right after `pause_rule` still
   showed the rule as active. Any write, including one that fails, now clears the
   response cache; the IP geolocation cache is kept.
+- `pause_rule` and `resume_rule` send `POST /v2/rules/{id}/pause` and
+  `/resume` with no body, as the MSP API documents. Up to 1.4.1 they sent
+  `{duration, box}` and `{box}`. Measured on 2026-09-25 on a disposable rule,
+  the API accepted the duration and ignored it, so a rule paused "for 60
+  minutes" stayed paused until it was resumed.
+- `resume_rule` right after `pause_rule` in the same server process no longer
+  refuses with "Rule is already active". Its status check read the cached
+  pre-pause answer from `GET /v2/rules` for up to `CACHE_TTL` (300 s by
+  default). The client now drops cached rule reads after a pause or a resume.
+- The status check in `pause_rule`, `resume_rule` and `delete_rule` matches
+  the rule by ID instead of taking the first rule the API returns.
+
+### Changed
+
+- `pause_rule` and `resume_rule` take only `rule_id`. The MSP API pause
+  endpoint takes no duration, so a pause lasts until `resume_rule`. The
+  `duration` argument (1 to 1440 minutes) and the `box` argument that both
+  schemas required are gone. A caller that still passes `duration` gets the
+  pause, plus `duration_ignored: true` and a note in the response.
 
 ## [1.4.1] - 2026-09-25
 

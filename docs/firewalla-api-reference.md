@@ -409,15 +409,25 @@ Pause an existing rule.
 **Endpoint**: `POST https://{msp_domain}/v2/rules/{id}/pause`
 
 **Path Parameters**:
-- `id` (string, required): Rule ID. In the MSP web UI it is shown at the bottom of the rule's dialog.
+- `id` (string, required): Rule ID. In the MSP web UI it is shown at the bottom of the rule's dialog. `GET /v2/rules` and `POST /v2/rules` return it as `<box gid>:<n>`, e.g. `00000000-0000-0000-0000-000000000000:630`.
 
-**Request Body**: none documented
+**Request Body**: none. The official docs and the `pause-an-existing-rule` example send no body and no query string. Neither documents a duration.
 
 **Responses**: 200 Success, 401 Permission Denied, 404 Not Found. The official docs show no response body.
 
 A paused rule has `status: "paused"`, and the Rule model's `resumeTs` is "the auto resume time when this rule is paused". The official docs do not say how that time is set.
 
-**Client note**: `pauseRule` in `src/firewalla/client.ts` still sends a JSON body `{duration, box}` (duration in minutes, 1 to 1440). That body is not in the official docs, and it is unverified whether the API honours `duration`.
+**Measured 2026-09-25** on disposable block rules for the domain `mcp-pause-test.example.invalid`, created on one online box and deleted afterwards (three rules, one per run):
+- A pause with no body returns 200 with the JSON string `"ok"`. Read back from `GET /v2/rules`, the rule has `status: "paused"` and no `resumeTs` field.
+- The pause has no duration. A duration was accepted (200 `"ok"`) and ignored in each form tried: the body `{"duration": 2, "box": "<box gid>"}` that the client sent up to 1.4.1, `{"duration": 2}`, `{"duration": 120}`, and the query string `?duration=2`. None of them set a `resumeTs`.
+- After a pause with the body `{"duration": 1, "box": "<box gid>"}` (one minute if the unit were minutes, one second if seconds), the rule was still paused 187 seconds later. It became active only after `POST /v2/rules/{id}/resume`. Longer units were not tested.
+- An unknown body such as `{"bogusField": true}` is accepted, and the rule is paused. A body that is not valid JSON returns 400 `{"error":{"title":"Bad request","message":"Bad request"}}`, and the rule stays active.
+- Pausing a rule that is already paused returns 200 `"ok"`.
+- For a rule ID that does not exist (`00000000-0000-0000-0000-000000000000`), pause returns 403 `{"error":{"title":"Forbidden","message":"You are not allowed to access this resource","type":"FORBIDDEN"}}`, not the documented 404.
+
+No request tried here set `resumeTs`. A rule paused through the API stays paused until it is resumed.
+
+**Client**: `pauseRule` in `src/firewalla/client.ts` sends the request with no body and no query string, and `pause_rule` takes only `rule_id`. Up to 1.4.1 the client sent `{duration, box}` and the tool took a `duration` of 1 to 1440 minutes. The API ignored that duration, so a pause never ended by itself. `pause_rule` now ignores a `duration` argument and says so in its response (`duration_ignored: true` and a `note`).
 
 **Example Request** (as in the official docs and the `pause-an-existing-rule` example):
 ```bash
@@ -434,11 +444,13 @@ Resume a previously paused rule.
 **Path Parameters**:
 - `id` (string, required): Rule ID
 
-**Request Body**: none documented
+**Request Body**: none
 
 **Responses**: 200 Success, 401 Permission Denied, 404 Not Found. The official docs show no response body.
 
-**Client note**: `resumeRule` in `src/firewalla/client.ts` still sends a JSON body `{box}`, which is not in the official docs.
+**Measured 2026-09-25** on the same disposable rules: a resume with no body returns 200 with the JSON string `"ok"`, and the rule reads back with `status: "active"`. Resuming a rule that is already active also returns 200 `"ok"`. For a rule ID that does not exist, resume returns the same 403 as pause.
+
+**Client**: `resumeRule` in `src/firewalla/client.ts` sends the request with no body. Up to 1.4.1 it sent `{box}`. After a pause or a resume the client drops its cached `GET /v2/rules` answers, so the next read shows the new status. Before this change, `resume_rule` could read the cached pre-pause `active` status for up to `CACHE_TTL` (300 s by default) and refuse to resume.
 
 **Example Request**:
 ```bash
@@ -1189,6 +1201,7 @@ The official docs do not cover the points below. Each was measured on 2026-09-25
 - **`total:>1MB` works on flows.**
 - **`device.ip:192.168.*` works on alarms**, and so does unqualified free text such as `porn`.
 - **`message:porn` on alarms returns an error.** `message` is not a searchable alarm qualifier.
+- **`id:<rule id>` works on rules**, though it is not a documented rule qualifier. On `/v2/rules`, `id:<box gid>:<n>` alone or with `box.id:<box gid>`, with or without `limit=1`, returned just that rule (count 1; the box had 61 other rules). The status check in `pause_rule`, `resume_rule` and `delete_rule` uses it, and it matches the returned rule's `id` instead of taking the first result.
 
 ### Pagination Support
 
@@ -1409,6 +1422,7 @@ The official docs list these per endpoint:
 
 Measured, not in the official docs:
 - **429 Too Many Requests**: Rate limit exceeded (see below)
+- **403 Forbidden** for `POST /v2/rules/{id}/pause` and `/resume` with a rule ID that does not exist, where the official docs list 404 (measured 2026-09-25)
 
 ### Error Response Format
 

@@ -54,6 +54,13 @@ This report documents all discrepancies found between the official Firewalla API
 
 This discrepancy requires immediate testing to verify actual API behavior
 
+**Resolved 2026-09-25**: measured on disposable rules, the pause endpoint takes
+no body and no duration. A `duration` in the body or the query string is
+accepted and ignored, and the rule stays paused until resumed. `pauseRule` and
+`resumeRule` now send no body. The undocumented `PATCH /v2/rules/{id}` was not
+tested. See "Pause Rule" in `docs/firewalla-api-reference.md` for the
+measurements.
+
 ### 2. Endpoint Path Notation
 
 **Issue**: Inconsistent parameter notation

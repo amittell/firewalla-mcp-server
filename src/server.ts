@@ -269,7 +269,7 @@ export class FirewallaMCPServer {
           {
             name: 'pause_rule',
             description:
-              'Temporarily disable an active firewall rule for a specified duration',
+              'Pause an active firewall rule until resume_rule reactivates it. The MSP API takes no duration, so the pause does not expire on its own.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -277,20 +277,8 @@ export class FirewallaMCPServer {
                   type: 'string',
                   description: 'Rule ID to pause',
                 },
-                duration: {
-                  type: 'number',
-                  description:
-                    'Duration in minutes to pause the rule (optional, default: 60, range: 1-1440)',
-                  minimum: 1,
-                  maximum: 1440,
-                  default: 60,
-                },
-                box: {
-                  type: 'string',
-                  description: 'Box GID for context (required by API)',
-                },
               },
-              required: ['rule_id', 'box'],
+              required: ['rule_id'],
             },
           },
           {
@@ -304,12 +292,8 @@ export class FirewallaMCPServer {
                   type: 'string',
                   description: 'Rule ID to resume',
                 },
-                box: {
-                  type: 'string',
-                  description: 'Box GID for context (required by API)',
-                },
               },
-              required: ['rule_id', 'box'],
+              required: ['rule_id'],
             },
           },
           {

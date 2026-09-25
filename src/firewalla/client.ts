@@ -315,6 +315,20 @@ export class FirewallaClient {
     });
   }
 
+  /**
+   * Drops every cached `GET /v2/rules` answer. Called after a rule changes
+   * state, so the next read (and resume_rule's status check after a pause)
+   * sees the new status instead of the cached one.
+   */
+  private invalidateRuleCache(): void {
+    const marker = `:GET:${'/v2/rules'.replace(/[^a-zA-Z0-9]/g, '_')}:`;
+    for (const key of [...this.cache.keys()]) {
+      if (key.includes(marker)) {
+        this.cache.delete(key);
+      }
+    }
+  }
+
   private sanitizeInput(input: string | undefined): string {
     if (!input || typeof input !== 'string') {
       return '';
@@ -4864,22 +4878,25 @@ export class FirewallaClient {
   }
 
   /**
-   * Temporarily disable a specific firewall rule for a specified duration
+   * Pause a firewall rule until it is resumed.
    *
-   * @param ruleId - The unique identifier of the rule to pause
-   * @param durationMinutes - Duration in minutes to pause the rule (default: 60, max: 1440)
+   * Sends `POST /v2/rules/{id}/pause` with no body, as the MSP API documents.
+   * The endpoint takes no duration: on 2026-09-25 a `duration` in the body or
+   * the query string was accepted and ignored, the rule showed no `resumeTs`,
+   * and it stayed paused until `resumeRule`.
+   *
+   * @param ruleId - The rule ID, e.g. `<box gid>:<n>` as `get_network_rules` returns it
    * @returns Promise resolving to operation result with success status and message
    * @throws {Error} If rule ID is invalid or API request fails
    * @example
    * ```typescript
-   * const result = await client.pauseRule('rule-123', 30);
-   * console.log(result.message); // "Rule paused successfully"
+   * const result = await client.pauseRule('rule-123');
+   * console.log(result.message); // "Rule rule-123 paused until resumed"
    * ```
    */
   @optimizeResponse('rules')
   async pauseRule(
-    ruleId: string,
-    durationMinutes: number = 60
+    ruleId: string
   ): Promise<{ success: boolean; message: string }> {
     try {
       // Enhanced input validation and sanitization
@@ -4888,30 +4905,17 @@ export class FirewallaClient {
         throw new Error('Invalid rule ID provided');
       }
 
-      const validatedDuration = Math.max(1, Math.min(durationMinutes, 1440)); // 1 minute to 24 hours
-
-      // Use documented API endpoint with box parameter (like other operations)
-      const params = {
-        duration: validatedDuration,
-        box: this.config.boxId, // Include box context like read operations
-      };
-
+      // The API answers 200 with the JSON string "ok"
       const response = await this.request<{
-        success: boolean;
-        message: string;
-      }>(
-        'POST',
-        `/v2/rules/${validatedRuleId}/pause`,
-        {}, // empty query params
-        params, // body payload with duration & box
-        false
-      );
+        success?: boolean;
+        message?: string;
+      }>('POST', `/v2/rules/${validatedRuleId}/pause`, {}, undefined, false);
+      this.invalidateRuleCache();
 
       return {
         success: response?.success ?? true, // Default to true if API doesn't return success field
         message:
-          response?.message ||
-          `Rule ${validatedRuleId} paused for ${validatedDuration} minutes`,
+          response?.message || `Rule ${validatedRuleId} paused until resumed`,
       };
     } catch (error) {
       logger.error(
@@ -4923,15 +4927,17 @@ export class FirewallaClient {
   }
 
   /**
-   * Resume a previously paused firewall rule, restoring it to active state
+   * Resume a paused firewall rule, restoring it to active state.
+   *
+   * Sends `POST /v2/rules/{id}/resume` with no body, as the MSP API documents.
    *
    * @param ruleId - The unique identifier of the rule to resume
    * @returns Promise resolving to operation result with success status and message
-   * @throws {Error} If rule ID is invalid or rule is not paused
+   * @throws {Error} If rule ID is invalid or API request fails
    * @example
    * ```typescript
    * const result = await client.resumeRule('rule-123');
-   * console.log(result.message); // "Rule resumed successfully"
+   * console.log(result.message); // "Rule rule-123 resumed successfully"
    * ```
    */
   @optimizeResponse('rules')
@@ -4945,21 +4951,12 @@ export class FirewallaClient {
         throw new Error('Invalid rule ID provided');
       }
 
-      // Use documented API endpoint with box parameter (like other operations)
-      const params = {
-        box: this.config.boxId, // Include box context like read operations
-      };
-
+      // The API answers 200 with the JSON string "ok"
       const response = await this.request<{
-        success: boolean;
-        message: string;
-      }>(
-        'POST',
-        `/v2/rules/${validatedRuleId}/resume`,
-        {}, // empty query params
-        params, // body payload with box
-        false
-      );
+        success?: boolean;
+        message?: string;
+      }>('POST', `/v2/rules/${validatedRuleId}/resume`, {}, undefined, false);
+      this.invalidateRuleCache();
 
       return {
         success: response?.success ?? true, // Default to true if API doesn't return success field

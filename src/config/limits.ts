@@ -34,7 +34,6 @@ export const STANDARD_LIMITS = {
   STATISTICS: 100,
 
   // Time-based parameters (not result limits)
-  RULE_PAUSE_DURATION_MINUTES: 1440, // 24 hours max
   TREND_INTERVAL_SECONDS: 86400, // 24 hours max
 } as const;
 
@@ -181,12 +180,6 @@ export function getToolTimeout(toolName: string): number {
 export const VALIDATION_CONFIG = {
   LIMIT: {
     min: 1,
-    integer: true,
-  },
-
-  DURATION_MINUTES: {
-    min: 1,
-    max: STANDARD_LIMITS.RULE_PAUSE_DURATION_MINUTES,
     integer: true,
   },
 
