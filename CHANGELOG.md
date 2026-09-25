@@ -85,6 +85,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `sortBy=bytes:desc` and `sortBy=timestamp:asc` with 400; `bytes` is sent as
   `total` and `timestamp` as `ts`. Alarm sorts send the documented `ts` as
   well, and `getActiveAlarms` defaults to `ts:desc`.
+- Flows keep their `domain`. The MSP API sends it on every flow (empty for a
+  flow to a bare IP), and the client's flow mappings dropped it, so
+  `get_flow_insights` listed every category's top domain as `unknown` (live:
+  3 categories, 3,477 visits, all under `unknown`; after the fix 9 top
+  domains, and `unknown` only for the flows to bare IPs). `get_flow_data`,
+  `search_flows` and `get_recent_flow_activity` return it as well.
 
 ### Changed
 

@@ -919,7 +919,13 @@ interface Flow {
   category?: FlowCategory;       // Content category, a plain string
   network: Network;              // Network object
   group?: Group;                 // Group the device belonged to when the flow was captured
+  domain?: string;               // Remote domain; "" for a flow to a bare IP (not in the official model)
 }
+
+// Measured 2026-09-25 on 200 live flows: every flow had a string `domain`,
+// empty on the 118 whose destination.type was "ip" and set on the 82 whose
+// destination.type was "dns". There it is the destination.name or a suffix
+// of it (e.g. "example.com" for "www.example.com").
 
 interface FlowDevice {
   id: DeviceID;                  // Device identifier

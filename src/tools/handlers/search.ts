@@ -540,6 +540,7 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
             'destination.geo.continent',
             'unknown'
           ),
+          domain: SafeAccess.getNestedValue(flow as any, 'domain', null),
           protocol: SafeAccess.getNestedValue(
             flow as any,
             'protocol',
