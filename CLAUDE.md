@@ -10,7 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ONLY use endpoints documented in `/docs/firewalla-api-reference.md`
 - NEVER assume endpoints exist without verification
 - ALWAYS use box-specific routing: `/v2/boxes/{box_gid}/{resource}`
-- NEVER use fictional endpoints like `/stats/simple` or `/trends/flows`
+- NEVER use paths without the `/v2/` prefix (`/stats/simple`, `/trends/flows` do not exist); the documented forms are `/v2/stats/simple` and `/v2/trends/{flows,alarms,rules}`
+- `/v2/alarms` and `/v2/flows` refuse `limit` over 500 (HTTP 400); page with `next_cursor`
 - ALWAYS implement client-side aggregation for bandwidth/trends
 
 ## Project Overview
@@ -186,44 +187,44 @@ The server supports search queries using Firewalla API syntax:
 
 ```text
 # Basic field queries
-type:8                        # Video Activity
-source_ip:192.168.1.1
-protocol:tcp
+type:8                        # Video Activity (alarms)
+device.ip:192.168.1.1         # alarms and flows
+protocol:tcp                  # flows
 
-# Logical operators
-type:1 AND source_ip:192.168.*     # Security alerts from local network
+# Logical operators (the API also takes space for AND and a comma list for OR)
+type:1 AND device.ip:192.168.*     # Security alerts from local network
 action:block OR action:timelimit
 
 # Wildcards and patterns
-ip:192.168.*
-device_name:*laptop*
-target_value:*.facebook.com
+device.ip:192.168.*
+name:*laptop*                 # search_devices
+target.value:*.facebook.com   # search_rules
 
 # Geographic filtering (flows and alarms)
 region:US                     # United States
 region:CN                     # China
 region:US AND protocol:tcp    # US TCP traffic
 
-# Ranges and comparisons
-bytes:[1000 TO 50000]
-type:>=8                      # Video activity and above
-timestamp:>=2024-01-01
+# Traffic, status and time
+status:blocked                # blocked flows (blocked:true is translated to this)
+total:>1MB                    # also download:/upload: (bytes: is translated to total:)
+ts:>1h                        # the last hour
 
 # Complex queries
-(type:8 OR type:9 OR type:10) AND source_ip:192.168.* NOT resolved:true
+(type:8 OR type:9 OR type:10) AND device.ip:192.168.* AND status:1
 ```
 
 ### Example Search Queries
 
 ```bash
 # Find security activity alarms from specific IP range
-search_alarms query:"type:1 AND source_ip:192.168.*" limit:50
+search_alarms query:"type:1 AND device.ip:192.168.*" limit:50
 
 # Find blocked flows over 1MB with geographic filtering
-search_flows query:"blocked:true AND bytes:>=1000000 AND region:CN" limit:100
+search_flows query:"status:blocked AND total:>1MB AND region:CN" limit:100
 
 # Find all rules targeting social media
-search_rules query:"target_value:*facebook* OR target_value:*twitter*" limit:25
+search_rules query:"target.value:*facebook* OR target.value:*twitter*" limit:25
 
 # Find offline devices by vendor
 search_devices query:"online:false AND mac_vendor:Apple" limit:30
@@ -393,7 +394,7 @@ DEBUG=cache npm run mcp:start
 - **Current Version**: 1.0.0
 - **Architecture**: 28-tool design (23 direct API + 5 convenience)
 - **API Support**: Firewalla MSP API v2 with CRUD operations
-- **Node.js**: Requires 24+
+- **Node.js**: Requires 18+
 - **TypeScript**: ES2020 target with strict mode
 
 **Remember**: The `/docs/firewalla-api-reference.md` file contains the complete, verified API specification. It is the single source of truth for all Firewalla API integration.
