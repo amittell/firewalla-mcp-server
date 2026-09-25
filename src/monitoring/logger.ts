@@ -144,7 +144,7 @@ export class StructuredLogger {
     const logString = JSON.stringify(entry);
 
     // Always write to stderr in MCP server to avoid polluting stdout JSON-RPC channel
-    process.stderr.write(`${logString}\\n`);
+    process.stderr.write(`${logString}\n`);
   }
 
   error(
