@@ -71,6 +71,9 @@ interface APIResponse<T> {
   error?: string;
 }
 
+/** Largest `limit` the MSP API accepts on its /v2 list endpoints */
+const MAX_API_PAGE_SIZE = 500;
+
 /**
  * A single-box operation could not pick a box: the account has several and
  * none was named, or the token sees none. Handlers report it as a validation
@@ -351,6 +354,49 @@ export class FirewallaClient {
     return filtered;
   }
 
+  /**
+   * GET up to `limit` results from a /v2 list endpoint, at most
+   * MAX_API_PAGE_SIZE per request, following next_cursor. The MSP API answers
+   * 400 "limit exceeds max allowed value of 500" to a larger limit on
+   * /v2/alarms and /v2/flows.
+   */
+  private async requestPages<T>(
+    endpoint: string,
+    params: Record<string, unknown>,
+    limit: number,
+    cacheable = true
+  ): Promise<{ count: number; results: T[]; next_cursor?: string; [key: string]: any }> {
+    // The API's own default when no usable limit is given
+    const wanted = Number.isFinite(limit) && limit >= 1 ? limit : 200;
+    const results: T[] = [];
+    let cursor = params.cursor as string | undefined;
+    let first: Record<string, unknown> | undefined;
+    do {
+      const pageParams: Record<string, unknown> = {
+        ...params,
+        limit: Math.min(MAX_API_PAGE_SIZE, wanted - results.length),
+      };
+      if (cursor) {
+        pageParams.cursor = cursor;
+      }
+      const page = await this.request<{
+        results?: T[];
+        next_cursor?: string;
+      }>('GET', endpoint, pageParams, cacheable);
+      if (!first && page && !Array.isArray(page)) {
+        first = page;
+      }
+      const pageResults = Array.isArray(page) ? page : page?.results || [];
+      results.push(...pageResults);
+      cursor = Array.isArray(page) ? undefined : page?.next_cursor;
+      if (pageResults.length === 0) {
+        break;
+      }
+    } while (cursor && results.length < wanted);
+
+    return { ...first, count: results.length, results, next_cursor: cursor };
+  }
+
   private async request<T>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
     endpoint: string,
@@ -576,11 +622,12 @@ export class FirewallaClient {
     // Apply box filter through the query parameter
     params.query = this.addBoxFilter(params.query as string | undefined);
 
-    const response = await this.request<{
-      count: number;
-      results: any[];
-      next_cursor?: string;
-    }>('GET', '/v2/alarms', params, !force_refresh);
+    const response = await this.requestPages<any>(
+      '/v2/alarms',
+      params,
+      Number(limit),
+      !force_refresh
+    );
 
     // Basic response validation
     if (!response || typeof response !== 'object') {
@@ -675,11 +722,11 @@ export class FirewallaClient {
     // Apply box filter through the query parameter
     params.query = this.addBoxFilter(params.query as string | undefined);
 
-    const response = await this.request<{
-      count: number;
-      results: any[];
-      next_cursor?: string;
-    }>('GET', `/v2/flows`, params);
+    const response = await this.requestPages<any>(
+      '/v2/flows',
+      params,
+      Number(limit)
+    );
 
     // API returns {count, results[], next_cursor} format
     const flows = (Array.isArray(response.results) ? response.results : []).map(
@@ -1030,19 +1077,17 @@ export class FirewallaClient {
       const params: Record<string, unknown> = {
         query: `ts:${begin}-${end}`,
         sortBy: 'ts:desc',
-        limit: Math.min(validatedTop * 10, 1000), // Get more data for client-side grouping
       };
 
       // Apply box filter through the query parameter
       params.query = this.addBoxFilter(params.query as string | undefined);
 
-      const endpoint = '/v2/flows';
-
-      const response = await this.request<{
-        count: number;
-        results: any[];
-        next_cursor?: string;
-      }>('GET', endpoint, params);
+      // Get more data than `top` for client-side grouping
+      const response = await this.requestPages<any>(
+        '/v2/flows',
+        params,
+        Math.min(validatedTop * 10, 1000)
+      );
 
       // Process and aggregate bandwidth by device
       const deviceBandwidth = new Map<string, BandwidthUsage>();
@@ -1505,7 +1550,9 @@ export class FirewallaClient {
       await Promise.all([
         this.getActiveAlarms(undefined, undefined, 'ts:desc', 1000), // Total alarms
         this.getActiveAlarms('status:1', undefined, 'ts:desc', 1000), // Active alarms only
-        this.getFlowData('block:true', undefined, 'ts:desc', 1000), // Blocked flows only
+        // Blocked flows: the API has no `block` qualifier and answers
+      // `block:true` with no results; `status:blocked` selects them
+      this.getFlowData('status:blocked', undefined, 'ts:desc', 1000),
         this.getActiveAlarms(`ts:>=${last24Hours}`, undefined, 'ts:desc', 1000), // Recent alarms
       ]);
 
@@ -1579,7 +1626,7 @@ export class FirewallaClient {
 
     // Create connection information from flows
     const connections = flows.results.slice(0, 50).map(flow => ({
-      source: flow.device.ip,
+      source: flow.device?.ip || flow.source?.ip || 'unknown',
       destination: flow.destination?.ip || 'unknown',
       type: flow.protocol,
       bandwidth: flow.bytes || 0,
@@ -2311,17 +2358,16 @@ export class FirewallaClient {
       // Get flow data for the period using global endpoint with box parameter
       const params: Record<string, unknown> = {
         query: `ts:${begin}-${end}`,
-        limit: 10000,
         sortBy: 'ts:asc',
       };
 
       // Apply box filter through the query parameter
       params.query = this.addBoxFilter(params.query as string | undefined);
-      const flowResponse = await this.request<{
-        count: number;
-        results: any[];
-        next_cursor?: string;
-      }>('GET', '/v2/flows', params);
+      const flowResponse = await this.requestPages<any>(
+        '/v2/flows',
+        params,
+        10000
+      );
 
       // Group flows by time intervals
       const trends: Trend[] = [];
@@ -2433,16 +2479,15 @@ export class FirewallaClient {
 
       // Get alarm data for the period using global endpoint with box parameter
       const params: Record<string, unknown> = {
-        limit: 10000,
         sortBy: 'ts:asc',
       };
       // Add box.id filter to query
       params.query = this.addBoxFilter(`ts:${begin}-${end}`);
-      const alarmResponse = await this.request<{
-        count: number;
-        results: any[];
-        next_cursor?: string;
-      }>('GET', '/v2/alarms', params);
+      const alarmResponse = await this.requestPages<any>(
+        '/v2/alarms',
+        params,
+        10000
+      );
 
       // Group alarms by time intervals
       const trends: Trend[] = [];
@@ -2978,12 +3023,11 @@ export class FirewallaClient {
         : 'block:false';
     }
 
-    const response = await this.request<{
-      count: number;
-      results: any[];
-      next_cursor?: string;
-      aggregations?: any;
-    }>('GET', `/v2/flows`, params);
+    const response = await this.requestPages<any>(
+      '/v2/flows',
+      params,
+      Number(params.limit)
+    );
 
     // Defensive programming: ensure results is an array before mapping
     const resultsList = Array.isArray(response.results) ? response.results : [];
@@ -3184,12 +3228,11 @@ export class FirewallaClient {
       // Enhanced API request with better error handling
       let response;
       try {
-        response = await this.request<{
-          count: number;
-          results: any[];
-          next_cursor?: string;
-          aggregations?: any;
-        }>('GET', `/v2/alarms`, requestParams);
+        response = await this.requestPages<any>(
+          '/v2/alarms',
+          requestParams,
+          Number(requestParams.limit)
+        );
       } catch (apiError) {
         if (apiError instanceof Error) {
           if (apiError.message.includes('timeout')) {
