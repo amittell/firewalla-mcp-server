@@ -81,6 +81,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `network_health_check` no longer throws `Cannot read properties of
   undefined (reading 'ip')` on flows without a `device`; neither does the
   `device_investigation` prompt.
+- `get_flow_insights` returned no content categories and filed every
+  device's traffic under "uncategorized". The API sends a flow's `category` as
+  a string (`"games"`, `"social"`, or `""`), and the code read
+  `category.name`; and with no `categories` argument the handler passed an
+  empty list, which became the query `ts:<range> AND ()` and matched nothing.
 - The server now starts under `npx`, global installs and on Windows (#36,
   from @mefrati75). The entrypoint check compared `import.meta.url` with
   `file://${process.argv[1]}`, which never matches through a bin symlink, or
