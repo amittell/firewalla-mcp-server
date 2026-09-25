@@ -569,6 +569,12 @@ export class FirewallaClient {
       }
 
       throw new Error('Unknown error occurred during API request');
+    } finally {
+      // A write can change what any cached read returns, and one that
+      // failed may still have been applied, so drop cached reads either way
+      if (method !== 'GET') {
+        this.clearCache();
+      }
     }
   }
 
@@ -5159,6 +5165,10 @@ export class FirewallaClient {
     } catch (error) {
       logger.error(`API call failed: ${method} ${endpoint}`, error as Error);
       throw error;
+    } finally {
+      if (method !== 'get') {
+        this.clearCache();
+      }
     }
   }
 
