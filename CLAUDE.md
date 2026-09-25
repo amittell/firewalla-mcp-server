@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ALWAYS use box-specific routing: `/v2/boxes/{box_gid}/{resource}`
 - NEVER use paths without the `/v2/` prefix (`/stats/simple`, `/trends/flows` do not exist); the documented forms are `/v2/stats/simple` and `/v2/trends/{flows,alarms,rules}`
 - `/v2/alarms` and `/v2/flows` refuse `limit` over 500 (HTTP 400); page with `next_cursor`
-- ALWAYS implement client-side aggregation for bandwidth/trends
+- Trends come from `/v2/trends/{alarms,flows}` (daily points; `/v2/trends/rules` answers 400, so rule trends count rule creation times); bandwidth is aggregated on the client from flows
 
 ## Project Overview
 
@@ -126,7 +126,7 @@ FIREWALLA_MSP_ID=yourdomain.firewalla.net
 - You can optionally set `FIREWALLA_BOX_ID` to filter all queries to a specific box by default
 - `FIREWALLA_DEFAULT_BOX_ID` is the default box for single-box operations (`get_specific_alarm`, `archive_alarm`, `mute_alarm`, `create_rule`, `rename_device`) without filtering queries
 - With neither set, single-box operations use the account's only box; on a multi-box account `get_specific_alarm`, `archive_alarm` and `mute_alarm` check each box (the two alarm write tools refuse when several boxes have the alarm ID), and `create_rule` and `rename_device` refuse until given `gid`
-- Box GID format: UUID-like `1eb71e38-3a95-4371-8903-ace24c83ab49`
+- Box GID format: UUID-like `00000000-0000-0000-0000-000000000000`
 
 ## Configuration Variables
 

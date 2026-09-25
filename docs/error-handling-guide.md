@@ -737,7 +737,7 @@ const errorResponseTimes = {
   "tool": "get_active_alarms",
   "errorType": "authentication_error",
   "details": {
-    "hint": "Box ID should be a UUID format like '1eb71e38-3a95-4371-8903-ace24c83ab49'"
+    "hint": "Box ID should be a UUID format like '00000000-0000-0000-0000-000000000000'"
   }
 }
 ```

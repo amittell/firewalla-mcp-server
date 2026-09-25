@@ -83,23 +83,24 @@ export interface GeographicData {
 }
 
 /**
- * Alarm types supported by Firewalla API
- * 1: Intrusion Detection - Network intrusion attempts
- * 2: Malware Detection - Malicious software identified
- * 3: DDoS Attack - Distributed denial of service
- * 4: Large Upload - Suspicious large data uploads
- * 5: Video Streaming - High video streaming activity
- * 6: Gaming Activity - Gaming protocol usage
- * 7: Social Media - Social media platform access
- * 8: Porn Content - Adult content access
- * 9: VPN Usage - Virtual private network usage
- * 10: New Device - Unrecognized device connected
- * 11: Vulnerability - Security vulnerability detected
- * 12: Intel Feed - Threat intelligence match
- * 13: DNS Hijack - DNS redirection detected
- * 14: Data Breach - Potential data breach activity
- * 15: Abnormal Traffic - Unusual traffic patterns
- * 16: Policy Violation - Security policy breach
+ * Alarm types, as the MSP API documents them (docs.firewalla.net, data
+ * models, Alarm)
+ * 1: Security Activity
+ * 2: Abnormal Upload
+ * 3: Large Bandwidth Usage
+ * 4: Monthly Data Plan
+ * 5: New Device
+ * 6: Device Back Online
+ * 7: Device Offline
+ * 8: Video Activity
+ * 9: Gaming Activity
+ * 10: Porn Activity
+ * 11: VPN Activity
+ * 12: VPN Connection Restored
+ * 13: VPN Connection Error
+ * 14: Open Port
+ * 15: Internet Connectivity Update
+ * 16: Large Upload
  */
 export type AlarmType =
   | 1
@@ -121,8 +122,8 @@ export type AlarmType =
 
 /**
  * Alarm status values
- * 1: Active - Alarm is currently active and requires attention
- * 2: Resolved - Alarm has been acknowledged and resolved
+ * 1: active
+ * 2: archived (see archive_alarm)
  */
 export type AlarmStatus = 1 | 2;
 

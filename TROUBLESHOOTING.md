@@ -38,7 +38,7 @@ export PATH=~/.npm-global/bin:$PATH
 
 **Check your credentials:**
 1. Verify MSP token is valid (log into MSP portal)
-2. Check Box ID format (should be UUID-like `1eb71e38-3a95-4371-8903-ace24c83ab49`)
+2. Check Box ID format (should be UUID-like `00000000-0000-0000-0000-000000000000`)
 3. Confirm MSP domain is correct (`yourdomain.firewalla.net`)
 
 **Test credentials manually:**
@@ -135,7 +135,7 @@ ls -la .env
 cat .env
 FIREWALLA_MSP_TOKEN=abc123
 FIREWALLA_MSP_ID=company.firewalla.net
-FIREWALLA_BOX_ID=1eb71e38-3a95-4371-8903-ace24c83ab49
+FIREWALLA_BOX_ID=00000000-0000-0000-0000-000000000000
 ```
 
 ## Performance Issues

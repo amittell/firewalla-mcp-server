@@ -222,7 +222,7 @@ curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
 **Symptom**: `"Box not found"` error
 
 **Diagnostic Steps**:
-1. **Check Box ID Format**: Should be UUID format (e.g., `1eb71e38-3a95-4371-8903-ace24c83ab49`)
+1. **Check Box ID Format**: Should be UUID format (e.g., `00000000-0000-0000-0000-000000000000`)
 2. **Verify Box Exists**: Check in MSP portal
 3. **Test Box Access**: Try accessing box directly
 
