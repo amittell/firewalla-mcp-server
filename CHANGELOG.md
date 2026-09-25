@@ -122,6 +122,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   advertise: 200 for `search_flows` and `search_alarms`, 50 for
   `search_devices` and 100 for `search_target_lists`, which returned every
   match without a `limit`.
+- `search_flows` and `search_alarms` use the `sortBy` their schemas list.
+  They read only `sort_by`, so a `sortBy` was dropped and the API got the
+  default `ts:desc`. Both names are read now.
 
 ### Changed
 
