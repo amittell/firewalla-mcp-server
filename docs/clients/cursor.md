@@ -5,7 +5,7 @@ Integrate Firewalla network security monitoring into Cursor IDE for real-time se
 ## Prerequisites
 
 - Cursor IDE installed
-- Node.js 24+ and npm
+- Node.js 18+ and npm
 - Active Firewalla MSP account with API access
 - Claude Code extension for Cursor
 

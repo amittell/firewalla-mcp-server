@@ -9,8 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.4.0] - Unreleased
 
-Minor release: Node.js 24 is now the minimum.
-
 ### Added
 - Opt-in write tools `create_rule`, `delete_rule` and `rename_device` (#37,
   from @mefrati75). Off unless `FIREWALLA_ENABLE_WRITE_TOOLS=true`, and marked
@@ -46,13 +44,18 @@ Minor release: Node.js 24 is now the minimum.
   values (the MSP API reports neither), the "uptime" was the time since the
   box was last seen, and without `FIREWALLA_BOX_ID` the firewall read as
   offline.
-- **Node.js 24 or later is now required** (`engines.node` `>=24.0.0`, was
-  `>=18.0.0`). `geoip-lite` 2.x requires Node 24. CI and the Docker image
-  (`node:24-alpine`) move to Node 24 as well. Stay on 1.3.x for Node 18-22.
 - `geoip-lite` 1.4.10 -> 2.0.3, and the `geoip-lite > ip-address` override is
   gone (2.0.3 depends on `ip-address ^10.2.0` itself). npm only applies
   `overrides` from the root project, so the override never reached npm or npx
   installs, which resolved `ip-address@5.9.4` under geoip-lite.
+- Node.js 18 or later is still supported (`engines.node` `>=18.0.0`).
+  geoip-lite 2.x declares `node >=24`, which only its `updatedb` script needs
+  (`fetch`, `fs.rmSync`); its lookup code uses `fs`, `net` and `path`, and
+  gives the same answers on Node 18.20.8, 20.20.2, 22.23.1 and 24.18.0. On
+  Node 18-22, npm prints an `EBADENGINE` warning for geoip-lite when
+  installing, and an install with `engine-strict=true` refuses it. CI runs the
+  tests on Node 18, 20, 22 and 24 and the `launch` job on 18 and 24. The
+  Docker image moves to `node:24-alpine`.
 - Docker examples in the README mark `FIREWALLA_BOX_ID` as optional (#39).
 
 ### Fixed
