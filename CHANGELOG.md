@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.4.0] - Unreleased
+## [1.4.0] - 2026-09-25
 
 ### Added
 - Opt-in write tools `create_rule`, `delete_rule` and `rename_device` (#37,
