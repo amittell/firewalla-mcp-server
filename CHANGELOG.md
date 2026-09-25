@@ -143,6 +143,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     longer lists `category`. Neither is an API parameter, the handlers
     never read them, and `query` does both (`online:false`,
     `category:social`).
+- README's quick reference listed `get_flow_trends`, which is not a tool,
+  and left out `get_recent_flow_activity`, `get_network_rules_summary`,
+  `get_specific_target_list`, `get_statistics_by_region`,
+  `get_statistics_by_box` and `get_rule_trends`. It lists the 28 tools and
+  the 5 opt-in write tools, each once.
 
 ### Changed
 
