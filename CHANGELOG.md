@@ -7,6 +7,135 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-25
+
+### Added
+
+- Opt-in write tools `archive_alarm` and `mute_alarm` (MSP 2.11.0+), off
+  unless `FIREWALLA_ENABLE_WRITE_TOOLS=true` like the other write tools.
+  `archive_alarm` takes an alarm out of the active alarms and nothing else.
+  `mute_alarm` also has the box create a lasting silence exception for the
+  alarm's type, a domain and its subdomains, or one IP, on every device or on
+  one device, group, user or network. The mute is checked against the
+  documented model and refused before anything is sent, for example a
+  `domain` target without a value, a wildcard domain, or a CIDR for `ip`.
+  Alarm IDs are per box, so both tools take `gid`, else use
+  `FIREWALLA_BOX_ID`, else check each box, and refuse when several boxes have
+  the alarm ID and none of them is `FIREWALLA_DEFAULT_BOX_ID`. They read the
+  alarm before writing, so a wrong ID changes nothing, and never retry a
+  write. `mute_alarm` is marked `destructiveHint` (it creates a lasting
+  silence of future alarms that this server cannot undo); `archive_alarm` is
+  not, and is `idempotentHint`. The client gains `archiveAlarm`
+  and `muteAlarm`. Checked live on 2026-09-25 with error-path calls only:
+  both routes exist on the MSP (a mute without `target.value` answers 400
+  `target.value is required for domain target`).
+- CI `Docker Build` workflow runs the image as well as building it. After the
+  multi-platform build it loads the linux/amd64 image, starts it with
+  `docker run -i --rm` and dummy credentials, and requires an answer to MCP
+  `initialize` over stdio whose `serverInfo.version` is package.json's.
+  `scripts/launch-smoke.mjs --docker <image>` does the check. A manual run
+  with the `image` input (for example `amittell/firewalla-mcp-server:1.4.1`)
+  pulls and checks that published image instead of building.
+- `get_target_lists` takes an optional `owner`, the API's documented filter:
+  `global`, a box gid, or a comma-separated list such as `global,<box_gid>`.
+  Without it the API returns global and Firewalla-managed lists.
+- MCP tool annotations on every tool, not only the opt-in write tools: a
+  `title`, `readOnlyHint`, and `openWorldHint: true` (each tool calls the
+  Firewalla MSP API), and on the ten tools that change state
+  `destructiveHint` and `idempotentHint` as well. The `get_*` and `search_*`
+  tools are read-only. `pause_rule` and `resume_rule` are idempotent and not
+  destructive: each checks the rule's status first and changes nothing if it
+  is already paused or active. `update_target_list`, `delete_target_list`
+  and `delete_rule` are destructive; `create_rule` keeps
+  `destructiveHint: true`, and so does `mute_alarm`.
+  The target list tools, `pause_rule` and `resume_rule` still work without
+  `FIREWALLA_ENABLE_WRITE_TOOLS`. See "Tool annotations" in the README.
+- A test lists the tools through the server's ListTools handler and calls
+  each one through CallTool with the HTTP layer mocked. It checks that every
+  tool has annotations, that every `get_*` and `search_*` tool is read-only,
+  that `readOnlyHint` is false on exactly the tools that send a POST, PATCH
+  or DELETE, and that each handler's `description` is the one tools/list
+  sends. So that tests can import `src/server.ts`, jest rewrites
+  `import.meta.url` (`tests/setup/import-meta-url.cjs`).
+
+### Changed
+
+- `pause_rule` and `resume_rule` take only `rule_id`. The MSP API pause
+  endpoint takes no duration, so a pause lasts until `resume_rule`. The
+  `duration` argument (1 to 1440 minutes) and the `box` argument that both
+  schemas required are gone. A caller that still passes `duration` gets the
+  pause, plus `duration_ignored: true` and a note in the response.
+- `get_alarm_trends` reads `GET /v2/trends/alarms`, the documented series of
+  alarms generated per day, instead of fetching up to 10000 alarms and
+  counting them per hour. The API has one point per day for the last 30
+  days, so `period` (now in the tool schema, default `30d` instead of `24h`)
+  selects the days that overlap it: `24h` returns yesterday and today, and
+  `1h` today so far. The response keeps its fields and adds `interval`,
+  `source`, `scope`, `window`, `last_point_partial` and `note`. The trends
+  API takes no box, so with `FIREWALLA_BOX_ID` set the tool still covers
+  every box (or the `group`), and `scope` says so. The old `30d` counted only
+  the first 30 hours of the 30 days, and the `group` argument in the schema
+  was ignored.
+- `get_rule_trends` reports rules created per day from
+  `GET /v2/trends/rules`. The live API answers that endpoint with HTTP 400, so
+  the tool then counts the creation times of the rules in `GET /v2/rules` per
+  UTC day, and says so in `source` and `note`. It no longer builds an "active
+  rule count" from an estimated baseline, shifted toward the current count
+  when the two differed by more than 20%: each point is `rules_created`, and
+  the summary has
+  `total_rules_created`, `avg_rules_created_per_day`, `peak_rules_created` and
+  `days_with_new_rules` in place of `avg_active_rules`, `max_active_rules`,
+  `min_active_rules` and `rule_stability`. It takes the same `period` and
+  `group` as `get_alarm_trends`.
+- `get_statistics_by_region` reads `GET /v2/stats/topRegionsByBlockedFlows`,
+  as its schema already said, instead of counting the regions of the 200 most
+  recent flows, blocked or not. It passes `group` and `limit`; the API
+  returned no more than 5 regions.
+- `get_statistics_by_box` reads `GET /v2/stats/{type}`
+  (`topBoxesByBlockedFlows` by default, or `topBoxesBySecurityAlarms`), the
+  types its schema already offered, and fills in each box from `/v2/boxes`.
+  Each box's `value` is the statistic; it replaces `activity_score`, which
+  added the box's rule count to its share of the 200 most recent alarms.
+- The client's `getFlowTrends`, which no tool calls, reads
+  `GET /v2/trends/flows` (blocked flows per day) instead of paging up to 10000
+  flows.
+- The threat level in the `security_report` and `network_health_check`
+  prompts and in `firewalla://metrics/security` comes from the Security
+  Activity (type 1) alarms of the last 24 hours, the type
+  `/v2/stats/topBoxesBySecurityAlarms` counts. It counted every alarm of type
+  5 or above, which includes video, gaming and new-device alarms, so an
+  account with a hundred such alarms a day and no Security Activity alarm
+  read as critical. The security scores and the resource's recommendation
+  also count Security Activity alarms instead of every active alarm. Alarms
+  stay active until archived, and each cost 5 of the score's 100 points.
+- The Docker MCP registry manifest (`servers/firewalla-mcp-server/server.yaml`)
+  follows the registry's format (title `Firewalla`, a pinned `source.commit`,
+  `{{firewalla-mcp-server.<parameter>}}` references) and sets only variables
+  the server reads: the `MCP_WAVE0_ENABLED`, `MCP_READ_ONLY_MODE`,
+  `MCP_CACHE_ENABLED`, `MCP_DEBUG_MODE`, `MCP_CACHE_TTL` and `MCP_RATE_LIMIT_*`
+  entries did nothing. Only `msp_id` is required; `box_id` is optional, and
+  the optional `default_box_id` and `enable_write_tools` set
+  `FIREWALLA_DEFAULT_BOX_ID` and `FIREWALLA_ENABLE_WRITE_TOOLS`.
+- Tool descriptions say what each tool calls and how far its results reach:
+  the endpoint, paging (`/v2/alarms` and `/v2/flows` return at most 500 per
+  request), box scoping (`box`, `FIREWALLA_BOX_ID`, or none for the trends
+  and statistics endpoints), where results are computed on the client from
+  a sample, and what the state-changing tools change. Descriptions that did
+  not match the code now do:
+  - `get_active_alarms` adds no `status:1` filter; the `query` schema said
+    it did.
+  - `get_bandwidth_usage` sums flows over the period and `get_offline_devices`
+    filters the device list; neither is a wrapper around
+    `get_device_status`.
+  - `get_target_lists` returns the global and Firewalla-managed lists unless
+    `owner` names others, not "all target lists".
+  - `get_network_rules_summary` counts rules by action, direction, status
+    and target type, not by category.
+  - `get_recent_flow_activity` returns the 50 most recent flows, whatever
+    time they span, not "the last 10-20 minutes".
+- The handler classes' `description` fields match what tools/list sends.
+  They are not sent to clients and had drifted from it.
+
 ### Fixed
 - `SearchEngine` search results count the records the search returns. The
   alarm, rule and target-list searches filter on the client, and `count`
@@ -212,133 +341,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `network: { id, name }`. Flows also keep the undocumented `country` the
   API sends beside `region`, which `get_recent_flow_activity` falls back
   to when `region` is empty.
-
-### Changed
-
-- `pause_rule` and `resume_rule` take only `rule_id`. The MSP API pause
-  endpoint takes no duration, so a pause lasts until `resume_rule`. The
-  `duration` argument (1 to 1440 minutes) and the `box` argument that both
-  schemas required are gone. A caller that still passes `duration` gets the
-  pause, plus `duration_ignored: true` and a note in the response.
-- `get_alarm_trends` reads `GET /v2/trends/alarms`, the documented series of
-  alarms generated per day, instead of fetching up to 10000 alarms and
-  counting them per hour. The API has one point per day for the last 30
-  days, so `period` (now in the tool schema, default `30d` instead of `24h`)
-  selects the days that overlap it: `24h` returns yesterday and today, and
-  `1h` today so far. The response keeps its fields and adds `interval`,
-  `source`, `scope`, `window`, `last_point_partial` and `note`. The trends
-  API takes no box, so with `FIREWALLA_BOX_ID` set the tool still covers
-  every box (or the `group`), and `scope` says so. The old `30d` counted only
-  the first 30 hours of the 30 days, and the `group` argument in the schema
-  was ignored.
-- `get_rule_trends` reports rules created per day from
-  `GET /v2/trends/rules`. The live API answers that endpoint with HTTP 400, so
-  the tool then counts the creation times of the rules in `GET /v2/rules` per
-  UTC day, and says so in `source` and `note`. It no longer builds an "active
-  rule count" from an estimated baseline, shifted toward the current count
-  when the two differed by more than 20%: each point is `rules_created`, and
-  the summary has
-  `total_rules_created`, `avg_rules_created_per_day`, `peak_rules_created` and
-  `days_with_new_rules` in place of `avg_active_rules`, `max_active_rules`,
-  `min_active_rules` and `rule_stability`. It takes the same `period` and
-  `group` as `get_alarm_trends`.
-- `get_statistics_by_region` reads `GET /v2/stats/topRegionsByBlockedFlows`,
-  as its schema already said, instead of counting the regions of the 200 most
-  recent flows, blocked or not. It passes `group` and `limit`; the API
-  returned no more than 5 regions.
-- `get_statistics_by_box` reads `GET /v2/stats/{type}`
-  (`topBoxesByBlockedFlows` by default, or `topBoxesBySecurityAlarms`), the
-  types its schema already offered, and fills in each box from `/v2/boxes`.
-  Each box's `value` is the statistic; it replaces `activity_score`, which
-  added the box's rule count to its share of the 200 most recent alarms.
-- The client's `getFlowTrends`, which no tool calls, reads
-  `GET /v2/trends/flows` (blocked flows per day) instead of paging up to 10000
-  flows.
-- The threat level in the `security_report` and `network_health_check`
-  prompts and in `firewalla://metrics/security` comes from the Security
-  Activity (type 1) alarms of the last 24 hours, the type
-  `/v2/stats/topBoxesBySecurityAlarms` counts. It counted every alarm of type
-  5 or above, which includes video, gaming and new-device alarms, so an
-  account with a hundred such alarms a day and no Security Activity alarm
-  read as critical. The security scores and the resource's recommendation
-  also count Security Activity alarms instead of every active alarm. Alarms
-  stay active until archived, and each cost 5 of the score's 100 points.
-- The Docker MCP registry manifest (`servers/firewalla-mcp-server/server.yaml`)
-  follows the registry's format (title `Firewalla`, a pinned `source.commit`,
-  `{{firewalla-mcp-server.<parameter>}}` references) and sets only variables
-  the server reads: the `MCP_WAVE0_ENABLED`, `MCP_READ_ONLY_MODE`,
-  `MCP_CACHE_ENABLED`, `MCP_DEBUG_MODE`, `MCP_CACHE_TTL` and `MCP_RATE_LIMIT_*`
-  entries did nothing. Only `msp_id` is required; `box_id` is optional, and
-  the optional `default_box_id` and `enable_write_tools` set
-  `FIREWALLA_DEFAULT_BOX_ID` and `FIREWALLA_ENABLE_WRITE_TOOLS`.
-- Tool descriptions say what each tool calls and how far its results reach:
-  the endpoint, paging (`/v2/alarms` and `/v2/flows` return at most 500 per
-  request), box scoping (`box`, `FIREWALLA_BOX_ID`, or none for the trends
-  and statistics endpoints), where results are computed on the client from
-  a sample, and what the state-changing tools change. Descriptions that did
-  not match the code now do:
-  - `get_active_alarms` adds no `status:1` filter; the `query` schema said
-    it did.
-  - `get_bandwidth_usage` sums flows over the period and `get_offline_devices`
-    filters the device list; neither is a wrapper around
-    `get_device_status`.
-  - `get_target_lists` returns the global and Firewalla-managed lists unless
-    `owner` names others, not "all target lists".
-  - `get_network_rules_summary` counts rules by action, direction, status
-    and target type, not by category.
-  - `get_recent_flow_activity` returns the 50 most recent flows, whatever
-    time they span, not "the last 10-20 minutes".
-- The handler classes' `description` fields match what tools/list sends.
-  They are not sent to clients and had drifted from it.
-
-### Added
-
-- Opt-in write tools `archive_alarm` and `mute_alarm` (MSP 2.11.0+), off
-  unless `FIREWALLA_ENABLE_WRITE_TOOLS=true` like the other write tools.
-  `archive_alarm` takes an alarm out of the active alarms and nothing else.
-  `mute_alarm` also has the box create a lasting silence exception for the
-  alarm's type, a domain and its subdomains, or one IP, on every device or on
-  one device, group, user or network. The mute is checked against the
-  documented model and refused before anything is sent, for example a
-  `domain` target without a value, a wildcard domain, or a CIDR for `ip`.
-  Alarm IDs are per box, so both tools take `gid`, else use
-  `FIREWALLA_BOX_ID`, else check each box, and refuse when several boxes have
-  the alarm ID and none of them is `FIREWALLA_DEFAULT_BOX_ID`. They read the
-  alarm before writing, so a wrong ID changes nothing, and never retry a
-  write. `mute_alarm` is marked `destructiveHint` (it creates a lasting
-  silence of future alarms that this server cannot undo); `archive_alarm` is
-  not, and is `idempotentHint`. The client gains `archiveAlarm`
-  and `muteAlarm`. Checked live on 2026-09-25 with error-path calls only:
-  both routes exist on the MSP (a mute without `target.value` answers 400
-  `target.value is required for domain target`).
-- CI `Docker Build` workflow runs the image as well as building it. After the
-  multi-platform build it loads the linux/amd64 image, starts it with
-  `docker run -i --rm` and dummy credentials, and requires an answer to MCP
-  `initialize` over stdio whose `serverInfo.version` is package.json's.
-  `scripts/launch-smoke.mjs --docker <image>` does the check. A manual run
-  with the `image` input (for example `amittell/firewalla-mcp-server:1.4.1`)
-  pulls and checks that published image instead of building.
-- `get_target_lists` takes an optional `owner`, the API's documented filter:
-  `global`, a box gid, or a comma-separated list such as `global,<box_gid>`.
-  Without it the API returns global and Firewalla-managed lists.
-- MCP tool annotations on every tool, not only the opt-in write tools: a
-  `title`, `readOnlyHint`, and `openWorldHint: true` (each tool calls the
-  Firewalla MSP API), and on the ten tools that change state
-  `destructiveHint` and `idempotentHint` as well. The `get_*` and `search_*`
-  tools are read-only. `pause_rule` and `resume_rule` are idempotent and not
-  destructive: each checks the rule's status first and changes nothing if it
-  is already paused or active. `update_target_list`, `delete_target_list`
-  and `delete_rule` are destructive; `create_rule` keeps
-  `destructiveHint: true`, and so does `mute_alarm`.
-  The target list tools, `pause_rule` and `resume_rule` still work without
-  `FIREWALLA_ENABLE_WRITE_TOOLS`. See "Tool annotations" in the README.
-- A test lists the tools through the server's ListTools handler and calls
-  each one through CallTool with the HTTP layer mocked. It checks that every
-  tool has annotations, that every `get_*` and `search_*` tool is read-only,
-  that `readOnlyHint` is false on exactly the tools that send a POST, PATCH
-  or DELETE, and that each handler's `description` is the one tools/list
-  sends. So that tests can import `src/server.ts`, jest rewrites
-  `import.meta.url` (`tests/setup/import-meta-url.cjs`).
 
 ## [1.4.1] - 2026-09-25
 
