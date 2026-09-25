@@ -1366,16 +1366,17 @@ export class QuerySanitizer {
 
     // FieldValidator is now imported at the top of the file
     
-    // Extract field names from query using simple regex
-    // Matches patterns like "field_name:" or "device.ip:value"
-    const fieldPattern = /([\w.]+):/g;
+    // Extract field names from the start of each term ("field_name:" or
+    // "device.ip:value"). A term runs to the next space or parenthesis outside
+    // quotes, so colons inside a value (mac:AA:BB:CC:DD:EE:FF, ip:fe80::1,
+    // mac:"aa:bb:cc:00:00:01") are never read as field names.
+    const termPattern = /(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s()"'])+/g;
     const foundFields: string[] = [];
-    let match;
-    
-    while ((match = fieldPattern.exec(query)) !== null) {
-      const fieldName = match[1];
-      if (!foundFields.includes(fieldName)) {
-        foundFields.push(fieldName);
+
+    for (const term of query.match(termPattern) || []) {
+      const fieldMatch = /^-?([\w.]+):/.exec(term);
+      if (fieldMatch && !foundFields.includes(fieldMatch[1])) {
+        foundFields.push(fieldMatch[1]);
       }
     }
 

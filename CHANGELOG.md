@@ -96,6 +96,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   flows and alarms and `ts:>1h`-style values become Unix seconds;
   `search_flows` documents `source.ip`/`destination.ip`; and `search_devices`
   `ip:` filters match (every `ip:` query returned 0 devices).
+- Search schemas and validators agree (fixes #42): every field and example
+  query in the `search_flows`, `search_alarms`, `search_rules` and
+  `search_devices` schemas now passes validation and reaches the API. Newly
+  accepted: `domain` on flows, `region` on alarms (the MSP alias for
+  `remote.region`), and `protocol`, `notes`, `scope.type` and `box.id` on
+  rules. Dotted fields such as `scope.type` and `network.name` no longer fail
+  with "Expected ':' after field". Values containing colons parse as one
+  value, so `mac:AA:BB:CC:DD:EE:FF`, `mac:AA:*` and `ip:fe80::1` work, quoted
+  or not. `search_devices` evaluates `OR`, `NOT` and parentheses
+  (`name:nas OR name:tv` returned only `nas`) and filters on `mac`, `gid`,
+  `network.name` and `group.name`, and the query parser no longer drops the
+  right-hand side of an `OR`. Removed from the schemas: `resolved` on alarms
+  (the MSP API has no such qualifier; use `status`), `gid:` on flows, alarms
+  and rules (use the documented `box.id:`), and `vendor:` on devices (use
+  `mac_vendor:`).
 - Installing the package (`npm install -g`, npx) no longer prints
   `npm warn deprecated` for `inflight@1.0.6`, `rimraf@2.7.1` and
   `glob@7.2.3` (#32). All three came from geoip-lite

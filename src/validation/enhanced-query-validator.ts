@@ -398,8 +398,9 @@ export class EnhancedQueryValidator {
     const quickFixes: QuickFix[] = [];
     
     // Match potential field patterns that might be malformed
-    // Updated regex to better handle logical operators and range syntax
-    const fieldPattern = /(\w+)\s*([=:]?)\s*([^)\s]*)/g;
+    // Updated regex to better handle logical operators and range syntax.
+    // Field names may be dotted property paths (scope.type, network.name).
+    const fieldPattern = /([\w.]+)\s*([=:]?)\s*([^)\s]*)/g;
     let match;
     
     // Skip validation for logical operators and range keywords

@@ -92,8 +92,38 @@ export class QueryParser {
       return tokens;
     }
 
+    // Set right after `field:` or `field:>=`, where a bare value starts
+    let expectValue = false;
+
     while (i < safeInput.length) {
       const char = safeInput[i];
+      const valueExpected = expectValue;
+      expectValue = false;
+
+      // A bare value runs to the next space or ')', so the colons in a MAC or
+      // IPv6 address (mac:AA:BB:CC:DD:EE:FF, ip:fe80::1) stay in the value.
+      // Quotes, ranges, groups and comparison operators are tokenized below.
+      if (
+        valueExpected &&
+        !/[\s()[\]"'<>]/.test(char) &&
+        !(char === '!' && safeInput[i + 1] === '=')
+      ) {
+        let value = '';
+        const start = i;
+
+        while (i < safeInput.length && !/[\s)]/.test(safeInput[i])) {
+          value += safeInput[i];
+          i++;
+        }
+
+        tokens.push({
+          type: /[*?]/.test(value) ? TokenType.WILDCARD : TokenType.VALUE,
+          value,
+          position: start,
+          length: value.length,
+        });
+        continue;
+      }
 
       // Skip whitespace
       if (/\s/.test(char)) {
@@ -149,6 +179,7 @@ export class QueryParser {
 
       // Colon for field:value
       if (char === ':') {
+        expectValue = tokens[tokens.length - 1]?.type === TokenType.FIELD;
         tokens.push({
           type: TokenType.COLON,
           value: char,
@@ -201,6 +232,7 @@ export class QueryParser {
           operator += '=';
           i++;
         }
+        expectValue = tokens[tokens.length - 1]?.type === TokenType.COLON;
         tokens.push({
           type: TokenType.OPERATOR,
           value: operator,
@@ -215,6 +247,7 @@ export class QueryParser {
         i + 1 < safeInput.length &&
         safeInput[i + 1] === '='
       ) {
+        expectValue = tokens[tokens.length - 1]?.type === TokenType.COLON;
         tokens.push({
           type: TokenType.OPERATOR,
           value: '!=',
@@ -303,7 +336,7 @@ export class QueryParser {
   private parseExpression(): QueryNode | undefined {
     let left = this.parseAndExpression();
 
-    while (this.match(TokenType.LOGICAL) && this.previous().value === 'OR') {
+    while (this.matchLogical('OR')) {
       const right = this.parseAndExpression();
       if (!right) {
         break;
@@ -326,7 +359,7 @@ export class QueryParser {
   private parseAndExpression(): QueryNode | undefined {
     let left = this.parseNotExpression();
 
-    while (this.match(TokenType.LOGICAL) && this.previous().value === 'AND') {
+    while (this.matchLogical('AND')) {
       const right = this.parseNotExpression();
       if (!right) {
         break;
@@ -347,7 +380,7 @@ export class QueryParser {
    * Parse NOT expressions (highest precedence)
    */
   private parseNotExpression(): QueryNode | undefined {
-    if (this.match(TokenType.LOGICAL) && this.previous().value === 'NOT') {
+    if (this.matchLogical('NOT')) {
       const operand = this.parsePrimary();
       if (!operand) {
         this.errors.push('Expected expression after NOT operator');
@@ -601,6 +634,20 @@ export class QueryParser {
   }
 
   // Utility methods for token management
+
+  /**
+   * Consume the next token only if it is the given logical operator.
+   * match(LOGICAL) would also consume an OR while looking for AND, which
+   * dropped the right-hand side of every OR query.
+   */
+  private matchLogical(operator: 'AND' | 'OR' | 'NOT'): boolean {
+    if (this.check(TokenType.LOGICAL) && this.peek().value === operator) {
+      this.advance();
+      return true;
+    }
+    return false;
+  }
+
   private match(...types: TokenTypeValue[]): boolean {
     for (const type of types) {
       if (this.check(type)) {

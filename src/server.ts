@@ -595,7 +595,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Supported fields: protocol:tcp/udp, direction:inbound/outbound/local, blocked:true/false, bytes:>1MB, domain:*.example.com, region:US (country code), category:social/games/porn/etc, gid:box_id, device.ip:192.168.*, source.ip:*, destination.ip:*, ts:>1h. Examples: "region:US AND protocol:tcp", "blocked:true AND bytes:>1MB", "category:social OR category:games"',
+                    'Search query using Firewalla syntax. Supported fields: protocol:tcp/udp, direction:inbound/outbound/local, blocked:true/false, bytes:>1MB, domain:*.example.com, region:US (country code), category:social/games/porn/etc, box.id:box_gid, device.ip:192.168.*, source.ip:*, destination.ip:*, ts:>1h. Examples: "region:US AND protocol:tcp", "blocked:true AND bytes:>1MB", "category:social OR category:games"',
                 },
                 groupBy: {
                   type: 'string',
@@ -633,7 +633,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Supported fields: type:1-16 (see alarm types above), resolved:true/false, status:1/2 (active/archived), source_ip:192.168.*, region:US (country code), gid:box_id, device.name:*, message:"text search". Examples: "type:8 AND region:US" (video from US), "type:10 AND status:1" (active porn alerts), "source_ip:192.168.* AND NOT resolved:true"',
+                    'Search query using Firewalla syntax. Supported fields: type:1-16 (see alarm types above), status:1/2 (active/archived), source_ip:192.168.*, region:US (country code), box.id:box_gid, device.name:*, message:"text search". Examples: "type:8 AND region:US" (video from US), "type:10 AND status:1" (active porn alerts), "source_ip:192.168.* AND status:1" (active alarms from the LAN)',
                 },
                 groupBy: {
                   type: 'string',
@@ -671,7 +671,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Supported fields: action:allow/block/timelimit, target.type:domain/ip/device, target.value:*.facebook.com, status:active/paused, direction:bidirection/inbound/outbound, protocol:tcp/udp, gid:box_id, scope.type:device/network, notes:"description text". Examples: "action:block AND target.value:*.social.com", "status:paused", "target.type:domain AND action:block"',
+                    'Search query using Firewalla syntax. Supported fields: action:allow/block/timelimit, target.type:domain/ip/device, target.value:*.facebook.com, status:active/paused, direction:bidirection/inbound/outbound, protocol:tcp/udp, box.id:box_gid, scope.type:device/network, notes:"description text". Examples: "action:block AND target.value:*.social.com", "status:paused", "target.type:domain AND action:block"',
                 },
                 limit: {
                   type: 'number',
@@ -912,7 +912,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Supported fields: mac:AA:BB:CC:DD:EE:FF, ip:192.168.1.*, name:*iPhone*, online:true/false, vendor:Apple, gid:box_id, network.name:*, group.name:*. Examples: "online:false AND vendor:Apple", "ip:192.168.1.* AND name:*laptop*", "mac:AA:* OR name:*phone*"',
+                    'Search query using Firewalla syntax. Supported fields: mac:AA:BB:CC:DD:EE:FF, ip:192.168.1.*, name:*iPhone*, online:true/false, mac_vendor:Apple, gid:box_gid, network.name:*, group.name:*. Examples: "online:false AND mac_vendor:Apple", "ip:192.168.1.* AND name:*laptop*", "mac:AA:* OR name:*phone*"',
                 },
                 status: {
                   type: 'string',
