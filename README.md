@@ -447,6 +447,23 @@ npx firewalla-mcp-server
 node dist/server.js
 ```
 
+### Launch checks in CI
+
+`scripts/launch-smoke.mjs` starts the server the way a user would and requires an answer to an MCP `initialize` over stdio. It uses dummy credentials, and `initialize` is answered locally, so nothing is sent to Firewalla.
+
+- The CI workflow's `launch` job packs the package and starts it through the global bin, `npx` and `node dist/server.js` on Linux, macOS and Windows.
+- The Docker Build workflow runs on pull requests that touch the Dockerfile, the package files or the Docker workflows. It builds the image for amd64, arm64 and arm/v7, then runs the amd64 image with `docker run -i --rm` and requires `serverInfo.version` to equal `package.json`'s version. Run the workflow by hand with the `image` input (for example `amittell/firewalla-mcp-server:1.4.1`) to pull and check a published image instead.
+
+To run the Docker check locally:
+
+```bash
+docker build -t firewalla-mcp-server:local .
+node scripts/launch-smoke.mjs --docker firewalla-mcp-server:local
+
+# A published image; the expected version comes from the tag
+node scripts/launch-smoke.mjs --docker amittell/firewalla-mcp-server:1.4.1 --pull
+```
+
 ### Project Structure
 
 ```text
