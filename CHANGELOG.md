@@ -148,6 +148,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `get_specific_target_list`, `get_statistics_by_region`,
   `get_statistics_by_box` and `get_rule_trends`. It lists the 28 tools and
   the 5 opt-in write tools, each once.
+- `search_target_lists` applies its query. `GET /v2/target-lists` takes
+  only `owner`, and the tool returned the first `limit` lists whatever the
+  query said (`category:social` returned every category). The query is
+  evaluated on the client, as `search_devices` does. The `targets:` and
+  `notes:` fields its schema lists, and the schema's own example
+  `targets:*.gaming.com`, were refused as invalid fields; they are accepted.
 
 ### Changed
 
