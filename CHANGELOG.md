@@ -66,6 +66,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The readiness check reported "Missing required configuration" without
   `FIREWALLA_BOX_ID`, and the environment check warned that a box ID "will be
   required for all operations".
+- `get_alarm_trends`, `get_bandwidth_usage` and the `security_report` and
+  `network_health_check` prompts failed against the live API with
+  `Bad Request: Invalid parameters sent to /v2/alarms` (or `/v2/flows`). The
+  API refuses a `limit` over 500 ("limit exceeds max allowed value of 500",
+  measured 2026-09-25), and they asked for 10000 alarms, `top * 10` flows (up
+  to 1000) or 1000 alarms and flows in one request, so `get_bandwidth_usage`
+  failed for any `limit` over 50. `getActiveAlarms`, `getFlowData`,
+  `searchFlows`, `searchAlarms` and the trend and bandwidth queries now page
+  through `next_cursor` 500 at a time, up to the same totals.
+- The blocked-connection count behind `security_report` and
+  `network_health_check` queried flows with `block:true`, which the API
+  answers with no results; it uses `status:blocked` now.
+- `network_health_check` no longer throws `Cannot read properties of
+  undefined (reading 'ip')` on flows without a `device`; neither does the
+  `device_investigation` prompt.
 - The server now starts under `npx`, global installs and on Windows (#36,
   from @mefrati75). The entrypoint check compared `import.meta.url` with
   `file://${process.argv[1]}`, which never matches through a bin symlink, or

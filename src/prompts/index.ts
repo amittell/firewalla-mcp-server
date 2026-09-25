@@ -349,7 +349,7 @@ Please analyze and provide:
             f =>
               f.source?.ip === targetDevice.ip ||
               f.destination?.ip === targetDevice.ip ||
-              f.device.ip === targetDevice.ip
+              f.device?.ip === targetDevice.ip
           );
           const deviceAlarms = alarms.results.filter(
             a =>
@@ -373,7 +373,7 @@ Investigate potential security issues and unusual behavior for this device:
 
 **Network Activity (${lookbackHours}h lookback):**
 - Total flows involving this device: ${deviceFlows.length}
-- Outbound connections: ${deviceFlows.filter(f => f.source?.ip === targetDevice.ip || f.device.ip === targetDevice.ip).length}
+- Outbound connections: ${deviceFlows.filter(f => f.source?.ip === targetDevice.ip || f.device?.ip === targetDevice.ip).length}
 - Inbound connections: ${deviceFlows.filter(f => f.destination?.ip === targetDevice.ip).length}
 - Data transferred: ${deviceFlows.reduce((sum, f) => sum + ((f.download || 0) + (f.upload || 0)), 0)} bytes
 - Unique remote IPs: ${
