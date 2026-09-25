@@ -3,7 +3,7 @@
  */
 
 import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
-import type { FirewallaClient } from '../../firewalla/client.js';
+import { isValidBoxGid, type FirewallaClient } from '../../firewalla/client.js';
 import {
   ParameterValidator,
   SafeAccess,
@@ -479,6 +479,22 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
         boxValidation,
       ]);
 
+      const box = boxValidation.sanitizedValue as string | undefined;
+      if (
+        validationResult.isValid &&
+        box !== undefined &&
+        !isValidBoxGid(box)
+      ) {
+        return this.createErrorResponse(
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          [
+            "box must be a box gid (letters, digits, '-' or '_'); get_boxes lists them",
+          ]
+        );
+      }
+
       if (!validationResult.isValid) {
         return this.createErrorResponse(
           'Parameter validation failed',
@@ -493,7 +509,7 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
           firewalla.getBandwidthUsage(
             periodValidation.sanitizedValue as string,
             limitValidation.sanitizedValue as number,
-            boxValidation.sanitizedValue as string | undefined
+            box
           ),
         this.name
       );

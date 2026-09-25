@@ -247,6 +247,18 @@ const DOCUMENTED_GET_PARAMS = new Map<string, readonly string[]>([
 ]);
 
 /**
+ * A box gid as the MSP API issues them (a UUID). Anything else is refused
+ * before it is put in a query, where a value such as `X OR box.id:Y` would
+ * widen the scope instead of narrowing it.
+ */
+const BOX_GID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** Whether `gid` has the shape of a box gid */
+export function isValidBoxGid(gid: string): boolean {
+  return BOX_GID_PATTERN.test(gid);
+}
+
+/**
  * A single-box operation could not pick a box: the account has several and
  * none was named, or the token sees none. Handlers report it as a validation
  * error rather than an API failure.
@@ -5328,6 +5340,11 @@ export class FirewallaClient {
     const gid = box?.trim() || this.config.boxId;
     if (!gid) {
       return query;
+    }
+    if (!isValidBoxGid(gid)) {
+      throw new BoxSelectionError(
+        `Invalid box gid: expected letters, digits, '-' or '_' only (get_boxes lists the gids)`
+      );
     }
 
     const boxFilter = `box.id:${gid}`;
