@@ -3,6 +3,8 @@
  * Defines query AST nodes, search parameters, and result structures
  */
 
+import type { AlarmGroup, FlowGroup } from '../types.js';
+
 /**
  * Query AST node types for complex search parsing
  */
@@ -115,6 +117,8 @@ export interface SearchResult<T = any> {
   limit: number;
   offset: number; // Deprecated: use next_cursor for new implementations
   next_cursor?: string; // Cursor-based pagination (preferred)
+  groups?: FlowGroup[] | AlarmGroup[]; // Grouped flows or alarms; results is empty then
+  group_by?: string; // The groupBy the groups were requested with
   query: string;
   execution_time_ms: number;
   aggregations?: Record<

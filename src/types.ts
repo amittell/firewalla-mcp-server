@@ -304,6 +304,46 @@ export interface Flow {
 }
 
 /**
+ * One group of a grouped GET /v2/flows response. With `groupBy` the API
+ * returns one item per group instead of flows: the group's fields and its
+ * totals, and no `ts` or `gid` (measured 2026-09-25).
+ * @interface FlowGroup
+ */
+export interface FlowGroup {
+  /**
+   * The fields that identify the group, as the API returned them, e.g.
+   * `{ category: 'social' }`, `{ domain, country, region }` for `domain`,
+   * `{ device: { id, ip, name, ... } }` for `device` (only `{ id }` for
+   * `device,category`), or `{ gid }` for `box`
+   */
+  key: Record<string, unknown>;
+  /** TCP connections and UDP sessions, or blocks, summed over the group */
+  count: number;
+  /** Bytes downloaded */
+  download: number;
+  /** Bytes uploaded */
+  upload: number;
+  /** Bytes transferred (download + upload) */
+  total: number;
+}
+
+/**
+ * One group of a grouped GET /v2/alarms response: the group's fields and
+ * its alarm count, with no `ts`, `aid` or `message` (measured 2026-09-25)
+ * @interface AlarmGroup
+ */
+export interface AlarmGroup {
+  /**
+   * The fields that identify the group, as the API returned them, e.g.
+   * `{ type: 8 }`, `{ type: 8, gid }` for `type,box`, or
+   * `{ device: { id } }` for `device`
+   */
+  key: Record<string, unknown>;
+  /** Alarms in the group */
+  count: number;
+}
+
+/**
  * Paginated network flow data response
  * @interface FlowData
  * @deprecated Consider using StandardPaginatedResponse<Flow> for consistent pagination

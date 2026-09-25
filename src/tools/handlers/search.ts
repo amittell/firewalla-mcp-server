@@ -268,8 +268,40 @@ function validateCommonSearchParameters(
     }
   }
 
-  // Validate group_by parameter if provided
-  if (args.group_by !== undefined) {
+  // Flows and alarms send group_by to the API as groupBy, which takes
+  // comma-separated API fields (for flows e.g. device, category, domain,
+  // box; for alarms type, box, device, status) and answers an unknown one
+  // with 400 (measured 2026-09-25). Other entities group on the client by
+  // one of their search fields.
+  let groupBy = args.group_by;
+  if (
+    args.group_by !== undefined &&
+    (entityType === 'flows' || entityType === 'alarms')
+  ) {
+    // An empty group_by asks for no grouping
+    groupBy =
+      typeof args.group_by === 'string'
+        ? args.group_by.replace(/\s+/g, '') || undefined
+        : args.group_by;
+    if (
+      groupBy !== undefined &&
+      (typeof groupBy !== 'string' ||
+        !/^[A-Za-z_.]+(,[A-Za-z_.]+)*$/.test(groupBy))
+    ) {
+      return {
+        isValid: false,
+        response: createErrorResponse(
+          toolName,
+          'Invalid group_by field',
+          ErrorType.VALIDATION_ERROR,
+          { group_by: args.group_by },
+          [
+            'group_by must be one or more comma-separated API fields, e.g. "category" or "device,category"',
+          ]
+        ),
+      };
+    }
+  } else if (args.group_by !== undefined) {
     const groupByValidation = ParameterValidator.validateEnum(
       args.group_by,
       'group_by',
@@ -300,7 +332,7 @@ function validateCommonSearchParameters(
     limit: args.limit,
     query: args.query,
     cursor: args.cursor,
-    groupBy: args.group_by,
+    groupBy,
   };
 }
 
@@ -319,7 +351,7 @@ OPTIONAL PARAMETERS:
 - cursor: Pagination cursor from previous response
 - time_range: Time window for search (start/end timestamps)
 - sort_by: Field to sort results by
-- group_by: Field to group results by for aggregation
+- group_by (or groupBy): API fields to group by, e.g. "category" or "device,category"; returns groups instead of flows
 - aggregate: Enable aggregation statistics
 
 QUERY EXAMPLES:
@@ -339,7 +371,7 @@ PERFORMANCE TIPS:
 - Use specific time ranges for better performance: {"time_range": {"start": "2024-01-01T00:00:00Z", "end": "2024-01-02T00:00:00Z"}}
 - Limit results with reasonable values (100-1000) for faster responses
 - Use cursor for pagination with large datasets
-- Group by fields like "source_ip" or "protocol" for aggregated insights
+- Group by fields like "category" or "protocol" for aggregated insights
 
 See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.md`;
   category = 'search' as const;
@@ -363,7 +395,11 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
-    const searchArgs = args as SearchFlowsArgs;
+    // The tool schema names the grouping groupBy; group_by is read too
+    const searchArgs = {
+      ...args,
+      group_by: args.group_by ?? args.groupBy,
+    } as SearchFlowsArgs;
     const startTime = Date.now();
 
     try {
@@ -469,7 +505,7 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
         cursor: searchArgs.cursor,
         sort_by: searchArgs.sort_by,
         sort_order: searchArgs.sort_order,
-        group_by: searchArgs.group_by,
+        group_by: validation.groupBy,
         aggregate: searchArgs.aggregate,
         time_range: searchArgs.time_range,
         force_refresh: forceRefreshValidation.sanitizedValue as boolean,
@@ -494,6 +530,21 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
         }
       );
       const executionTime = Date.now() - startTime;
+
+      // Grouped: the API returned one item per group, not flows
+      if (result.groups) {
+        return this.createUnifiedResponse(
+          {
+            group_by: result.group_by,
+            count: result.groups.length,
+            groups: result.groups,
+            next_cursor: result.next_cursor,
+            has_more: !!result.next_cursor,
+            query_executed: result.query,
+          },
+          { executionTimeMs: executionTime }
+        );
+      }
 
       // Process flow data with enhanced standardization
       let processedFlows = SafeAccess.safeArrayMap(
@@ -668,6 +719,7 @@ OPTIONAL PARAMETERS:
 - force_refresh: Bypass cache for real-time data (default: false)
 - cursor: Pagination cursor from previous response
 - sort_by: Field to sort results by
+- group_by (or groupBy): API fields to group by, e.g. "type" or "type,box"; returns groups instead of alarms
 - aggregate: Enable aggregation statistics
 
 QUERY EXAMPLES:
@@ -716,7 +768,11 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
-    const searchArgs = args as SearchAlarmsArgs;
+    // The tool schema names the grouping groupBy; group_by is read too
+    const searchArgs = {
+      ...args,
+      group_by: args.group_by ?? args.groupBy,
+    } as SearchAlarmsArgs;
     const startTime = Date.now();
 
     try {
@@ -756,7 +812,7 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
         cursor: searchArgs.cursor,
         sort_by: searchArgs.sort_by,
         sort_order: searchArgs.sort_order,
-        group_by: searchArgs.group_by,
+        group_by: validation.groupBy,
         aggregate: searchArgs.aggregate,
         time_range: searchArgs.time_range,
         force_refresh: forceRefreshValidation.sanitizedValue as boolean,
@@ -767,6 +823,21 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
         this.name
       );
       const executionTime = Date.now() - startTime;
+
+      // Grouped: the API returned one item per group, not alarms
+      if (result.groups) {
+        return this.createUnifiedResponse(
+          {
+            group_by: result.group_by,
+            count: result.groups.length,
+            groups: result.groups,
+            next_cursor: result.next_cursor,
+            has_more: !!result.next_cursor,
+            query_executed: result.query,
+          },
+          { executionTimeMs: executionTime }
+        );
+      }
 
       // Process alarm data with enhanced standardization and schema harmonization
       let processedAlarms = SafeAccess.safeArrayMap(

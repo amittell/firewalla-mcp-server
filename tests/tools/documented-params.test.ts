@@ -261,10 +261,10 @@ describe('flows', () => {
 
   it('getFlowData sends timestamp: and bytes: sort fields as ts: and total:', async () => {
     const { client, get } = makeClient();
-    await client.getFlowData(undefined, 'device', 'timestamp:asc,bytes:desc');
+    // Ungrouped: a grouped request drops ts sorts (grouped-responses.test.ts)
+    await client.getFlowData(undefined, undefined, 'timestamp:asc,bytes:desc');
     const [params] = sentTo(get, '/v2/flows');
     expect(params.sortBy).toBe('ts:asc,total:desc');
-    expect(params.groupBy).toBe('device');
   });
 });
 
@@ -272,10 +272,9 @@ describe('alarms', () => {
   it('getActiveAlarms sends ts:desc by default and ts: for timestamp:', async () => {
     const { client, get } = makeClient();
     await client.getActiveAlarms();
-    await client.getActiveAlarms('type:1', 'type', 'timestamp:asc');
+    await client.getActiveAlarms('type:1', undefined, 'timestamp:asc');
     const sent = sentTo(get, '/v2/alarms');
     expect(sent.map(params => params.sortBy)).toEqual(['ts:desc', 'ts:asc']);
-    expect(sent[1].groupBy).toBe('type');
   });
 
   it('searchAlarms sends ts: sort fields and no grouping params', async () => {

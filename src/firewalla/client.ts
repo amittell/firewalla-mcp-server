@@ -24,7 +24,9 @@ import { getCurrentTimestamp } from '../utils/timestamp.js';
 import {
   FirewallaConfig,
   Alarm,
+  AlarmGroup,
   Flow,
+  FlowGroup,
   Device,
   BandwidthUsage,
   NetworkRule,
@@ -93,6 +95,73 @@ function flowCategory(item: any): string {
   const category =
     typeof item?.category === 'string' ? item.category : item?.category?.name;
   return category || 'uncategorized';
+}
+
+/**
+ * The fields of a grouped /v2/alarms or /v2/flows item that identify its
+ * group: every field but its totals. An empty object is left out: grouped
+ * flows carry `device: {}` unless they are grouped by device.
+ */
+function groupKey(
+  item: Record<string, unknown>,
+  totals: readonly string[]
+): Record<string, unknown> {
+  const key: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(item)) {
+    const isEmptyObject =
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      Object.keys(value).length === 0;
+    if (!totals.includes(field) && !isEmptyObject) {
+      key[field] = value;
+    }
+  }
+  return key;
+}
+
+/**
+ * The sortBy of a grouped request. Groups have no `ts`, and the API answers a
+ * grouped request sorted by `ts` with no groups: measured 2026-09-25,
+ * `groupBy=category` on /v2/flows with `sortBy=ts:desc` or `ts:asc`, and
+ * `groupBy=type` on /v2/alarms with `sortBy=ts:desc`, returned count 0, and
+ * the same requests with `total:desc` or `count:desc` returned groups. Sort
+ * terms on `ts` are dropped, and with none left the largest groups come
+ * first (`largest`).
+ */
+function groupedSortBy(sortBy: string, largest: string): string {
+  const terms = String(sortBy ?? '')
+    .split(',')
+    .map(term => term.trim())
+    .filter(term => term && term.split(':')[0] !== 'ts');
+  return terms.length > 0 ? terms.join(',') : largest;
+}
+
+/** Flow groups from the items of a grouped GET /v2/flows */
+function toFlowGroups(items: unknown[]): FlowGroup[] {
+  return items
+    .filter((item): item is Record<string, any> =>
+      Boolean(item && typeof item === 'object')
+    )
+    .map(item => ({
+      key: groupKey(item, ['count', 'download', 'upload', 'total']),
+      count: Number(item.count) || 0,
+      download: Number(item.download) || 0,
+      upload: Number(item.upload) || 0,
+      total: Number(item.total) || 0,
+    }));
+}
+
+/** Alarm groups from the items of a grouped GET /v2/alarms */
+function toAlarmGroups(items: unknown[]): AlarmGroup[] {
+  return items
+    .filter((item): item is Record<string, any> =>
+      Boolean(item && typeof item === 'object')
+    )
+    .map(item => ({
+      key: groupKey(item, ['count']),
+      count: Number(item.count) || 0,
+    }));
 }
 
 /** Largest `limit` the MSP API accepts on its /v2 list endpoints */
@@ -713,7 +782,9 @@ export class FirewallaClient {
    * optimized for token efficiency while preserving essential security context.
    *
    * @param query - Optional search query for filtering alarms
-   * @param groupBy - Optional field to group results by (e.g., 'type', 'box')
+   * @param groupBy - Optional fields to group by (e.g., 'type', 'type,box').
+   *   The API then returns groups, not alarms: the result has `groups` and
+   *   `group_by`, and empty `results`.
    * @param sortBy - Sort order specification (default: 'ts:desc'; `timestamp`
    *   is sent as `ts`)
    * @param limit - Maximum number of results to return (required for pagination)
@@ -750,7 +821,13 @@ export class FirewallaClient {
     limit = 200,
     cursor?: string,
     force_refresh = false
-  ): Promise<{ count: number; results: Alarm[]; next_cursor?: string }> {
+  ): Promise<{
+    count: number;
+    results: Alarm[];
+    next_cursor?: string;
+    groups?: AlarmGroup[];
+    group_by?: string;
+  }> {
     const params: Record<string, unknown> = {
       sortBy: translateSortBy(sortBy, 'alarms'),
       limit, // Remove artificial limit - let pagination handle large datasets
@@ -760,8 +837,11 @@ export class FirewallaClient {
       // source_ip: is rejected by /v2/alarms; send it as device.ip:
       params.query = translateToMspQualifiers(query, 'alarms');
     }
-    if (groupBy) {
-      params.groupBy = groupBy;
+    const group = typeof groupBy === 'string' ? groupBy.trim() : undefined;
+    if (group) {
+      params.groupBy = group;
+      // A ts sort returns no groups; see groupedSortBy
+      params.sortBy = groupedSortBy(params.sortBy as string, 'count:desc');
     }
     if (cursor) {
       params.cursor = cursor;
@@ -789,6 +869,20 @@ export class FirewallaClient {
 
     // Extract alarm data with safe defaults
     const rawAlarms = Array.isArray(response.results) ? response.results : [];
+
+    // A grouped response has one { <group fields>, count } item per group
+    // and no ts, aid or message (measured 2026-09-25); mapped as alarms,
+    // they became "Unknown alarm" records stamped with the current time
+    if (group) {
+      const groups = toAlarmGroups(rawAlarms);
+      return {
+        count: groups.length,
+        results: [],
+        groups,
+        group_by: group,
+        next_cursor: response.next_cursor,
+      };
+    }
 
     // Apply basic safety to the raw alarm data
     const normalizedAlarms = rawAlarms.map((alarm: any) => ({
@@ -843,6 +937,13 @@ export class FirewallaClient {
     };
   }
 
+  /**
+   * Get flows from GET /v2/flows
+   *
+   * @param groupBy - Optional fields to group by (e.g., 'category',
+   *   'device', 'category,domain'). The API then returns groups, not flows:
+   *   the result has `groups` and `group_by`, and empty `results`.
+   */
   @optimizeResponse('flows')
   async getFlowData(
     query?: string,
@@ -850,7 +951,13 @@ export class FirewallaClient {
     sortBy = 'ts:desc',
     limit = 200,
     cursor?: string
-  ): Promise<{ count: number; results: Flow[]; next_cursor?: string }> {
+  ): Promise<{
+    count: number;
+    results: Flow[];
+    next_cursor?: string;
+    groups?: FlowGroup[];
+    group_by?: string;
+  }> {
     const params: Record<string, unknown> = {
       // timestamp: and bytes: are rejected by /v2/flows; sent as ts: and total:
       sortBy: translateSortBy(sortBy, 'flows'),
@@ -862,8 +969,11 @@ export class FirewallaClient {
     if (query?.trim()) {
       params.query = translateToMspQualifiers(query.trim(), 'flows');
     }
-    if (groupBy) {
-      params.groupBy = groupBy;
+    const group = typeof groupBy === 'string' ? groupBy.trim() : undefined;
+    if (group) {
+      params.groupBy = group;
+      // A ts sort returns no groups; see groupedSortBy
+      params.sortBy = groupedSortBy(params.sortBy as string, 'total:desc');
     }
     if (cursor) {
       params.cursor = cursor;
@@ -877,6 +987,22 @@ export class FirewallaClient {
       params,
       Number(limit)
     );
+
+    // A grouped response has one item of totals per group and no ts or gid
+    // (measured 2026-09-25); mapped as flows, they became records stamped
+    // with the current time
+    if (group) {
+      const groups = toFlowGroups(
+        Array.isArray(response.results) ? response.results : []
+      );
+      return {
+        count: groups.length,
+        results: [],
+        groups,
+        group_by: group,
+        next_cursor: response.next_cursor,
+      };
+    }
 
     // API returns {count, results[], next_cursor} format
     const flows = (Array.isArray(response.results) ? response.results : []).map(

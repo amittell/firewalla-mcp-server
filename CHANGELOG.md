@@ -91,6 +91,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   3 categories, 3,477 visits, all under `unknown`; after the fix 9 top
   domains, and `unknown` only for the flows to bare IPs). `get_flow_data`,
   `search_flows` and `get_recent_flow_activity` return it as well.
+- Grouped alarms and flows come back as groups. With `groupBy`, the API
+  returns one item per group (its fields and its count or byte totals), and
+  none at all when the request is sorted by `ts`. The client always sent
+  `sortBy=ts:desc`, so `get_active_alarms`, `get_flow_data`, `search_flows`
+  and `search_alarms` returned nothing when grouped, and with another sort
+  they turned the groups into `Unknown alarm` records and flows stamped with
+  the current time. They return `groups: [{ key, count, ... }]` now (flows
+  add `download`, `upload` and `total`), and a grouped request drops `ts`
+  sort terms, sorting by `count:desc` (alarms) or `total:desc` (flows)
+  unless asked otherwise. `search_flows` and `search_alarms` read the
+  `groupBy` their schemas list as well as `group_by`, and take any
+  comma-separated API fields (`device`, `box` and `device,category` were
+  refused); the API answers an unknown field with 400.
 
 ### Changed
 

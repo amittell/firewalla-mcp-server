@@ -544,6 +544,12 @@ export function autoOptimizeResponse(
     return response;
   }
 
+  // Groups of a grouped alarm or flow response are already one compact item
+  // per group; the per-record summaries below would drop them
+  if (Array.isArray(response?.groups)) {
+    return response;
+  }
+
   // Quick size estimation before expensive JSON.stringify
   let estimatedSize: number;
   try {
