@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- A box gid is checked before it goes into a `box.id:` query qualifier:
+  `get_bandwidth_usage` refuses a `box` that is not a gid (letters, digits,
+  `-` and `_`), and the client refuses a malformed `FIREWALLA_BOX_ID`
+  rather than sending it. A value such as `X OR box.id:Y` used to widen the
+  query to other boxes.
 - `search_target_lists` evaluates `target_count:` and `last_updated:`, which
   its query fields list. `target_count` compares the entry count (`>n`,
   `<=n`, `a-b` or `n`), using the API's `count` for Firewalla-managed lists,
