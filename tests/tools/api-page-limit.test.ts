@@ -134,6 +134,17 @@ describe('requests to capped list endpoints', () => {
     expect(alarmQuery).not.toContain('source_ip');
   });
 
+  it('searchFlows with include_resolved: false excludes blocked flows with -status:blocked', async () => {
+    const { client, request } = makeClient(10);
+    await client.searchFlows(
+      { query: 'protocol:tcp', limit: 10 },
+      { include_resolved: false }
+    );
+    const [query] = request.mock.calls.map(([, , params]) => params.query);
+    expect(query).toContain('-status:blocked');
+    expect(query).not.toMatch(/block:|blocked:/);
+  });
+
   it('stops when the endpoint has no more pages', async () => {
     const { client, request } = makeClient(120);
     await client.getBandwidthUsage('1h', 60);

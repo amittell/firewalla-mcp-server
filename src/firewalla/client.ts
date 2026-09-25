@@ -2998,11 +2998,7 @@ export class FirewallaClient {
 
     // Add query if provided
     if (searchQuery.query?.trim()) {
-      // blocked: and bytes: are rejected by /v2/flows (see getFlowData)
-      params.query = translateToMspQualifiers(
-        searchQuery.query.trim(),
-        'flows'
-      );
+      params.query = searchQuery.query.trim();
     }
 
     if (searchQuery.group_by) {
@@ -3035,11 +3031,18 @@ export class FirewallaClient {
         : timeQuery;
     }
 
-    // Add blocked flow filter if needed
+    // Add blocked flow filter if needed: the API has no `block` qualifier and
+    // answers `block:false` with no results; `-status:blocked` excludes blocked
     if (options.include_resolved === false) {
       params.query = params.query
-        ? `${params.query} AND block:false`
-        : 'block:false';
+        ? `${params.query} AND -status:blocked`
+        : '-status:blocked';
+    }
+
+    // blocked: and bytes: are rejected by /v2/flows (see getFlowData); translate
+    // once every fragment is in
+    if (typeof params.query === 'string') {
+      params.query = translateToMspQualifiers(params.query, 'flows');
     }
 
     const response = await this.requestPages<any>(
