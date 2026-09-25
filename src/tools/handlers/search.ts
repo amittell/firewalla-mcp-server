@@ -157,7 +157,9 @@ type CommonSearchValidationResult =
 function validateCommonSearchParameters(
   args: BaseSearchArgs,
   toolName: string,
-  entityType: 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists'
+  entityType: 'flows' | 'alarms' | 'rules' | 'devices' | 'target_lists',
+  // The default the tool's schema advertises for limit
+  defaultLimit = 200
 ): CommonSearchValidationResult {
   // Validate optional limit parameter with default
   const limitValidation = ParameterValidator.validateNumber(
@@ -165,7 +167,7 @@ function validateCommonSearchParameters(
     'limit',
     {
       required: false,
-      defaultValue: 200,
+      defaultValue: defaultLimit,
       ...getLimitValidationConfig(toolName),
     }
   );
@@ -330,7 +332,8 @@ function validateCommonSearchParameters(
 
   return {
     isValid: true,
-    limit: args.limit,
+    // The limit to use: the one given, else the default
+    limit: limitValidation.sanitizedValue as number,
     query: args.query,
     cursor: args.cursor,
     groupBy,
@@ -501,7 +504,7 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: finalQuery,
-        limit: searchArgs.limit,
+        limit: validation.limit,
         offset: searchArgs.offset,
         cursor: searchArgs.cursor,
         sort_by: searchArgs.sort_by,
@@ -634,7 +637,7 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
         cached: false,
         cursor: (result as any).next_cursor,
         hasMore: !!(result as any).next_cursor,
-        limit: searchArgs.limit,
+        limit: validation.limit,
         aggregations: SafeAccess.getNestedValue(
           result as any,
           'aggregations',
@@ -808,7 +811,7 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
-        limit: searchArgs.limit,
+        limit: validation.limit,
         offset: searchArgs.offset,
         cursor: searchArgs.cursor,
         sort_by: searchArgs.sort_by,
@@ -958,7 +961,7 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
         cached: false,
         cursor: (result as any).next_cursor,
         hasMore: !!(result as any).next_cursor,
-        limit: searchArgs.limit,
+        limit: validation.limit,
         aggregations: SafeAccess.getNestedValue(
           result as any,
           'aggregations',
@@ -1246,7 +1249,8 @@ See the Data Normalization Guide for field details.`;
       const validation = validateCommonSearchParameters(
         searchArgs,
         this.name,
-        'devices'
+        'devices',
+        50
       );
 
       if (!validation.isValid) {
@@ -1304,7 +1308,7 @@ See the Data Normalization Guide for field details.`;
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
-        limit: searchArgs.limit,
+        limit: validation.limit,
         offset: searchArgs.offset,
         cursor: searchArgs.cursor,
         sort_by: searchArgs.sort_by,
@@ -1451,7 +1455,8 @@ See the Target List Management guide for configuration details.`;
       const validation = validateCommonSearchParameters(
         searchArgs,
         this.name,
-        'target_lists'
+        'target_lists',
+        100
       );
 
       if (!validation.isValid) {
@@ -1461,7 +1466,7 @@ See the Target List Management guide for configuration details.`;
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
-        limit: searchArgs.limit,
+        limit: validation.limit,
         offset: searchArgs.offset,
         cursor: searchArgs.cursor,
         sort_by: searchArgs.sort_by,
