@@ -1773,14 +1773,24 @@ export class SearchEngine {
           Object.assign(combinedResult.apiParams, rightResult.apiParams);
 
           // Combine post-processing for logical operations
-          if (rightResult.postProcessing) {
-            const existingPostProcessing = combinedResult.postProcessing;
+          const existingPostProcessing = combinedResult.postProcessing;
+          if (node.operator === 'OR') {
+            // An item passes if either branch keeps it. A branch without
+            // post-processing does not narrow here, so neither does the OR.
+            combinedResult.postProcessing =
+              existingPostProcessing && rightResult.postProcessing
+                ? (items: any[]): any[] => {
+                    const left = new Set(existingPostProcessing(items));
+                    const right = new Set(rightResult.postProcessing!(items));
+                    return items.filter(
+                      item => left.has(item) || right.has(item)
+                    );
+                  }
+                : undefined;
+          } else if (rightResult.postProcessing) {
             if (existingPostProcessing && node.operator === 'AND') {
               combinedResult.postProcessing = (items: any[]): any[] =>
                 rightResult.postProcessing!(existingPostProcessing(items));
-            } else if (node.operator === 'OR') {
-              // OR logic is more complex, simplified for now
-              combinedResult.postProcessing = rightResult.postProcessing;
             } else {
               combinedResult.postProcessing = rightResult.postProcessing;
             }

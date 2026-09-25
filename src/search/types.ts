@@ -200,6 +200,7 @@ export const SEARCH_FIELDS = {
     'device_id',
     'region',
     'category',
+    'domain', // MSP flow qualifier: domain:*.example.com
     // Enhanced geographic fields
     'country',
     'country_code',
@@ -245,6 +246,7 @@ export const SEARCH_FIELDS = {
     'direction',
     'description',
     'message',
+    'region', // MSP alarm alias for remote.region
     // Enhanced geographic fields
     'country',
     'country_code',
@@ -294,9 +296,15 @@ export const SEARCH_FIELDS = {
     'enabled',
     'created_at',
     'updated_at',
+    // MSP rule qualifier and Rule model property paths
+    'box.id',
+    'protocol',
+    'notes',
+    'scope.type',
   ],
   devices: [
     'id',
+    'gid', // Device model box ID, filtered client-side like network.name and group.name
     'name',
     'ip',
     'mac',
@@ -305,7 +313,9 @@ export const SEARCH_FIELDS = {
     'device_type',
     'os',
     'network_name',
+    'network.name',
     'group_name',
+    'group.name',
     'last_seen',
     'bandwidth_usage',
     'connection_count',

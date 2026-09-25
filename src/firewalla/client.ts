@@ -42,6 +42,7 @@ import {
   GeographicData,
 } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
+import { matchesQuery, unquoteQueryValue } from '../search/client-filter.js';
 import { optimizeResponse } from '../optimization/index.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
 import { logger } from '../monitoring/logger.js';
@@ -3814,120 +3815,80 @@ export class FirewallaClient {
 
             // Device field extraction
             const name = device.name?.toLowerCase() || '';
-            const mac = device.mac?.toLowerCase() || '';
             const ip = device.ip?.toLowerCase() || '';
             const macVendor = device.macVendor?.toLowerCase() || '';
             const id = device.id?.toLowerCase() || '';
+            // MSP device ids are `mac:<address>` for devices identified by MAC
+            const mac =
+              device.mac?.toLowerCase() ||
+              (id.startsWith('mac:') ? id.slice(4) : '');
+            const gid = device.gid?.toLowerCase() || '';
+            const networkName = device.network?.name?.toLowerCase() || '';
+            const groupName = device.group?.name?.toLowerCase() || '';
             const isOnline = Boolean(
               device.online || device.isOnline || device.connected
             );
 
-            // `ip:` takes an exact address or a `*` wildcard (172.16.2.*)
-            const matchesIp = (pattern: string): boolean => {
+            // `ip:`, `mac:` and `gid:` take an exact value or a `*` wildcard
+            // (172.16.2.*, AA:BB:*)
+            const matchesPattern = (
+              value: string,
+              pattern: string
+            ): boolean => {
               if (!pattern.includes('*')) {
-                return ip === pattern;
+                return value === pattern;
               }
               const escaped = pattern
                 .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
                 .replace(/\*/g, '.*');
-              return new RegExp(`^${escaped}$`).test(ip);
+              return new RegExp(`^${escaped}$`).test(value);
             };
-            const ipTerm = /^ip:(\S+)$/;
+            const matchesText = (text: string): boolean =>
+              name.includes(text) ||
+              mac.includes(text) ||
+              ip.includes(text) ||
+              macVendor.includes(text) ||
+              id.includes(text);
 
-            // Handle AND/OR logic in queries
-            const andParts = query.split(' and ');
+            // Match one `field:value` term; matchesQuery evaluates AND, OR,
+            // NOT and parentheses between terms
+            const matchesTerm = (term: string): boolean => {
+              const fieldTerm = /^([\w.]+):(.*)$/.exec(term);
+              if (!fieldTerm) {
+                return matchesText(unquoteQueryValue(term));
+              }
+              const [, field, rawValue] = fieldTerm;
+              const value = unquoteQueryValue(rawValue);
 
-            // Check if this is an AND query
-            if (andParts.length > 1) {
-              return andParts.every(part => {
-                const trimmedPart = part.trim();
-
-                const ipMatch = ipTerm.exec(trimmedPart);
-                if (ipMatch) {
-                  return matchesIp(ipMatch[1]);
-                }
-                if (trimmedPart.includes('mac_vendor:')) {
-                  const vendor = trimmedPart
-                    .split('mac_vendor:')[1]
-                    ?.split(' ')[0]
-                    ?.toLowerCase();
-                  return macVendor.includes(vendor || '');
-                }
-                if (trimmedPart.includes('name:')) {
-                  const nameSearch = trimmedPart
-                    .split('name:')[1]
-                    ?.split(' ')[0]
-                    ?.toLowerCase()
-                    .replace(/\*/g, '');
-                  return name.includes(nameSearch || '');
-                }
-                if (trimmedPart.includes('online:')) {
-                  const onlineValue = trimmedPart
-                    .split('online:')[1]
-                    ?.split(' ')[0]
-                    ?.toLowerCase();
-
-                  if (onlineValue === 'true') {
+              switch (field) {
+                case 'ip':
+                  return matchesPattern(ip, value);
+                case 'mac':
+                  return matchesPattern(mac, value);
+                case 'gid':
+                  return matchesPattern(gid, value);
+                case 'mac_vendor':
+                  return macVendor.includes(value);
+                case 'name':
+                  return name.includes(value.replace(/\*/g, ''));
+                case 'network.name':
+                  return networkName.includes(value.replace(/\*/g, ''));
+                case 'group.name':
+                  return groupName.includes(value.replace(/\*/g, ''));
+                case 'online':
+                  if (value === 'true') {
                     return isOnline;
-                  } else if (onlineValue === 'false') {
+                  } else if (value === 'false') {
                     return !isOnline;
                   }
                   return true; // Unknown online value, let it pass
-                }
-
-                // Fallback for AND parts: search in all text fields
-                return (
-                  name.includes(trimmedPart) ||
-                  mac.includes(trimmedPart) ||
-                  ip.includes(trimmedPart) ||
-                  macVendor.includes(trimmedPart) ||
-                  id.includes(trimmedPart)
-                );
-              });
-            }
-
-            // Handle single field patterns (original logic)
-            const singleIpMatch = ipTerm.exec(query);
-            if (singleIpMatch) {
-              return matchesIp(singleIpMatch[1]);
-            }
-            if (query.includes('mac_vendor:')) {
-              const vendor = query
-                .split('mac_vendor:')[1]
-                ?.split(' ')[0]
-                ?.toLowerCase();
-              return macVendor.includes(vendor || '');
-            }
-            if (query.includes('name:')) {
-              const nameSearch = query
-                .split('name:')[1]
-                ?.split(' ')[0]
-                ?.toLowerCase()
-                .replace(/\*/g, '');
-              return name.includes(nameSearch || '');
-            }
-            if (query.includes('online:')) {
-              const onlineValue = query
-                .split('online:')[1]
-                ?.split(' ')[0]
-                ?.toLowerCase();
-
-              if (onlineValue === 'true') {
-                return isOnline;
-              } else if (onlineValue === 'false') {
-                return !isOnline;
+                default:
+                  // Fallback: search the whole term in all text fields
+                  return matchesText(term);
               }
-              // If neither true nor false, fall through to other filters
-            }
+            };
 
-            // Fallback: search in all text fields
-            return (
-              name.includes(query) ||
-              mac.includes(query) ||
-              ip.includes(query) ||
-              macVendor.includes(query) ||
-              id.includes(query)
-            );
+            return matchesQuery(query, matchesTerm);
           });
         }
 

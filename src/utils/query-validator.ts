@@ -85,12 +85,42 @@ function tokenizeQuery(query: string): QueryToken[] {
       current++;
     }
 
+    // After a field, keep only the operator itself: in `ip:::1` the extra
+    // colons belong to the value
+    const followsField = tokens[tokens.length - 1]?.type === 'field';
+    if (followsField) {
+      while (operator.length > 1 && !OPERATOR_PATTERN.test(operator)) {
+        operator = operator.slice(0, -1);
+        current--;
+      }
+    }
+
     if (operator && OPERATOR_PATTERN.test(operator)) {
       tokens.push({
         type: 'operator',
         value: operator,
         position: operatorStart,
       });
+
+      // A value runs to the next space or ')', so the colons in a MAC or
+      // IPv6 address (mac:AA:BB:CC:DD:EE:FF, ip:fe80::1) stay in the value
+      if (
+        followsField &&
+        current < query.length &&
+        !/[\s()"']/.test(query[current])
+      ) {
+        const valueStart = current;
+        let value = '';
+        while (current < query.length && !/[\s)]/.test(query[current])) {
+          value += query[current];
+          current++;
+        }
+        tokens.push({
+          type: 'value',
+          value,
+          position: valueStart,
+        });
+      }
       continue;
     } else if (operator) {
       // Invalid operator, treat as value
@@ -232,7 +262,7 @@ export function validateFirewallaQuerySyntax(query: string): ValidationResult {
         }
 
         // Check for common syntax errors
-        if (token.value.includes('*') && !token.value.match(/^[*\w.-]+$/)) {
+        if (token.value.includes('*') && !token.value.match(/^[*\w.:-]+$/)) {
           errors.push(
             `Invalid wildcard pattern '${token.value}' at position ${token.position}`
           );
@@ -294,7 +324,7 @@ export function getExampleQueries(entityType: string): string[] {
     alarms: [
       'severity:high AND status:1',
       'region:CN AND type:1',
-      'source_ip:192.168.* AND NOT resolved:true',
+      'source_ip:192.168.* AND status:1',
       'message:"suspicious activity"',
       'device.name:*laptop* AND severity:>=medium',
     ],
@@ -306,7 +336,7 @@ export function getExampleQueries(entityType: string): string[] {
       'notes:"temporary rule"',
     ],
     devices: [
-      'online:false AND vendor:Apple',
+      'online:false AND mac_vendor:Apple',
       'ip:192.168.1.* AND name:*phone*',
       'mac:AA:BB:*',
       'network.name:"Guest Network"',
