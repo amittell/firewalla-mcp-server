@@ -2105,7 +2105,13 @@ export class FirewallaClient {
     const timeThreshold = Math.floor(Date.now() / 1000 - hours * 60 * 60);
 
     const [alarms, blockedFlows] = await Promise.all([
-      this.getActiveAlarms(`ts:>=${timeThreshold}`, undefined, 'ts:desc', 1000),
+      // Active alarms only: archived ones are dismissed, not threats
+      this.getActiveAlarms(
+        `status:1 ts:>=${timeThreshold}`,
+        undefined,
+        'ts:desc',
+        1000
+      ),
       this.getFlowData(
         `status:blocked AND ts:>=${timeThreshold}`,
         undefined,

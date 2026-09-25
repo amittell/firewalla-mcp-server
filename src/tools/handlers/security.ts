@@ -163,7 +163,7 @@ function deriveAlarmSeverity(alarmType: any): string {
 export class GetActiveAlarmsHandler extends BaseToolHandler {
   name = 'get_active_alarms';
   description =
-    'Retrieve security alarms from the Firewalla MSP API (GET /v2/alarms). No status filter is added: put status:1 in query for active alarms only. Without a ts: qualifier the API covers the last 30 days. Returns up to limit alarms and a cursor for the next page, or groups with groupBy. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
+    'Retrieve active security alarms from the Firewalla MSP API (GET /v2/alarms): status:1 is added unless the query names a status (status:2 for archived alarms). Without a ts: qualifier the API covers the last 30 days. Returns up to limit alarms and a cursor for the next page, or groups with groupBy. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
   category = 'security' as const;
 
   constructor() {
@@ -218,12 +218,6 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         'include_total_count',
         false
       );
-      const severityValidation = ParameterValidator.validateEnum(
-        args?.severity,
-        'severity',
-        ['low', 'medium', 'high', 'critical'],
-        false // not required
-      );
       const forceRefreshValidation = ParameterValidator.validateBoolean(
         args?.force_refresh,
         'force_refresh',
@@ -237,7 +231,6 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         limitValidation,
         cursorValidation,
         includeTotalValidation,
-        severityValidation,
         forceRefreshValidation,
       ]);
 
@@ -250,19 +243,13 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         );
       }
 
-      // Build query string combining provided query and severity filter
+      // Active alarms unless the query names a status. /v2/alarms returns
+      // archived alarms too (status 2) when no status is given.
       let sanitizedQuery = queryValidation.sanitizedValue as string | undefined;
-      const severityValue = severityValidation.sanitizedValue as
-        string | undefined;
-
-      // Add severity filter to query if provided
-      if (severityValue) {
-        const severityQuery = `severity:${severityValue}`;
-        if (sanitizedQuery) {
-          sanitizedQuery = `(${sanitizedQuery}) AND ${severityQuery}`;
-        } else {
-          sanitizedQuery = severityQuery;
-        }
+      if (!/(^|[\s(,])-?status[:=]/i.test(sanitizedQuery ?? '')) {
+        sanitizedQuery = sanitizedQuery?.trim()
+          ? `status:1 ${sanitizedQuery.trim()}`
+          : 'status:1';
       }
 
       // Validate cursor format if provided

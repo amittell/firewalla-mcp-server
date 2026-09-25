@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `get_active_alarms` returns active alarms again: it adds `status:1` unless
+  the query names a status (`status:2` for archived). `/v2/alarms` returns
+  archived alarms too when no status is given, so archived alarms showed up
+  as active and in the recent-threats counts, which now ask for `status:1`
+  as well. The undocumented `severity` argument, which built a query the
+  API rejects, is gone.
+- `npm run test:regression` no longer passes when it matches no test file.
 - A box gid is checked before it goes into a `box.id:` query qualifier:
   `get_bandwidth_usage` refuses a `box` that is not a gid (letters, digits,
   `-` and `_`), and the client refuses a malformed `FIREWALLA_BOX_ID`
