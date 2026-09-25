@@ -5,7 +5,7 @@
  *
  * This file implements the primary MCP server class that provides Claude with access to
  * Firewalla firewall data through 28 tools that map to Firewalla API endpoints,
- * plus 3 opt-in write tools (FIREWALLA_ENABLE_WRITE_TOOLS=true).
+ * plus 5 opt-in write tools (FIREWALLA_ENABLE_WRITE_TOOLS=true).
  * Tools include parameter validation and error handling.
  *
  * Architecture:
@@ -169,6 +169,7 @@ export class FirewallaMCPServer {
           },
           // Disabled: delete_alarm tool commented out because the Firewalla MSP API
           // returns false success responses but doesn't actually delete alarms
+          // archive_alarm (below, opt-in) is the documented alternative
           // {
           //   name: 'delete_alarm',
           //   description: 'Delete/dismiss a specific Firewalla alarm',
@@ -183,6 +184,80 @@ export class FirewallaMCPServer {
           //     required: ['alarm_id'],
           //   },
           // },
+          {
+            name: 'archive_alarm',
+            description:
+              "Archive an alarm (MSP 2.11.0 or later): it leaves the active alarms. It creates no silence exception, so future matching traffic can still raise new alarms (mute_alarm silences them). Alarm IDs are per box: pass gid (the alarm's gid field); without gid or FIREWALLA_BOX_ID each box is checked, and the tool refuses when several boxes have that aid and none is FIREWALLA_DEFAULT_BOX_ID.",
+            annotations: {
+              readOnlyHint: false,
+              destructiveHint: false,
+              idempotentHint: true,
+            },
+            inputSchema: {
+              type: 'object',
+              properties: {
+                alarm_id: {
+                  type: ['string', 'number'],
+                  description:
+                    'Alarm ID: the numeric aid from get_active_alarms or search_alarms, as a number or a string',
+                },
+                gid: {
+                  type: 'string',
+                  description:
+                    'Box the alarm belongs to (the gid field of get_active_alarms or search_alarms results). Defaults to FIREWALLA_BOX_ID; without either, each box on the account is checked.',
+                },
+              },
+              required: ['alarm_id'],
+            },
+          },
+          {
+            name: 'mute_alarm',
+            description:
+              "Mute an alarm (MSP 2.11.0 or later): the API archives it and has the box create a lasting silence exception, so future alarms matching the target within the scope are no longer raised. target_type alarmType silences every future alarm of this alarm's type (for example all Security Activity alarms), domain a domain and its subdomains, ip one IP address. scope_type all covers every device on the box; device, group, user or network limit it to the one named by scope_value. This server has no tool to remove the exception. Box selection is the same as archive_alarm.",
+            annotations: {
+              readOnlyHint: false,
+              destructiveHint: false,
+              idempotentHint: false,
+            },
+            inputSchema: {
+              type: 'object',
+              properties: {
+                alarm_id: {
+                  type: ['string', 'number'],
+                  description:
+                    'Alarm ID: the numeric aid from get_active_alarms or search_alarms, as a number or a string',
+                },
+                target_type: {
+                  type: 'string',
+                  enum: ['alarmType', 'domain', 'ip'],
+                  description:
+                    "What to silence: alarmType (every future alarm of this alarm's type, whatever the destination), domain (target_value and its subdomains) or ip (target_value)",
+                },
+                target_value: {
+                  type: 'string',
+                  description:
+                    'Required for domain (a plain domain name such as example.com; the API applies wildcard matching itself) and ip (one IP address). Omit for alarmType.',
+                },
+                scope_type: {
+                  type: 'string',
+                  enum: ['device', 'group', 'user', 'network', 'all'],
+                  description:
+                    'Which devices the silence covers: all (every device on the box), or one device, group, user or network named by scope_value',
+                },
+                scope_value: {
+                  type: 'string',
+                  description:
+                    'The device ID (MAC address), group ID, user ID or network ID. Required unless scope_type is all; omit for all.',
+                },
+                gid: {
+                  type: 'string',
+                  description:
+                    'Box the alarm belongs to (the gid field of get_active_alarms or search_alarms results). Defaults to FIREWALLA_BOX_ID; without either, each box on the account is checked.',
+                },
+              },
+              required: ['alarm_id', 'target_type', 'scope_type'],
+            },
+          },
           {
             name: 'get_flow_data',
             description: 'Query network traffic flows from Firewalla firewall',

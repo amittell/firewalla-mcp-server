@@ -56,6 +56,10 @@ import {
 import { safeAccess, safeValue } from '../utils/data-normalizer.js';
 import { validateAlarmId } from '../utils/alarm-id-validation.js';
 import { normalizeTimestamps } from '../utils/data-validator.js';
+import {
+  checkMuteRequest,
+  type AlarmMuteRequest,
+} from '../validation/alarm-mute.js';
 
 /**
  * Standard API response wrapper for Firewalla MSP endpoints
@@ -97,6 +101,41 @@ export class BoxSelectionError extends Error {
     super(message);
     this.name = 'BoxSelectionError';
   }
+}
+
+/**
+ * The alarm an alarm write names is not on the box it was looked for on, or
+ * on any box when each box was checked.
+ */
+export class AlarmNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AlarmNotFoundError';
+  }
+}
+
+/** The alarm archiveAlarm or muteAlarm acted on, and the API's answer */
+export interface AlarmActionResult {
+  gid: string;
+  aid: string;
+  /** The alarm as GET /v2/alarms/{gid}/{aid} returned it before the action */
+  alarm: Record<string, any>;
+  /** The API's answer to the POST; the official docs show no response body */
+  response: unknown;
+}
+
+/**
+ * request() reports an HTTP 404 as "Resource not found: ..."; the MSP API's
+ * 404 body is an empty CloudFront error page, so the status is all there is.
+ */
+function isNotFoundError(error: unknown): boolean {
+  return error instanceof Error && /\b404\b|not found/i.test(error.message);
+}
+
+/** "type 8, 'Living Room watched ...'" for naming an alarm in a message */
+function describeAlarm(alarm: Record<string, any>): string {
+  const message = String(alarm.message ?? '').slice(0, 80);
+  return `type ${alarm.type ?? 'unknown'}, '${message}'`;
 }
 
 /**
@@ -2250,6 +2289,216 @@ export class FirewallaClient {
       throw new Error(
         `Failed to delete alarm: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
+    }
+  }
+
+  /**
+   * Archive an alarm (MSP 2.11.0 or later). It leaves the active alarms, and
+   * unlike muteAlarm it creates no silence exception: future matching traffic
+   * can still raise new alarms. The box is found as locateAlarmForWrite
+   * describes, and the alarm is read first so a wrong ID fails before any
+   * write.
+   *
+   * @param alarmId - The numeric aid, as a number or a string
+   * @param gid - Box the alarm belongs to (the alarm's gid field)
+   */
+  async archiveAlarm(
+    alarmId: string | number,
+    gid?: string
+  ): Promise<AlarmActionResult> {
+    const located = await this.locateAlarmForWrite(alarmId, gid);
+    const response = await this.postAlarmAction(located, 'archive');
+    return { ...located, response };
+  }
+
+  /**
+   * Mute an alarm (MSP 2.11.0 or later): the API archives it and has the box
+   * create a lasting silence exception, so future alarms matching `target`
+   * within `scope` are no longer raised. The body is checked against the
+   * documented model before anything is sent, then the box is found as
+   * locateAlarmForWrite describes.
+   *
+   * @param alarmId - The numeric aid, as a number or a string
+   * @param mute - What to silence (target) and for which devices (scope)
+   * @param gid - Box the alarm belongs to (the alarm's gid field)
+   * @throws {Error} When the body is not one the docs allow; nothing is sent
+   */
+  async muteAlarm(
+    alarmId: string | number,
+    mute: AlarmMuteRequest,
+    gid?: string
+  ): Promise<AlarmActionResult & { request: AlarmMuteRequest }> {
+    const checked = checkMuteRequest(mute);
+    if (!checked.ok) {
+      throw new Error(`Invalid mute request: ${checked.problems.join('; ')}`);
+    }
+    const located = await this.locateAlarmForWrite(alarmId, gid);
+    const response = await this.postAlarmAction(located, 'mute', {
+      target: checked.request.target,
+      scope: checked.request.scope,
+    });
+    return { ...located, request: checked.request, response };
+  }
+
+  /**
+   * The box and alarm an alarm write acts on. An explicit gid, else
+   * FIREWALLA_BOX_ID, names the one box to look on. Without either, each box
+   * is checked, as getSpecificAlarm does. Alarm IDs are per box, so the same
+   * aid can name different alarms on different boxes: the
+   * FIREWALLA_DEFAULT_BOX_ID box is used if it has the alarm (the one
+   * getSpecificAlarm returns), and otherwise exactly one box must have it.
+   *
+   * @throws {AlarmNotFoundError} The alarm is not on the box, or on any box
+   * @throws {BoxSelectionError} Several boxes have the aid, a box could not be
+   *   checked, or the token sees no boxes
+   */
+  private async locateAlarmForWrite(
+    alarmId: string | number,
+    gid?: string
+  ): Promise<{ gid: string; aid: string; alarm: Record<string, any> }> {
+    const aid = validateAlarmId(alarmId);
+    if (!/^\d+$/.test(aid)) {
+      throw new Error(
+        `Invalid alarm ID: "${aid}" is not a numeric aid (the aid field of get_active_alarms or search_alarms)`
+      );
+    }
+
+    const named = gid?.trim() || this.config.boxId;
+    if (named) {
+      const alarm = await this.findAlarmOnBox(named, aid);
+      if (!alarm) {
+        throw new AlarmNotFoundError(`Alarm ${aid} not found on box ${named}`);
+      }
+      return { gid: named, aid, alarm };
+    }
+
+    const boxes = (await this.getBoxes()).results;
+    if (boxes.length === 0) {
+      throw new BoxSelectionError('No boxes are visible to this MSP token');
+    }
+    const preferred = this.config.defaultBoxId;
+    const ordered = [
+      ...boxes.filter(box => box.gid === preferred),
+      ...boxes.filter(box => box.gid !== preferred),
+    ];
+
+    const found: Array<{ box: Box; alarm: Record<string, any> }> = [];
+    const unchecked: string[] = [];
+    for (const box of ordered) {
+      let alarm: Record<string, any> | null;
+      try {
+        alarm = await this.findAlarmOnBox(box.gid, aid);
+      } catch (error) {
+        unchecked.push(
+          `${box.name} (${box.gid}): ${error instanceof Error ? error.message : String(error)}`
+        );
+        continue;
+      }
+      if (alarm && box.gid === preferred) {
+        return { gid: box.gid, aid, alarm };
+      }
+      if (alarm) {
+        found.push({ box, alarm });
+      }
+    }
+
+    // A box that could not be checked may hold the same aid
+    if (unchecked.length > 0) {
+      throw new BoxSelectionError(
+        `Could not check every box for alarm ${aid}: ${unchecked.join('; ')}. Pass gid to act on one box`
+      );
+    }
+    if (found.length === 1) {
+      return { gid: found[0].box.gid, aid, alarm: found[0].alarm };
+    }
+    if (found.length === 0) {
+      throw new AlarmNotFoundError(
+        boxes.length === 1
+          ? `Alarm ${aid} not found on the account's only box (${boxes[0].gid})`
+          : `Alarm ${aid} not found on any of the ${boxes.length} boxes on this account`
+      );
+    }
+    const listed = found
+      .map(
+        ({ box, alarm }) => `${box.name} (${box.gid}): ${describeAlarm(alarm)}`
+      )
+      .join('; ');
+    throw new BoxSelectionError(
+      `Alarm ID ${aid} exists on ${found.length} boxes, and alarm IDs are per box: ${listed}. Pass gid to pick one, or set FIREWALLA_DEFAULT_BOX_ID`
+    );
+  }
+
+  /** GET one alarm without the cache; null when the API answers 404 */
+  private async findAlarmOnBox(
+    gid: string,
+    aid: string
+  ): Promise<Record<string, any> | null> {
+    if (!/^[a-zA-Z0-9_-]+$/.test(gid)) {
+      throw new Error(`Invalid box gid: "${gid}"`);
+    }
+    try {
+      const alarm = await this.request<Record<string, any>>(
+        'GET',
+        `/v2/alarms/${gid}/${aid}`,
+        undefined,
+        undefined,
+        false
+      );
+      return alarm && typeof alarm === 'object' ? alarm : null;
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * POST an alarm action for an alarm locateAlarmForWrite found. Not retried:
+   * a request that got no HTTP answer may still have been applied.
+   */
+  private async postAlarmAction(
+    located: { gid: string; aid: string },
+    action: 'archive' | 'mute',
+    body?: Record<string, unknown>
+  ): Promise<unknown> {
+    const endpoint = `/v2/alarms/${located.gid}/${located.aid}/${action}`;
+    let response: unknown;
+    try {
+      response = await this.request<unknown>(
+        'POST',
+        endpoint,
+        undefined,
+        body,
+        false
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (isNotFoundError(error)) {
+        throw new Error(
+          `POST ${endpoint} returned 404 although the alarm exists (GET returned it). ${action} needs MSP 2.11.0 or later, and the API's 404 does not say whether the endpoint or the alarm was missing`
+        );
+      }
+      if (/API Error \(unknown\)|^Request failed:/.test(message)) {
+        throw new Error(
+          `POST ${endpoint} got no HTTP status (${message}). The alarm may or may not have been ${action === 'archive' ? 'archived' : 'muted'}: check its status with get_specific_alarm (2 is archived) before retrying`
+        );
+      }
+      throw error;
+    }
+    this.dropCachedAlarms();
+    return response;
+  }
+
+  /**
+   * Forget cached alarm reads, so an alarm just archived or muted does not
+   * show as active for the rest of the cache TTL
+   */
+  private dropCachedAlarms(): void {
+    for (const key of this.cache.keys()) {
+      if (key.includes(':GET:_v2_alarms')) {
+        this.cache.delete(key);
+      }
     }
   }
 

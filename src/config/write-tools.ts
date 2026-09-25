@@ -1,13 +1,15 @@
 /**
  * Opt-in switch for the tools that change state on the box: create_rule,
- * delete_rule and rename_device. They are registered and listed only when
- * FIREWALLA_ENABLE_WRITE_TOOLS=true.
+ * delete_rule, rename_device, archive_alarm and mute_alarm. They are
+ * registered and listed only when FIREWALLA_ENABLE_WRITE_TOOLS=true.
  */
 
 export const WRITE_TOOL_NAMES: readonly string[] = [
   'create_rule',
   'delete_rule',
   'rename_device',
+  'archive_alarm',
+  'mute_alarm',
 ];
 
 export function writeToolsEnabled(

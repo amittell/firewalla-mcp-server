@@ -33,7 +33,7 @@ A Model Context Protocol (MCP) server that provides Claude with access to Firewa
 - **Search (3 tools)**: search_flows, search_alarms, search_rules
 - **Analytics (8 tools)**: get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_insights, get_flow_trends, get_alarm_trends, get_rule_trends
 - **Convenience Wrappers (5 tools)**: get_bandwidth_usage, get_offline_devices, search_devices, search_target_lists, get_network_rules_summary
-- **Write tools (3, opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)**: create_rule, delete_rule, rename_device. Not counted in the 28.
+- **Write tools (5, opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)**: create_rule, delete_rule, rename_device, archive_alarm, mute_alarm. Not counted in the 28.
 
 ## Development Commands
 
@@ -124,8 +124,8 @@ FIREWALLA_MSP_ID=yourdomain.firewalla.net
 - **Box ID is now optional** - you can retrieve available boxes using the `get_boxes` tool
 - If no box ID is configured, API calls return data for all boxes you have access to
 - You can optionally set `FIREWALLA_BOX_ID` to filter all queries to a specific box by default
-- `FIREWALLA_DEFAULT_BOX_ID` is the default box for single-box operations (`get_specific_alarm`, `create_rule`, `rename_device`) without filtering queries
-- With neither set, single-box operations use the account's only box; on a multi-box account `get_specific_alarm` checks each box and the write tools refuse until given `gid`
+- `FIREWALLA_DEFAULT_BOX_ID` is the default box for single-box operations (`get_specific_alarm`, `archive_alarm`, `mute_alarm`, `create_rule`, `rename_device`) without filtering queries
+- With neither set, single-box operations use the account's only box; on a multi-box account `get_specific_alarm`, `archive_alarm` and `mute_alarm` check each box (the two alarm write tools refuse when several boxes have the alarm ID), and `create_rule` and `rename_device` refuse until given `gid`
 - Box GID format: UUID-like `1eb71e38-3a95-4371-8903-ace24c83ab49`
 
 ## Feature Flag System

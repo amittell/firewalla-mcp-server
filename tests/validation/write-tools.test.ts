@@ -249,7 +249,13 @@ describe('rename_device', () => {
 });
 
 describe('FIREWALLA_ENABLE_WRITE_TOOLS', () => {
-  const WRITE_TOOLS = ['create_rule', 'delete_rule', 'rename_device'];
+  const WRITE_TOOLS = [
+    'create_rule',
+    'delete_rule',
+    'rename_device',
+    'archive_alarm',
+    'mute_alarm',
+  ];
 
   it.each([
     [undefined, false],
@@ -269,6 +275,6 @@ describe('FIREWALLA_ENABLE_WRITE_TOOLS', () => {
     expect(on.filter(name => WRITE_TOOLS.includes(name)).sort()).toEqual(
       [...WRITE_TOOLS].sort()
     );
-    expect(on.length - off.length).toBe(3);
+    expect(on.length - off.length).toBe(5);
   });
 });
