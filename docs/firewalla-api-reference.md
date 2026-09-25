@@ -2,7 +2,9 @@
 
 ## Overview
 
-This document provides comprehensive documentation for the Firewalla MSP (Managed Service Provider) API v2. It includes all verified endpoints, data models, request/response formats, and practical examples to serve as the definitive reference for development.
+This document describes the Firewalla MSP (Managed Service Provider) API v2: endpoints, data models, request/response formats, and examples. It follows the official documentation at https://docs.firewalla.net (synced 2026-09-25). Where this file states behavior that the official docs do not cover, it is marked as measured, with the date of the measurement.
+
+The official docs carry their own caveat: "since Firewalla MSP is still evolving rapidly, this document might be outdated or incorrect."
 
 **Base URL Pattern**: `https://{msp_domain}/v2/`
 
@@ -35,17 +37,21 @@ Authorization: Token {your_personal_access_token}
 
 ### Alarm Management
 
+Source: https://docs.firewalla.net/api-reference/alarm/
+
 #### Get Alarms
 Retrieve alarms with filtering and pagination support.
 
 **Endpoint**: `GET https://{msp_domain}/v2/alarms`
 
 **Query Parameters**:
-- `query` (string, optional): Search query for filtering alarms
-- `groupBy` (string, optional): Group alarms by specified fields (comma-separated)
-- `sortBy` (string, optional): Sort alarms (default: `ts:desc`)
+- `query` (string, optional): Search query for filtering alarms. If no `ts` qualifier is provided, results default to the last 30 days.
+- `groupBy` (string, optional): Group alarms by specified fields (comma-separated, e.g. `type,box`)
+- `sortBy` (string, optional): Sort alarms (comma-separated, e.g. `ts:desc,total:asc`; default: `ts:desc`)
 - `limit` (number, optional): Maximum results (default: 200, max: 500)
 - `cursor` (string, optional): Pagination cursor for next page
+
+**Limit**: the official docs give `limit <=500`. Measured 2026-09-25 on a live account: `limit=501` returns HTTP 400 with the message `limit exceeds max allowed value of 500`. Page with `cursor` to read more than 500 alarms.
 
 **Response (200 Success)**:
 ```json
@@ -60,7 +66,7 @@ Retrieve alarms with filtering and pagination support.
       "status": 1,
       "message": "Security activity detected",
       "device": {
-        "id": "mac:AA:BB:CC:DD:EE:FF",
+        "id": "AA:BB:CC:DD:EE:FF",
         "name": "My Device",
         "ip": "192.168.1.100"
       }
@@ -77,9 +83,33 @@ Retrieve detailed information about a specific alarm.
 
 **Path Parameters**:
 - `gid` (string, required): Box ID
-- `aid` (string, required): Alarm ID
+- `aid` (number, required): Alarm ID, the numeric `aid` that alarm listings return
 
-**Response (200 Success)**: Returns detailed alarm JSON with device information
+**Response (200 Success)**: the alarm, with device information:
+```json
+{
+  "aid": 1,
+  "type": 5,
+  "message": "Found a new device iPhone connected to your network.",
+  "ts": 1664522841.895,
+  "gid": "00000000-0000-0000-0000-000000000000",
+  "device": {
+    "name": "iPhone",
+    "id": "AA:BB:CC:DD:EE:FF",
+    "ip": "192.168.1.2",
+    "network": {
+      "id": "00000000-0000-0000-0000-000000000000",
+      "name": "Lan 1"
+    },
+    "group": {
+      "id": "1",
+      "name": "Guest"
+    }
+  }
+}
+```
+
+**Responses**: 200 Success, 401 Permission Denied
 
 #### Delete Alarm
 Delete a specific alarm.
@@ -88,11 +118,85 @@ Delete a specific alarm.
 
 **Path Parameters**:
 - `gid` (string, required): Box ID
-- `aid` (string, required): Alarm ID
+- `aid` (number, required): Alarm ID
 
-**Response (200 Success)**: Confirmation of successful deletion
+**Responses**: 200 Success, 401 Permission Denied, 404 Not Found
+
+#### Archive Alarm
+Archive an alarm. Requires MSP 2.11.0 or later.
+
+The official docs: "The alarm is moved to the archived state and no longer appears among active alarms. Unlike muting, archiving does not create a silence exception, so future traffic matching this alarm can still trigger new alarms."
+
+**Endpoint**: `POST https://{msp_domain}/v2/alarms/{gid}/{aid}/archive`
+
+**Path Parameters**:
+- `gid` (string, required): Box ID
+- `aid` (number, required): Alarm ID
+
+**Request Body**: none
+
+**Responses**: 200 Success, 401 Permission Denied, 404 Not Found. The official docs show no response body.
+
+**Example Request**:
+```bash
+curl --request POST \
+  --url "https://yourdomain.firewalla.net/v2/alarms/${gid}/${aid}/archive" \
+  --header "Authorization: Token <YOUR_TOKEN>"
+```
+
+#### Mute Alarm
+Mute an alarm. Requires MSP 2.11.0 or later.
+
+The official docs: "It archives the alarm and instructs the box to create a silence exception so that future traffic matching this alarm will no longer trigger new alarms."
+
+**Endpoint**: `POST https://{msp_domain}/v2/alarms/{gid}/{aid}/mute`
+
+**Path Parameters**:
+- `gid` (string, required): Box ID
+- `aid` (number, required): Alarm ID
+
+**Request Body** (`Content-Type: application/json`):
+- `target` ([MuteTarget](#alarm-model), required): what to silence
+  - `type`: `alarmType`, `domain` or `ip`
+  - `value`: required when `type` is `domain` (a domain name) or `ip` (an IP address); not used for `alarmType`
+- `scope` ([MuteScope](#alarm-model), required): which devices the silence applies to
+  - `type`: `device`, `group`, `user`, `network` or `all`
+  - `value`: the device ID, group ID, user ID or network ID; not used when `type` is `all`
+
+Target semantics from the official data model:
+- `alarmType`: "Explicitly silences all future alarms of the same type, regardless of destination."
+- `domain`: "Silences all future alarms matching this domain. Wildcard matching is applied automatically, e.g. `example.com` also matches `sub.example.com`."
+- `ip`: "Silences all future alarms matching this IP address."
+
+```json
+{
+  "target": { "type": "domain", "value": "example.com" },
+  "scope": { "type": "device", "value": "AA:BB:CC:DD:EE:FF" }
+}
+```
+
+**Responses**: 200 Success, 400 Bad Request, 401 Permission Denied, 404 Not Found. The official docs show no response body.
+
+**Example Requests**:
+```bash
+# Mute by alarm type on all devices
+curl --request POST \
+  --url "https://yourdomain.firewalla.net/v2/alarms/${gid}/${aid}/mute" \
+  --header "Authorization: Token <YOUR_TOKEN>" \
+  --header "Content-Type: application/json" \
+  --data '{"target":{"type":"alarmType"},"scope":{"type":"all"}}'
+
+# Mute a specific destination for one device
+curl --request POST \
+  --url "https://yourdomain.firewalla.net/v2/alarms/${gid}/${aid}/mute" \
+  --header "Authorization: Token <YOUR_TOKEN>" \
+  --header "Content-Type: application/json" \
+  --data '{"target":{"type":"domain","value":"example.com"},"scope":{"type":"device","value":"AA:BB:CC:DD:EE:FF"}}'
+```
 
 ### Box Management
+
+Source: https://docs.firewalla.net/api-reference/box/
 
 #### Get Boxes
 Retrieve list of Firewalla boxes.
@@ -100,7 +204,9 @@ Retrieve list of Firewalla boxes.
 **Endpoint**: `GET https://{msp_domain}/v2/boxes`
 
 **Query Parameters**:
-- `group` (string, optional): Get boxes within a specific group (requires group ID)
+- `group` (string, optional): Get boxes within a specific box group (requires group ID)
+
+No `limit` or `cursor`: the response is a plain array.
 
 **Response (200 Success)**:
 ```json
@@ -126,6 +232,8 @@ Retrieve list of Firewalla boxes.
 
 ### Device Management
 
+Source: https://docs.firewalla.net/api-reference/device/
+
 #### Get Devices
 Retrieve list of devices on the network.
 
@@ -135,11 +243,13 @@ Retrieve list of devices on the network.
 - `box` (string, optional): Get devices under a specific Firewalla box (requires box ID)
 - `group` (string, optional): Get devices under a specific box group (requires group ID)
 
+These are the only documented parameters. The official docs do not document `query`, `sortBy`, `limit` or `cursor` for devices; the response is a plain array, and the official examples filter and sort it on the client.
+
 **Response (200 Success)**:
 ```json
 [
   {
-    "id": "mac:AA:BB:CC:DD:EE:FF",
+    "id": "AA:BB:CC:DD:EE:FF",
     "gid": "00000000-0000-0000-0000-000000000000",
     "name": "My iPhone",
     "ip": "192.168.120.1",
@@ -164,13 +274,11 @@ Retrieve list of devices on the network.
 #### Update Device
 Rename a device. Only `name` can be changed; the API ignores every other field in the body.
 
-Source: https://docs.firewalla.net/api-reference/device/
-
 **Endpoint**: `PATCH https://{msp_domain}/v2/boxes/{gid}/devices/{id}`
 
 **Path Parameters**:
 - `gid` (string, required): Box GID
-- `id` (string, required): Device ID (MAC address)
+- `id` (string, required): Device ID (a plain MAC address, or an `ovpn:` / `wg_peer:` prefixed VPN client ID; see [Device Model](#device-model))
 
 **Request Body**:
 ```json
@@ -182,23 +290,30 @@ Source: https://docs.firewalla.net/api-reference/device/
 **Parameters**:
 - `name` (string, required): New device name, 32 characters max
 
-**Response (200 Success)**: the updated device object.
+**Responses**:
+- 200 Success: the updated device object
+- 400 Bad Request: the name is empty or longer than 32 characters
+- 404 Not Found: the device is not found
 
 **MCP tool**: `rename_device` (opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`; takes `gid` or falls back to `FIREWALLA_BOX_ID`)
 
 ### Flow Management
 
+Source: https://docs.firewalla.net/api-reference/flow/
+
 #### Get Flows
-Retrieve network traffic flow information.
+Retrieve network traffic flow information. Flows are always returned in reverse chronological order.
 
 **Endpoint**: `GET https://{msp_domain}/v2/flows`
 
 **Query Parameters**:
-- `query` (string, optional): Search query for flows
+- `query` (string, optional): Search query for flows. If no `ts` qualifier is provided, results default to the last 24 hours.
 - `groupBy` (string, optional): Group flows by specified values (e.g., "domain,box")
-- `sortBy` (string, optional): Sort flows (default: "ts:desc")
+- `sortBy` (string, optional): Sort flows (comma-separated, e.g. `ts:desc,total:asc`; default: "ts:desc")
 - `limit` (number, optional): Maximum results (default: 200, max: 500)
 - `cursor` (string, optional): Pagination support
+
+**Limit**: the official docs give `limit <=500`. Measured 2026-09-25 on a live account: `limit=501` returns HTTP 400 with the message `limit exceeds max allowed value of 500`, and `limit=10000` on `/v2/flows` returns the same 400. Page with `cursor` to read more than 500 flows.
 
 **Response (200 Success)**:
 ```json
@@ -211,18 +326,17 @@ Retrieve network traffic flow information.
       "protocol": "tcp",
       "direction": "outbound",
       "block": false,
-      "blockType": null,
       "download": 1048576,
       "upload": 262144,
       "duration": 300,
       "count": 5,
       "device": {
-        "id": "mac:AA:BB:CC:DD:EE:FF",
+        "id": "AA:BB:CC:DD:EE:FF",
         "ip": "192.168.1.100",
         "name": "My Device"
       },
       "source": {
-        "id": "192.168.1.100",
+        "id": "AA:BB:CC:DD:EE:FF",
         "name": "My Device",
         "ip": "192.168.1.100"
       },
@@ -232,12 +346,14 @@ Retrieve network traffic flow information.
         "ip": "93.184.216.34"
       },
       "region": "US",
-      "category": {
-        "name": "social"
-      },
+      "category": "social",
       "network": {
         "id": "network_id",
         "name": "Home Network"
+      },
+      "group": {
+        "id": "2",
+        "name": "Mobile"
       }
     }
   ],
@@ -247,6 +363,8 @@ Retrieve network traffic flow information.
 
 ### Rule Management
 
+Source: https://docs.firewalla.net/api-reference/rule/
+
 #### Get Rules
 Retrieve list of firewall rules.
 
@@ -254,6 +372,8 @@ Retrieve list of firewall rules.
 
 **Query Parameters**:
 - `query` (string, optional): Search conditions for filtering rules
+
+`query` is the only documented parameter. The official docs document no `limit`, `cursor`, `sortBy` or `groupBy` for rules, and say the endpoint "returns all matched rules for now".
 
 **Response (200 Success)**:
 ```json
@@ -271,7 +391,7 @@ Retrieve list of firewall rules.
       },
       "scope": {
         "type": "device",
-        "value": "mac:AA:BB:CC:DD:EE:FF"
+        "value": "AA:BB:CC:DD:EE:FF"
       },
       "status": "active",
       "protocol": "tcp",
@@ -284,73 +404,47 @@ Retrieve list of firewall rules.
 ```
 
 #### Pause Rule
-Temporarily disable an active firewall rule for a specified duration.
+Pause an existing rule.
 
 **Endpoint**: `POST https://{msp_domain}/v2/rules/{id}/pause`
 
 **Path Parameters**:
-- `id` (string, required): Rule ID
+- `id` (string, required): Rule ID. In the MSP web UI it is shown at the bottom of the rule's dialog.
 
-**Request Body**:
-```json
-{
-  "duration": 60,
-  "box": "box_gid_here"
-}
-```
+**Request Body**: none documented
 
-**Parameters**:
-- `duration` (number, optional): Duration in minutes to pause the rule (default: 60, range: 1-1440)
-- `box` (string, required): Box GID for context
+**Responses**: 200 Success, 401 Permission Denied, 404 Not Found. The official docs show no response body.
 
-**Response (200 Success)**:
-```json
-{
-  "success": true,
-  "message": "Rule rule_123 paused for 60 minutes"
-}
-```
+A paused rule has `status: "paused"`, and the Rule model's `resumeTs` is "the auto resume time when this rule is paused". The official docs do not say how that time is set.
 
-**Example Request**:
+**Client note**: `pauseRule` in `src/firewalla/client.ts` still sends a JSON body `{duration, box}` (duration in minutes, 1 to 1440). That body is not in the official docs, and it is unverified whether the API honours `duration`.
+
+**Example Request** (as in the official docs and the `pause-an-existing-rule` example):
 ```bash
-curl -X POST "https://yourdomain.firewalla.net/v2/rules/rule_123/pause" \
-  -H "Authorization: Token <YOUR_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"duration": 30, "box": "box_gid_here"}'
+curl --request POST \
+  --url "https://yourdomain.firewalla.net/v2/rules/${id}/pause" \
+  --header "Authorization: Token <YOUR_TOKEN>"
 ```
 
 #### Resume Rule
-Resume a previously paused firewall rule, restoring it to active state.
+Resume a previously paused rule.
 
 **Endpoint**: `POST https://{msp_domain}/v2/rules/{id}/resume`
 
 **Path Parameters**:
 - `id` (string, required): Rule ID
 
-**Request Body**:
-```json
-{
-  "box": "box_gid_here"
-}
-```
+**Request Body**: none documented
 
-**Parameters**:
-- `box` (string, required): Box GID for context
+**Responses**: 200 Success, 401 Permission Denied, 404 Not Found. The official docs show no response body.
 
-**Response (200 Success)**:
-```json
-{
-  "success": true,
-  "message": "Rule rule_123 resumed successfully"
-}
-```
+**Client note**: `resumeRule` in `src/firewalla/client.ts` still sends a JSON body `{box}`, which is not in the official docs.
 
 **Example Request**:
 ```bash
-curl -X POST "https://yourdomain.firewalla.net/v2/rules/rule_123/resume" \
-  -H "Authorization: Token <YOUR_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"box": "box_gid_here"}'
+curl --request POST \
+  --url "https://yourdomain.firewalla.net/v2/rules/${id}/resume" \
+  --header "Authorization: Token <YOUR_TOKEN>"
 ```
 
 #### Create Rule
@@ -381,18 +475,17 @@ Source: https://docs.firewalla.net/api-reference/rule/ (request body) and https:
 
 **Field rules from the MSP rule model**:
 - If neither `gid` nor `group` is provided, the rule applies to all boxes under the MSP account, including boxes added later.
-- `target.type`: `app`, `category`, `domain`, `internet`, `intranet`, `ip`, `net`, `region`, `remotePort`, `targetlist`. `internet` takes no value; `intranet` takes a network ID or no value (all local networks).
+- `target.type`: `app`, `category`, `domain`, `internet`, `intranet`, `ip`, `net`, `region`, `remotePort`, `targetlist`. `internet` takes no value; `intranet` takes a network ID or no value (all local networks). See [Rule Model](#rule-model) for the value lists.
+- `target.dnsOnly` defaults to `true` when creating block rules with `category`, `app`, `targetlist` or `domain` targets.
 - `scope.type`: `device`, `group`, `user`, `network`. No scope means all devices.
 - `schedule.duration` (seconds) must be present when `schedule.cronTime` is set.
 
-**Response (200 Success)**: the created rule, including its `id`.
+**Responses**: 200 Success (the created rule, including its `id`), 400 Bad Request, 401 Permission Denied
 
 **MCP tool**: `create_rule` (opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`; takes `gid` or falls back to `FIREWALLA_BOX_ID`, and refuses when neither is set)
 
 #### Delete Rule
 Permanently delete a rule. Requires MSP 2.11.0 or later. Use Pause Rule to disable a rule temporarily.
-
-Source: https://docs.firewalla.net/api-reference/rule/
 
 **Endpoint**: `DELETE https://{msp_domain}/v2/rules/{id}`
 
@@ -405,22 +498,26 @@ Source: https://docs.firewalla.net/api-reference/rule/
 
 ### Statistics
 
+Source: https://docs.firewalla.net/api-reference/statistics/
+
+Both statistics endpoints are documented by Firewalla. Earlier project notes called `/stats/simple` a fictional endpoint; that was wrong.
+
 #### Get Statistics
-Retrieve various statistics about your Firewalla deployment.
+"The Statistics API returns an ordered array of statistical data. It's usually used to render a table."
 
 **Endpoint**: `GET https://{msp_domain}/v2/stats/{type}`
 
 **Path Parameters**:
-- `type` (string, required): Statistics type
+- `type` (string, required): Statistics type. The official docs list exactly three:
   - `topBoxesByBlockedFlows`: Top boxes by blocked flows
   - `topBoxesBySecurityAlarms`: Top boxes by security alarms
   - `topRegionsByBlockedFlows`: Top regions by blocked flows
 
 **Query Parameters**:
-- `group` (string, optional): Get statistics for specific box group
-- `limit` (number, optional): Maximum number of results (default: 5)
+- `group` (string, optional): Get statistics for a specific box group. Global statistics by default.
+- `limit` (number, optional): Maximum number of results (default: 5; no maximum documented)
 
-**Response (200 Success)**:
+**Response (200 Success)**: an array of [Statistic](#statistics-models). `meta` is a Box (`gid`, `name`, `model`) for the box types and a Region (`code`) for `topRegionsByBlockedFlows`.
 ```json
 [
   {
@@ -440,7 +537,7 @@ Retrieve basic statistics overview.
 **Endpoint**: `GET https://{msp_domain}/v2/stats/simple`
 
 **Query Parameters**:
-- `group` (string, optional): Get statistics for specific box group
+- `group` (string, optional): Get statistics for a specific box group. Global statistics by default.
 
 **Response (200 Success)**:
 ```json
@@ -454,16 +551,25 @@ Retrieve basic statistics overview.
 
 ### Target Lists
 
+Source: https://docs.firewalla.net/api-reference/target-lists/
+
+A target list is owned either by the MSP (`global`, shareable across all boxes but only available to MSP users) or by one box (not shared with other boxes, but still accessible to the MSP).
+
 #### Get All Target Lists
-Retrieve all target lists.
+Retrieve all target lists. If no target list is found, an empty array is returned.
 
 **Endpoint**: `GET https://{msp_domain}/v2/target-lists`
+
+**Query Parameters**:
+- `owner` (string, optional): Filter target lists by owner. When not provided, the API returns `global` target lists and Firewalla-managed target lists. Pass a box ID to get target lists for that box, or a comma-separated list such as `global,<box_id>` for several owners.
+
+`owner` is the only documented parameter; there is no `query`, `limit` or `cursor` for target lists.
 
 **Response (200 Success)**:
 ```json
 [
   {
-    "id": "target_list_id",
+    "id": "TL-00000000-0000-0000-0000-000000000000",
     "name": "Social Media Sites",
     "owner": "global",
     "targets": [
@@ -486,14 +592,26 @@ Retrieve a specific target list by ID.
 **Path Parameters**:
 - `id` (string, required): Target list ID
 
-**Response (200 Success)**: Detailed JSON of the specific target list
+**Response (200 Success)**: the target list. This response also carries `count`, the number of targets:
+```json
+{
+  "id": "TL-00000000-0000-0000-0000-000000000000",
+  "name": "A Simple Target List",
+  "owner": "global",
+  "count": 2,
+  "targets": ["foo.com", "bar.net"],
+  "category": "edu",
+  "notes": "This is a simple target list",
+  "lastUpdated": 1664373339.857
+}
+```
 
 #### Create Target List
-Create a new target list.
+Create a new target list for the whole MSP or for one box under MSP management.
 
 **Endpoint**: `POST https://{msp_domain}/v2/target-lists`
 
-**Request Body**:
+**Request Body**: a Target List without `id` and `lastUpdated`. `name` (24 characters max) and `owner` (`global` or a box gid) are required on creation.
 ```json
 {
   "name": "Gaming Sites",
@@ -507,7 +625,7 @@ Create a new target list.
 }
 ```
 
-**Response (200 Success)**: Returns created target list with generated ID
+**Responses**: 200 Success (the created target list with its generated ID), 400 Bad Request, 401 Permission Denied
 
 #### Update Target List
 Update an existing target list.
@@ -517,9 +635,9 @@ Update an existing target list.
 **Path Parameters**:
 - `id` (string, required): Target list ID
 
-**Request Body**: Updated target list details (same format as create)
+**Request Body**: the fields to change (`name`, `targets`, `category`, `notes`). The official docs: "immutable properties should not be supplied in the body and are ignored by the server" (`id`, `owner`, `lastUpdated`).
 
-**Response (200 Success)**: Returns updated target list
+**Responses**: 200 Success (the updated target list), 400 Bad Request, 401 Permission Denied, 404 Not Found
 
 #### Delete Target List
 Delete a target list.
@@ -529,23 +647,24 @@ Delete a target list.
 **Path Parameters**:
 - `id` (string, required): Target list ID
 
-**Response (200 Success)**: Confirmation of successful deletion
+**Responses**: 200 Success, 401 Permission Denied, 404 Not Found
 
 ### Trends
 
+Source: https://docs.firewalla.net/api-reference/trend/
+
+These are documented endpoints. Earlier project notes called `/trends/flows` a fictional endpoint; that was wrong.
+
 #### Get Trends
-Retrieve trend data for various metrics.
+Retrieve a statistical trend as a daily time series.
 
-**Endpoint**: `GET https://{msp_domain}/v2/trends/{type}`
-
-**Path Parameters**:
-- `type` (string, required): Trend type
-  - `flows`: Blocked flows per day
-  - `alarms`: Alarms generated per day
-  - `rules`: Rules created per day
+**Endpoints**:
+- `GET https://{msp_domain}/v2/trends/flows`: "The number of blocked flows captured each day."
+- `GET https://{msp_domain}/v2/trends/alarms`: "The number of alarms generated each day."
+- `GET https://{msp_domain}/v2/trends/rules`: "The number of rules created each day."
 
 **Query Parameters**:
-- `group` (string, optional): Get trends for a specific box group
+- `group` (string, optional): Get trends for a specific box group. Global statistics by default.
 
 **Response (200 Success)**:
 ```json
@@ -565,6 +684,8 @@ Retrieve trend data for various metrics.
 
 ## Data Models
 
+Source: the Data Models pages at https://docs.firewalla.net (for example https://docs.firewalla.net/data-models/alarm/).
+
 ### Alarm Model
 
 ```typescript
@@ -575,14 +696,43 @@ interface Alarm {
   type: AlarmType;               // Alarm type (1-16)
   status: AlarmStatus;           // Alarm status (1=Active, 2=Archived)
   message: string;               // Descriptive alarm text
-  device?: Device;               // Device details (when type != 4)
-  remote?: Host;                 // Remote host info (when type in [1,2,8,9,10,16])
+  device?: AlarmDevice;          // Device details (when type != 4)
+  remote?: Remote;               // Remote host info (when type in [1,2,8,9,10,16])
   direction?: "inbound" | "outbound" | "local"; // Traffic direction
-  transfer?: TransferData;       // Data transfer details
-  dataPlan?: DataPlan;          // Data plan info
-  vpn?: VpnDetails;             // VPN connection details
-  port?: PortInfo;              // Port opening information
-  wan?: WanInfo;                // Internet connectivity data
+  transfer?: TransferData;       // Data transfer details (when type in [2,3,4,16])
+  dataPlan?: DataPlan;           // Data plan info (when type == 4)
+  vpn?: VpnDetails;              // VPN connection details (when type in [11,12,13])
+  port?: PortInfo;               // Port opening information (when type == 14)
+  wan?: WanInfo;                 // Internet connectivity data (when type == 15)
+  protocol?: "tcp" | "udp";      // Transport protocol of this alarm
+}
+
+interface AlarmDevice {
+  id: DeviceID;                  // Device identifier (see Device Model)
+  ip: string;                    // Device IP address
+  name: string;                  // Device display name
+  port?: number[];               // Ports used on the device
+  lastActive?: number;           // Last time the device was active (when type == 7)
+  network: Network;              // Network the device was on when the alarm was raised
+  group?: Group;                 // Group the device belonged to when the alarm was raised
+}
+
+interface Remote {
+  ip: string;                    // Remote host IP address
+  domain?: string;               // Remote host domain name
+  rootDomain?: string;           // Domain name without any subdomains
+  region?: string;               // 2-letter ISO 3166 country code
+  category?: string;             // Remote host category (see Flow Model categories)
+  port?: number[];               // Ports used on the remote host
+}
+
+interface TransferData {
+  total: number;                 // Total bytes transferred
+  percentage?: number;           // Percentage of all bandwidth or data plan
+  upload?: number;               // Bytes uploaded
+  download?: number;             // Bytes downloaded
+  duration?: number;             // Time span of the transfer in seconds
+  stats?: Array<{ ts: number; download: number; upload: number }>; // Transfer over time
 }
 
 enum AlarmType {
@@ -608,6 +758,17 @@ enum AlarmStatus {
   ACTIVE = 1,
   ARCHIVED = 2
 }
+
+// Request body pieces for POST /v2/alarms/{gid}/{aid}/mute (MSP 2.11.0 or later)
+interface MuteTarget {
+  type: "alarmType" | "domain" | "ip";
+  value?: string;                // Required for "domain" and "ip"
+}
+
+interface MuteScope {
+  type: "device" | "group" | "user" | "network" | "all";
+  value?: string;                // Device, group, user or network ID; not used for "all"
+}
 ```
 
 ### Box Model
@@ -620,7 +781,7 @@ interface Box {
   mode: "router" | "bridge" | "dhcp" | "simple"; // Monitoring mode
   version: string;               // Firewalla software version
   online: boolean;               // Box connection status
-  lastSeen?: number;             // Unix timestamp of last online time
+  lastSeen?: number;             // Unix timestamp of last online time (only returned while offline)
   license: string;               // Box license code
   publicIP: string;              // Box's public IP address
   group?: string;                // Group ID (nullable)
@@ -641,7 +802,7 @@ interface Device {
   ip: string;                    // Device IP address
   macVendor?: string;            // MAC address vendor
   online: boolean;               // Device connection status
-  lastSeen?: number;             // Unix timestamp of last seen
+  lastSeen?: number;             // Unix timestamp of last seen (only returned while offline)
   ipReserved: boolean;           // IP reservation status
   network: Network;              // Network object
   group?: Group;                 // Group object
@@ -649,10 +810,12 @@ interface Device {
   totalUpload: number;           // Bytes uploaded in 24 hours
 }
 
+// A device ID is a plain MAC address by default, e.g. "AA:BB:CC:DD:EE:FF".
+// Only VPN clients carry a prefix.
 type DeviceID =
-  | `ovpn:${string}`             // OpenVPN client with profile ID
-  | `wg_peer:${string}`          // WireGuard client with profile ID
-  | `mac:${string}`;             // MAC address (default)
+  | `ovpn:${string}`             // OpenVPN client, followed by its profile ID
+  | `wg_peer:${string}`          // WireGuard client, followed by its profile ID
+  | string;                      // MAC address (default, no prefix)
 
 interface Network {
   id: string;                    // Network identifier
@@ -674,61 +837,115 @@ interface Flow {
   protocol: "tcp" | "udp";       // Network protocol
   direction: "inbound" | "outbound" | "local"; // Traffic direction
   block: boolean;                // Indicates blocked flow
-  blockType?: "ip" | "dns";      // Type of block
-  download?: number;             // Bytes downloaded
-  upload?: number;               // Bytes uploaded
-  duration?: number;             // Flow duration in seconds
-  count: number;                 // TCP connections/UDP sessions
-  device: Device;                // Device object
+  blockType?: "ip" | "dns";      // Type of block (blocked flows only)
+  download?: number;             // Bytes downloaded (regular flows only)
+  upload?: number;               // Bytes uploaded (regular flows only)
+  duration?: number;             // Flow duration in seconds (regular flows only)
+  count: number;                 // TCP connections/UDP sessions, or block count for a blocked flow
+  device: FlowDevice;            // Device object
   source?: Host;                 // Source host information
   destination?: Host;            // Destination host information
   region?: string;               // 2-letter ISO 3166 country code
-  category?: Category;           // Content category
+  category?: FlowCategory;       // Content category, a plain string
   network: Network;              // Network object
+  group?: Group;                 // Group the device belonged to when the flow was captured
+}
+
+interface FlowDevice {
+  id: DeviceID;                  // Device identifier
+  ip: string;                    // Device IP address
+  name: string;                  // Device display name
 }
 
 interface Host {
-  id: string;                    // Host identifier
-  name: string;                  // Host name
+  id: string;                    // Device ID for a local device, otherwise remote domain or IP
+  name: string;                  // Device name for a local device, otherwise remote domain
   ip: string;                    // Host IP address
 }
 
-interface Category {
-  name: "ad" | "edu" | "games" | "gamble" | "intel" | "p2p" |
-        "porn" | "private" | "social" | "shopping" | "video" | "vpn";
-}
+// The official list of category values. The field is a string, not an object.
+// Measured 2026-09-25 on a live account: flows carried "av", "social",
+// "shopping", "ad", "intel" and "" (empty string when uncategorized).
+// "av" is not in the official list.
+type FlowCategory =
+  | "ad" | "edu" | "games" | "gamble" | "intel" | "p2p"
+  | "porn" | "private" | "social" | "shopping" | "video" | "vpn"
+  | string;
 ```
 
 ### Rule Model
 
+Source: https://docs.firewalla.net/data-models/rule/
+
 ```typescript
 interface Rule {
   id: string;                    // Unique rule identifier
+  name?: string;                 // Human-readable name of this rule
   gid?: string;                  // Firewalla box ID
   action: "allow" | "block" | "timelimit"; // Rule action (default: "block")
   target: Target;                // Rule target details
   direction: "bidirection" | "inbound" | "outbound"; // Traffic direction (default: "bidirection")
   group?: string;                // Firewalla box group ID (default: "global")
-  scope?: Scope;                 // Local rule application scope
+  scope?: Scope;                 // Local rule application scope (unset for all devices)
   notes?: string;                // Descriptive text
   status?: "active" | "paused";  // Rule status
-  schedule?: Schedule;           // Rule activation schedule
-  protocol?: "tcp" | "udp";      // Traffic protocol
-  resumeTs?: number;             // Auto-resume timestamp for paused rules
+  hit?: Hit;                     // Rule hit stats (marked "Upcoming" in the official docs)
+  schedule?: Schedule;           // Rule activation schedule (unset for always active)
+  timeUsage?: TimeUsage;         // Time limit details (when action == "timelimit")
+  protocol?: "tcp" | "udp";      // Traffic protocol (unset for both)
+  resumeTs?: number;             // Auto-resume timestamp (when status == "paused")
   ts: number;                    // Rule creation timestamp
   updateTs: number;              // Last rule update timestamp
 }
 
 interface Target {
-  type: string;                  // Target type
-  value: string;                 // Target value
+  type: "app" | "category" | "domain" | "internet" | "intranet" |
+        "ip" | "net" | "region" | "remotePort" | "targetlist";
+  value: string;                 // Target value (see the mapping below)
+  dnsOnly?: boolean;             // DNS-only matching; for category, app, targetlist and domain.
+                                 // Defaults to true when creating block rules with these types.
+  port?: string;                 // Port or port range; for domain, ip and net
 }
 
 interface Scope {
-  type: string;                  // Scope type
-  value: string;                 // Scope value
+  type: "device" | "group" | "user" | "network";
+  value: string;                 // Device ID, group ID, user ID or network ID
+  port?: string;                 // Port or port range, matched with the scope value
+}
+
+interface Hit {
+  count: number;                 // Number of hits
+  lastHitTs: number;             // Timestamp of the last hit
+  statsResetTs?: number;         // Timestamp of the hit info reset
+}
+
+interface Schedule {
+  duration: number;              // Seconds the rule takes effect after activation
+  cronTime?: string;             // Activation time in cron format
+}
+
+interface TimeUsage {
+  quota: number;                 // Time usage quota in minutes
+  used: number;                  // Time used in minutes
 }
 ```
+
+**Target type and value mapping**:
+
+| `type` | `value` |
+|--------|---------|
+| `app` | App ID: `discord`, `facebook`, `fortnite`, `instagram`, `netflix`, `roblox`, `snapchat`, `tiktok`, `twitch`, `twitter`, `youtube` |
+| `category` | Category code: `drugs`, `games`, `gamble`, `p2p`, `porn`, `social`, `shopping`, `video`, `violence`, `vpn` |
+| `domain` | Domain name, e.g. `example.com` |
+| `internet` | Always unset; matches all traffic routed through the WAN port(s) |
+| `intranet` | Unset for all local networks, or a network ID for one |
+| `ip` | IP address, e.g. `192.168.0.1` |
+| `net` | Network address in CIDR notation, e.g. `192.168.0.0/24` |
+| `region` | 2-letter ISO 3166 code, e.g. `US` |
+| `remotePort` | Port or port range, e.g. `443` or `440-443` |
+| `targetlist` | Target list ID |
+
+The rule `category` codes differ from the flow and alarm category values: `drugs` and `violence` exist only for rules.
 
 ### Target List Model
 
@@ -737,11 +954,12 @@ interface TargetList {
   id: string;                    // Unique system-generated identifier (immutable)
   name: string;                  // Readable name (required, max 24 chars)
   owner: "global" | string;      // "global" or box gid (required, immutable)
-  targets: string[];             // Array of domains, IPs, or CIDR ranges
+  targets: string[];             // Domains (with or without wildcard), IPs, or CIDR ranges
   category?: "ad" | "edu" | "games" | "gamble" | "intel" | "p2p" |
             "porn" | "private" | "social" | "shopping" | "video" | "vpn";
   notes?: string;                // Additional description
   lastUpdated: number;           // Unix timestamp of last modification (immutable)
+  count?: number;                // Number of targets (returned by GET /v2/target-lists/{id})
 }
 ```
 
@@ -756,6 +974,8 @@ interface Statistic {
 interface Region {
   code: string;                  // 2-letter ISO 3166 country code
 }
+
+// meta for the box statistics types: { gid, name, model }
 
 interface SimpleStatistics {
   onlineBoxes: number;           // Number of online Firewalla boxes
@@ -778,7 +998,9 @@ interface Trend {
 
 ## Search Functionality
 
-The Firewalla MSP API supports advanced search capabilities across multiple resources (Alarms, Flows, Rules) with a flexible query syntax.
+Source: https://docs.firewalla.net/api-reference/search/
+
+The `query` parameter is available on `/v2/alarms`, `/v2/flows` and `/v2/rules`. The official docs document no `query` parameter for devices, boxes or target lists.
 
 ### Search Query Syntax
 
@@ -796,10 +1018,22 @@ numeric-search = qualifier ":" numeric-match
 numeric-match = [ ">" | ">=" | "<" | "<=" ] <number> [ <unit> ] | <number> [ <unit> ] "-" <number> [ <unit> ]
 ```
 
+In short:
+- A space between terms means AND: every term must match.
+- A comma between values of one qualifier means OR within that field (`category:social,video`).
+- A `-` prefix excludes the matches of a term (`-status:active`).
+- `n-m` is a range (`ts:1695196894.395-1695604487.633`).
+- Qualifier aliases are case insensitive; literal matching is case sensitive.
+- The query string must be URL encoded when sent.
+
 **Example Full Query:**
 ```bash
 box.name:"Gold Plus",Purple mac:"AA:BB:CC:DD:EE:FF" Total:>50MB
 ```
+
+#### Default Time Windows
+
+If a query has no `ts` qualifier, `/v2/alarms` returns the last 30 days and `/v2/flows` returns the last 24 hours.
 
 #### Literal Search
 ```bash
@@ -817,8 +1051,10 @@ box.name:FirewallaGold
 # Use * for fuzzy matching
 device.name:*iphone*     # Matches "iphone-12", "joe-iphone", etc.
 domain:*.facebook.com    # Matches any Facebook subdomain
-device.ip:192.168.*      # Matches any IP in 192.168.x.x range
+device.ip:192.168.*      # Matches any IP in 192.168.x.x range (measured on alarms, 2026-09-25)
 ```
+
+Wildcard search does not support unqualified search or exclusive search.
 
 #### Quoted Search
 ```bash
@@ -845,6 +1081,8 @@ download:1000-2000      # Between values
 ts:1695196894.395-1695604487.633  # Time range
 ```
 
+Numeric search supports neither unqualified search nor exclusive search.
+
 #### Exclusive Search
 ```bash
 # Exclude results with hyphen prefix
@@ -865,7 +1103,7 @@ TB (TeraByte) = 1000 GB
 
 ### Search Qualifiers
 
-The Firewalla MSP API provides comprehensive search qualifiers for each resource type. Below are the complete lists from the official documentation:
+The qualifier tables below are the lists in the official documentation.
 
 #### Alarm Qualifiers
 
@@ -877,7 +1115,7 @@ The Firewalla MSP API provides comprehensive search qualifiers for each resource
 | `box.id` | | Box ID | `box.id:00000000-0000-0000-0000-000000000000` |
 | `box.name` | Box | Box name | `box.name:FirewallaGold` |
 | `box.group.id` | | MSP group ID | `box.group.id:1` |
-| `device.id` | Mac | Device MAC address | `device.id:"mac:AA:BB:CC:DD:EE:FF"` |
+| `device.id` | Mac | Device ID (plain MAC) | `device.id:"AA:BB:CC:DD:EE:FF"` |
 | `device.name` | Device | Device name | `device.name:iphone` |
 | `device.network.id` | | Device network ID | `device.network.id:00000000-1111-1111-1111-000000000000` |
 | `device.network.name` | Network | Device network name | `device.network.name:Guest` |
@@ -893,12 +1131,12 @@ The Firewalla MSP API provides comprehensive search qualifiers for each resource
 | Qualifier | Alias | Description | Example |
 |-----------|-------|-------------|---------|
 | `ts` | | Timestamp of flow | `ts:<1695196894.395` |
-| `status` | | Flow status | `status:ok` |
+| `status` | | Flow status | `status:ok`; `status:blocked` returns blocked flows (measured 2026-09-25) |
 | `direction` | | Traffic direction | `direction:outbound` |
 | `box.id` | | Box ID | `box.id:00000000-0000-0000-0000-000000000000` |
 | `box.name` | Box | Box name | `box.name:FirewallaGold` |
 | `box.group.id` | | MSP group ID | `box.group.id:1` |
-| `device.id` | Mac | Device MAC address | `device.id:"mac:AA:BB:CC:DD:EE:FF"` |
+| `device.id` | Mac | Device ID (plain MAC) | `device.id:"AA:BB:CC:DD:EE:FF"` |
 | `device.name` | Device | Device name | `device.name:iphone` |
 | `network.id` | | Network ID | `network.id:00000000-1111-1111-1111-000000000000` |
 | `network.name` | Network | Network name | `network.name:Guest` |
@@ -939,12 +1177,22 @@ category:social -region:CN  # Social media traffic, excluding China
 #### Unqualified Search
 Search terms without qualifiers search across a subset of properties (varies by resource type):
 ```bash
-iphone                  # Searches device names, MAC addresses, etc.
+porn                    # Free text; measured to work on alarms (2026-09-25)
 ```
+
+### Measured Query Behavior
+
+The official docs do not cover the points below. Each was measured on 2026-09-25 against a live MSP account.
+
+- **`AND` / `OR` keywords are accepted** even though the official grammar does not include them. `region:US AND protocol:tcp` and `category:social OR category:games` on flows returned the expected results. `NOT` was not measured; use the `-` prefix, which the official grammar defines.
+- **Unknown property paths return no results, not an error.** A qualifier the API does not know returns HTTP 200 with an empty result set. On flows, `block:true` returned 0 results, while `status:blocked` returned the blocked flows. An empty result is therefore not proof that nothing matched.
+- **`total:>1MB` works on flows.**
+- **`device.ip:192.168.*` works on alarms**, and so does unqualified free text such as `porn`.
+- **`message:porn` on alarms returns an error.** `message` is not a searchable alarm qualifier.
 
 ### Pagination Support
 
-All search endpoints support cursor-based pagination. Each response (except the last) includes a base64 encoded `next_cursor`. Use this cursor in subsequent requests to get the next page of results.
+`/v2/alarms` and `/v2/flows` support cursor-based pagination. Each response (except the last) includes a base64 encoded `next_cursor`. Use this cursor in subsequent requests to get the next page of results. `/v2/rules` has no `limit` or `cursor` and "returns all matched rules for now"; boxes, devices and target lists return plain arrays.
 
 **JavaScript Example:**
 ```javascript
@@ -971,7 +1219,7 @@ while (1) {
 - Query strings must be URL encoded when sending requests
 - `next_cursor` values are opaque - do not modify them
 - Set `cursor` parameter to `null` or omit it for the first request
-- Use `limit` parameter to control page size (default: 200, max: 500)
+- Use `limit` parameter to control page size (default: 200, max: 500). A `limit` above 500 returns HTTP 400 (measured 2026-09-25).
 - Always check for `next_cursor` in response to determine if more pages exist
 
 ---
@@ -1004,8 +1252,8 @@ async function getActiveAlarms(limit = 100) {
   try {
     const response = await apiClient.get('/alarms', {
       params: {
-        query: 'status:1',  // Active alarms only
-        limit: limit,
+        query: 'status:active',  // Active alarms only
+        limit: limit,            // 500 at most
         sortBy: 'ts:desc'
       }
     });
@@ -1018,20 +1266,23 @@ async function getActiveAlarms(limit = 100) {
 ```
 
 #### Get Device Bandwidth Usage
+Group flows by device and sort by total transfer, as in the official `get-top-bandwidth-usage-devices` example (https://github.com/firewalla/msp-api-examples).
 ```javascript
 async function getTopBandwidthUsers(boxId, limit = 10) {
+  const end = Math.floor(Date.now() / 1000);
+  const begin = end - 24 * 3600; // last 24 hours
   try {
-    const response = await apiClient.get('/devices', {
+    const response = await apiClient.get('/flows', {
       params: {
-        box: boxId,
-        query: 'online:true',
-        sortBy: 'totalDownload:desc',
+        query: `ts:${begin}-${end} box.id:${boxId}`,
+        groupBy: 'device',
+        sortBy: 'total:desc',
         limit: limit
       }
     });
     return response.data;
   } catch (error) {
-    console.error('Error fetching devices:', error.response?.data || error.message);
+    console.error('Error fetching flows:', error.response?.data || error.message);
     throw error;
   }
 }
@@ -1048,10 +1299,7 @@ async function createBlockRule(domain, boxId) {
         value: domain
       },
       direction: 'bidirection',
-      scope: {
-        type: 'box',
-        value: boxId
-      },
+      gid: boxId,        // the box this rule applies to; no scope means all its devices
       notes: `Block ${domain}`
     });
     return response.data;
@@ -1064,13 +1312,16 @@ async function createBlockRule(domain, boxId) {
 
 #### Search High-Risk Flows
 ```javascript
-async function searchHighRiskFlows(boxId, timeframe = '1h') {
+async function searchHighRiskFlows(boxId, hours = 1) {
+  const end = Math.floor(Date.now() / 1000);
+  const begin = end - hours * 3600;
   try {
     const response = await apiClient.get('/flows', {
       params: {
-        query: `gid:${boxId} AND (category:porn OR category:gamble OR blocked:true)`,
+        // Space means AND, comma means OR within one qualifier
+        query: `ts:${begin}-${end} box.id:${boxId} category:porn,gamble`,
         limit: 200,
-        sortBy: 'bytes:desc'
+        sortBy: 'ts:desc'
       }
     });
     return response.data;
@@ -1079,6 +1330,9 @@ async function searchHighRiskFlows(boxId, timeframe = '1h') {
     throw error;
   }
 }
+
+// Blocked flows use the status qualifier (block:true returns no results):
+//   query: `ts:${begin}-${end} box.id:${boxId} status:blocked`
 ```
 
 ### cURL Examples
@@ -1091,10 +1345,12 @@ curl --request GET \
 ```
 
 #### Get Offline Devices
+The devices endpoint has no `query` parameter; filter the array on the client.
 ```bash
 curl --request GET \
-  --url "https://your-domain.firewalla.net/v2/devices?query=online:false" \
-  --header "Authorization: Token your_personal_access_token"
+  --url "https://your-domain.firewalla.net/v2/devices?box=your_box_gid_here" \
+  --header "Authorization: Token your_personal_access_token" \
+  | jq '.[] | select(.online == false)'
 ```
 
 #### Pause a Rule
@@ -1145,31 +1401,32 @@ FIREWALLA_BOX_ID=your_box_gid_here
 
 ### Common HTTP Status Codes
 
-- **200 OK**: Successful request
-- **401 Unauthorized**: Invalid or missing authentication token
+The official docs list these per endpoint:
+- **200 Success**: Successful request
+- **400 Bad Request**: Invalid request, for example a device name over 32 characters, an invalid mute body, or a `limit` above 500 on `/v2/alarms` or `/v2/flows`
+- **401 Permission Denied**: Invalid or missing authentication token
 - **404 Not Found**: Resource not found
-- **429 Too Many Requests**: Rate limit exceeded
-- **500 Internal Server Error**: Server-side error
+
+Measured, not in the official docs:
+- **429 Too Many Requests**: Rate limit exceeded (see below)
 
 ### Error Response Format
 
+The official docs do not document an error body format. Measured 2026-09-25, a limit error carries the message `limit exceeds max allowed value of 500`, and a rate-limit error has this body:
+
 ```json
-{
-  "error": {
-    "code": "UNAUTHORIZED",
-    "message": "Invalid authentication token",
-    "details": "The provided token is expired or invalid"
-  }
-}
+{"error":{"message":"Too Many Requests"}}
 ```
 
 ### Rate Limiting
 
-The API implements rate limiting to ensure fair usage:
-- Default limit: 100 requests per minute per token
-- Large data requests may have lower limits
-- Include appropriate delays between requests
-- Monitor response headers for rate limit information
+The official docs do not document rate limits. Measured 2026-09-25 on a live account:
+- An exhausted quota returns HTTP 429 with the body `{"error":{"message":"Too Many Requests"}}`.
+- The 429 response carries `retry-after` (seconds), `x-ratelimit-reset` (Unix seconds) and `x-ratelimit-remaining: 0`.
+- The window reset within about 60 seconds.
+- The exact per-minute quota was not measured.
+
+Honour `retry-after` (or wait until `x-ratelimit-reset`) before retrying.
 
 ### Best Practices
 
@@ -1183,8 +1440,9 @@ The API implements rate limiting to ensure fair usage:
        // Handle authentication error
        throw new Error('Authentication failed');
      } else if (error.response?.status === 429) {
-       // Handle rate limiting
-       await delay(60000); // Wait 1 minute
+       // Handle rate limiting: wait for the time the server asks for
+       const retryAfter = Number(error.response.headers['retry-after']) || 60;
+       await delay(retryAfter * 1000);
        return retryRequest();
      }
      throw error;
@@ -1212,7 +1470,7 @@ The API implements rate limiting to ensure fair usage:
      let cursor = null;
 
      do {
-       const params = { query, limit: 500 };
+       const params = { query, limit: 500 }; // 500 is the maximum
        if (cursor) params.cursor = cursor;
 
        const response = await apiClient.get('/flows', { params });
@@ -1238,11 +1496,9 @@ The API implements rate limiting to ensure fair usage:
 
 ## Conclusion
 
-This API reference provides comprehensive documentation for integrating with the Firewalla MSP API v2. All endpoints, data models, and examples have been verified against official Firewalla documentation and GitHub examples.
+This reference was synced with the official Firewalla MSP documentation at https://docs.firewalla.net on 2026-09-25. Behavior the official docs do not cover is marked as measured, with its date; re-measure it before relying on it, since the MSP API changes.
 
 For additional support or questions:
-- Review the official Firewalla MSP documentation
+- Review the official Firewalla MSP documentation at https://docs.firewalla.net
 - Check the [msp-api-examples repository](https://github.com/firewalla/msp-api-examples) for more code samples
 - Ensure your MSP account has appropriate permissions for the endpoints you're trying to access
-
-**Important Security Note**: Always protect your personal access tokens and never expose them in client-side code or public repositories. Use environment variables or secure configuration management for production deployments.
