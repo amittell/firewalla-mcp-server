@@ -65,7 +65,8 @@ export function setupResources(
       {
         uri: 'firewalla://summary',
         name: 'Firewall Summary',
-        description: 'Real-time firewall health and performance metrics',
+        description:
+          'Box online status and device, alarm and rule counts per box, plus blocked flows in a recent sample',
         mimeType: 'application/json',
       },
       {
@@ -112,19 +113,18 @@ export function setupResources(
                   {
                     firewall_status: {
                       status: summary.status,
-                      uptime_seconds: summary.uptime,
-                      uptime_formatted: formatUptime(summary.uptime),
-                      cpu_usage_percent: summary.cpu_usage,
-                      memory_usage_percent: summary.memory_usage,
-                      active_connections: summary.active_connections,
-                      blocked_attempts: summary.blocked_attempts,
+                      boxes_online: summary.boxes_online,
+                      boxes_total: summary.boxes_total,
+                      boxes: summary.boxes,
+                      recent_flows_sampled: summary.recent_flows_sampled,
+                      blocked_in_sample: summary.blocked_in_sample,
                       last_updated: summary.last_updated,
                     },
                     health_indicators: {
                       status_ok: summary.status === 'online',
-                      cpu_ok: summary.cpu_usage < 80,
-                      memory_ok: summary.memory_usage < 85,
-                      performance_score: calculatePerformanceScore(summary),
+                      offline_boxes: summary.boxes
+                        .filter(box => !box.online)
+                        .map(box => box.name),
                     },
                   },
                   null,
@@ -368,38 +368,6 @@ export function setupResources(
       };
     }
   });
-}
-
-/**
- * Converts a duration in seconds to a formatted string in days, hours, and minutes.
- *
- * @param seconds - The total number of seconds to format
- * @returns A string representing the duration in the format 'Xd Xh Xm'
- */
-function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  return `${days}d ${hours}h ${minutes}m`;
-}
-
-/**
- * Calculates a performance score for the firewall based on CPU and memory usage if the status is 'online'.
- *
- * @param summary - An object containing `cpu_usage`, `memory_usage`, and `status` of the firewall.
- * @returns A score from 0 to 100 representing overall performance, or 0 if the firewall is not online.
- */
-function calculatePerformanceScore(summary: {
-  cpu_usage: number;
-  memory_usage: number;
-  status: string;
-}): number {
-  if (summary.status !== 'online') {
-    return 0;
-  }
-  const cpuScore = Math.max(0, 100 - summary.cpu_usage);
-  const memScore = Math.max(0, 100 - summary.memory_usage);
-  return Math.round((cpuScore + memScore) / 2);
 }
 
 function getThreatLevelEmoji(level: string): string {

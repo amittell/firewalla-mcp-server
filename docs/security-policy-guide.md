@@ -94,11 +94,12 @@ PermissionLevel.ADMIN (3)    - Full administrative access
 #### Required Variables
 
 - `FIREWALLA_MSP_TOKEN`: MSP API access token
-- `FIREWALLA_BOX_ID`: Primary box identifier
+- `FIREWALLA_MSP_ID`: MSP domain
 
 #### Optional Security Variables
 
-- `FIREWALLA_DEFAULT_BOX_ID`: Default box for convenience tools
+- `FIREWALLA_BOX_ID`: Scopes queries to one box and is the default box for single-box operations
+- `FIREWALLA_DEFAULT_BOX_ID`: Default box for single-box operations, without scoping queries
 - `RBAC_ENABLED`: Enable/disable RBAC (default: true)
 - `AUDIT_LOGGING_ENABLED`: Enable/disable audit logging (default: true)
 - `MAX_RISK_SCORE`: Maximum allowed risk score (default: 80)

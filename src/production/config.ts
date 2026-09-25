@@ -37,6 +37,9 @@ export function getProductionConfig(): ProductionConfig {
     mspId,
     mspBaseUrl: `https://${mspId}`,
     boxId: testMode ? 'test-box-id' : process.env.FIREWALLA_BOX_ID || undefined,
+    defaultBoxId: testMode
+      ? undefined
+      : process.env.FIREWALLA_DEFAULT_BOX_ID || undefined,
     apiTimeout: getOptionalEnvInt('API_TIMEOUT', 30000, 1000, 300000), // 1s to 5min
     rateLimit: getOptionalEnvInt('API_RATE_LIMIT', 100, 1, 1000), // 1 to 1000 requests per minute
     cacheTtl: getOptionalEnvInt('CACHE_TTL', 300, 0, 3600), // 0s to 1 hour

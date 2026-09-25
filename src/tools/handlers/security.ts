@@ -3,7 +3,10 @@
  */
 
 import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
-import type { FirewallaClient } from '../../firewalla/client.js';
+import {
+  BoxSelectionError,
+  type FirewallaClient,
+} from '../../firewalla/client.js';
 import {
   ParameterValidator,
   SafeAccess,
@@ -486,7 +489,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
 export class GetSpecificAlarmHandler extends BaseToolHandler {
   name = 'get_specific_alarm';
   description =
-    'Get detailed information for a specific alarm by alarm ID. Requires alarm_id parameter obtained from get_active_alarms or search_alarms (aid field is automatically normalized). Features improved ID resolution that automatically tries multiple ID formats to handle API inconsistencies.';
+    "Get detailed information for a specific alarm by alarm ID. Requires alarm_id parameter obtained from get_active_alarms or search_alarms (aid field is automatically normalized). Alarm IDs are per box: pass gid (the alarm's gid field) to name the box; without gid or FIREWALLA_BOX_ID, each box on the account is checked.";
   category = 'security' as const;
 
   constructor() {
@@ -522,11 +525,25 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
         );
       }
 
+      const gidValidation = ParameterValidator.validateOptionalString(
+        args?.gid,
+        'gid'
+      );
+      if (!gidValidation.isValid) {
+        return this.createErrorResponse(
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          gidValidation.errors
+        );
+      }
+      const gid = gidValidation.sanitizedValue as string | undefined;
+
       const rawAlarmId = alarmIdValidation.sanitizedValue as string;
       const alarmId = validateAlarmId(rawAlarmId);
 
       const response = await withToolTimeout(
-        async () => firewalla.getSpecificAlarm(alarmId),
+        async () => firewalla.getSpecificAlarm(alarmId, gid),
         'get_specific_alarm'
       );
 
@@ -568,6 +585,13 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
           'get_specific_alarm',
           error.duration,
           10000
+        );
+      }
+
+      if (error instanceof BoxSelectionError) {
+        return this.createErrorResponse(
+          error.message,
+          ErrorType.VALIDATION_ERROR
         );
       }
 

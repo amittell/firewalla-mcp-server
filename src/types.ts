@@ -22,8 +22,16 @@ export interface FirewallaConfig {
   mspId: string;
   /** Full MSP base URL (alternative to mspId for direct URL specification) */
   mspBaseUrl?: string;
-  /** Unique identifier for the Firewalla box/device (optional - can be provided per-call or as default) */
+  /**
+   * FIREWALLA_BOX_ID: scopes queries to this box and is the default box for
+   * single-box operations. Optional; without it queries cover every box.
+   */
   boxId?: string;
+  /**
+   * FIREWALLA_DEFAULT_BOX_ID: the default box for single-box operations
+   * (create_rule, rename_device, get_specific_alarm) without scoping queries
+   */
+  defaultBoxId?: string;
   /** API request timeout in milliseconds (default: 30000) */
   apiTimeout: number;
   /** Maximum number of API requests per minute (default: 100) */
@@ -526,6 +534,44 @@ export interface Box {
   ruleCount: number;
   /** Number of alarms on box */
   alarmCount: number;
+}
+
+/**
+ * One box in the firewall summary, from the MSP /v2/boxes endpoint
+ * @interface BoxSummary
+ */
+export interface BoxSummary {
+  gid: string;
+  name: string;
+  model: string;
+  online: boolean;
+  /** Unix seconds when the box was last seen online, when the API reports it */
+  last_seen?: number;
+  device_count: number;
+  alarm_count: number;
+  rule_count: number;
+}
+
+/**
+ * Firewall status built from /v2/boxes and a sample of recent flows. The MSP
+ * API reports no CPU, memory or uptime figures, so the summary has none.
+ * @interface FirewallSummary
+ */
+export interface FirewallSummary {
+  /**
+   * online: every box in scope is online; partial: some are; offline: none
+   * are; unknown: no boxes are visible to the token
+   */
+  status: 'online' | 'partial' | 'offline' | 'unknown';
+  /** The FIREWALLA_BOX_ID box, or every box on the account */
+  boxes: BoxSummary[];
+  boxes_online: number;
+  boxes_total: number;
+  /** Number of recent flows the blocked count was taken from */
+  recent_flows_sampled: number;
+  /** Blocked flows among the sampled recent flows */
+  blocked_in_sample: number;
+  last_updated: string;
 }
 
 /**

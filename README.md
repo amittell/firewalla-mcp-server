@@ -160,6 +160,9 @@ FIREWALLA_MSP_ID=yourdomain.firewalla.net
 
 # Optional - filters all queries to a specific box
 # FIREWALLA_BOX_ID=your_box_gid_here
+
+# Optional - default box for single-box operations, without filtering queries
+# FIREWALLA_DEFAULT_BOX_ID=your_box_gid_here
 ```
 
 **Getting Your Credentials:**
@@ -167,6 +170,8 @@ FIREWALLA_MSP_ID=yourdomain.firewalla.net
 2. Your MSP ID is the full domain (e.g., `company123.firewalla.net`)
 3. Generate an access token in API settings
 4. (Optional) Find your Box GID in device settings to filter queries to a specific box, or retrieve available boxes using the `get_boxes` tool
+
+**Box ID is optional.** Without `FIREWALLA_BOX_ID`, queries cover every box on the account. The few operations that act on one box (`get_specific_alarm`, `create_rule`, `rename_device`) take a `gid` argument, and without one they use `FIREWALLA_BOX_ID`, then `FIREWALLA_DEFAULT_BOX_ID`, then the account's only box. On an account with several boxes and none of those set, `get_specific_alarm` checks each box, and `create_rule` and `rename_device` refuse and list the boxes.
 
 #### Transport Configuration
 
@@ -404,7 +409,7 @@ Write (opt-in): create_rule, delete_rule, rename_device
 
 `create_rule`, `delete_rule` and `rename_device` change rules and device names on your box, so they are off by default. Set `FIREWALLA_ENABLE_WRITE_TOOLS=true` to register them. MCP clients that honor tool annotations will ask before calling them (`destructiveHint: true` on `create_rule` and `delete_rule`).
 
-`create_rule` and `rename_device` act on one box: pass `gid`, or set `FIREWALLA_BOX_ID`. With neither, they refuse without calling the API, because the MSP API applies a rule with no `gid` to every box in the account, including boxes added later. `delete_rule` needs MSP 2.11.0 or later.
+`create_rule` and `rename_device` act on one box: `gid`, else `FIREWALLA_BOX_ID` or `FIREWALLA_DEFAULT_BOX_ID`, else the account's only box. On a multi-box account with none of those, they refuse without writing anything, because the MSP API applies a rule with no `gid` to every box in the account, including boxes added later. `delete_rule` needs MSP 2.11.0 or later.
 
 ## Development
 

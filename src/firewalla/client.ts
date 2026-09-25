@@ -30,6 +30,8 @@ import {
   NetworkRule,
   TargetList,
   Box,
+  BoxSummary,
+  FirewallSummary,
   SearchResult,
   SearchQuery,
   SearchOptions,
@@ -67,6 +69,18 @@ interface APIResponse<T> {
   message?: string;
   /** @description Optional error message if the request failed */
   error?: string;
+}
+
+/**
+ * A single-box operation could not pick a box: the account has several and
+ * none was named, or the token sees none. Handlers report it as a validation
+ * error rather than an API failure.
+ */
+export class BoxSelectionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BoxSelectionError';
+  }
 }
 
 /**
@@ -1298,10 +1312,40 @@ export class FirewallaClient {
   }
 
   /**
-   * The box configured with FIREWALLA_BOX_ID, if any
+   * The configured default box for single-box operations: FIREWALLA_BOX_ID,
+   * else FIREWALLA_DEFAULT_BOX_ID, if either is set
    */
   getDefaultBoxId(): string | undefined {
-    return this.config.boxId;
+    return this.config.boxId ?? this.config.defaultBoxId;
+  }
+
+  /**
+   * The box a single-box operation acts on: the explicit gid, else the
+   * configured default (getDefaultBoxId), else the account's only box.
+   *
+   * @throws {BoxSelectionError} When the account has several boxes and none
+   *   was named, or the token sees no boxes
+   */
+  async resolveBoxGid(gid?: string): Promise<string> {
+    const named = gid?.trim() || this.getDefaultBoxId();
+    if (named) {
+      return named;
+    }
+
+    const boxes = await this.getBoxes();
+    if (boxes.results.length === 1) {
+      return boxes.results[0].gid;
+    }
+    if (boxes.results.length === 0) {
+      throw new BoxSelectionError('No boxes are visible to this MSP token');
+    }
+
+    const listed = boxes.results
+      .map(box => `${box.name} (${box.gid})`)
+      .join(', ');
+    throw new BoxSelectionError(
+      `This MSP account has ${boxes.results.length} boxes: ${listed}. Pass gid, or set FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID`
+    );
   }
 
   /**
@@ -1400,31 +1444,48 @@ export class FirewallaClient {
     );
   }
 
-  async getFirewallSummary(): Promise<{
-    status: string;
-    uptime: number;
-    cpu_usage: number;
-    memory_usage: number;
-    active_connections: number;
-    blocked_attempts: number;
-    last_updated: string;
-  }> {
-    // Aggregate data from real endpoints since /summary doesn't exist
+  /**
+   * Firewall status from /v2/boxes plus the 100 most recent flows. Covers the
+   * FIREWALLA_BOX_ID box, or every box on the account. The MSP API reports no
+   * CPU, memory or uptime figures, so the summary has none.
+   */
+  async getFirewallSummary(): Promise<FirewallSummary> {
     const [boxes, flows] = await Promise.all([
       this.getBoxes(),
       this.getFlowData(undefined, undefined, 'ts:desc', 100),
     ]);
 
-    const currentBox = boxes.results.find(box => box.gid === this.config.boxId);
-    const blockedFlows = flows.results.filter(flow => flow.block);
+    const inScope = this.config.boxId
+      ? boxes.results.filter(box => box.gid === this.config.boxId)
+      : boxes.results;
+    const summaries: BoxSummary[] = inScope.map(box => ({
+      gid: box.gid,
+      name: box.name,
+      model: box.model,
+      online: box.online,
+      last_seen: box.lastSeen,
+      device_count: box.deviceCount,
+      alarm_count: box.alarmCount,
+      rule_count: box.ruleCount,
+    }));
+
+    const online = summaries.filter(box => box.online).length;
+    let status: FirewallSummary['status'] = 'partial';
+    if (summaries.length === 0) {
+      status = 'unknown';
+    } else if (online === summaries.length) {
+      status = 'online';
+    } else if (online === 0) {
+      status = 'offline';
+    }
 
     return {
-      status: currentBox?.online ? 'online' : 'offline',
-      uptime: Date.now() - (currentBox?.lastSeen || 0) * 1000,
-      cpu_usage: Math.random() * 100, // Mock data - not available in API
-      memory_usage: Math.random() * 100, // Mock data - not available in API
-      active_connections: flows.count,
-      blocked_attempts: blockedFlows.length,
+      status,
+      boxes: summaries,
+      boxes_online: online,
+      boxes_total: summaries.length,
+      recent_flows_sampled: flows.results.length,
+      blocked_in_sample: flows.results.filter(flow => flow.block).length,
       last_updated: new Date().toISOString(),
     };
   }
@@ -1667,17 +1728,43 @@ export class FirewallaClient {
     gid?: string
   ): Promise<{ count: number; results: Alarm[]; next_cursor?: string }> {
     try {
+      // An explicit gid or FIREWALLA_BOX_ID names the one box to ask. Without
+      // either, ask each box on the account (FIREWALLA_DEFAULT_BOX_ID first)
+      // until one has the alarm: alarm IDs are per box.
+      const namedGid = gid?.trim() || this.config.boxId;
+      let candidateGids: string[];
+      if (namedGid) {
+        candidateGids = [namedGid];
+      } else {
+        const boxes = await this.getBoxes();
+        candidateGids = boxes.results.map(box => box.gid);
+        const preferred = this.config.defaultBoxId;
+        if (preferred && candidateGids.includes(preferred)) {
+          candidateGids = [
+            preferred,
+            ...candidateGids.filter(candidate => candidate !== preferred),
+          ];
+        }
+        if (candidateGids.length === 0) {
+          throw new BoxSelectionError('No boxes are visible to this MSP token');
+        }
+      }
+
       // Enhanced input validation and sanitization
-      const validatedGid = this.sanitizeInput(gid || this.config.boxId);
+      const validatedGids = candidateGids.map(candidate => {
+        const validatedGid = this.sanitizeInput(candidate);
 
-      if (!validatedGid || validatedGid.length === 0) {
-        throw new Error('Invalid or empty gid provided');
-      }
+        if (!validatedGid || validatedGid.length === 0) {
+          throw new Error('Invalid or empty gid provided');
+        }
 
-      // Additional validation for GID format
-      if (!/^[a-zA-Z0-9_-]+$/.test(validatedGid)) {
-        throw new Error('GID contains invalid characters');
-      }
+        // Additional validation for GID format
+        if (!/^[a-zA-Z0-9_-]+$/.test(validatedGid)) {
+          throw new Error('GID contains invalid characters');
+        }
+
+        return validatedGid;
+      });
 
       // Simple alarm ID validation
       const validatedAlarmId = validateAlarmId(alarmId);
@@ -1694,44 +1781,54 @@ export class FirewallaClient {
 
       let lastError: Error | null = null;
       let response: any = null;
+      let foundGid: string | undefined;
 
-      // Try each ID variation until one succeeds
-      for (const idVariation of idVariations) {
-        const validatedAlarmId = this.sanitizeInput(idVariation);
+      // Try each box, and each ID variation on it, until one succeeds
+      for (const validatedGid of validatedGids) {
+        for (const idVariation of idVariations) {
+          const validatedAlarmId = this.sanitizeInput(idVariation);
 
-        if (!validatedAlarmId || validatedAlarmId.length === 0) {
-          continue; // Skip invalid variations
+          if (!validatedAlarmId || validatedAlarmId.length === 0) {
+            continue; // Skip invalid variations
+          }
+
+          // Additional validation for alarm ID format (relaxed for ID variations)
+          if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
+            continue; // Skip invalid format variations
+          }
+
+          try {
+            logger.debug(`Trying alarm ID variation: ${validatedAlarmId}`);
+
+            response = await this.request<any>(
+              'GET',
+              `/v2/alarms/${validatedGid}/${validatedAlarmId}`
+            );
+
+            // If we get here, the request succeeded
+            foundGid = validatedGid;
+            logger.debug(
+              `Successfully found alarm with ID: ${validatedAlarmId}`
+            );
+            break;
+          } catch (error) {
+            lastError =
+              error instanceof Error ? error : new Error(String(error));
+            logger.debug(`Failed to find alarm with ID ${validatedAlarmId}:`, {
+              error: lastError.message,
+            });
+
+            // Skip invalid variations
+          }
         }
-
-        // Additional validation for alarm ID format (relaxed for ID variations)
-        if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
-          continue; // Skip invalid format variations
-        }
-
-        try {
-          logger.debug(`Trying alarm ID variation: ${validatedAlarmId}`);
-
-          response = await this.request<any>(
-            'GET',
-            `/v2/alarms/${validatedGid}/${validatedAlarmId}`
-          );
-
-          // If we get here, the request succeeded
-          logger.debug(`Successfully found alarm with ID: ${validatedAlarmId}`);
+        if (response) {
           break;
-        } catch (error) {
-          lastError = error instanceof Error ? error : new Error(String(error));
-          logger.debug(`Failed to find alarm with ID ${validatedAlarmId}:`, {
-            error: lastError.message,
-          });
-
-          // Skip invalid variations
         }
       }
 
       // If no variation worked, throw the last error
       if (!response) {
-        const errorMessage = `Alarm not found: tried ${idVariations.length} ID variations. Last error: ${lastError?.message || 'Unknown error'}`;
+        const errorMessage = `Alarm not found: tried ${validatedGids.length} box(es) and ${idVariations.length} ID variation(s). Last error: ${lastError?.message || 'Unknown error'}`;
         logger.warn('All alarm ID variations failed', {
           originalId: alarmId,
           variations: idVariations,
@@ -1784,7 +1881,7 @@ export class FirewallaClient {
           typeof response.gid === 'string' &&
           response.gid.trim()
             ? response.gid.trim()
-            : this.config.boxId,
+            : foundGid,
         aid:
           response.aid && typeof response.aid === 'number' && response.aid >= 0
             ? response.aid
@@ -2524,7 +2621,7 @@ export class FirewallaClient {
           }
         });
 
-        // Generate trend points with realistic progression
+        // Generate trend points from the counted rules
         let cumulativeRuleCount = Math.max(0, baselineCount - rulesByTime.size); // Estimate baseline
 
         for (let i = 0; i < points; i++) {
@@ -2534,9 +2631,7 @@ export class FirewallaClient {
           const rulesInInterval = rulesByTime.get(intervalEnd)?.size || 0;
           cumulativeRuleCount += rulesInInterval;
 
-          // Add small natural variation for stability (±1-2 rules)
-          const variation = Math.floor(Math.random() * 3) - 1; // -1, 0, or 1
-          const finalCount = Math.max(0, cumulativeRuleCount + variation);
+          const finalCount = Math.max(0, cumulativeRuleCount);
 
           if (intervalEnd > begin && intervalEnd <= end + interval) {
             trends.push({

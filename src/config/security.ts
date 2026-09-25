@@ -287,18 +287,10 @@ export class SecurityManager {
           'FIREWALLA_BOX_ID does not appear to be a valid UUID format'
         );
       }
-    } else {
-      warnings.push(
-        'FIREWALLA_BOX_ID not set - box ID must be provided per-call or via FIREWALLA_DEFAULT_BOX_ID'
-      );
     }
 
-    // Check for FIREWALLA_DEFAULT_BOX_ID if convenience tools are used
-    if (!process.env.FIREWALLA_DEFAULT_BOX_ID && !boxId) {
-      warnings.push(
-        'Neither FIREWALLA_BOX_ID nor FIREWALLA_DEFAULT_BOX_ID set - box ID will be required for all operations'
-      );
-    } else if (process.env.FIREWALLA_DEFAULT_BOX_ID) {
+    // FIREWALLA_DEFAULT_BOX_ID is optional too; validate it when present
+    if (process.env.FIREWALLA_DEFAULT_BOX_ID) {
       // Validate default box ID format
       const defaultBoxId = process.env.FIREWALLA_DEFAULT_BOX_ID;
       if (

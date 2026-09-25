@@ -93,11 +93,10 @@ export class DebugTools {
     error?: string;
     data?: {
       status: string;
-      uptime: number;
-      cpu_usage: number;
-      memory_usage: number;
-      active_connections: number;
-      blocked_attempts: number;
+      boxes_online: number;
+      boxes_total: number;
+      recent_flows_sampled: number;
+      blocked_in_sample: number;
       last_updated: string;
     };
   }> {
@@ -112,12 +111,11 @@ export class DebugTools {
         response_time: responseTime,
         data: {
           status: summary.status,
-          uptime: summary.uptime,
-          cpu_usage: summary.cpu_usage,
-          memory_usage: summary.memory_usage,
-          active_connections: summary.active_connections || 0,
-          blocked_attempts: summary.blocked_attempts || 0,
-          last_updated: summary.last_updated || new Date().toISOString(),
+          boxes_online: summary.boxes_online,
+          boxes_total: summary.boxes_total,
+          recent_flows_sampled: summary.recent_flows_sampled,
+          blocked_in_sample: summary.blocked_in_sample,
+          last_updated: summary.last_updated,
         },
       };
     } catch (error) {
@@ -224,18 +222,6 @@ export class DebugTools {
           message: `Missing required environment variable: ${varName}`,
         });
       }
-    }
-
-    // Check optional box ID - warn if not set
-    if (
-      !process.env.FIREWALLA_BOX_ID &&
-      !process.env.FIREWALLA_DEFAULT_BOX_ID
-    ) {
-      issues.push({
-        level: 'warning',
-        message:
-          'Neither FIREWALLA_BOX_ID nor FIREWALLA_DEFAULT_BOX_ID set - box ID will be required for specific operations',
-      });
     }
 
     // Check API connectivity

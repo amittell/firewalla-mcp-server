@@ -3,7 +3,10 @@
  */
 
 import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
-import type { FirewallaClient } from '../../firewalla/client.js';
+import {
+  BoxSelectionError,
+  type FirewallaClient,
+} from '../../firewalla/client.js';
 import {
   ParameterValidator,
   SafeAccess,
@@ -1822,7 +1825,7 @@ export class DeleteTargetListHandler extends BaseToolHandler {
 export class CreateRuleHandler extends BaseToolHandler {
   name = 'create_rule';
   description =
-    'Create a new firewall rule (block or allow) on one box (gid, or FIREWALLA_BOX_ID). Target types: app, category, domain, internet, intranet, ip, net, region, remotePort, targetlist. Optionally scope the rule to a device (MAC address), group, user, or network, and schedule it with cron_time + duration.';
+    "Create a new firewall rule (block or allow) on one box (gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box). Target types: app, category, domain, internet, intranet, ip, net, region, remotePort, targetlist. Optionally scope the rule to a device (MAC address), group, user, or network, and schedule it with cron_time + duration.";
   category = 'rule' as const;
 
   constructor() {
@@ -1943,17 +1946,25 @@ export class CreateRuleHandler extends BaseToolHandler {
         );
       }
 
-      const gid =
-        (gidValidation.sanitizedValue as string | undefined) ??
-        firewalla.getDefaultBoxId();
-      if (!gid) {
+      // The MSP API applies a rule without a gid to every box in the
+      // account, so a box is always resolved first: gid, the configured
+      // default, or the account's only box.
+      let gid: string;
+      try {
+        gid = await firewalla.resolveBoxGid(
+          gidValidation.sanitizedValue as string | undefined
+        );
+      } catch (error) {
+        if (!(error instanceof BoxSelectionError)) {
+          throw error;
+        }
         return createErrorResponse(
           this.name,
           'No box to apply the rule to',
           ErrorType.VALIDATION_ERROR,
           undefined,
           [
-            'Pass gid, or set FIREWALLA_BOX_ID',
+            error.message,
             'The MSP API applies a rule without a gid to every box in the account, including boxes added later',
           ]
         );

@@ -149,13 +149,18 @@ export class FirewallaMCPServer {
           {
             name: 'get_specific_alarm',
             description:
-              'Get detailed information for a specific Firewalla alarm',
+              'Get detailed information for a specific Firewalla alarm. Alarm IDs are per box: pass gid on a multi-box account, or each box is checked.',
             inputSchema: {
               type: 'object',
               properties: {
                 alarm_id: {
                   type: 'string',
                   description: 'Alarm ID (required for API call)',
+                },
+                gid: {
+                  type: 'string',
+                  description:
+                    'Box the alarm belongs to (the gid field of get_active_alarms or search_alarms results). Defaults to FIREWALLA_BOX_ID; without either, each box on the account is checked.',
                 },
               },
               required: ['alarm_id'],
@@ -340,7 +345,7 @@ export class FirewallaMCPServer {
           {
             name: 'create_rule',
             description:
-              'Create a new firewall rule (block or allow) on one box, with optional device/group/network scope and cron schedule. Needs gid or FIREWALLA_BOX_ID.',
+              "Create a new firewall rule (block or allow) on one box, with optional device/group/network scope and cron schedule. Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box; refuses on a multi-box account with none of those.",
             annotations: {
               readOnlyHint: false,
               destructiveHint: true,
@@ -414,7 +419,7 @@ export class FirewallaMCPServer {
                 gid: {
                   type: 'string',
                   description:
-                    'Box to create the rule on. Defaults to FIREWALLA_BOX_ID; the tool refuses when neither is set.',
+                    "Box to create the rule on. Defaults to FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, then to the account's only box; the tool refuses on a multi-box account when none is set.",
                 },
               },
               required: ['action', 'target_type'],
@@ -442,7 +447,7 @@ export class FirewallaMCPServer {
           {
             name: 'rename_device',
             description:
-              'Rename a network device (the only device field the MSP API allows changing; 32 characters max). Needs gid or FIREWALLA_BOX_ID.',
+              "Rename a network device (the only device field the MSP API allows changing; 32 characters max). Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box.",
             annotations: {
               readOnlyHint: false,
               destructiveHint: false,
@@ -463,7 +468,7 @@ export class FirewallaMCPServer {
                 gid: {
                   type: 'string',
                   description:
-                    'Box the device belongs to. Defaults to FIREWALLA_BOX_ID; the tool refuses when neither is set.',
+                    "Box the device belongs to. Defaults to FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, then to the account's only box; the tool refuses on a multi-box account when none is set.",
                 },
               },
               required: ['device_id', 'name'],
