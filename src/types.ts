@@ -103,22 +103,7 @@ export interface GeographicData {
  * 16: Large Upload
  */
 export type AlarmType =
-  | 1
-  | 2
-  | 3
-  | 4
-  | 5
-  | 6
-  | 7
-  | 8
-  | 9
-  | 10
-  | 11
-  | 12
-  | 13
-  | 14
-  | 15
-  | 16;
+  1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16;
 
 /**
  * Alarm status values
@@ -863,11 +848,7 @@ export interface CrossReferenceResult {
  * Category of response indicating the type of operation
  */
 export type ResponseCategory =
-  | 'search'
-  | 'paginated'
-  | 'statistical'
-  | 'correlation'
-  | 'status';
+  'search' | 'paginated' | 'statistical' | 'correlation' | 'status';
 
 /**
  * Base metadata included in all standardized responses

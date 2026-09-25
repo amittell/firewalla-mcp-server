@@ -653,7 +653,12 @@ export class FirewallaClient {
     params: Record<string, unknown>,
     limit: number,
     cacheable = true
-  ): Promise<{ count: number; results: T[]; next_cursor?: string; [key: string]: any }> {
+  ): Promise<{
+    count: number;
+    results: T[];
+    next_cursor?: string;
+    [key: string]: any;
+  }> {
     // The API's own default when no usable limit is given
     const wanted = Number.isFinite(limit) && limit >= 1 ? limit : 200;
     const results: T[] = [];
@@ -974,26 +979,24 @@ export class FirewallaClient {
     }));
 
     // Map normalized data to Alarm objects
-    const alarms = normalizedAlarms.map(
-      (item: any): Alarm => ({
-        ts: item.ts || Math.floor(Date.now() / 1000),
-        gid: item.gid || this.config.boxId,
-        aid: item.aid !== undefined && item.aid !== null ? item.aid : 0,
-        type: item.type || 1,
-        status: item.status || 1,
-        message: item.message,
-        direction: item.direction,
-        protocol: item.protocol,
-        // Conditional properties based on alarm type
-        ...(item.device && { device: item.device }),
-        ...(item.remote && { remote: item.remote }),
-        ...(item.transfer && { transfer: item.transfer }),
-        ...(item.dataPlan && { dataPlan: item.dataPlan }),
-        ...(item.vpn && { vpn: item.vpn }),
-        ...(item.port && { port: item.port }),
-        ...(item.wan && { wan: item.wan }),
-      })
-    );
+    const alarms = normalizedAlarms.map((item: any): Alarm => ({
+      ts: item.ts || Math.floor(Date.now() / 1000),
+      gid: item.gid || this.config.boxId,
+      aid: item.aid !== undefined && item.aid !== null ? item.aid : 0,
+      type: item.type || 1,
+      status: item.status || 1,
+      message: item.message,
+      direction: item.direction,
+      protocol: item.protocol,
+      // Conditional properties based on alarm type
+      ...(item.device && { device: item.device }),
+      ...(item.remote && { remote: item.remote }),
+      ...(item.transfer && { transfer: item.transfer }),
+      ...(item.dataPlan && { dataPlan: item.dataPlan }),
+      ...(item.vpn && { vpn: item.vpn }),
+      ...(item.port && { port: item.port }),
+      ...(item.wan && { wan: item.wan }),
+    }));
 
     // Normalize timestamps in the alarm objects
     const timestampNormalizedAlarms = alarms.map(alarm => {
@@ -1763,15 +1766,18 @@ export class FirewallaClient {
    *   (and no group) to every box in the MSP account, so callers must pass one.
    * @returns The created rule as returned by the API
    */
-  async createRule(ruleData: {
-    action: 'block' | 'allow';
-    target: { type: string; value?: string; dnsOnly?: boolean };
-    scope?: { type: string; value: string; port?: string };
-    direction?: 'bidirection' | 'inbound' | 'outbound';
-    protocol?: 'tcp' | 'udp';
-    notes?: string;
-    schedule?: { duration?: number; cronTime?: string };
-  }, gid: string): Promise<NetworkRule> {
+  async createRule(
+    ruleData: {
+      action: 'block' | 'allow';
+      target: { type: string; value?: string; dnsOnly?: boolean };
+      scope?: { type: string; value: string; port?: string };
+      direction?: 'bidirection' | 'inbound' | 'outbound';
+      protocol?: 'tcp' | 'udp';
+      notes?: string;
+      schedule?: { duration?: number; cronTime?: string };
+    },
+    gid: string
+  ): Promise<NetworkRule> {
     if (!gid) {
       throw new Error('createRule requires a box gid');
     }
@@ -2580,11 +2586,11 @@ export class FirewallaClient {
           // Complex response object - check multiple success indicators
           isSuccess = Boolean(
             response.success ||
-              response.deleted ||
-              (response.status &&
-                ['deleted', 'removed', 'success', 'ok'].includes(
-                  response.status.toLowerCase()
-                ))
+            response.deleted ||
+            (response.status &&
+              ['deleted', 'removed', 'success', 'ok'].includes(
+                response.status.toLowerCase()
+              ))
           );
           if ('message' in response && response.message) {
             responseMessage = response.message;

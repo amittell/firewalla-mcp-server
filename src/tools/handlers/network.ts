@@ -108,8 +108,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
         !groupBy &&
         (Boolean(args?.stream) || shouldUseStreaming(this.name, limit));
       const streamingSessionId = args?.streaming_session_id as
-        | string
-        | undefined;
+        string | undefined;
 
       // Validate individual date parameters before building query
       const startTimeArg = args?.start_time as string | undefined;

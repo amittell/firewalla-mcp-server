@@ -253,8 +253,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
       // Build query string combining provided query and severity filter
       let sanitizedQuery = queryValidation.sanitizedValue as string | undefined;
       const severityValue = severityValidation.sanitizedValue as
-        | string
-        | undefined;
+        string | undefined;
 
       // Add severity filter to query if provided
       if (severityValue) {

@@ -221,20 +221,14 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
           'total_count',
           0
         ),
-        online_devices: (deviceCounts)
-          .online,
-        offline_devices: (deviceCounts)
-          .offline,
+        online_devices: deviceCounts.online,
+        offline_devices: deviceCounts.offline,
         page_size: SafeAccess.safeArrayAccess(
           devicesResponse.results,
           arr => arr.length,
           0
         ),
-        has_more: SafeAccess.getNestedValue(
-          devicesResponse,
-          'has_more',
-          false
-        ),
+        has_more: SafeAccess.getNestedValue(devicesResponse, 'has_more', false),
         devices: enrichedDevices,
         next_cursor: SafeAccess.getNestedValue(
           devicesResponse,

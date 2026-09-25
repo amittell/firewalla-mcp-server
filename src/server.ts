@@ -1279,9 +1279,7 @@ export class FirewallaMCPServer {
     // Server.connect() chains this onclose ahead of its own handler.
     transport.onclose = () => shutdown('transport closed');
     await this.server.connect(transport);
-    logger.info(
-      'Firewalla MCP Server running on stdio transport'
-    );
+    logger.info('Firewalla MCP Server running on stdio transport');
   }
 
   /**
@@ -1299,17 +1297,18 @@ export class FirewallaMCPServer {
     // their Server + transport in the maps forever. Stamp activity per request
     // and close sessions idle past MCP_SESSION_IDLE_TIMEOUT_MS (default 30 min).
     const lastActivity = new Map<string, number>();
-    const idleTimeoutMs = Number(process.env.MCP_SESSION_IDLE_TIMEOUT_MS) || 30 * 60 * 1000;
-    const reapEveryMs = Math.min(60_000, idleTimeoutMs);  // sweep at least as often as the timeout
+    const idleTimeoutMs =
+      Number(process.env.MCP_SESSION_IDLE_TIMEOUT_MS) || 30 * 60 * 1000;
+    const reapEveryMs = Math.min(60_000, idleTimeoutMs); // sweep at least as often as the timeout
     const reaper = setInterval(() => {
       const now = Date.now();
       for (const [sid, seen] of lastActivity.entries()) {
         if (!transports.has(sid)) {
-          lastActivity.delete(sid);           // closed elsewhere; drop the stamp
+          lastActivity.delete(sid); // closed elsewhere; drop the stamp
         } else if (now - seen > idleTimeoutMs) {
           logger.info(`Reaping idle HTTP session: ${sid}`);
           lastActivity.delete(sid);
-          void transports.get(sid)?.close();  // onclose cleans transports/servers
+          void transports.get(sid)?.close(); // onclose cleans transports/servers
         }
       }
     }, reapEveryMs);
@@ -1482,9 +1481,7 @@ export class FirewallaMCPServer {
       });
 
       httpServer.listen(port, () => {
-        logger.info(
-          `Firewalla MCP Server running on HTTP transport`
-        );
+        logger.info(`Firewalla MCP Server running on HTTP transport`);
         logger.info(`HTTP server listening on http://localhost:${port}${path}`);
         resolve();
       });
@@ -1559,7 +1556,9 @@ const isMainModule = (() => {
     return false;
   }
   try {
-    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+    return (
+      import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
+    );
   } catch {
     return false;
   }
