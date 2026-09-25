@@ -15,6 +15,9 @@ about:
   icon: https://avatars.githubusercontent.com/u/16805913?s=200&v=4
 source:
   project: https://github.com/amittell/firewalla-mcp-server
+  # The catalog builds the commit pinned in docker/mcp-registry's copy of this
+  # file. A file cannot name the commit that contains it, so each release's
+  # registry PR sets the pin there; this copy keeps the last pin submitted.
   commit: d6f8c6ac25701a7eb69c3dfdda312817979329e9
 config:
   description: Configure your Firewalla MSP connection credentials

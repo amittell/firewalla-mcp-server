@@ -9,15 +9,15 @@ This report documents all discrepancies found between the official Firewalla API
 
 ## Critical Discrepancies
 
-### 1. Rule Management Endpoints
+### 1. Rule Management Endpoints (resolved 2026-09-25)
 
-**Issue**: Request body parameters for pause/resume operations differ significantly
+**Issue**: Request body parameters for pause/resume operations differed
 
 **Official Documentation**:
 - `POST /v2/rules/:id/pause` - No request body documented
 - `POST /v2/rules/:id/resume` - No request body documented
 
-**Local Documentation & Implementation**:
+**Local Documentation & Implementation (before 1.5.0)**:
 - `POST /v2/rules/{id}/pause` - Includes request body:
   ```json
   {
@@ -41,18 +41,6 @@ This report documents all discrepancies found between the official Firewalla API
   }
   ```
 - This would align with the Rule data model which includes `status` and `resumeTs` fields
-
-**Current Implementation Analysis**:
-- Our `FirewallaClient.pauseRule()` sends `duration` and `box` as POST body parameters
-- The `duration` parameter (1-1440 minutes) is validated in the implementation
-- The `box` parameter uses the configured `boxId` from environment
-
-**Impact**: Critical - Three different approaches documented:
-1. Official docs: No parameters
-2. Our implementation: `duration` and `box` in request body
-3. Research suggests: `status` and `resumeTs` via PATCH
-
-This discrepancy requires immediate testing to verify actual API behavior
 
 **Resolved 2026-09-25**: measured on disposable rules, the pause endpoint takes
 no body and no duration. A `duration` in the body or the query string is
@@ -148,40 +136,30 @@ Our local documentation includes endpoints that may not be officially documented
 
 | Resource | Endpoint | Issue |
 |----------|----------|-------|
-| Rules | `/v2/rules/:id/pause` | POST body parameters undocumented |
-| Rules | `/v2/rules/:id/resume` | POST body parameters undocumented |
+| Rules | `/v2/rules/:id/pause` | Resolved 2026-09-25: no body, as the official docs say |
+| Rules | `/v2/rules/:id/resume` | Resolved 2026-09-25: no body, as the official docs say |
 
 ## Recommendations
 
-### 1. Immediate Action: Test Rule Pause/Resume
-**Priority**: CRITICAL
-- Create test script to verify actual API behavior:
-  1. Test with no body parameters (as per official docs)
-  2. Test with `duration` and `box` parameters (as per our implementation)
-  3. Test PATCH with `status` and `resumeTs` (as per research)
-- Document actual working approach
-- Update implementation if necessary
+### 1. Test Rule Pause/Resume (done 2026-09-25)
+Measured on disposable rules: pause and resume take no body. `box` is not
+needed, and a `duration` is accepted and ignored. The client sends no body
+since 1.5.0. `PATCH /v2/rules/{id}` with `status`/`resumeTs` was not tested.
 
-### 2. Verify Required Parameters
-**Priority**: HIGH
-- Test if `box` parameter is actually required for pause/resume
-- Confirm if omitting parameters causes failures
-- Check if duration defaults to 60 minutes when not specified
-
-### 3. Standardize Documentation
+### 2. Standardize Documentation
 **Priority**: MEDIUM
 - Update path parameter notation for consistency (prefer `{param}`)
 - Add missing examples from GitHub repository
 - Document actual vs documented behavior clearly
 
-### 4. Preserve Local Enhancements
+### 3. Preserve Local Enhancements
 **Priority**: HIGH
 - Keep TypeScript interfaces as they provide valuable type safety
 - Maintain comprehensive error handling documentation
 - Preserve detailed query syntax guide
 - Keep pagination and rate limiting documentation
 
-### 5. Contributing Back
+### 4. Contributing Back
 **Priority**: LOW
 - Consider submitting documentation improvements to Firewalla
 - Share discovered undocumented features
@@ -189,86 +167,9 @@ Our local documentation includes endpoints that may not be officially documented
 
 ## Action Items
 
-1. **Immediate**: Test rule pause/resume endpoints to verify parameter requirements
+1. **Done 2026-09-25**: Tested rule pause/resume; neither takes a body
 2. **Short-term**: Update path parameter notation for consistency
 3. **Long-term**: Consider contributing comprehensive documentation back to Firewalla
-
-## Test Script for Verification
-
-To resolve the pause/resume endpoint discrepancy, use this test script:
-
-```javascript
-// test-pause-resume.js
-const axios = require('axios');
-
-const config = {
-  mspDomain: process.env.FIREWALLA_MSP_DOMAIN,
-  token: process.env.FIREWALLA_MSP_TOKEN,
-  boxId: process.env.FIREWALLA_BOX_ID,
-  testRuleId: 'YOUR_TEST_RULE_ID' // Replace with actual rule ID
-};
-
-const api = axios.create({
-  baseURL: `https://${config.mspDomain}/v2`,
-  headers: {
-    'Authorization': `Token ${config.token}`,
-    'Content-Type': 'application/json'
-  }
-});
-
-async function testPauseResume() {
-  console.log('Testing pause/resume endpoints...\n');
-
-  // Test 1: No body (as per official docs)
-  try {
-    console.log('Test 1: POST with no body');
-    const res1 = await api.post(`/rules/${config.testRuleId}/pause`);
-    console.log('✅ Success:', res1.data);
-  } catch (err) {
-    console.log('❌ Failed:', err.response?.status, err.response?.data);
-  }
-
-  // Test 2: With duration and box (as per our implementation)
-  try {
-    console.log('\nTest 2: POST with duration and box');
-    const res2 = await api.post(`/rules/${config.testRuleId}/pause`, {
-      duration: 30,
-      box: config.boxId
-    });
-    console.log('✅ Success:', res2.data);
-  } catch (err) {
-    console.log('❌ Failed:', err.response?.status, err.response?.data);
-  }
-
-  // Test 3: PATCH with status/resumeTs (as per research)
-  try {
-    console.log('\nTest 3: PATCH with status and resumeTs');
-    const resumeTs = Math.floor(Date.now() / 1000) + 1800; // 30 minutes
-    const res3 = await api.patch(`/rules/${config.testRuleId}`, {
-      status: 'paused',
-      resumeTs: resumeTs
-    });
-    console.log('✅ Success:', res3.data);
-  } catch (err) {
-    console.log('❌ Failed:', err.response?.status, err.response?.data);
-  }
-
-  // Test resume
-  try {
-    console.log('\nTest 4: Resume with box parameter');
-    const res4 = await api.post(`/rules/${config.testRuleId}/resume`, {
-      box: config.boxId
-    });
-    console.log('✅ Success:', res4.data);
-  } catch (err) {
-    console.log('❌ Failed:', err.response?.status, err.response?.data);
-  }
-}
-
-testPauseResume().catch(console.error);
-```
-
-Run with: `node test-pause-resume.js`
 
 ## Conclusion
 
@@ -279,4 +180,4 @@ While the official Firewalla documentation provides the authoritative API specif
 - Detailed query syntax guides
 - Rate limiting and pagination documentation
 
-The most critical discrepancy is the rule management endpoints' request parameters. Our implementation includes `duration` and `box` parameters that aren't documented officially, which requires immediate verification through testing to ensure API compatibility and prevent potential failures in production.
+The most critical discrepancy was the rule pause/resume request body. Up to 1.4.1 the client sent `duration` and `box`, which the official docs do not list. Testing on 2026-09-25 found the API ignores both, so 1.5.0 sends no body.
