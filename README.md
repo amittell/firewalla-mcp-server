@@ -562,15 +562,9 @@ For more detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## What's New
 
-**Version 1.0.0:**
-- 28 tools with API-verified schemas (33 with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)
-- 24 direct API endpoints + 5 convenience wrappers
-- NEW: get_flow_insights for category-based traffic analysis
-- Advanced search with logical operators (AND, OR, NOT)
-- All limits corrected to API maximum (500)
-- Required parameters added for proper API calls
-- Better caching for faster responses
-- Handles high-volume networks (300k+ flows/day)  
+Release notes for every version, newest first, are in
+[CHANGELOG.md](CHANGELOG.md). Changes that are merged but not yet released are
+listed there under Unreleased.
 
 ## License
 
