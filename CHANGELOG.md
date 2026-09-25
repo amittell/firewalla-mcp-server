@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   error as a generic failure, and `withToolTimeout` rewrapped it again, so the
   handler's check for it never matched; the wrapped errors now keep the
   original as `cause`.
+- A write no longer leaves reads serving stale data. Cached GET responses
+  (`CACHE_TTL`, 300 s by default) survived `pause_rule`, `resume_rule`,
+  `create_rule`, `delete_rule`, `rename_device`, `delete_alarm` and the target
+  list writes, so for example `get_network_rules` right after `pause_rule` still
+  showed the rule as active. Any write, including one that fails, now clears the
+  response cache; the IP geolocation cache is kept.
 
 ## [1.4.1] - 2026-09-25
 
