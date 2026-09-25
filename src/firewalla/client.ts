@@ -272,10 +272,77 @@ function isNotFoundError(error: unknown): boolean {
   return error instanceof Error && /\b404\b|not found/i.test(error.message);
 }
 
-/** "type 8, 'Living Room watched ...'" for naming an alarm in a message */
+/** "type 8, 'A device watched ...'" for naming an alarm in a message */
 function describeAlarm(alarm: Record<string, any>): string {
   const message = String(alarm.message ?? '').slice(0, 80);
   return `type ${alarm.type ?? 'unknown'}, '${message}'`;
+}
+
+/**
+ * The MSP API answered HTTP 403. The message says which box the request
+ * named, when it named one, and how to list the boxes the token can access.
+ */
+export class ForbiddenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ForbiddenError';
+  }
+}
+
+/**
+ * Whether a request names a box: a `box` parameter, a `box` or `gid` in
+ * its body, or a gid in an /v2/alarms/{gid}/... or /v2/boxes/{gid}/... path
+ */
+function namesBox(config?: {
+  url?: string;
+  params?: unknown;
+  data?: unknown;
+}): boolean {
+  const named = (value: unknown) =>
+    typeof value === 'string' && value.trim() !== '';
+  let body = config?.data;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      // A body that is not JSON names no box
+      body = undefined;
+    }
+  }
+  const fields = body as Record<string, unknown> | undefined;
+  return (
+    named((config?.params as Record<string, unknown> | undefined)?.box) ||
+    named(fields?.box) ||
+    named(fields?.gid) ||
+    /^\/v2\/(?:alarms|boxes)\/[^/?]+/.test(config?.url ?? '')
+  );
+}
+
+/**
+ * The message for an HTTP 403 from the MSP API. Measured 2026-09-25: a box
+ * gid the token cannot access, whether wrong, malformed or another
+ * account's, gets 403 {"error":{"title":"Forbidden","message":"You are not
+ * allowed to access this resource","type":"FORBIDDEN"}} from
+ * GET /v2/devices?box=<gid> and GET /v2/alarms/<gid>/<aid>, while a known
+ * box with an unknown alarm id gets 404. The message used to blame the MSP
+ * subscription. It does not quote the gid: handlers match "404" and
+ * "not found" in error messages, and a gid can contain either.
+ */
+export function forbiddenMessage(error: {
+  config?: { url?: string; params?: unknown; data?: unknown };
+  response?: { data?: unknown };
+}): string {
+  const apiMessage = (
+    error.response?.data as { error?: { message?: unknown } } | undefined
+  )?.error?.message;
+  const detail =
+    typeof apiMessage === 'string' && apiMessage.trim()
+      ? `: ${apiMessage.trim()}`
+      : '';
+  const cause = namesBox(error.config)
+    ? 'The MSP API answers 403 when a request names a box this token cannot access, and this request names one: check that its gid is right and belongs to this account.'
+    : "This MSP token cannot access the requested resource. The MSP API answers 403 when a request names a box the token cannot access (a wrong gid, or another account's).";
+  return `Forbidden (HTTP 403)${detail}. ${cause} get_boxes lists the box gids this token can access; if get_boxes is refused as well, the token itself lacks access.`;
 }
 
 /**
@@ -405,9 +472,7 @@ export class FirewallaClient {
           );
         }
         if (error.response?.status === 403) {
-          throw new Error(
-            'Insufficient permissions. Please check your MSP subscription.'
-          );
+          throw new ForbiddenError(forbiddenMessage(error));
         }
         if (error.response?.status === 404) {
           throw new Error('Resource not found. Please check your Box ID.');
@@ -729,9 +794,7 @@ export class FirewallaClient {
                 'Authentication failed: Invalid or expired MSP token';
               break;
             case 403:
-              errorMessage =
-                'Access denied: Insufficient permissions for this operation';
-              break;
+              throw new ForbiddenError(forbiddenMessage(error));
             case 404:
               errorMessage = `Resource not found: ${url} does not exist`;
               break;
@@ -757,6 +820,11 @@ export class FirewallaClient {
         }
 
         throw new Error(errorMessage);
+      }
+
+      // A 403 from the response interceptor carries its own explanation
+      if (error instanceof ForbiddenError) {
+        throw error;
       }
 
       // Handle other types of errors
@@ -2185,6 +2253,8 @@ export class FirewallaClient {
       let lastError: Error | null = null;
       let response: any = null;
       let foundGid: string | undefined;
+      let attempts = 0;
+      let forbidden = 0;
 
       // Try each box, and each ID variation on it, until one succeeds
       for (const validatedGid of validatedGids) {
@@ -2217,6 +2287,10 @@ export class FirewallaClient {
           } catch (error) {
             lastError =
               error instanceof Error ? error : new Error(String(error));
+            attempts++;
+            if (error instanceof ForbiddenError) {
+              forbidden++;
+            }
             logger.debug(`Failed to find alarm with ID ${validatedAlarmId}:`, {
               error: lastError.message,
             });
@@ -2227,6 +2301,11 @@ export class FirewallaClient {
         if (response) {
           break;
         }
+      }
+
+      // Every box refused the token (403): say so, not "not found"
+      if (!response && attempts > 0 && forbidden === attempts) {
+        throw lastError;
       }
 
       // If no variation worked, throw the last error
@@ -2355,6 +2434,9 @@ export class FirewallaClient {
         'Error in getSpecificAlarm:',
         error instanceof Error ? error : new Error(String(error))
       );
+      if (error instanceof ForbiddenError) {
+        throw error;
+      }
       // Enhanced error handling
       if (error instanceof Error) {
         if (
