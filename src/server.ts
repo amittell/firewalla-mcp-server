@@ -385,6 +385,11 @@ export class FirewallaMCPServer {
                   minimum: 1,
                   maximum: 1000,
                 },
+                owner: {
+                  type: 'string',
+                  description:
+                    'Only lists with this owner: "global" (MSP lists), a box gid (that box\'s lists), or several comma-separated, e.g. "global,<box_gid>". Default: global and Firewalla-managed lists.',
+                },
               },
               required: ['limit'],
             },

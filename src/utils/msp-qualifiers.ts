@@ -59,3 +59,38 @@ export function translateToMspQualifiers(
     )
     .join('');
 }
+
+/**
+ * Sort fields rewritten into the ones the MSP API documents (`ts`, `total`).
+ * Measured 2026-09-25: /v2/flows answers `sortBy=timestamp:asc` and
+ * `sortBy=bytes:desc` with 400; /v2/alarms sorts `timestamp` like `ts`.
+ */
+const SORT_FIELDS: Record<string, Map<string, string>> = {
+  flows: new Map([
+    ['timestamp', 'ts'],
+    ['bytes', 'total'],
+  ]),
+  alarms: new Map([['timestamp', 'ts']]),
+};
+
+/**
+ * Translates the fields of a `sortBy` value ("timestamp:desc", or a
+ * comma-separated list such as "bytes:desc,ts:asc") into MSP sort fields
+ *
+ * @param sortBy - Sort value as the caller wrote it
+ * @param entityType - `flows` or `alarms`; other types pass through unchanged
+ * @returns The sort value with documented MSP fields
+ */
+export function translateSortBy(sortBy: string, entityType: string): string {
+  const fields = SORT_FIELDS[entityType];
+  if (!sortBy || typeof sortBy !== 'string' || !fields) {
+    return sortBy;
+  }
+  return sortBy
+    .split(',')
+    .map(term => {
+      const [field, ...rest] = term.trim().split(':');
+      return [fields.get(field) ?? field, ...rest].join(':');
+    })
+    .join(',');
+}

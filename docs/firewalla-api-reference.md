@@ -53,6 +53,10 @@ Retrieve alarms with filtering and pagination support.
 
 **Limit**: the official docs give `limit <=500`. Measured 2026-09-25 on a live account: `limit=501` returns HTTP 400 with the message `limit exceeds max allowed value of 500`. Page with `cursor` to read more than 500 alarms.
 
+**sortBy and groupBy** (measured 2026-09-25 on a live account):
+- `sortBy=ts:asc` returns the oldest alarms first. `sortBy=timestamp:asc` and `timestamp:desc` sort the same way as `ts:asc` and `ts:desc`; the client sends the documented `ts:`.
+- `groupBy=type` returns one `{ "type", "count" }` item per alarm type, and `groupBy=type,box` adds the box `gid`. A grouped response has no `ts`, `aid` or `message`. With `limit=20` these returned 10 and 13 groups and no `next_cursor`.
+
 **Response (200 Success)**:
 ```json
 {
@@ -208,6 +212,8 @@ Retrieve list of Firewalla boxes.
 
 No `limit` or `cursor`: the response is a plain array.
 
+Measured 2026-09-25: on an account whose boxes have no group, `group=999999` returned every box with 200, so that account could not show whether `group` filters.
+
 **Response (200 Success)**:
 ```json
 [
@@ -244,6 +250,12 @@ Retrieve list of devices on the network.
 - `group` (string, optional): Get devices under a specific box group (requires group ID)
 
 These are the only documented parameters. The official docs do not document `query`, `sortBy`, `limit` or `cursor` for devices; the response is a plain array, and the official examples filter and sort it on the client.
+
+Measured 2026-09-25 on a live account with two boxes (224 devices, 190 on one box):
+- `box=<gid>` returns only that box's devices (190, every one with that `gid`).
+- `query=box.id:<gid>`, `limit=5` and `sortBy=name:asc` or `name:desc` return 200 and are ignored: all 224 devices, in the same order as with no parameters. Scope devices to a box with `box`, not with a `box.id:` query.
+- An unknown box gid in `box` returns 403 `{"error":{"title":"Forbidden","message":"You are not allowed to access this resource","type":"FORBIDDEN"}}`.
+- `group=999999` returned all 224 devices; the account has no box groups, so whether `group` filters was not measured.
 
 **Response (200 Success)**:
 ```json
@@ -314,6 +326,19 @@ Retrieve network traffic flow information. Flows are always returned in reverse 
 - `cursor` (string, optional): Pagination support
 
 **Limit**: the official docs give `limit <=500`. Measured 2026-09-25 on a live account: `limit=501` returns HTTP 400 with the message `limit exceeds max allowed value of 500`, and `limit=10000` on `/v2/flows` returns the same 400. Page with `cursor` to read more than 500 flows.
+
+**sortBy** (measured 2026-09-25 on a live account): `ts:asc`, `total:desc` and `count:desc` sort as named. `bytes:desc` and `timestamp:asc` return 400 with an empty body; the client sends `total:` and `ts:` for them. A snake_case `sort_by` is ignored (the default `ts:desc` order comes back).
+
+**groupBy** (measured 2026-09-25): a grouped response has one item per group, with the group's `total`, `download`, `upload` and `count` ("totals" below), and no `ts` or `gid`:
+
+| `groupBy` | Item fields |
+| --- | --- |
+| `device` | `device` (`id`, `ip`, `name`, `macVendor`, `type`, `deviceType`), totals |
+| `category` | `category`, totals, `device: {}` |
+| `category,domain` | `category`, `domain`, `country`, `region`, totals, `device: {}` |
+| `device,category` | `category`, totals, `device` with only `id` |
+
+Groups are not sorted by `total` unless asked: `groupBy=device&sortBy=total:desc` (the official `get-top-bandwidth-usage-devices` example) returns the devices by descending `total`. A grouped response carries `next_cursor` when there are more groups than `limit` (`groupBy=category` returned 10 groups for `limit=20` and no cursor). The client's `getFlowData` passes `groupBy` through; its `searchFlows` does not, because its callers group per-flow results themselves.
 
 **Response (200 Success)**:
 ```json
@@ -590,6 +615,11 @@ Retrieve all target lists. If no target list is found, an empty array is returne
 - `owner` (string, optional): Filter target lists by owner. When not provided, the API returns `global` target lists and Firewalla-managed target lists. Pass a box ID to get target lists for that box, or a comma-separated list such as `global,<box_id>` for several owners.
 
 `owner` is the only documented parameter; there is no `query`, `limit` or `cursor` for target lists.
+
+Measured 2026-09-25 on a live account whose only lists are Firewalla-managed:
+- With no parameters, the API returned 13 lists, each with `owner` `firewalla`.
+- `owner=firewalla` and `owner=global,firewalla` returned the same 13. `owner=global`, `owner=<box gid>` and `owner=global,<box gid>` returned none, and an unknown parameter name (`ownerx=global`) returned all 13, so `owner` is applied.
+- `query=box.id:<gid>`, `limit=2` and `sortBy=name:desc` return 200 and are ignored.
 
 **Response (200 Success)**:
 ```json
