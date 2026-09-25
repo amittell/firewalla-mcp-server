@@ -125,6 +125,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `search_flows` and `search_alarms` use the `sortBy` their schemas list.
   They read only `sort_by`, so a `sortBy` was dropped and the API got the
   default `ts:desc`. Both names are read now.
+- `get_offline_devices` looks at every device. It filtered a page of the
+  first 3 x `limit` devices by name (1000 at most), so an offline device
+  later in the alphabet was never reported, and `total_offline_devices`
+  counted only that page. `GET /v2/devices` returns the whole list in one
+  answer; the tool now filters all of it.
 
 ### Changed
 
