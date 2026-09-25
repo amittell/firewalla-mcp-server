@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `SearchEngine` search results count the records the search returns. The
+  alarm, rule and target-list searches filter on the client, and `count`
+  was the API's count before that filtering.
 - The `threat_analysis` prompt lists the 50 most recent active alarms. It
   sent its `severity_threshold` argument (default `medium`) as the alarm
   query, a free-text search, although MSP alarms have no severity; the

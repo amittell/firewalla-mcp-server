@@ -8,6 +8,7 @@
 import { FirewallaClient } from '../../src/firewalla/client.js';
 import { SearchTargetListsHandler } from '../../src/tools/handlers/search.js';
 import { targetListMatchesQuery } from '../../src/utils/target-lists.js';
+import { SearchEngine } from '../../src/tools/search.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -129,5 +130,28 @@ describe('target_count and last_updated', () => {
       'B',
     ]);
     expect(ids('last_updated:>2026-09-10 AND target_count:1')).toEqual(['B']);
+  });
+});
+
+describe('SearchEngine.searchTargetLists count', () => {
+  it('counts the lists the query kept, not every list the API sent', async () => {
+    const client = new FirewallaClient({
+      mspToken: 'test-token',
+      mspId: 'test.firewalla.net',
+      apiTimeout: 30000,
+      rateLimit: 100,
+      cacheTtl: 300,
+      defaultPageSize: 100,
+      maxPageSize: 10000,
+    } as any);
+    (client as any).request = jest.fn(async () => LISTS);
+    const result = await new SearchEngine(client).searchTargetLists({
+      query: 'category:social',
+      limit: 10,
+    });
+    expect(result.results.map((list: { id: string }) => list.id)).toEqual([
+      'TL-2',
+    ]);
+    expect(result.count).toBe(1);
   });
 });
