@@ -37,6 +37,10 @@ jobs:
     - name: Lint
       if: matrix.node == '24'
       run: npm run lint
+
+    - name: Format
+      if: matrix.node == '24'
+      run: npm run format:check
     
     - name: Build
       run: npm run build

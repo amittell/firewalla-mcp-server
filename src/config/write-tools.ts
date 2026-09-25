@@ -15,7 +15,9 @@ export const WRITE_TOOL_NAMES: readonly string[] = [
 export function writeToolsEnabled(
   env: Record<string, string | undefined> = process.env
 ): boolean {
-  return (env.FIREWALLA_ENABLE_WRITE_TOOLS ?? '').trim().toLowerCase() === 'true';
+  return (
+    (env.FIREWALLA_ENABLE_WRITE_TOOLS ?? '').trim().toLowerCase() === 'true'
+  );
 }
 
 export function isWriteTool(name: string): boolean {

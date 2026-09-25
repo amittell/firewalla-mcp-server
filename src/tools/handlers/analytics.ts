@@ -852,13 +852,9 @@ export class GetFlowInsightsHandler extends BaseToolHandler {
       }
 
       const period = periodValidation.sanitizedValue as
-        | '1h'
-        | '24h'
-        | '7d'
-        | '30d';
+        '1h' | '24h' | '7d' | '30d';
       const categories = categoriesValidation.sanitizedValue as
-        | string[]
-        | undefined;
+        string[] | undefined;
       const includeBlocked = includeBlockedValidation.sanitizedValue as boolean;
 
       const startTime = Date.now();

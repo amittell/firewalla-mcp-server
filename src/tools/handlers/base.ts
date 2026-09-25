@@ -168,7 +168,8 @@ export interface BoxArgs {
  * backward compatibility.
  */
 export interface ToolArgs
-  extends BaseToolArgs,
+  extends
+    BaseToolArgs,
     QueryArgs,
     TimeRangeArgs,
     DeviceArgs,
@@ -280,12 +281,7 @@ export abstract class BaseToolHandler implements ToolHandler {
 
   /** @description Tool category - must be implemented by concrete classes */
   abstract category:
-    | 'security'
-    | 'network'
-    | 'device'
-    | 'rule'
-    | 'analytics'
-    | 'search';
+    'security' | 'network' | 'device' | 'rule' | 'analytics' | 'search';
 
   /** @description Configuration options for this handler */
   protected options: BaseToolOptions;

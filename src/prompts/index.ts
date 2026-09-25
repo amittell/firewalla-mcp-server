@@ -107,36 +107,67 @@ export function setupPrompts(server: Server, firewalla: FirewallaClient): void {
         name: 'security_report',
         description: 'Comprehensive security report for a time period',
         arguments: [
-          { name: 'period', description: "Report period: '24h', '7d' or '30d' (default 24h)", required: false },
+          {
+            name: 'period',
+            description: "Report period: '24h', '7d' or '30d' (default 24h)",
+            required: false,
+          },
         ],
       },
       {
         name: 'threat_analysis',
         description: 'Deep analysis of recent threats and blocked attempts',
         arguments: [
-          { name: 'period', description: "Lookback period: '24h', '7d' or '30d' (default 24h)", required: false },
-          { name: 'severity_threshold', description: "Minimum alarm severity: 'low', 'medium' or 'high' (default medium)", required: false },
+          {
+            name: 'period',
+            description: "Lookback period: '24h', '7d' or '30d' (default 24h)",
+            required: false,
+          },
+          {
+            name: 'severity_threshold',
+            description:
+              "Minimum alarm severity: 'low', 'medium' or 'high' (default medium)",
+            required: false,
+          },
         ],
       },
       {
         name: 'bandwidth_analysis',
         description: 'Top bandwidth consumers and usage patterns',
         arguments: [
-          { name: 'period', description: "Analysis period: '24h', '7d' or '30d'", required: true },
-          { name: 'threshold_mb', description: 'Highlight devices above this usage in MB (default 100)', required: false },
+          {
+            name: 'period',
+            description: "Analysis period: '24h', '7d' or '30d'",
+            required: true,
+          },
+          {
+            name: 'threshold_mb',
+            description:
+              'Highlight devices above this usage in MB (default 100)',
+            required: false,
+          },
         ],
       },
       {
         name: 'device_investigation',
         description: 'Investigate a specific device: flows, alarms, behavior',
         arguments: [
-          { name: 'device_id', description: 'Device ID (MAC) to investigate', required: true },
-          { name: 'lookback_hours', description: 'Hours of history to inspect (default 24)', required: false },
+          {
+            name: 'device_id',
+            description: 'Device ID (MAC) to investigate',
+            required: true,
+          },
+          {
+            name: 'lookback_hours',
+            description: 'Hours of history to inspect (default 24)',
+            required: false,
+          },
         ],
       },
       {
         name: 'network_health_check',
-        description: 'Overall network health: summary, devices, metrics, topology, rules',
+        description:
+          'Overall network health: summary, devices, metrics, topology, rules',
         arguments: [],
       },
     ],
@@ -280,7 +311,9 @@ Please provide:
           // MCP prompt argument values are strings on the wire -- coerce
           const thresholdMbRaw = Number(args?.threshold_mb);
           const thresholdMb =
-            Number.isFinite(thresholdMbRaw) && thresholdMbRaw > 0 ? thresholdMbRaw : 100;
+            Number.isFinite(thresholdMbRaw) && thresholdMbRaw > 0
+              ? thresholdMbRaw
+              : 100;
 
           if (!period) {
             throw new Error(

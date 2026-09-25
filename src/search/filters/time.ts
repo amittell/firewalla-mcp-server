@@ -239,7 +239,7 @@ export class TimeRangeFilter extends BaseFilter {
         const targetTime = this.parseTimestamp(node.value);
         return Boolean(
           targetTime &&
-            Math.abs(timestamp - targetTime) <= this.STANDARD_TIME_MARGIN
+          Math.abs(timestamp - targetTime) <= this.STANDARD_TIME_MARGIN
         );
       }
 

@@ -408,7 +408,7 @@ export class QueryParser {
         this.errors.push('Expected closing parenthesis');
         return undefined;
       }
-      return expr ? ({ type: 'group', query: expr }) : undefined;
+      return expr ? { type: 'group', query: expr } : undefined;
     }
 
     // Field query

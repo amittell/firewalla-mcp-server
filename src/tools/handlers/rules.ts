@@ -101,8 +101,7 @@ async function checkRuleStatus(
       'unknown'
     ) as string;
     const resumeTs = SafeAccess.getNestedValue(rule, 'resumeTs', undefined) as
-      | number
-      | undefined;
+      number | undefined;
 
     // Determine if rule is paused or active
     const isPaused: boolean =
@@ -270,20 +269,17 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
                 ),
                 created_at: safeUnixToISOString(
                   SafeAccess.getNestedValue(rule, 'ts', undefined) as
-                    | number
-                    | undefined,
+                    number | undefined,
                   undefined
                 ),
                 updated_at: safeUnixToISOString(
                   SafeAccess.getNestedValue(rule, 'updateTs', undefined) as
-                    | number
-                    | undefined,
+                    number | undefined,
                   undefined
                 ),
                 resume_at: safeUnixToISOString(
                   SafeAccess.getNestedValue(rule, 'resumeTs', undefined) as
-                    | number
-                    | undefined,
+                    number | undefined,
                   undefined
                 ),
               })
@@ -772,8 +768,7 @@ export class GetTargetListsHandler extends BaseToolHandler {
             targets: targetListEntries(list, 500),
             last_updated: safeUnixToISOString(
               SafeAccess.getNestedValue(list, 'lastUpdated', undefined) as
-                | number
-                | undefined,
+                number | undefined,
               undefined
             ),
             notes: SafeAccess.getNestedValue(list, 'notes', ''),
@@ -1195,14 +1190,12 @@ export class GetMostActiveRulesHandler extends BaseToolHandler {
             hit_count: SafeAccess.getNestedValue(rule, 'hit.count', 0),
             last_hit: safeUnixToISOString(
               SafeAccess.getNestedValue(rule, 'hit.lastHitTs', undefined) as
-                | number
-                | undefined,
+                number | undefined,
               'Never'
             ),
             created_at: safeUnixToISOString(
               SafeAccess.getNestedValue(rule, 'ts', undefined) as
-                | number
-                | undefined,
+                number | undefined,
               undefined
             ),
             notes: notes.length > 80 ? `${notes.substring(0, 80)}...` : notes,
@@ -2021,16 +2014,16 @@ export class CreateRuleHandler extends BaseToolHandler {
           'duration is required when cron_time is set',
           ErrorType.VALIDATION_ERROR,
           { cron_time: cronTime },
-          ['The MSP rule model requires schedule.duration whenever cronTime is set']
+          [
+            'The MSP rule model requires schedule.duration whenever cronTime is set',
+          ]
         );
       }
 
       const scopeType = scopeTypeValidation.sanitizedValue as
-        | string
-        | undefined;
+        string | undefined;
       const scopeValue = scopeValueValidation.sanitizedValue as
-        | string
-        | undefined;
+        string | undefined;
 
       if ((scopeType && !scopeValue) || (!scopeType && scopeValue)) {
         return createErrorResponse(
@@ -2061,9 +2054,7 @@ export class CreateRuleHandler extends BaseToolHandler {
       }
       if (directionValidation.sanitizedValue) {
         ruleData.direction = directionValidation.sanitizedValue as
-          | 'bidirection'
-          | 'inbound'
-          | 'outbound';
+          'bidirection' | 'inbound' | 'outbound';
       }
       if (protocolValidation.sanitizedValue) {
         ruleData.protocol = protocolValidation.sanitizedValue as 'tcp' | 'udp';
