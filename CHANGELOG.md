@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.4.1] - Unreleased
+## [1.4.1] - 2026-09-25
 
 ### Fixed
 - The Docker image builds again. 1.4.0 moved it to `node:24-alpine`, which
