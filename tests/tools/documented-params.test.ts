@@ -9,6 +9,9 @@
 
 import { FirewallaClient } from '../../src/firewalla/client.js';
 import { GetTargetListsHandler } from '../../src/tools/handlers/rules.js';
+import { GetDeviceStatusHandler } from '../../src/tools/handlers/device.js';
+import { GetOfflineDevicesHandler } from '../../src/tools/handlers/network.js';
+import { SearchDevicesHandler } from '../../src/tools/handlers/search.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -134,6 +137,46 @@ describe('devices', () => {
       group: '3',
     });
     expect(sentTo(get, '/v2/devices')).toEqual([{ box: BOX_B, group: '3' }]);
+  });
+});
+
+describe('the box argument of the device tools', () => {
+  it.each([
+    ['get_device_status', () => new GetDeviceStatusHandler(), {}],
+    ['get_offline_devices', () => new GetOfflineDevicesHandler(), {}],
+    [
+      'search_devices',
+      () => new SearchDevicesHandler(),
+      { query: 'online:false' },
+    ],
+  ])('%s sends box, over FIREWALLA_BOX_ID', async (_name, handler, args) => {
+    const { client, get } = makeClient(BOX_A);
+    const response = await handler().execute(
+      { limit: 10, box: BOX_B, ...args },
+      client
+    );
+    expect(response.isError).toBeFalsy();
+    expect(sentTo(get, '/v2/devices')).toEqual([{ box: BOX_B }]);
+    expect(JSON.stringify(response)).toContain('tablet');
+    expect(JSON.stringify(response)).not.toContain('phone');
+  });
+
+  it.each([
+    ['get_device_status', () => new GetDeviceStatusHandler(), {}],
+    ['get_offline_devices', () => new GetOfflineDevicesHandler(), {}],
+    [
+      'search_devices',
+      () => new SearchDevicesHandler(),
+      { query: 'online:false' },
+    ],
+  ])('%s refuses a box that is not a string', async (_name, handler, args) => {
+    const { client, get } = makeClient();
+    const response = await handler().execute(
+      { limit: 10, box: 7, ...args },
+      client
+    );
+    expect(response.isError).toBe(true);
+    expect(get).not.toHaveBeenCalled();
   });
 });
 

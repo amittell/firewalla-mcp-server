@@ -257,6 +257,8 @@ Measured 2026-09-25 on a live account with two boxes (224 devices, 190 on one bo
 - An unknown box gid in `box` returns 403 `{"error":{"title":"Forbidden","message":"You are not allowed to access this resource","type":"FORBIDDEN"}}`.
 - `group=999999` returned all 224 devices; the account has no box groups, so whether `group` filters was not measured.
 
+**MCP tools**: `get_device_status`, `get_offline_devices` and `search_devices` send `box`: their `box` argument, else `FIREWALLA_BOX_ID`, else no parameter (every box's devices).
+
 **Response (200 Success)**:
 ```json
 [
