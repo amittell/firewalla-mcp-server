@@ -91,6 +91,8 @@ Retrieve detailed information about a specific alarm.
 - `gid` (string, required): Box ID
 - `aid` (number, required): Alarm ID, the numeric `aid` that alarm listings return
 
+Measured 2026-09-25: a `gid` the token cannot access (an unknown UUID) returns 403 with the `Forbidden` body shown under Get Devices, and a known box with an unknown `aid` returns 404 with an empty body.
+
 **Response (200 Success)**: the alarm, with device information:
 ```json
 {
@@ -256,7 +258,8 @@ These are the only documented parameters. The official docs do not document `que
 Measured 2026-09-25 on a live account with two boxes (224 devices, 190 on one box):
 - `box=<gid>` returns only that box's devices (190, every one with that `gid`).
 - `query=box.id:<gid>`, `limit=5` and `sortBy=name:asc` or `name:desc` return 200 and are ignored: all 224 devices, in the same order as with no parameters. Scope devices to a box with `box`, not with a `box.id:` query.
-- An unknown box gid in `box` returns 403 `{"error":{"title":"Forbidden","message":"You are not allowed to access this resource","type":"FORBIDDEN"}}`.
+- An unknown box gid in `box` returns 403 `{"error":{"title":"Forbidden","message":"You are not allowed to access this resource","type":"FORBIDDEN"}}`. So does a malformed one (`box=notagid`). The client reports a 403 with the API's message, says whether the request named a box, and points to `get_boxes`.
+- A `box.id:<unknown gid>` query on `/v2/alarms`, `/v2/flows` or `/v2/rules`, and `owner=<unknown gid>` on `/v2/target-lists`, return 200 with no results rather than 403.
 - `group=999999` returned all 224 devices; the account has no box groups, so whether `group` filters was not measured.
 
 **MCP tools**: `get_device_status`, `get_offline_devices` and `search_devices` send `box`: their `box` argument, else `FIREWALLA_BOX_ID`, else no parameter (every box's devices).

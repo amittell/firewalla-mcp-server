@@ -110,6 +110,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of 13). They use the `count` the API sends on every list (live: 1 to
   5,968,164), `targets` is `null` rather than `[]` when the API sent none,
   and a list with neither reads `entry_count: null`, with a note.
+- A 403 no longer blames the MSP subscription. The MSP API answers a box gid
+  the token cannot access (wrong, or another account's) with 403, and the
+  client reported every 403 as `Insufficient permissions. Please check your
+  MSP subscription.`; `get_specific_alarm` reported it as the alarm not being
+  found. The message now quotes the API's reason, says whether the request
+  named a box, and points to `get_boxes` for the gids the token can access.
 
 ### Changed
 
