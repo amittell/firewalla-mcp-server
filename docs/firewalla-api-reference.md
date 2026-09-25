@@ -56,6 +56,8 @@ Retrieve alarms with filtering and pagination support.
 **sortBy and groupBy** (measured 2026-09-25 on a live account):
 - `sortBy=ts:asc` returns the oldest alarms first. `sortBy=timestamp:asc` and `timestamp:desc` sort the same way as `ts:asc` and `ts:desc`; the client sends the documented `ts:`.
 - `groupBy=type` returns one `{ "type", "count" }` item per alarm type, and `groupBy=type,box` adds the box `gid`. A grouped response has no `ts`, `aid` or `message`. With `limit=20` these returned 10 and 13 groups and no `next_cursor`.
+- `groupBy=device` returns `{ "device": { "id" }, "count" }` items and `groupBy=status` `{ "status", "count" }`; an unknown field (`groupBy=nonsense`) returns 400 with an empty body.
+- A grouped request sorted by `ts` returns no groups: `groupBy=type&sortBy=ts:desc` answered `count: 0`, and `sortBy=count:desc` or no `sortBy` returned the groups. `get_active_alarms` and `search_alarms` return the groups as `groups: [{ key, count }]`; on a grouped request the client drops `ts` sort terms and, with none left, sends `count:desc`.
 
 **Response (200 Success)**:
 ```json
@@ -341,6 +343,8 @@ Retrieve network traffic flow information. Flows are always returned in reverse 
 | `device,category` | `category`, totals, `device` with only `id` |
 
 Groups are not sorted by `total` unless asked: `groupBy=device&sortBy=total:desc` (the official `get-top-bandwidth-usage-devices` example) returns the devices by descending `total`. A grouped response carries `next_cursor` when there are more groups than `limit` (`groupBy=category` returned 10 groups for `limit=20` and no cursor). The client's `getFlowData` passes `groupBy` through; its `searchFlows` does not, because its callers group per-flow results themselves.
+
+Also measured 2026-09-25: `groupBy=domain` returns `domain`, `country`, `region`, totals and `device: {}`; `groupBy=box` the box `gid` and totals; `groupBy=protocol` and `groupBy=region` return groups too, and `groupBy=nonsense` returns 400 with an empty body. A grouped request sorted by `ts` (`sortBy=ts:desc` or `ts:asc`) returns no groups (`count: 0`), while `total:desc` and `count:desc` sort them. `get_flow_data` and `search_flows` return the groups as `groups: [{ key, count, download, upload, total }]`, where `key` is every field of the item but its totals, without the empty `device: {}`; on a grouped request the client drops `ts` sort terms and, with none left, sends `total:desc`.
 
 **Response (200 Success)**:
 ```json

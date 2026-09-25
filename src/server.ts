@@ -125,7 +125,8 @@ export class FirewallaMCPServer {
                 },
                 groupBy: {
                   type: 'string',
-                  description: 'Group alarms by field (e.g., type, box)',
+                  description:
+                    'Fields to group by, comma-separated, e.g. "type", "status", "device" or "type,box". The API then returns groups instead of alarms: groups of { key, count }, where key holds the group fields (gid for box, device.id for device) and count the alarms in the group.',
                 },
                 sortBy: {
                   type: 'string',
@@ -273,7 +274,7 @@ export class FirewallaMCPServer {
                 groupBy: {
                   type: 'string',
                   description:
-                    'Group flows by specified values (e.g., "domain,box")',
+                    'Fields to group by, comma-separated, e.g. "category", "domain", "device", "box" or "device,category". The API then returns groups instead of flows: groups of { key, count, download, upload, total }, where key holds the group fields (gid for box; for device the device with its name, but only its id for "device,category") and the rest are the group\'s summed connection count and bytes.',
                 },
                 sortBy: {
                   type: 'string',
@@ -666,7 +667,7 @@ export class FirewallaMCPServer {
                 groupBy: {
                   type: 'string',
                   description:
-                    'Group flows by specified values (e.g., "domain,box")',
+                    'Fields to group by, comma-separated, e.g. "category", "domain", "device", "box" or "device,category". The API then returns groups instead of flows: groups of { key, count, download, upload, total }, where key holds the group fields (gid for box; for device the device with its name, but only its id for "device,category") and the rest are the group\'s summed connection count and bytes.',
                 },
                 sortBy: {
                   type: 'string',
@@ -704,7 +705,7 @@ export class FirewallaMCPServer {
                 groupBy: {
                   type: 'string',
                   description:
-                    'Group alarms by specified fields (comma-separated)',
+                    'Fields to group by, comma-separated, e.g. "type", "status", "device" or "type,box". The API then returns groups instead of alarms: groups of { key, count }, where key holds the group fields (gid for box, device.id for device) and count the alarms in the group.',
                 },
                 sortBy: {
                   type: 'string',

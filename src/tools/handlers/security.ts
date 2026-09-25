@@ -302,6 +302,17 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         'get_active_alarms'
       );
 
+      // Grouped: the API returned one { <group fields>, count } per group
+      if (response.groups) {
+        return this.createUnifiedResponse({
+          group_by: response.group_by,
+          count: response.groups.length,
+          groups: response.groups,
+          next_cursor: response.next_cursor,
+          has_more: !!response.next_cursor,
+        });
+      }
+
       // Calculate total count if requested
       let totalCount: number = SafeAccess.getNestedValue(
         response,

@@ -82,24 +82,31 @@ export class GetFlowDataHandler extends BaseToolHandler {
         }
       );
 
-      if (!limitValidation.isValid) {
+      const groupByValidation = ParameterValidator.validateOptionalString(
+        args?.groupBy,
+        'groupBy'
+      );
+
+      if (!limitValidation.isValid || !groupByValidation.isValid) {
         return this.createErrorResponse(
           'Parameter validation failed',
           ErrorType.VALIDATION_ERROR,
           undefined,
-          limitValidation.errors
+          [...limitValidation.errors, ...groupByValidation.errors]
         );
       }
 
       const query = args?.query;
-      const groupBy = args?.groupBy;
+      const groupBy = groupByValidation.sanitizedValue as string | undefined;
       const sortBy = args?.sortBy;
       const limit = limitValidation.sanitizedValue! as number;
       const cursor = args?.cursor;
 
-      // Check if streaming is requested or should be automatically enabled
+      // Check if streaming is requested or should be automatically enabled.
+      // A grouped request is not streamed: it returns groups, not flows.
       const enableStreaming =
-        Boolean(args?.stream) || shouldUseStreaming(this.name, limit);
+        !groupBy &&
+        (Boolean(args?.stream) || shouldUseStreaming(this.name, limit));
       const streamingSessionId = args?.streaming_session_id as
         | string
         | undefined;
@@ -310,6 +317,20 @@ export class GetFlowDataHandler extends BaseToolHandler {
         this.name
       );
       const executionTime = Date.now() - startTime;
+
+      // Grouped: the API returned one item of totals per group, not flows
+      if (response.groups) {
+        return this.createUnifiedResponse(
+          {
+            group_by: response.group_by,
+            count: response.groups.length,
+            groups: response.groups,
+            next_cursor: response.next_cursor,
+            has_more: !!response.next_cursor,
+          },
+          { executionTimeMs: executionTime }
+        );
+      }
 
       // Process flow data
       let processedFlows = SafeAccess.safeArrayMap(

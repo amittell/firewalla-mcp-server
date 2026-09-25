@@ -1049,6 +1049,21 @@ export class SearchEngine {
         params.cursor
       );
 
+      // Grouped: the API returned groups, not flows
+      if (response.groups) {
+        return {
+          results: [],
+          groups: response.groups,
+          group_by: response.group_by,
+          count: response.groups.length,
+          limit: params.limit,
+          offset: 0,
+          query: queryString,
+          execution_time_ms: Date.now() - startTime,
+          next_cursor: response.next_cursor,
+        };
+      }
+
       // Apply client-side offset if needed (for backward compatibility)
       let results = response.results || [];
 
@@ -1163,6 +1178,21 @@ export class SearchEngine {
         params.limit,
         params.cursor
       );
+
+      // Grouped: the API returned groups, not alarms
+      if (response.groups) {
+        return {
+          results: [],
+          groups: response.groups,
+          group_by: response.group_by,
+          count: response.groups.length,
+          limit: params.limit,
+          offset: 0,
+          query: params.query,
+          execution_time_ms: Date.now() - startTime,
+          next_cursor: response.next_cursor,
+        };
+      }
 
       // Apply client-side offset if needed (for backward compatibility)
       let results = response.results || [];
