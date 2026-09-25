@@ -63,7 +63,7 @@ function argsFor(name, schema, seeds) {
     else if (prop.enum?.length) args[key] = prop.enum[0];
     else if (key === 'query') {
       const queries = {
-        search_flows: 'protocol:tcp', search_alarms: 'severity:high',
+        search_flows: 'protocol:tcp', search_alarms: 'status:1',
         search_rules: 'action:block', search_devices: 'online:true',
         search_target_lists: 'category:edu',
       };
@@ -126,6 +126,11 @@ async function stdioPhase() {
     const { payload } = await call('get_device_status', { limit: 2 });
     const d = payload?.data?.results?.[0] ?? payload?.data?.devices?.[0];
     seeds.deviceId = d?.id ?? d?.mac;
+  } catch { /* ok */ }
+  try {
+    const { payload } = await call('get_target_lists', { limit: 2 });
+    const t = payload?.data?.results?.[0] ?? payload?.data?.target_lists?.[0] ?? payload?.data?.[0];
+    seeds.targetListId = t?.id;
   } catch { /* ok */ }
   console.log('  seeds:', JSON.stringify({ ...seeds, boxId: String(seeds.boxId).slice(0, 8) + '..' }));
 

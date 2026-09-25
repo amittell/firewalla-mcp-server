@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`FIREWALLA_DEFAULT_BOX_ID` first). In 1.3.0 it failed with `Invalid or
   empty gid provided` whenever `FIREWALLA_BOX_ID` was unset, and could not
   reach another box's alarms when it was set.
+- `get_specific_alarm` accepts a numeric `alarm_id`. `get_active_alarms` and
+  `search_alarms` return `aid` as a number, and passing it on failed with
+  `alarm_id must be a string, got number`.
 - CI `launch` job (#44): on ubuntu-latest, macos-latest and windows-latest it
   packs the server and requires an answer to MCP `initialize` over stdio
   through the global bin, `npx` and `node dist/server.js`.
