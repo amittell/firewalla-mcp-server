@@ -8,7 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-
 - `get_specific_alarm` reports "No boxes are visible to this MSP token" as a
   validation error with that message. The client rewrapped the box-selection
   error as a generic failure, and `withToolTimeout` rewrapped it again, so the
@@ -48,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `get_simple_statistics` and `get_boxes` pass their `group` argument to the
   API. The client dropped `group` from every `/v2` request, and `get_boxes`
   read `group_id` while its schema offers `group`.
+- `update_target_list` called without `targets` sent `targets: []` in its
+  PATCH, which asks the API to empty the list. It now sends only the fields
+  it is given.
 
 ### Changed
 
