@@ -3,7 +3,6 @@
  * This determines whether we should use "blocked:true" or "blocked=true" as the canonical syntax
  */
 
-import { createTestServer } from '../setup/test-server.js';
 import { createSearchTools } from '../../src/tools/search.js';
 import type { FirewallaClient } from '../../src/firewalla/client.js';
 
