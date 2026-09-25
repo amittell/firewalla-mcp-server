@@ -248,8 +248,14 @@ export interface Flow {
   download?: number;
   /** Bytes uploaded */
   upload?: number;
-  /** Total bytes transferred (download + upload) */
+  /** Total bytes transferred (download + upload), the same as total */
   bytes?: number;
+  /**
+   * Total bytes transferred (download + upload). The MSP API sends it on
+   * every flow; the official Flow Model does not list it (measured
+   * 2026-09-25).
+   */
+  total?: number;
   /** Flow duration in seconds */
   duration?: number;
   /** TCP connections/UDP sessions or block count */

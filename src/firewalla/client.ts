@@ -150,6 +150,23 @@ function toFlowGroups(items: unknown[]): FlowGroup[] {
     }));
 }
 
+/**
+ * A flow's byte counts. GET /v2/flows sends download, upload and total on
+ * every flow; total is not in the official Flow Model (measured
+ * 2026-09-25: on 200 of 200 flows, total equaled download + upload).
+ * Without a total, it is download + upload; bytes is the same figure.
+ */
+function flowBytes(
+  item: Record<string, any>
+): Required<Pick<Flow, 'download' | 'upload' | 'total' | 'bytes'>> {
+  const download = Number(item.download) || 0;
+  const upload = Number(item.upload) || 0;
+  const total = Number.isFinite(item.total)
+    ? Number(item.total)
+    : download + upload;
+  return { download, upload, total, bytes: total };
+}
+
 /** Alarm groups from the items of a grouped GET /v2/alarms */
 function toAlarmGroups(items: unknown[]): AlarmGroup[] {
   return items
@@ -1091,9 +1108,7 @@ export class FirewallaClient {
           protocol: item.protocol || 'tcp',
           direction: item.direction || 'outbound',
           block: Boolean(item.block || item.blocked),
-          download: item.download || 0,
-          upload: item.upload || 0,
-          bytes: (item.download || 0) + (item.upload || 0),
+          ...flowBytes(item),
           duration: item.duration || 0,
           count: item.count || item.packets || 1,
           device: {
@@ -3423,9 +3438,7 @@ export class FirewallaClient {
         protocol: item.protocol || 'tcp',
         direction: item.direction || 'outbound',
         block: Boolean(item.block || item.blocked),
-        download: item.download || 0,
-        upload: item.upload || 0,
-        bytes: (item.download || 0) + (item.upload || 0),
+        ...flowBytes(item),
         duration: item.duration || 0,
         count: item.count || item.packets || 1,
         device: {
