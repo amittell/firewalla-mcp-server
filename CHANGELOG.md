@@ -247,8 +247,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FIREWALLA_BOX_ID`, else check each box, and refuse when several boxes have
   the alarm ID and none of them is `FIREWALLA_DEFAULT_BOX_ID`. They read the
   alarm before writing, so a wrong ID changes nothing, and never retry a
-  write. Neither is marked `destructiveHint`; `archive_alarm` is
-  `idempotentHint` and `mute_alarm` is not. The client gains `archiveAlarm`
+  write. `mute_alarm` is marked `destructiveHint` (it creates a lasting
+  silence of future alarms that this server cannot undo); `archive_alarm` is
+  not, and is `idempotentHint`. The client gains `archiveAlarm`
   and `muteAlarm`. Checked live on 2026-09-25 with error-path calls only:
   both routes exist on the MSP (a mute without `target.value` answers 400
   `target.value is required for domain target`).
@@ -270,7 +271,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   destructive: each checks the rule's status first and changes nothing if it
   is already paused or active. `update_target_list`, `delete_target_list`
   and `delete_rule` are destructive; `create_rule` keeps
-  `destructiveHint: true`, and `archive_alarm` and `mute_alarm` keep theirs.
+  `destructiveHint: true`, and so does `mute_alarm`.
   The target list tools, `pause_rule` and `resume_rule` still work without
   `FIREWALLA_ENABLE_WRITE_TOOLS`. See "Tool annotations" in the README.
 - A test lists the tools through the server's ListTools handler and calls
