@@ -626,9 +626,11 @@ describe('archive_alarm and mute_alarm schemas', () => {
   it('archive_alarm is a non-destructive, idempotent write', () => {
     const schema = toolSchema('archive_alarm');
     expect(schema.annotations).toEqual({
+      title: 'Archive Alarm',
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
+      openWorldHint: true,
     });
     expect(schema.inputSchema.properties.alarm_id.type).toEqual(['string', 'number']);
     expect(schema.inputSchema.required).toEqual(['alarm_id']);
@@ -637,9 +639,11 @@ describe('archive_alarm and mute_alarm schemas', () => {
   it('mute_alarm is a write that is neither destructive nor idempotent, and says what it silences', () => {
     const schema = toolSchema('mute_alarm');
     expect(schema.annotations).toEqual({
+      title: 'Mute Alarm',
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
+      openWorldHint: true,
     });
     expect(schema.description).toContain('lasting silence exception');
     expect(schema.inputSchema.required).toEqual([

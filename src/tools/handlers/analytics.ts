@@ -31,7 +31,7 @@ import type {
 export class GetBoxesHandler extends BaseToolHandler {
   name = 'get_boxes';
   description =
-    'List all managed Firewalla boxes with status and configuration details.';
+    'List the Firewalla boxes this MSP token can see (GET /v2/boxes, optionally one box group), with online status, model and version. Not limited by FIREWALLA_BOX_ID.';
   category = 'analytics' as const;
 
   constructor() {
@@ -149,7 +149,7 @@ export class GetBoxesHandler extends BaseToolHandler {
 export class GetSimpleStatisticsHandler extends BaseToolHandler {
   name = 'get_simple_statistics';
   description =
-    'Get network statistics including box status, security metrics, and system health indicators.';
+    'Get account-wide counts from GET /v2/stats/simple: online boxes, offline boxes, alarms and rules, optionally for one box group. Not limited by FIREWALLA_BOX_ID.';
   category = 'analytics' as const;
 
   constructor() {
@@ -298,7 +298,7 @@ export class GetSimpleStatisticsHandler extends BaseToolHandler {
 export class GetStatisticsByRegionHandler extends BaseToolHandler {
   name = 'get_statistics_by_region';
   description =
-    'Top regions by blocked flows, from GET /v2/stats/topRegionsByBlockedFlows. Optional group and limit (default 5).';
+    'Top regions by blocked flows, from GET /v2/stats/topRegionsByBlockedFlows, optionally for one box group; the API returned no more than 5 regions. Not limited by FIREWALLA_BOX_ID.';
   category = 'analytics' as const;
 
   constructor() {
@@ -409,7 +409,7 @@ const BOX_STATISTIC_METRICS: Record<
 export class GetStatisticsByBoxHandler extends BaseToolHandler {
   name = 'get_statistics_by_box';
   description =
-    'Top boxes by blocked flows or by security alarms, from GET /v2/stats/{type}, with each box from GET /v2/boxes. Optional type, group and limit.';
+    "Top boxes by blocked flows (the default) or by Security Activity alarms, from GET /v2/stats/{type}, with each box's details from GET /v2/boxes; each box's value is the statistic, over about the last 30 days when measured. Not limited by FIREWALLA_BOX_ID.";
   category = 'analytics' as const;
 
   constructor() {
@@ -555,7 +555,7 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
 export class GetRecentFlowActivityHandler extends BaseToolHandler {
   name = 'get_recent_flow_activity';
   description =
-    'Get recent network flow activity snapshot (last 10-20 minutes of traffic). Returns up to 50 most recent flows for immediate analysis. IMPORTANT: This is NOT historical trend data - it shows current activity only. Use for "what\'s happening now" questions, not daily/weekly patterns. Ideal for: current security assessment, immediate network state, recent protocol distribution.';
+    'Get a snapshot of the 50 most recent network flows (one GET /v2/flows request) with protocol, region and blocked/allowed counts; the minutes they span depend on how busy the network is. Use this for: "what\'s happening right now?", current security threats, immediate network issues. DO NOT use for: historical analysis, more than 50 flows, or daily/weekly patterns; use search_flows with time queries like "ts:>24h" for those. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
   category = 'analytics' as const;
 
   private static readonly MAX_FLOWS = 50;
@@ -765,7 +765,7 @@ export class GetRecentFlowActivityHandler extends BaseToolHandler {
 export class GetFlowInsightsHandler extends BaseToolHandler {
   name = 'get_flow_insights';
   description =
-    'Get category-based flow analysis including top content categories, bandwidth consumers, and blocked traffic. Replaces time-based trends with actionable insights for networks with high flow volumes. Ideal for answering questions like "what porn sites were accessed" or "what social media was used".';
+    'Get category-based flow analysis for a period: top content categories and their domains, top devices by bandwidth, and optionally blocked traffic. Ideal for answering questions like "what porn sites were accessed" or "what social media was used". Computed client-side from the period\'s largest flows (GET /v2/flows by total bytes: up to 500 for categories, 200 for devices) and, with include_blocked, the 50 most frequent blocked flows, so on a busy network it covers the largest flows, not all of them. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
   category = 'analytics' as const;
 
   constructor() {
@@ -1023,7 +1023,7 @@ function summarizeValues(points: Array<{ value: number }>) {
 export class GetAlarmTrendsHandler extends BaseToolHandler {
   name = 'get_alarm_trends';
   description =
-    'Alarms generated per day, from GET /v2/trends/alarms (the last 30 days, one point per day). Optional period (default 30d) and group.';
+    'Alarms generated per day, from GET /v2/trends/alarms: one point per day for the last 30 days, the last point being today so far. period (default 30d) returns the days that overlap it. The trends API takes no box, so it covers every box (or the group) even with FIREWALLA_BOX_ID set.';
   category = 'analytics' as const;
 
   constructor() {
@@ -1098,7 +1098,7 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
 export class GetRuleTrendsHandler extends BaseToolHandler {
   name = 'get_rule_trends';
   description =
-    'Rules created per day, from GET /v2/trends/rules (the last 30 days, one point per day), or from the creation times in GET /v2/rules when that endpoint answers 400. Optional period (default 30d) and group.';
+    'Rules created per day for the last 30 days, from GET /v2/trends/rules; period and group work as in get_alarm_trends. When that endpoint answers 400 (it did when measured), each UTC day counts the rules in GET /v2/rules created on it, scoped to FIREWALLA_BOX_ID when set (rules deleted since are not counted), and the response says so.';
   category = 'analytics' as const;
 
   constructor() {

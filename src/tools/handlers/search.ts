@@ -344,42 +344,8 @@ function validateCommonSearchParameters(
 
 export class SearchFlowsHandler extends BaseToolHandler {
   name = 'search_flows';
-  description = `Advanced network flow searching with powerful query syntax and enhanced reliability. Data cached for 15 seconds, use force_refresh=true for real-time network analysis.
-  
-Search through network traffic flows using complex queries with logical operators, wildcards, and field-specific filters. Features automatic boolean query translation for improved compatibility.
-
-REQUIRED PARAMETERS:
-- query: Search query string using flow field syntax
-
-OPTIONAL PARAMETERS:
-- limit: Maximum number of results to return (default: 200, max: 500)
-- force_refresh: Bypass cache for real-time data (default: false)
-- cursor: Pagination cursor from previous response
-- time_range: Time window for search (start/end timestamps)
-- sort_by: Field to sort results by
-- group_by (or groupBy): API fields to group by, e.g. "category" or "device,category"; returns groups instead of flows
-- aggregate: Enable aggregation statistics
-
-QUERY EXAMPLES:
-- Blocked traffic: "status:blocked" ("blocked:true" is still accepted and sent as status:blocked, "blocked:false" as -status:blocked)
-- Basic field queries: "protocol:tcp", "device.ip:192.168.1.100", "region:US"
-- Logical operators: "protocol:tcp AND status:blocked", "category:social OR category:games"
-- Wildcards: "device.ip:192.168.*", "domain:*.facebook.com"
-- Data transfer (units B, KB, MB, GB, TB): "total:>1MB", "download:>10MB", "upload:1000-50000" ("bytes:" is still accepted and sent as total:)
-- Time: "ts:>1h", "ts:1735689600-1735693200"
-
-CACHE CONTROL:
-- Default: 15-second cache for optimal performance
-- Real-time: Use force_refresh=true for live network monitoring
-- Cache info included in responses for timing awareness
-
-PERFORMANCE TIPS:
-- Use specific time ranges for better performance: {"time_range": {"start": "2024-01-01T00:00:00Z", "end": "2024-01-02T00:00:00Z"}}
-- Limit results with reasonable values (100-1000) for faster responses
-- Use cursor for pagination with large datasets
-- Group by fields like "category" or "protocol" for aggregated insights
-
-See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.md`;
+  description =
+    'Search network flows with advanced query filters. Use this for: historical analysis, specific time ranges, complex filtering, or when you need more than 50 flows. Supports pagination, time-based queries (e.g., "ts:>1h" for the last hour, or Unix seconds such as "ts:1735689600-1735693200"), and all flow fields including geographic filtering. For quick "what\'s happening now" snapshots, use get_recent_flow_activity instead. Reads GET /v2/flows, 500 per request, following the cursor up to limit. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
   category = 'search' as const;
 
   constructor() {
@@ -715,46 +681,8 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
 
 export class SearchAlarmsHandler extends BaseToolHandler {
   name = 'search_alarms';
-  description = `Security alarm searching with powerful filtering and enhanced reliability. Data cached for 15 seconds, use force_refresh=true for real-time security data.
-
-Search through security alerts and alarms using flexible query syntax to identify threats and suspicious activities. Features automatic boolean query translation, enhanced schema harmonization with device information, and improved alarm ID resolution for seamless integration with get_specific_alarm and delete_alarm.
-
-REQUIRED PARAMETERS:
-- query: Search query string using alarm field syntax
-
-OPTIONAL PARAMETERS:
-- limit: Maximum number of results to return (default: 200, max: 500)
-- force_refresh: Bypass cache for real-time data (default: false)
-- cursor: Pagination cursor from previous response
-- sort_by: Field to sort results by
-- group_by (or groupBy): API fields to group by, e.g. "type" or "type,box"; returns groups instead of alarms
-- aggregate: Enable aggregation statistics
-
-QUERY EXAMPLES:
-- Status: "status:1" (active), "status:2" (archived)
-- Device searches: "device.ip:192.168.1.100", "device.name:*iphone*" ("source_ip:" is still accepted and sent as device.ip:)
-- Type filtering: "type:8", "type:9", "type:10" (use numeric alarm types)
-- Time-based: "ts:>=1735689600", "ts:1735689600-1735693200"
-- Free text (a term without a qualifier): "porn"
-- Complex combinations: "type:8 AND device.ip:192.168.* AND status:1"
-
-CACHE CONTROL:
-- Default: 15-second cache for optimal performance
-- Real-time: Use force_refresh=true for incident response
-- Cache info included in responses for timing awareness
-
-COMMON USE CASES:
-- Active security alerts: "type:1 AND status:1"
-- Geographic threats: "region:CN AND type:2"
-- Video/Gaming/Porn activity: "type:8 OR type:9 OR type:10"
-- VPN issues: "type:13" (VPN Connection Error)
-
-ERROR RECOVERY:
-- If no results, try broader time ranges or different type filters
-- Check field names against the API documentation
-- Use wildcards (*) for partial matches when exact queries fail
-
-See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`;
+  description =
+    'Search alarms using full-text or field filters. Alarm types: 1=Security Activity, 2=Abnormal Upload, 3=Large Bandwidth Usage, 4=Monthly Data Plan, 5=New Device, 6=Device Back Online, 7=Device Offline, 8=Video Activity, 9=Gaming Activity, 10=Porn Activity, 11=VPN Activity, 12=VPN Connection Restored, 13=VPN Connection Error, 14=Open Port, 15=Internet Connectivity Update, 16=Large Upload. Reads GET /v2/alarms, 500 per request, following the cursor up to limit. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
   category = 'search' as const;
 
   constructor() {
@@ -1024,34 +952,8 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
 
 export class SearchRulesHandler extends BaseToolHandler {
   name = 'search_rules';
-  description = `Firewall rule searching with comprehensive filtering for actions, targets, and status.
-
-Search through firewall rules to manage policies, troubleshoot blocking issues, and analyze rule effectiveness.
-
-QUERY EXAMPLES:
-- Action filtering: "action:block", "action:allow", "action:timelimit"
-- Target searches: "target_value:*.facebook.com", "target_type:domain", "target_value:192.168.*"
-- Status queries: "enabled:true", "paused:false", "active:true"
-- Direction: "direction:inbound", "direction:outbound", "direction:bidirection"
-- Combined filters: "action:block AND target_value:*.social.* AND enabled:true"
-
-RULE MANAGEMENT EXAMPLES:
-- Social media blocks: "action:block AND (target_value:*.facebook.com OR target_value:*.twitter.com)"
-- Gaming restrictions: "action:timelimit AND target_category:gaming"
-- Security rules: "action:block AND target_type:malware_domain"
-- Active blocking rules: "action:block AND enabled:true AND paused:false"
-
-TROUBLESHOOTING:
-- Find conflicting rules: "target_value:example.com" (then check different actions)
-- Identify inactive rules: "enabled:false OR paused:true"
-- Review recent changes: "modified:>=yesterday"
-
-PERFORMANCE NOTES:
-- Rules are cached for 10 minutes for optimal performance
-- Use specific target_value searches for fastest results
-- Group by action or target_type for rule analysis
-
-For rule management operations, see pause_rule and resume_rule tools.`;
+  description =
+    'Search firewall rules by target, action or status; the MSP API applies the query (GET /v2/rules). Supports all rule fields. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
   category = 'search' as const;
 
   constructor() {
@@ -1192,57 +1094,8 @@ For rule management operations, see pause_rule and resume_rule tools.`;
 
 export class SearchDevicesHandler extends BaseToolHandler {
   name = 'search_devices';
-  description = `Network device searching with comprehensive filtering for status, usage patterns, and network properties. Data cached for 5 minutes, use force_refresh=true for real-time device status.
-
-Search through network devices to monitor connectivity, identify issues, and analyze usage patterns.
-
-REQUIRED PARAMETERS:
-- query: Search query string using device field syntax
-
-OPTIONAL PARAMETERS:
-- limit: Maximum number of results to return (default: 200, max: 500)
-- force_refresh: Bypass cache for real-time status (default: false)
-- cursor: Pagination cursor from previous response
-- time_range: Time window for search (start/end timestamps)
-- sort_by: Field to sort results by
-- group_by: Field to group results by for aggregation
-- aggregate: Enable aggregation statistics
-
-QUERY EXAMPLES:
-- Status filtering: "online:true", "online:false", "last_seen:>=yesterday"
-- Device identification: "mac_vendor:Apple", "name:*iPhone*", "ip:192.168.1.*"
-- Network properties: "network_id:main", "dhcp:true", "static_ip:true"
-- Usage patterns: "bandwidth_usage:>1000000", "active_connections:>10"
-- Device types: "device_type:smartphone", "os_type:iOS", "manufacturer:Samsung"
-
-CACHE CONTROL:
-- Default: 5-minute cache for optimal performance
-- Real-time: Use force_refresh=true for device troubleshooting
-- Cache info included in responses for timing awareness
-
-NETWORK MONITORING:
-- Offline devices: "online:false AND last_seen:>=24h" (recently offline)
-- Heavy bandwidth users: "bandwidth_usage:>5000000 AND online:true"
-- Unknown devices: "name:unknown OR mac_vendor:unknown"
-- Mobile devices: "device_type:smartphone OR device_type:tablet"
-- IoT devices: "device_category:IoT OR manufacturer:smart_*"
-
-TROUBLESHOOTING:
-- Connection issues: "online:false AND dhcp_errors:>0"
-- Security concerns: "new_device:true AND trust_level:low"
-- Performance problems: "packet_loss:>5 OR latency:>100"
-
-PAGINATION:
-- Use cursor-based pagination for large device lists
-- Supports up to 10,000 devices per query
-- Include offline devices with include_offline:true
-
-FIELD CONSISTENCY:
-- Device names normalized to remove unknown/null inconsistencies
-- IP addresses validated and standardized
-- Timestamps converted to ISO format for consistency
-
-See the Data Normalization Guide for field details.`;
+  description =
+    'Search devices by name, IP, MAC or status (convenience wrapper with client-side filtering): reads the device list from GET /v2/devices (box, else FIREWALLA_BOX_ID, else every box) and filters it locally.';
   category = 'search' as const;
 
   async execute(
@@ -1397,43 +1250,8 @@ See the Data Normalization Guide for field details.`;
 
 export class SearchTargetListsHandler extends BaseToolHandler {
   name = 'search_target_lists';
-  description = `Target list searching with comprehensive filtering for categories, ownership, and content analysis.
-
-Search through Firewalla target lists including domains, IPs, and security categories for policy management and analysis.
-
-QUERY EXAMPLES:
-- Category filtering: "category:ad", "category:social_media", "category:malware"
-- Ownership: "owner:global", "owner:custom", "owner:user_defined"
-- Content type: "type:domain", "type:ip", "type:url_pattern"
-- Size filtering: "target_count:>100", "active_targets:>50"
-- Status queries: "enabled:true", "updated:>=2024-01-01"
-
-TARGET LIST MANAGEMENT:
-- Ad blocking lists: "category:ad AND enabled:true"
-- Security lists: "category:malware OR category:phishing OR category:threat"
-- Social media controls: "category:social_media AND owner:custom"
-- Custom domain lists: "owner:user_defined AND type:domain"
-- Large lists analysis: "target_count:>1000 AND category:security"
-
-CONTENT ANALYSIS:
-- Popular categories: group_by:"category" for category distribution
-- List effectiveness: "hit_count:>0 AND enabled:true"
-- Maintenance needed: "updated:<=30d AND enabled:true"
-- Unused lists: "hit_count:0 AND enabled:true"
-
-PERFORMANCE CONSIDERATIONS:
-- Target lists cached for 10 minutes for optimal performance
-- Use specific category filters for faster searches
-- Large lists (>10,000 targets) may have slower response times
-- Aggregate queries provide faster overview statistics
-
-FIELD NORMALIZATION:
-- Categories standardized to lowercase with consistent naming
-- Target counts validated as non-negative numbers
-- Timestamps normalized to ISO format
-- Unknown values replaced with "unknown" for consistency
-
-See the Target List Management guide for configuration details.`;
+  description =
+    'Search target lists (convenience wrapper with client-side filtering): reads GET /v2/target-lists, sending owner if given (without it, the global and Firewalla-managed lists), and applies the query locally.';
   category = 'search' as const;
 
   constructor() {

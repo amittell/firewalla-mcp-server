@@ -407,11 +407,28 @@ Write (opt-in): create_rule, delete_rule, rename_device, archive_alarm, mute_ala
 
 ### Write tools (opt-in)
 
-`create_rule`, `delete_rule`, `rename_device`, `archive_alarm` and `mute_alarm` change rules, device names and alarms on your box, so they are off by default. Set `FIREWALLA_ENABLE_WRITE_TOOLS=true` to register them. MCP clients that honor tool annotations will ask before calling them (`destructiveHint: true` on `create_rule` and `delete_rule`).
+`create_rule`, `delete_rule`, `rename_device`, `archive_alarm` and `mute_alarm` change rules, device names and alarms on your box, so they are off by default. Set `FIREWALLA_ENABLE_WRITE_TOOLS=true` to register them. MCP clients that honor tool annotations can ask before calling them; see [Tool annotations](#tool-annotations).
 
 `create_rule` and `rename_device` act on one box: `gid`, else `FIREWALLA_BOX_ID` or `FIREWALLA_DEFAULT_BOX_ID`, else the account's only box. On a multi-box account with none of those, they refuse without writing anything, because the MSP API applies a rule with no `gid` to every box in the account, including boxes added later. `delete_rule` needs MSP 2.11.0 or later.
 
 `archive_alarm` and `mute_alarm` need MSP 2.11.0 or later. `archive_alarm` takes an alarm out of the active alarms and does nothing else: future matching traffic can still raise new alarms. `mute_alarm` archives the alarm and has the box create a lasting silence exception. Its `target_type` says what is silenced: `alarmType` every future alarm of that alarm's type, whatever the destination; `domain` a domain and its subdomains; `ip` one address. Its `scope_type` says for which devices: `all` of them, or the one device, group, user or network named by `scope_value`. The mute is checked against the documented request model before anything is sent, and this server has no tool to remove the exception afterwards. Alarm IDs are per box, and the same ID can name different alarms on different boxes: both tools use the alarm's `gid`, else `FIREWALLA_BOX_ID`, else check each box, and they refuse when several boxes have that alarm ID and none of them is `FIREWALLA_DEFAULT_BOX_ID`. Both read the alarm before writing, so a wrong ID fails without changing anything.
+
+### Tool annotations
+
+Every tool carries MCP tool annotations: a `title`, `readOnlyHint`, and `openWorldHint: true`, since each one calls the Firewalla MSP API. All `get_*` and `search_*` tools are read-only. The tools that change state have `readOnlyHint: false`:
+
+| Tool | `destructiveHint` | `idempotentHint` | Needs `FIREWALLA_ENABLE_WRITE_TOOLS` |
+|---|---|---|---|
+| `pause_rule`, `resume_rule` | false | true | no |
+| `create_target_list` | false | false | no |
+| `update_target_list`, `delete_target_list` | true | true | no |
+| `create_rule` | true | false | yes |
+| `delete_rule` | true | true | yes |
+| `rename_device` | false | true | yes |
+| `archive_alarm` | false | true | yes |
+| `mute_alarm` | false | false | yes |
+
+`pause_rule` and `resume_rule` check the rule's status first and change nothing when it is already paused or active. Clients that honor annotations can ask before calling any tool that is not read-only.
 
 ## Development
 

@@ -163,7 +163,7 @@ function deriveAlarmSeverity(alarmType: any): string {
 export class GetActiveAlarmsHandler extends BaseToolHandler {
   name = 'get_active_alarms';
   description =
-    'Retrieve active security alarms with optional severity filtering. Data is cached for 15 seconds for performance. Use force_refresh=true to bypass cache for real-time data.';
+    'Retrieve security alarms from the Firewalla MSP API (GET /v2/alarms). No status filter is added: put status:1 in query for active alarms only. Without a ts: qualifier the API covers the last 30 days. Returns up to limit alarms and a cursor for the next page, or groups with groupBy. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
   category = 'security' as const;
 
   constructor() {
@@ -500,7 +500,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
 export class GetSpecificAlarmHandler extends BaseToolHandler {
   name = 'get_specific_alarm';
   description =
-    "Get detailed information for a specific alarm by alarm ID. Requires alarm_id parameter obtained from get_active_alarms or search_alarms (aid field is automatically normalized). Alarm IDs are per box: pass gid (the alarm's gid field) to name the box; without gid or FIREWALLA_BOX_ID, each box on the account is checked.";
+    'Get detailed information for one Firewalla alarm (GET /v2/alarms/{gid}/{aid}). Alarm IDs are per box: pass gid on a multi-box account, or each box is checked, one request per box, until one has the alarm.';
   category = 'security' as const;
 
   constructor() {

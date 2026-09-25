@@ -8,9 +8,14 @@ module.exports = {
     '**/?(*.)+(spec|test).ts'
   ],
   transform: {
-    '^.+\\.ts$': ['ts-jest', { 
+    '^.+\\.ts$': ['ts-jest', {
       useESM: true,
-      tsconfig: 'tsconfig.test.json'
+      tsconfig: 'tsconfig.test.json',
+      // import.meta is a syntax error under CommonJS; lets tests import
+      // src/server.ts
+      astTransformers: {
+        before: ['<rootDir>/tests/setup/import-meta-url.cjs']
+      }
     }]
   },
   moduleNameMapper: {
