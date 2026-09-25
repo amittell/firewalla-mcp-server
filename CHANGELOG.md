@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- The `threat_analysis` prompt lists the 50 most recent active alarms. It
+  sent its `severity_threshold` argument (default `medium`) as the alarm
+  query, a free-text search, although MSP alarms have no severity; the
+  argument is gone.
 - `get_active_alarms` returns active alarms again: it adds `status:1` unless
   the query names a status (`status:2` for archived). `/v2/alarms` returns
   archived alarms too when no status is given, so archived alarms showed up

@@ -123,12 +123,6 @@ export function setupPrompts(server: Server, firewalla: FirewallaClient): void {
             description: "Lookback period: '24h', '7d' or '30d' (default 24h)",
             required: false,
           },
-          {
-            name: 'severity_threshold',
-            description:
-              "Minimum alarm severity: 'low', 'medium' or 'high' (default medium)",
-            required: false,
-          },
         ],
       },
       {
@@ -244,12 +238,12 @@ Please analyze this data and provide:
         }
 
         case 'threat_analysis': {
-          const severityThreshold =
-            (args?.severity_threshold as string) || 'medium';
           const period = (args?.period as string) || '24h';
 
+          // MSP alarms carry no severity, and /v2/alarms returns archived
+          // alarms too unless the query names a status
           const [alarms, threats, rules] = await Promise.all([
-            firewalla.getActiveAlarms(severityThreshold),
+            firewalla.getActiveAlarms('status:1', undefined, 'ts:desc', 50),
             firewalla.getRecentThreats(getPeriodInHours(period)),
             firewalla.getNetworkRules(),
           ]);
@@ -262,7 +256,7 @@ Please analyze this data and provide:
 ## Current Threat Landscape
 Analyze the following security data to identify patterns, trends, and recommend defensive actions:
 
-**Active Alarms (${severityThreshold}+ severity):**
+**Active Alarms (the ${Array.isArray(alarms.results) ? alarms.results.length : 0} most recent):**
 ${(Array.isArray(alarms.results) ? alarms.results : [])
   .map(
     alarm =>
