@@ -726,6 +726,11 @@ export class ParameterValidator {
    * Validate Firewalla alarm ID format
    */
   static validateAlarmId(value: unknown, paramName: string): ValidationResult {
+    // get_active_alarms and search_alarms return `aid` as a number, so accept
+    // the number a client copies from them
+    if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
+      value = String(value);
+    }
     const stringValidation = this.validateRequiredString(value, paramName);
     if (!stringValidation.isValid) {
       return stringValidation;

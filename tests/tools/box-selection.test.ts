@@ -176,6 +176,16 @@ describe('getSpecificAlarm', () => {
 });
 
 describe('get_specific_alarm tool', () => {
+  it('accepts the numeric aid that get_active_alarms returns', async () => {
+    const { client, request } = makeClient({ alarms: { [PINEWOOD]: ['42'] } });
+    const res = await new GetSpecificAlarmHandler().execute(
+      { alarm_id: 42, gid: PINEWOOD },
+      client
+    );
+    expect(res.isError).toBeFalsy();
+    expect(calls(request)).toEqual([`GET /v2/alarms/${PINEWOOD}/42`]);
+  });
+
   it('passes gid through to the client', async () => {
     const { client, request } = makeClient({ alarms: { [PINEWOOD]: ['42'] } });
     const res = await new GetSpecificAlarmHandler().execute(
