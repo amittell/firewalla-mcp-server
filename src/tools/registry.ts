@@ -25,8 +25,8 @@
  *     get_statistics_by_box, get_flow_trends, get_alarm_trends, get_rule_trends)
  * - Convenience Wrappers (5 tools):
  *   * get_bandwidth_usage, get_offline_devices, search_devices, search_target_lists, get_network_rules_summary
- * - Write tools (3, opt-in with FIREWALLA_ENABLE_WRITE_TOOLS=true):
- *   * create_rule, delete_rule, rename_device
+ * - Write tools (5, opt-in with FIREWALLA_ENABLE_WRITE_TOOLS=true):
+ *   * create_rule, delete_rule, rename_device, archive_alarm, mute_alarm
  *
  * @version 1.0.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
@@ -40,6 +40,10 @@ import {
   GetSpecificAlarmHandler,
   // DeleteAlarmHandler, // Disabled - API returns false success
 } from './handlers/security.js';
+import {
+  ArchiveAlarmHandler,
+  MuteAlarmHandler,
+} from './handlers/alarm-actions.js';
 import {
   GetFlowDataHandler,
   GetBandwidthUsageHandler,
@@ -104,7 +108,7 @@ import {
  * // Get tools by category
  * const searchTools = registry.getToolsByCategory('search');
  *
- * // List all available tools (28, or 31 with write tools enabled)
+ * // List all available tools (28, or 33 with write tools enabled)
  * const allTools = registry.getToolNames();
  * ```
  *
@@ -118,8 +122,9 @@ export class ToolRegistry {
   /**
    * Creates a new tool registry and automatically registers all available handlers
    *
-   * @param options.enableWriteTools - Register create_rule, delete_rule and
-   *   rename_device. Defaults to FIREWALLA_ENABLE_WRITE_TOOLS=true.
+   * @param options.enableWriteTools - Register create_rule, delete_rule,
+   *   rename_device, archive_alarm and mute_alarm. Defaults to
+   *   FIREWALLA_ENABLE_WRITE_TOOLS=true.
    * @constructor
    */
   constructor(options: { enableWriteTools?: boolean } = {}) {
@@ -145,6 +150,7 @@ export class ToolRegistry {
     // Disabled: DeleteAlarmHandler commented out because the Firewalla MSP API
     // returns false success responses but doesn't actually delete alarms
     // this.register(new DeleteAlarmHandler());
+    // archive_alarm (a write tool, below) is the documented alternative
 
     // Network tools (1 handler - get_flow_data)
     this.register(new GetFlowDataHandler());
@@ -162,12 +168,14 @@ export class ToolRegistry {
     this.register(new UpdateTargetListHandler());
     this.register(new DeleteTargetListHandler());
 
-    // Write tools (3 handlers): change rules and device names on the box,
-    // so they are opt-in
+    // Write tools (5 handlers): change rules, device names and alarm state
+    // on the box, so they are opt-in
     if (enableWriteTools) {
       this.register(new CreateRuleHandler());
       this.register(new DeleteRuleHandler());
       this.register(new RenameDeviceHandler());
+      this.register(new ArchiveAlarmHandler());
+      this.register(new MuteAlarmHandler());
     }
 
     // Search tools (5 handlers)

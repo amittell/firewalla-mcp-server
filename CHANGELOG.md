@@ -40,6 +40,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   schemas required are gone. A caller that still passes `duration` gets the
   pause, plus `duration_ignored: true` and a note in the response.
 
+### Added
+
+- Opt-in write tools `archive_alarm` and `mute_alarm` (MSP 2.11.0+), off
+  unless `FIREWALLA_ENABLE_WRITE_TOOLS=true` like the other write tools.
+  `archive_alarm` takes an alarm out of the active alarms and nothing else.
+  `mute_alarm` also has the box create a lasting silence exception for the
+  alarm's type, a domain and its subdomains, or one IP, on every device or on
+  one device, group, user or network. The mute is checked against the
+  documented model and refused before anything is sent, for example a
+  `domain` target without a value, a wildcard domain, or a CIDR for `ip`.
+  Alarm IDs are per box, so both tools take `gid`, else use
+  `FIREWALLA_BOX_ID`, else check each box, and refuse when several boxes have
+  the alarm ID and none of them is `FIREWALLA_DEFAULT_BOX_ID`. They read the
+  alarm before writing, so a wrong ID changes nothing, and never retry a
+  write. Neither is marked `destructiveHint`; `archive_alarm` is
+  `idempotentHint` and `mute_alarm` is not. The client gains `archiveAlarm`
+  and `muteAlarm`. Checked live on 2026-09-25 with error-path calls only:
+  both routes exist on the MSP (a mute without `target.value` answers 400
+  `target.value is required for domain target`).
+
 ## [1.4.1] - 2026-09-25
 
 ### Fixed

@@ -171,7 +171,7 @@ FIREWALLA_MSP_ID=yourdomain.firewalla.net
 3. Generate an access token in API settings
 4. (Optional) Find your Box GID in device settings to filter queries to a specific box, or retrieve available boxes using the `get_boxes` tool
 
-**Box ID is optional.** Without `FIREWALLA_BOX_ID`, queries cover every box on the account. The few operations that act on one box (`get_specific_alarm`, `create_rule`, `rename_device`) take a `gid` argument, and without one they use `FIREWALLA_BOX_ID`, then `FIREWALLA_DEFAULT_BOX_ID`, then the account's only box. On an account with several boxes and none of those set, `get_specific_alarm` checks each box, and `create_rule` and `rename_device` refuse and list the boxes.
+**Box ID is optional.** Without `FIREWALLA_BOX_ID`, queries cover every box on the account. The few operations that act on one box (`get_specific_alarm`, `archive_alarm`, `mute_alarm`, `create_rule`, `rename_device`) take a `gid` argument, and without one they use `FIREWALLA_BOX_ID`, then `FIREWALLA_DEFAULT_BOX_ID`, then the account's only box. On an account with several boxes and none of those set, `get_specific_alarm`, `archive_alarm` and `mute_alarm` check each box, and `create_rule` and `rename_device` refuse and list the boxes.
 
 #### Transport Configuration
 
@@ -402,14 +402,16 @@ Rules: get_network_rules, pause_rule, resume_rule, get_target_lists
 Search: search_flows, search_alarms, search_rules, search_target_lists
 Analytics: get_simple_statistics, get_flow_insights, get_flow_trends, get_alarm_trends
 Management: create_target_list, update_target_list, delete_target_list
-Write (opt-in): create_rule, delete_rule, rename_device
+Write (opt-in): create_rule, delete_rule, rename_device, archive_alarm, mute_alarm
 ```
 
 ### Write tools (opt-in)
 
-`create_rule`, `delete_rule` and `rename_device` change rules and device names on your box, so they are off by default. Set `FIREWALLA_ENABLE_WRITE_TOOLS=true` to register them. MCP clients that honor tool annotations will ask before calling them (`destructiveHint: true` on `create_rule` and `delete_rule`).
+`create_rule`, `delete_rule`, `rename_device`, `archive_alarm` and `mute_alarm` change rules, device names and alarms on your box, so they are off by default. Set `FIREWALLA_ENABLE_WRITE_TOOLS=true` to register them. MCP clients that honor tool annotations will ask before calling them (`destructiveHint: true` on `create_rule` and `delete_rule`).
 
 `create_rule` and `rename_device` act on one box: `gid`, else `FIREWALLA_BOX_ID` or `FIREWALLA_DEFAULT_BOX_ID`, else the account's only box. On a multi-box account with none of those, they refuse without writing anything, because the MSP API applies a rule with no `gid` to every box in the account, including boxes added later. `delete_rule` needs MSP 2.11.0 or later.
+
+`archive_alarm` and `mute_alarm` need MSP 2.11.0 or later. `archive_alarm` takes an alarm out of the active alarms and does nothing else: future matching traffic can still raise new alarms. `mute_alarm` archives the alarm and has the box create a lasting silence exception. Its `target_type` says what is silenced: `alarmType` every future alarm of that alarm's type, whatever the destination; `domain` a domain and its subdomains; `ip` one address. Its `scope_type` says for which devices: `all` of them, or the one device, group, user or network named by `scope_value`. The mute is checked against the documented request model before anything is sent, and this server has no tool to remove the exception afterwards. Alarm IDs are per box, and the same ID can name different alarms on different boxes: both tools use the alarm's `gid`, else `FIREWALLA_BOX_ID`, else check each box, and they refuse when several boxes have that alarm ID and none of them is `FIREWALLA_DEFAULT_BOX_ID`. Both read the alarm before writing, so a wrong ID fails without changing anything.
 
 ## Development
 
@@ -544,7 +546,7 @@ For more detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 ## What's New
 
 **Version 1.0.0:**
-- 28 tools with API-verified schemas (31 with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)
+- 28 tools with API-verified schemas (33 with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)
 - 24 direct API endpoints + 5 convenience wrappers
 - NEW: get_flow_insights for category-based traffic analysis
 - Advanced search with logical operators (AND, OR, NOT)
