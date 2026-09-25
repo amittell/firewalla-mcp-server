@@ -396,12 +396,12 @@ If responses are slow:
 ### Quick Reference
 ```
 Security: get_active_alarms, get_specific_alarm
-Network: get_flow_data, get_bandwidth_usage, get_offline_devices  
-Devices: get_device_status, get_boxes, search_devices
-Rules: get_network_rules, pause_rule, resume_rule, get_target_lists
-Search: search_flows, search_alarms, search_rules, search_target_lists
-Analytics: get_simple_statistics, get_flow_insights, get_flow_trends, get_alarm_trends
-Management: create_target_list, update_target_list, delete_target_list
+Network: get_flow_data, get_recent_flow_activity, get_bandwidth_usage
+Devices: get_device_status, get_offline_devices, get_boxes
+Rules: get_network_rules, get_network_rules_summary, pause_rule, resume_rule
+Target lists: get_target_lists, get_specific_target_list, create_target_list, update_target_list, delete_target_list
+Search: search_flows, search_alarms, search_rules, search_devices, search_target_lists
+Analytics: get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_insights, get_alarm_trends, get_rule_trends
 Write (opt-in): create_rule, delete_rule, rename_device, archive_alarm, mute_alarm
 ```
 
