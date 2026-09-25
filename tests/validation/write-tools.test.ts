@@ -26,11 +26,15 @@ const BOX = '11111111-2222-3333-4444-555555555555';
 const OTHER_BOX = '66666666-7777-8888-9999-000000000000';
 const MAC = 'AA:BB:CC:DD:EE:FF';
 
-function makeClient(boxId?: string) {
+function makeClient(
+  boxId?: string,
+  { defaultBoxId, boxes = [BOX, OTHER_BOX] }: { defaultBoxId?: string; boxes?: string[] } = {}
+) {
   const client = new FirewallaClient({
     mspToken: 'test-token',
     mspId: 'test.firewalla.net',
     boxId,
+    defaultBoxId,
     apiTimeout: 30000,
     rateLimit: 100,
     cacheTtl: 300,
@@ -39,6 +43,9 @@ function makeClient(boxId?: string) {
   } as any);
   const request = jest.fn(
     async (method: string, endpoint: string, _params?: unknown, body?: any) => {
+      if (method === 'GET' && endpoint === '/v2/boxes') {
+        return boxes.map(gid => ({ gid, name: `box-${gid.slice(0, 4)}`, online: true }));
+      }
       if (method === 'GET' && endpoint === '/v2/rules') {
         return { count: 1, results: [{ id: 'rule-0001', action: 'block', status: 'active' }] };
       }
@@ -62,15 +69,38 @@ const parse = (res: any) => JSON.parse(res.content[0].text);
 beforeEach(() => ResourceValidator.clearCache());
 
 describe('create_rule', () => {
-  it('refuses without gid or FIREWALLA_BOX_ID and sends nothing', async () => {
+  it('refuses on a multi-box account without gid or a default box, and writes nothing', async () => {
     const { client, request } = makeClient(undefined);
     const res = await new CreateRuleHandler().execute(
       { action: 'block', target_type: 'internet' },
       client
     );
     expect(res.isError).toBe(true);
-    expect(parse(res).message).toBe('No box to apply the rule to');
-    expect(request).not.toHaveBeenCalled();
+    const body = parse(res);
+    expect(body.message).toBe('No box to apply the rule to');
+    expect(JSON.stringify(body)).toContain(BOX);
+    expect(JSON.stringify(body)).toContain(OTHER_BOX);
+    expect(writes(request)).toEqual([]);
+  });
+
+  it("uses the account's only box when no gid or default box is set", async () => {
+    const { client, request } = makeClient(undefined, { boxes: [BOX] });
+    const res = await new CreateRuleHandler().execute(
+      { action: 'block', target_type: 'internet' },
+      client
+    );
+    expect(res.isError).toBeFalsy();
+    expect(writes(request)[0].body.gid).toBe(BOX);
+  });
+
+  it('falls back to FIREWALLA_DEFAULT_BOX_ID without listing boxes', async () => {
+    const { client, request } = makeClient(undefined, { defaultBoxId: OTHER_BOX });
+    await new CreateRuleHandler().execute(
+      { action: 'block', target_type: 'internet' },
+      client
+    );
+    expect(writes(request)[0].body.gid).toBe(OTHER_BOX);
+    expect(request.mock.calls.some(([, endpoint]) => endpoint === '/v2/boxes')).toBe(false);
   });
 
   it('posts to /v2/rules with the gid argument', async () => {
@@ -169,7 +199,7 @@ describe('delete_rule', () => {
 });
 
 describe('rename_device', () => {
-  it('refuses without gid or FIREWALLA_BOX_ID and sends nothing', async () => {
+  it('refuses on a multi-box account without gid or a default box, and writes nothing', async () => {
     const { client, request } = makeClient(undefined);
     const res = await new RenameDeviceHandler().execute(
       { device_id: MAC, name: 'nas' },
@@ -177,7 +207,19 @@ describe('rename_device', () => {
     );
     expect(res.isError).toBe(true);
     expect(parse(res).message).toBe('No box to rename the device on');
-    expect(request).not.toHaveBeenCalled();
+    expect(writes(request)).toEqual([]);
+  });
+
+  it("renames on the account's only box when no gid or default box is set", async () => {
+    const { client, request } = makeClient(undefined, { boxes: [BOX] });
+    await new RenameDeviceHandler().execute({ device_id: MAC, name: 'nas' }, client);
+    expect(writes(request)).toEqual([
+      {
+        method: 'PATCH',
+        endpoint: `/v2/boxes/${BOX}/devices/AA%3ABB%3ACC%3ADD%3AEE%3AFF`,
+        body: { name: 'nas' },
+      },
+    ]);
   });
 
   it('patches the device on the given box', async () => {

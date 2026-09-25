@@ -310,7 +310,7 @@ export class HealthCheckManager {
   getReadinessStatus(): { ready: boolean; reason?: string } {
     try {
       // Check if essential services are configured
-      if (!config.mspToken || !config.boxId) {
+      if (!config.mspToken || !config.mspId) {
         return { ready: false, reason: 'Missing required configuration' };
       }
 

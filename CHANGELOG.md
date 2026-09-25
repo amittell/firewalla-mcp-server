@@ -15,10 +15,15 @@ Minor release: Node.js 24 is now the minimum.
 - Opt-in write tools `create_rule`, `delete_rule` and `rename_device` (#37,
   from @mefrati75). Off unless `FIREWALLA_ENABLE_WRITE_TOOLS=true`, and marked
   with MCP tool annotations (`destructiveHint: true` on `create_rule` and
-  `delete_rule`). `create_rule` and `rename_device` take a `gid` or fall back to
-  `FIREWALLA_BOX_ID`, and refuse without calling the API when neither is set:
-  the MSP API applies a rule with no `gid` to every box in the account.
+  `delete_rule`). `create_rule` and `rename_device` act on one box (see the
+  `FIREWALLA_BOX_ID` entry under Changed) and never send a rule without a
+  `gid`: the MSP API applies such a rule to every box in the account.
   `delete_rule` needs MSP 2.11.0+ and checks the rule exists first.
+- `get_specific_alarm` takes an optional `gid`. Alarm IDs are per box, and
+  without `gid` or `FIREWALLA_BOX_ID` it checks each box on the account
+  (`FIREWALLA_DEFAULT_BOX_ID` first). In 1.3.0 it failed with `Invalid or
+  empty gid provided` whenever `FIREWALLA_BOX_ID` was unset, and could not
+  reach another box's alarms when it was set.
 - CI `launch` job (#44): on ubuntu-latest, macos-latest and windows-latest it
   packs the server and requires an answer to MCP `initialize` over stdio
   through the global bin, `npx` and `node dist/server.js`.
@@ -27,6 +32,20 @@ Minor release: Node.js 24 is now the minimum.
   and attestations, and creates the GitHub release from this file.
 
 ### Changed
+- `FIREWALLA_BOX_ID` is optional for every tool (fixes #27). `create_rule`
+  and `rename_device` use `gid`, else `FIREWALLA_BOX_ID`, else
+  `FIREWALLA_DEFAULT_BOX_ID`, else the account's only box. On a multi-box
+  account with none of those they still refuse, and the error now lists the
+  boxes. `FIREWALLA_DEFAULT_BOX_ID` was documented but nothing read it; it is
+  now the default box for single-box operations, without scoping queries the
+  way `FIREWALLA_BOX_ID` does.
+- The `security_report` and `network_health_check` prompts and the
+  `firewalla://summary` resource report each box's online state and device,
+  alarm and rule counts from `/v2/boxes`, and the blocked flows among the 100
+  most recent. The CPU and memory figures they showed were `Math.random()`
+  values (the MSP API reports neither), the "uptime" was the time since the
+  box was last seen, and without `FIREWALLA_BOX_ID` the firewall read as
+  offline.
 - **Node.js 24 or later is now required** (`engines.node` `>=24.0.0`, was
   `>=18.0.0`). `geoip-lite` 2.x requires Node 24. CI and the Docker image
   (`node:24-alpine`) move to Node 24 as well. Stay on 1.3.x for Node 18-22.
@@ -37,6 +56,13 @@ Minor release: Node.js 24 is now the minimum.
 - Docker examples in the README mark `FIREWALLA_BOX_ID` as optional (#39).
 
 ### Fixed
+- `get_rule_trends` no longer adds a random -1, 0 or +1 to every point.
+- The `security_report`, `threat_analysis`, `bandwidth_analysis` and
+  `device_investigation` prompts joined their list lines with a literal `\n`
+  instead of a newline.
+- The readiness check reported "Missing required configuration" without
+  `FIREWALLA_BOX_ID`, and the environment check warned that a box ID "will be
+  required for all operations".
 - The server now starts under `npx`, global installs and on Windows (#36,
   from @mefrati75). The entrypoint check compared `import.meta.url` with
   `file://${process.argv[1]}`, which never matches through a bin symlink, or

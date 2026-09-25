@@ -3,7 +3,10 @@
  */
 
 import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
-import type { FirewallaClient } from '../../firewalla/client.js';
+import {
+  BoxSelectionError,
+  type FirewallaClient,
+} from '../../firewalla/client.js';
 import {
   ParameterValidator,
   SafeAccess,
@@ -244,7 +247,7 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
 export class RenameDeviceHandler extends BaseToolHandler {
   name = 'rename_device';
   description =
-    'Rename a network device on one box (gid, or FIREWALLA_BOX_ID). The MSP API only supports changing the name (32 characters max); other device fields cannot be modified. Requires device_id (MAC address).';
+    "Rename a network device on one box (gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box). The MSP API only supports changing the name (32 characters max); other device fields cannot be modified. Requires device_id (MAC address).";
   category = 'device' as const;
 
   constructor() {
@@ -297,16 +300,21 @@ export class RenameDeviceHandler extends BaseToolHandler {
 
       const deviceId = deviceIdValidation.sanitizedValue as string;
       const name = nameValidation.sanitizedValue as string;
-      const gid =
-        (gidValidation.sanitizedValue as string | undefined) ??
-        firewalla.getDefaultBoxId();
-      if (!gid) {
+      let gid: string;
+      try {
+        gid = await firewalla.resolveBoxGid(
+          gidValidation.sanitizedValue as string | undefined
+        );
+      } catch (error) {
+        if (!(error instanceof BoxSelectionError)) {
+          throw error;
+        }
         return createErrorResponse(
           this.name,
           'No box to rename the device on',
           ErrorType.VALIDATION_ERROR,
           undefined,
-          ['Pass gid, or set FIREWALLA_BOX_ID']
+          [error.message]
         );
       }
 

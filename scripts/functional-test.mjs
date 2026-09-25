@@ -13,7 +13,8 @@
  * per-session Server instances), each lists tools and makes a live call, then
  * a third session connects after one closes.
  *
- * Requires FIREWALLA_MSP_TOKEN / FIREWALLA_MSP_ID / FIREWALLA_BOX_ID in env.
+ * Requires FIREWALLA_MSP_TOKEN and FIREWALLA_MSP_ID in env; FIREWALLA_BOX_ID is
+ * optional, and running both with and without it covers both box modes.
  * Exit code 0 = all green; 1 = failures (summary printed either way).
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -22,7 +23,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-const CREDS = ['FIREWALLA_MSP_TOKEN', 'FIREWALLA_MSP_ID', 'FIREWALLA_BOX_ID'];
+const CREDS = ['FIREWALLA_MSP_TOKEN', 'FIREWALLA_MSP_ID'];
 for (const k of CREDS) {
   if (!process.env[k]) { console.error(`missing env ${k}`); process.exit(2); }
 }

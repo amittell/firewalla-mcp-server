@@ -10,7 +10,10 @@
  * - FIREWALLA_MSP_ID: MSP domain (e.g., 'yourdomain.firewalla.net')
  *
  * Optional environment variables:
- * - FIREWALLA_BOX_ID: Firewalla box Global ID (GID) - can be provided as default or per-call
+ * - FIREWALLA_BOX_ID: Box GID. Scopes queries to that box and is the default for
+ *   single-box operations. Without it, queries cover every box on the account.
+ * - FIREWALLA_DEFAULT_BOX_ID: Box GID used as the default for single-box operations
+ *   only; queries still cover every box
  * - API_TIMEOUT: Request timeout in milliseconds (default: 30000)
  * - API_RATE_LIMIT: Requests per minute limit (default: 100)
  * - CACHE_TTL: Cache time-to-live in seconds (default: 300)
@@ -72,6 +75,7 @@ export function getConfig(): FirewallaConfig {
     mspId,
     mspBaseUrl: `https://${mspId}`,
     boxId: process.env.FIREWALLA_BOX_ID || undefined,
+    defaultBoxId: process.env.FIREWALLA_DEFAULT_BOX_ID || undefined,
     apiTimeout: getOptionalEnvInt('API_TIMEOUT', 30000, 1000, 300000), // 1s to 5min
     rateLimit: getOptionalEnvInt('API_RATE_LIMIT', 100, 1, 1000), // 1 to 1000 requests per minute
     cacheTtl: getOptionalEnvInt('CACHE_TTL', 300, 0, 3600), // 0s to 1 hour

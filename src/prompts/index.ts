@@ -4,17 +4,10 @@ import {
   ListPromptsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { FirewallaClient } from '../firewalla/client.js';
-import type { Device, NetworkRule } from '../types.js';
+import type { Device, FirewallSummary, NetworkRule } from '../types.js';
 import { unixToISOString, safeUnixToISOString } from '../utils/timestamp.js';
 
 // Type definitions for health score calculation
-
-interface SystemSummary {
-  status: string;
-  cpu_usage: number;
-  memory_usage: number;
-  uptime: number;
-}
 
 interface SecurityMetrics {
   active_alarms: number;
@@ -27,7 +20,7 @@ interface NetworkTopology {
 }
 
 interface HealthScoreData {
-  summary: SystemSummary;
+  summary: FirewallSummary;
   devices: {
     count: number;
     results: Device[];
@@ -137,13 +130,9 @@ export function setupPrompts(server: Server, firewalla: FirewallaClient): void {
 ## Executive Summary
 Generate a comprehensive security report based on the following data:
 
-**Firewall Status:**
-- Status: ${summary.status}
-- Uptime: ${Math.floor(summary.uptime / 3600)} hours
-- CPU Usage: ${summary.cpu_usage}%
-- Memory Usage: ${summary.memory_usage}%
-- Active Connections: ${summary.active_connections}
-- Blocked Attempts: ${summary.blocked_attempts}
+**Firewall Status:** ${summary.status} (${summary.boxes_online} of ${summary.boxes_total} boxes online)
+${formatBoxStatusLines(summary)}
+- Blocked in the ${summary.recent_flows_sampled} most recent flows: ${summary.blocked_in_sample}
 
 **Security Metrics:**
 - Total Alarms: ${metrics.total_alarms}
@@ -158,7 +147,7 @@ ${alarms.results
   .map(
     alarm => `- ${alarm.type}: ${alarm.message} (${unixToISOString(alarm.ts)})`
   )
-  .join('\\n')}
+  .join('\n')}
 
 **Recent Threats (${threats.length}):**
 ${threats
@@ -167,7 +156,7 @@ ${threats
     threat =>
       `- ${threat.type}: ${threat.source_ip} → ${threat.destination_ip} (${threat.action_taken})`
   )
-  .join('\\n')}
+  .join('\n')}
 
 Please analyze this data and provide:
 1. Overall security status assessment
@@ -216,7 +205,7 @@ ${(Array.isArray(alarms.results) ? alarms.results : [])
     Source: ${alarm.device?.ip || 'N/A'} → Destination: ${alarm.remote?.ip || 'N/A'}
     Time: ${unixToISOString(alarm.ts)}`
   )
-  .join('\\n\\n')}
+  .join('\n\n')}
 
 **Recent Threat Patterns:**
 - Total threats in ${period}: ${threats.length}
@@ -297,7 +286,7 @@ ${highUsageDevices
     Download: ${Math.round(device.bytes_downloaded / (1024 * 1024))}MB
     Ratio: ${(device.bytes_uploaded / Math.max(device.bytes_downloaded, 1)).toFixed(2)}`
   )
-  .join('\\n\\n')}
+  .join('\n\n')}
 
 **Network Flow Analysis:**
 - Total flows analyzed: ${flows.count}
@@ -407,7 +396,7 @@ ${
           alarm =>
             `- [${alarm.type}] ${alarm.message} (${unixToISOString(alarm.ts)})`
         )
-        .join('\\n')
+        .join('\n')
     : 'No security alerts found for this device'
 }
 
@@ -419,7 +408,7 @@ ${deviceFlows
       `- ${flow.source?.ip || 'N/A'} → ${flow.destination?.ip || 'N/A'} (${flow.protocol})
     ${(flow.download || 0) + (flow.upload || 0)} bytes, ${flow.count} packets, ${flow.duration || 0}s duration`
   )
-  .join('\\n')}
+  .join('\n')}
 
 Please investigate and provide:
 1. Device behavior assessment (normal/suspicious)
@@ -466,23 +455,19 @@ Please investigate and provide:
 Evaluate overall network health and performance:
 
 **System Health:**
-- Firewall Status: ${summary.status}
-- Uptime: ${Math.floor(summary.uptime / 3600)}h (${summary.uptime > 604800 ? '✅' : '⚠️'})
-- CPU Usage: ${summary.cpu_usage}% (${summary.cpu_usage < 80 ? '✅' : '⚠️'})
-- Memory Usage: ${summary.memory_usage}% (${summary.memory_usage < 85 ? '✅' : '⚠️'})
-- Performance Score: ${calculatePerformanceScore(summary)}/100
+- Firewall Status: ${summary.status}, ${summary.boxes_online} of ${summary.boxes_total} boxes online (${summary.status === 'online' ? '✅' : '⚠️'})
+${formatBoxStatusLines(summary)}
 
 **Network Connectivity:**
 - Total Devices: ${devices.count}
 - Online: ${devices.results.filter(d => d.online).length} (${Math.round((devices.results.filter(d => d.online).length / devices.count) * 100)}%)
 - Offline: ${devices.results.filter(d => !d.online).length}
 - Subnets: ${topology.subnets.length}
-- Active Connections: ${summary.active_connections}
 
 **Security Posture:**
 - Threat Level: ${metrics.threat_level}
 - Active Alarms: ${metrics.active_alarms}
-- Blocked Attempts: ${summary.blocked_attempts}
+- Blocked in the ${summary.recent_flows_sampled} most recent flows: ${summary.blocked_in_sample}
 - Active Rules: ${rules.results.filter(r => r.status === 'active' || !r.status).length}
 - Security Score: ${calculateSecurityScore(metrics)}/100
 
@@ -594,9 +579,29 @@ function analyzeFlowPatterns(
 }
 
 /**
+ * One line per box in the firewall summary, for prompt text
+ *
+ * @param summary - The firewall summary from getFirewallSummary
+ * @returns Markdown list lines, one per box
+ */
+function formatBoxStatusLines(summary: FirewallSummary): string {
+  if (summary.boxes.length === 0) {
+    return '- No boxes are visible to this MSP token';
+  }
+  return summary.boxes
+    .map(box => {
+      const state = box.online
+        ? 'online'
+        : `offline, last seen ${safeUnixToISOString(box.last_seen, 'unknown')}`;
+      return `- ${box.name} (${box.model}, ${box.gid}): ${state}; ${box.device_count} devices, ${box.alarm_count} alarms, ${box.rule_count} rules`;
+    })
+    .join('\n');
+}
+
+/**
  * Calculates an overall network health score based on system status, device connectivity, security metrics, network topology, and rule configuration.
  *
- * The score starts at 100 and deducts points for offline status, high resource usage, short uptime, offline devices, active alarms, threat severity, lack of active rules, and missing subnets. The result is a non-negative integer representing the network's health.
+ * The score starts at 100 and deducts points for offline or partly offline boxes, offline devices, active alarms, threat severity, lack of active rules, and missing subnets. The result is a non-negative integer representing the network's health.
  *
  * @param data - Aggregated network and security data used for scoring
  * @returns The computed network health score as an integer between 0 and 100
@@ -604,19 +609,13 @@ function analyzeFlowPatterns(
 function calculateNetworkHealthScore(data: HealthScoreData): number {
   let score = 100;
 
-  // System health (30 points)
-  if (data.summary.status !== 'online') {
+  // System health (30 points): the MSP API reports box online state, not
+  // CPU, memory or uptime
+  if (data.summary.status === 'partial') {
+    score -= 15;
+  } else if (data.summary.status !== 'online') {
     score -= 30;
   }
-  if (data.summary.cpu_usage > 80) {
-    score -= 10;
-  }
-  if (data.summary.memory_usage > 85) {
-    score -= 10;
-  }
-  if (data.summary.uptime < 86400) {
-    score -= 5;
-  } // Less than 1 day
 
   // Connectivity (25 points)
   const onlineRatio =
@@ -641,23 +640,6 @@ function calculateNetworkHealthScore(data: HealthScoreData): number {
   }
 
   return Math.max(0, Math.round(score));
-}
-
-/**
- * Calculates a performance score for the system based on CPU and memory usage.
- *
- * Returns 0 if the system is not online. Otherwise, computes the score as the average of (100 minus CPU usage) and (100 minus memory usage), rounded to the nearest integer.
- *
- * @param summary - The system summary containing status, CPU usage, and memory usage
- * @returns The calculated performance score, or 0 if the system is offline.
- */
-function calculatePerformanceScore(summary: SystemSummary): number {
-  if (summary.status !== 'online') {
-    return 0;
-  }
-  const cpuScore = Math.max(0, 100 - summary.cpu_usage);
-  const memScore = Math.max(0, 100 - summary.memory_usage);
-  return Math.round((cpuScore + memScore) / 2);
 }
 
 /**
