@@ -1714,7 +1714,9 @@ export class UpdateTargetListHandler extends BaseToolHandler {
       if (nameValidation.sanitizedValue !== undefined) {
         updateData.name = nameValidation.sanitizedValue;
       }
-      if (targetsValidation.sanitizedValue !== undefined) {
+      // validateArray turns an omitted targets into [], and PATCHing
+      // targets: [] would empty the list: send targets only when given
+      if (args?.targets !== undefined && args?.targets !== null) {
         updateData.targets = targetsValidation.sanitizedValue;
       }
       if (categoryValidation.sanitizedValue !== undefined) {
