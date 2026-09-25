@@ -2007,6 +2007,9 @@ export class FirewallaClient {
         next_cursor: undefined,
       };
     } catch (error) {
+      if (error instanceof BoxSelectionError) {
+        throw error; // the handler reports it as a validation error
+      }
       logger.error(
         'Error in getSpecificAlarm:',
         error instanceof Error ? error : new Error(String(error))

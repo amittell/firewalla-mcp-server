@@ -368,7 +368,14 @@ export async function withToolTimeout<T>(
 
       // Convert immediate failures to ValidationError for clarity
       if (error instanceof Error && !(error instanceof TimeoutError)) {
-        throw new ValidationError(toolName, duration, error.message);
+        const validationError = new ValidationError(
+          toolName,
+          duration,
+          error.message
+        );
+        // Keep the original so handlers can still tell error classes apart
+        (validationError as Error & { cause?: unknown }).cause = error;
+        throw validationError;
       }
     }
 
@@ -396,6 +403,7 @@ export async function withToolTimeout<T>(
         );
         processingError.name = error.name;
         processingError.stack = error.stack;
+        (processingError as Error & { cause?: unknown }).cause = error;
         // Add debugging information as a property
         (processingError as any).debugInfo = {
           duration,
