@@ -399,10 +399,12 @@ See the Query Syntax Guide for complete documentation: /docs/query-syntax-guide.
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
-    // The tool schema names the grouping groupBy; group_by is read too
+    // The tool schema names the grouping groupBy and the sort sortBy;
+    // group_by and sort_by are read too
     const searchArgs = {
       ...args,
       group_by: args.group_by ?? args.groupBy,
+      sort_by: args.sort_by ?? args.sortBy,
     } as SearchFlowsArgs;
     const startTime = Date.now();
 
@@ -772,10 +774,12 @@ See the Error Handling Guide for troubleshooting: /docs/error-handling-guide.md`
     args: ToolArgs,
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
-    // The tool schema names the grouping groupBy; group_by is read too
+    // The tool schema names the grouping groupBy and the sort sortBy;
+    // group_by and sort_by are read too
     const searchArgs = {
       ...args,
       group_by: args.group_by ?? args.groupBy,
+      sort_by: args.sort_by ?? args.sortBy,
     } as SearchAlarmsArgs;
     const startTime = Date.now();
 
