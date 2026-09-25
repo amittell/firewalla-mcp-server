@@ -102,6 +102,38 @@ describe('requests to capped list endpoints', () => {
     expect(flowQueries.some(query => query.includes('block:true'))).toBe(false);
   });
 
+  it('getActiveAlarms with force_refresh asks request() not to use the cache', async () => {
+    const { client, request } = makeClient(10);
+    await client.getActiveAlarms(
+      undefined,
+      undefined,
+      'ts:desc',
+      5,
+      undefined,
+      true
+    );
+    await client.getActiveAlarms(undefined, undefined, 'ts:desc', 5);
+    // request(method, endpoint, params, body, cacheable)
+    expect(request.mock.calls.map(call => call[4])).toEqual([false, true]);
+  });
+
+  it('searchFlows and searchAlarms send the qualifiers the API accepts', async () => {
+    const { client, request } = makeClient(10);
+    await client.searchFlows({
+      query: 'blocked:true AND bytes:>1MB',
+      limit: 10,
+    });
+    await client.searchAlarms({ query: 'source_ip:192.168.*', limit: 10 });
+    const [flowQuery, alarmQuery] = request.mock.calls.map(
+      ([, , params]) => params.query
+    );
+    expect(flowQuery).toContain('status:blocked');
+    expect(flowQuery).toContain('total:>1MB');
+    expect(flowQuery).not.toMatch(/blocked:true|bytes:/);
+    expect(alarmQuery).toMatch(/^device\.ip:/);
+    expect(alarmQuery).not.toContain('source_ip');
+  });
+
   it('stops when the endpoint has no more pages', async () => {
     const { client, request } = makeClient(120);
     await client.getBandwidthUsage('1h', 60);

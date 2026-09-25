@@ -71,3 +71,21 @@ it('treats an empty categories list as all categories', async () => {
   const queries = request.mock.calls.map(([, , params]: any[]) => params.query);
   expect(queries.some(query => query.includes('()'))).toBe(false);
 });
+
+it('asks for blocked flows with status:blocked when include_blocked is set', async () => {
+  const client = new FirewallaClient({
+    mspToken: 'test-token',
+    mspId: 'test.firewalla.net',
+    apiTimeout: 30000,
+    rateLimit: 100,
+    cacheTtl: 300,
+    defaultPageSize: 100,
+    maxPageSize: 10000,
+  } as any);
+  const request = jest.fn(async () => ({ count: 0, results: [] }));
+  (client as any).request = request;
+  await client.getFlowInsights('1h', { includeBlocked: true });
+  const queries = request.mock.calls.map(([, , params]: any[]) => params.query);
+  expect(queries.some(query => query.includes('status:blocked'))).toBe(true);
+  expect(queries.some(query => /blocked:true/.test(query))).toBe(false);
+});

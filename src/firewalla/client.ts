@@ -395,7 +395,7 @@ export class FirewallaClient {
       const page = await this.request<{
         results?: T[];
         next_cursor?: string;
-      }>('GET', endpoint, pageParams, cacheable);
+      }>('GET', endpoint, pageParams, undefined, cacheable);
       if (!first && page && !Array.isArray(page)) {
         first = page;
       }
@@ -1666,7 +1666,7 @@ export class FirewallaClient {
     const [alarms, blockedFlows] = await Promise.all([
       this.getActiveAlarms(`ts:>=${timeThreshold}`, undefined, 'ts:desc', 1000),
       this.getFlowData(
-        `block:true AND ts:>=${timeThreshold}`,
+        `status:blocked AND ts:>=${timeThreshold}`,
         undefined,
         'ts:desc',
         50
@@ -2998,7 +2998,11 @@ export class FirewallaClient {
 
     // Add query if provided
     if (searchQuery.query?.trim()) {
-      params.query = searchQuery.query.trim();
+      // blocked: and bytes: are rejected by /v2/flows (see getFlowData)
+      params.query = translateToMspQualifiers(
+        searchQuery.query.trim(),
+        'flows'
+      );
     }
 
     if (searchQuery.group_by) {
@@ -3175,7 +3179,8 @@ export class FirewallaClient {
           : 'timestamp:desc';
 
       const params: Record<string, unknown> = {
-        query: optimizedQuery,
+        // source_ip: is not an alarm qualifier (see getActiveAlarms)
+        query: translateToMspQualifiers(optimizedQuery, 'alarms'),
         limit,
         sortBy,
       };
@@ -5306,7 +5311,7 @@ export class FirewallaClient {
       if (options?.includeBlocked) {
         try {
           const blockedData = await this.searchFlows({
-            query: `ts:${begin}-${end} AND blocked:true`,
+            query: `ts:${begin}-${end} AND status:blocked`,
             group_by: 'category',
             sort_by: 'count:desc',
             limit: 50,

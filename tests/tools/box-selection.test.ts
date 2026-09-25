@@ -4,6 +4,8 @@
  * the prompts and the summary resource read. The HTTP layer is stubbed.
  */
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import {
   BoxSelectionError,
   FirewallaClient,
@@ -176,6 +178,16 @@ describe('getSpecificAlarm', () => {
 });
 
 describe('get_specific_alarm tool', () => {
+  it('advertises alarm_id as a string or a number', () => {
+    const source = readFileSync(
+      path.join(process.cwd(), 'src', 'server.ts'),
+      'utf8'
+    );
+    const start = source.indexOf("name: 'get_specific_alarm'");
+    const block = source.slice(start, source.indexOf("name: '", start + 10));
+    expect(block).toMatch(/alarm_id: \{\s*type: \['string', 'number'\]/);
+  });
+
   it('accepts the numeric aid that get_active_alarms returns', async () => {
     const { client, request } = makeClient({ alarms: { [PINEWOOD]: ['42'] } });
     const res = await new GetSpecificAlarmHandler().execute(
