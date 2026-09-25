@@ -69,6 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   devices. They send the documented `box=<gid>`, and no longer send `query`,
   `limit` or `sortBy`, which the endpoint also ignores. Measured on a two-box
   account: `query=box.id:` returned all 224 devices, `box=` the box's 190.
+- The same three tools use their `box` argument, which their schemas list but
+  the handlers ignored. It takes precedence over `FIREWALLA_BOX_ID`.
 - The client sends each endpoint the parameters its docs define. It kept only
   `query`, `limit`, `sortBy`, `groupBy`, `cursor` and `box` on every GET, so
   `get_boxes` dropped `group` and target lists could not be filtered by

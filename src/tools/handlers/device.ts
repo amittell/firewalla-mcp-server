@@ -70,13 +70,18 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
         }
       );
 
-      if (!limitValidation.isValid) {
+      const boxValidation = ParameterValidator.validateOptionalString(
+        args?.box,
+        'box'
+      );
+
+      if (!limitValidation.isValid || !boxValidation.isValid) {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
           ErrorType.VALIDATION_ERROR,
           undefined,
-          limitValidation.errors
+          [...limitValidation.errors, ...boxValidation.errors]
         );
       }
 
@@ -84,10 +89,18 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
       const includeOffline = (args?.include_offline as boolean) !== false; // Default to true
       const limit = limitValidation.sanitizedValue! as number;
       const cursor = args?.cursor; // Cursor for pagination
+      // The box to list; getDeviceStatus falls back to FIREWALLA_BOX_ID
+      const box = boxValidation.sanitizedValue as string | undefined;
 
       const devicesResponse = await withToolTimeout(
         async () =>
-          firewalla.getDeviceStatus(deviceId, includeOffline, limit, cursor),
+          firewalla.getDeviceStatus(
+            deviceId,
+            includeOffline,
+            limit,
+            cursor,
+            box
+          ),
         this.name
       );
 

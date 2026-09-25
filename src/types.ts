@@ -730,6 +730,8 @@ export interface SearchOptions {
   categories?: string[];
   /** Filter by owners (for target lists) */
   owners?: string[];
+  /** Box gid to search the devices of (for devices; default FIREWALLA_BOX_ID) */
+  box?: string;
 }
 
 /**

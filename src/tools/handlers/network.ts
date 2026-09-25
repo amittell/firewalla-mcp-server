@@ -583,9 +583,15 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
         true
       );
 
+      const boxValidation = ParameterValidator.validateOptionalString(
+        args?.box,
+        'box'
+      );
+
       const validationResult = ParameterValidator.combineValidationResults([
         limitValidation,
         sortValidation,
+        boxValidation,
       ]);
 
       if (!validationResult.isValid) {
@@ -599,6 +605,8 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
 
       const limit = limitValidation.sanitizedValue! as number;
       const sortByLastSeen = sortValidation.sanitizedValue ?? true;
+      // The box to list; getDeviceStatus falls back to FIREWALLA_BOX_ID
+      const box = boxValidation.sanitizedValue as string | undefined;
 
       // Buffer Strategy: Fetch extra devices to account for post-processing filtering
       //
@@ -614,7 +622,14 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
       // ratios in network environments (usually 60-80% devices are online).
       const fetchLimit = Math.min(limit * 3, 1000); // 3x buffer with 1000 cap for API limits
       const allDevicesResponse = await withToolTimeout(
-        async () => firewalla.getDeviceStatus(undefined, undefined, fetchLimit),
+        async () =>
+          firewalla.getDeviceStatus(
+            undefined,
+            undefined,
+            fetchLimit,
+            undefined,
+            box
+          ),
         this.name
       );
 

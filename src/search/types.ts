@@ -102,6 +102,7 @@ export interface SearchParams {
     min_risk_score?: number;
   };
   include_analytics?: boolean; // Include geographic analysis in response
+  box?: string; // Devices only: box gid to search (default FIREWALLA_BOX_ID)
 }
 
 /**

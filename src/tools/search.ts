@@ -556,6 +556,9 @@ export class SearchEngine {
             end: params.time_range.end,
           };
         }
+        if (params.box) {
+          searchOptions.box = params.box;
+        }
 
         return client.searchDevices(searchQuery, searchOptions);
       },

@@ -972,7 +972,8 @@ export class FirewallaClient {
     deviceId?: string,
     includeOffline = true,
     limit?: number,
-    cursor?: string
+    cursor?: string,
+    box?: string
   ): Promise<{
     count: number;
     results: Device[];
@@ -991,7 +992,7 @@ export class FirewallaClient {
         const response = await this.request<Device[]>(
           'GET',
           endpoint,
-          this.deviceBoxParams()
+          this.deviceBoxParams(box)
         );
 
         // Enhanced null safety and error handling
@@ -3923,7 +3924,7 @@ export class FirewallaClient {
       // GET /v2/devices takes only `box` and `group`, and answers query,
       // limit and sortBy with every device (measured 2026-09-25), so the
       // query is matched and the limit applied on the client below
-      const params = this.deviceBoxParams();
+      const params = this.deviceBoxParams(options.box);
 
       // Enhanced filter application with validation
       const clientQuery =
@@ -5117,13 +5118,14 @@ export class FirewallaClient {
   }
 
   /**
-   * Parameters that scope GET /v2/devices to FIREWALLA_BOX_ID. The endpoint
-   * documents only `box` and `group` and ignores `query`: measured
-   * 2026-09-25, `query=box.id:<gid>` returned both boxes' 224 devices and
-   * `box=<gid>` returned that box's 190.
+   * Parameters that scope GET /v2/devices to one box: the `box` a caller
+   * names, else FIREWALLA_BOX_ID. The endpoint documents only `box` and
+   * `group` and ignores `query`: measured 2026-09-25, `query=box.id:<gid>`
+   * returned both boxes' 224 devices and `box=<gid>` returned that box's 190.
    */
-  private deviceBoxParams(): Record<string, unknown> {
-    return this.config.boxId ? { box: this.config.boxId } : {};
+  private deviceBoxParams(box?: string): Record<string, unknown> {
+    const gid = box?.trim() || this.config.boxId;
+    return gid ? { box: gid } : {};
   }
 
   /**

@@ -87,6 +87,7 @@ export interface SearchDevicesArgs extends BaseSearchArgs {
     start?: string;
     end?: string;
   };
+  box?: string;
 }
 
 export interface SearchTargetListsArgs extends BaseSearchArgs {}
@@ -1212,6 +1213,21 @@ See the Data Normalization Guide for field details.`;
         );
       }
 
+      // The box to search; searchDevices falls back to FIREWALLA_BOX_ID
+      const boxValidation = ParameterValidator.validateOptionalString(
+        searchArgs.box,
+        'box'
+      );
+      if (!boxValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Box parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          boxValidation.errors
+        );
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -1224,6 +1240,7 @@ See the Data Normalization Guide for field details.`;
         aggregate: searchArgs.aggregate,
         time_range: searchArgs.time_range,
         force_refresh: forceRefreshValidation.sanitizedValue as boolean,
+        box: boxValidation.sanitizedValue as string | undefined,
       };
 
       const result = await withToolTimeout(
