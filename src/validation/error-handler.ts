@@ -826,7 +826,7 @@ export class ParameterValidator {
     const contexts: Record<string, string> = {
       limit: 'to control result set size and prevent memory issues',
       min_hits: 'to filter rules by activity level',
-      duration: 'in minutes for temporary rule changes',
+      duration: 'in seconds, how long a scheduled rule stays active',
       hours: 'for time-based filtering',
       interval: 'in seconds for data aggregation',
       fetch_limit: 'to prevent excessive API calls',

@@ -21,10 +21,7 @@ import {
   safeUnixToISOString,
   getCurrentTimestamp,
 } from '../../utils/timestamp.js';
-import {
-  getLimitValidationConfig,
-  VALIDATION_CONFIG,
-} from '../../config/limits.js';
+import { getLimitValidationConfig } from '../../config/limits.js';
 import {
   withToolTimeout,
   createTimeoutErrorResponse,
@@ -70,13 +67,13 @@ async function checkRuleStatus(
       };
     }
 
-    // Get the specific rule details to check its status
+    // Get the specific rule details to check its status. `id:` is not a
+    // documented rule qualifier; on 2026-09-25 the API answered it with just
+    // that rule, but match on id rather than trusting the first result.
     const rulesResponse = await firewalla.getNetworkRules(`id:${ruleId}`, 1);
-    const rules = SafeAccess.getNestedValue(
-      rulesResponse,
-      'results',
-      []
-    ) as any[];
+    const rules = (
+      SafeAccess.getNestedValue(rulesResponse, 'results', []) as any[]
+    ).filter(candidate => candidate?.id === ruleId);
 
     if (rules.length === 0) {
       return {
@@ -320,10 +317,18 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
   }
 }
 
+/**
+ * Note returned when a caller passes the `duration` that pause_rule took up to
+ * 1.4.1. The MSP pause endpoint takes no duration: on 2026-09-25 it accepted
+ * and ignored one in the body or the query string, and the rule stayed paused.
+ */
+const PAUSE_DURATION_IGNORED_NOTE =
+  'duration was ignored: the Firewalla MSP API pause endpoint takes no duration, so the rule stays paused until resume_rule is called';
+
 export class PauseRuleHandler extends BaseToolHandler {
   name = 'pause_rule';
   description =
-    'Temporarily disable a specific firewall rule. Requires rule_id parameter. Optional duration parameter (default 60 minutes).';
+    'Pause a firewall rule until resume_rule reactivates it. Requires rule_id parameter. The MSP API takes no duration, so the pause does not expire on its own.';
   category = 'rule' as const;
 
   constructor() {
@@ -350,32 +355,20 @@ export class PauseRuleHandler extends BaseToolHandler {
         args?.rule_id,
         'rule_id'
       );
-      const durationValidation = ParameterValidator.validateNumber(
-        args?.duration,
-        'duration',
-        {
-          defaultValue: 60,
-          ...VALIDATION_CONFIG.DURATION_MINUTES,
-        }
-      );
 
-      const validationResult = ParameterValidator.combineValidationResults([
-        ruleIdValidation,
-        durationValidation,
-      ]);
-
-      if (!validationResult.isValid) {
+      if (!ruleIdValidation.isValid) {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
           ErrorType.VALIDATION_ERROR,
           undefined,
-          validationResult.errors
+          ruleIdValidation.errors
         );
       }
 
       const ruleId = ruleIdValidation.sanitizedValue as string;
-      const duration = durationValidation.sanitizedValue as number;
+      const durationIgnored =
+        args?.duration !== undefined && args?.duration !== null;
 
       // Check rule status before attempting to pause it
       const statusCheck = await checkRuleStatus(ruleId, this.name, firewalla);
@@ -399,7 +392,6 @@ export class PauseRuleHandler extends BaseToolHandler {
             current_status: statusCheck.status,
             already_paused: true,
             resume_at: statusCheck.resumeAt,
-            requested_duration_minutes: duration,
           },
           [
             'Rule is already in a paused state',
@@ -407,7 +399,6 @@ export class PauseRuleHandler extends BaseToolHandler {
               ? `Rule will automatically resume at ${statusCheck.resumeAt}`
               : 'Use resume_rule to manually reactivate the rule',
             'Use get_network_rules to check current rule status',
-            'If you want to extend the pause duration, resume first then pause again',
           ]
         );
       }
@@ -426,7 +417,7 @@ export class PauseRuleHandler extends BaseToolHandler {
       }
 
       const result = await withToolTimeout(
-        async () => firewalla.pauseRule(ruleId, duration),
+        async () => firewalla.pauseRule(ruleId),
         this.name
       );
 
@@ -440,8 +431,12 @@ export class PauseRuleHandler extends BaseToolHandler {
           'Rule pause completed'
         ),
         rule_id: ruleId,
-        duration_minutes: duration,
         action: 'pause_rule',
+        paused_until: 'resumed',
+        ...(durationIgnored && {
+          duration_ignored: true,
+          note: PAUSE_DURATION_IGNORED_NOTE,
+        }),
       };
 
       const executionTime = Date.now() - startTime;
@@ -465,7 +460,6 @@ export class PauseRuleHandler extends BaseToolHandler {
       const suggestions: string[] = [];
       const context: Record<string, any> = {
         rule_id: args?.rule_id,
-        duration: args?.duration || 60,
         operation: 'pause_rule',
       };
 
@@ -486,7 +480,8 @@ export class PauseRuleHandler extends BaseToolHandler {
         suggestions.push(
           'Verify your Firewalla MSP API credentials are valid',
           'Check if your API token has rule management permissions',
-          'Ensure the rule belongs to a box you have access to'
+          'Ensure the rule belongs to a box you have access to',
+          'The MSP API also answers 403 for a rule ID that does not exist; check the ID with get_network_rules'
         );
       } else if (
         errorMessage.includes('already paused') ||

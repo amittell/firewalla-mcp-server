@@ -5,7 +5,6 @@
 import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
 import type { FirewallaClient } from '../../firewalla/client.js';
 import {
-  ParameterValidator,
   createErrorResponse,
   ErrorType,
 } from '../../validation/error-handler.js';
@@ -22,7 +21,7 @@ import { withToolTimeout } from '../../utils/timeout-manager.js';
 export class BulkPauseRulesHandler extends BaseToolHandler {
   name = 'bulk_pause_rules';
   description =
-    'Pause multiple firewall rules in a single operation. Requires array of rule IDs. Optional duration parameter (default 60 minutes).';
+    'Pause multiple firewall rules in a single operation until they are resumed. Requires array of rule IDs. The MSP API takes no pause duration.';
   category = 'rule' as const;
 
   constructor() {
@@ -70,30 +69,13 @@ export class BulkPauseRulesHandler extends BaseToolHandler {
       );
     }
 
-    // Validate duration parameter if provided
-    let duration = 60; // Default 60 minutes
-    if (options?.duration !== undefined) {
-      const durationValidation = ParameterValidator.validateNumber(
-        options.duration,
-        'duration',
-        { min: 1, max: 1440, integer: true }
-      );
-      if (!durationValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Duration validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          durationValidation.errors
-        );
-      }
-      duration = durationValidation.sanitizedValue as number;
-    }
+    // The MSP pause endpoint takes no duration; a passed one is ignored
+    const durationIgnored = options?.duration !== undefined;
 
     // Define the pause operation for individual rules
     const pauseOperation: BulkOperationFunction = async (ruleId: string) => {
       return withToolTimeout(
-        async () => firewalla.pauseRule(ruleId, duration),
+        async () => firewalla.pauseRule(ruleId),
         `${this.name}_item`,
         5000 // 5 second timeout per rule
       );
@@ -111,7 +93,8 @@ export class BulkPauseRulesHandler extends BaseToolHandler {
 
     const unifiedResponseData = {
       operation: this.name,
-      pause_duration_minutes: duration,
+      paused_until: 'resumed',
+      ...(durationIgnored && { duration_ignored: true }),
       bulk_operation_result: result,
       timestamp: new Date().toISOString(),
     };
