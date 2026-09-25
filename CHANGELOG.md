@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `get_active_alarms` already did.
 - The `get_specific_alarm` schema lists `alarm_id` as a string or a number, to
   match the numeric `aid` that `get_active_alarms` returns.
+- The client's `searchFlows` with `include_resolved: false` added `block:false`
+  after translating the query, and the API answers that with no results; it
+  adds `-status:blocked`, and the whole query is translated at the end.
 
 ### Added
 - CI `Docker Build` workflow: a pull request that touches the Dockerfile, the
