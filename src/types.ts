@@ -509,6 +509,11 @@ export interface TargetList {
   owner: string;
   /** List of domains, IPs, IP ranges */
   targets: string[];
+  /**
+   * Number of entries. GET /v2/target-lists returns it on every list, and
+   * returns no `targets` for Firewalla-managed lists (measured 2026-09-25).
+   */
+  count?: number;
   /** Optional category */
   category?: CategoryType;
   /** Optional additional description */

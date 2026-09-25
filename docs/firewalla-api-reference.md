@@ -626,6 +626,7 @@ Measured 2026-09-25 on a live account whose only lists are Firewalla-managed:
 - With no parameters, the API returned 13 lists, each with `owner` `firewalla`.
 - `owner=firewalla` and `owner=global,firewalla` returned the same 13. `owner=global`, `owner=<box gid>` and `owner=global,<box gid>` returned none, and an unknown parameter name (`ownerx=global`) returned all 13, so `owner` is applied.
 - `query=box.id:<gid>`, `limit=2` and `sortBy=name:desc` return 200 and are ignored.
+- Every list carried `count`, its number of entries (from 1 to 5,968,164), and none carried `targets` or `category`. `GET /v2/target-lists/{id}` on two of them returned the same `count` and no `targets` either. The lists also carried `type` (`list`), `source`, `beta`, `blockMode` and, on 6 of 13, `actions`. `get_target_lists` and `search_target_lists` report `entry_count` from `targets` when the API sends them, else from `count`, and `targets: null` when it sends none.
 
 **Response (200 Success)**:
 ```json

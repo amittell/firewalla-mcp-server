@@ -375,7 +375,8 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_target_lists',
-            description: 'Retrieve all target lists from Firewalla',
+            description:
+              'Retrieve all target lists from Firewalla. entry_count is the number of entries in each list; the API does not return the entries of Firewalla-managed lists, so their targets is null.',
             inputSchema: {
               type: 'object',
               properties: {

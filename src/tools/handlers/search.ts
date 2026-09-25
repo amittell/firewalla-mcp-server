@@ -39,6 +39,7 @@ import { SEARCH_FIELDS, type SearchParams } from '../../search/types.js';
 import type { ScoringCorrelationParams } from '../../validation/field-mapper.js';
 // ResponseStandardizer import removed - using direct response creation
 import { validateCountryCodes } from '../../utils/geographic.js';
+import { targetListEntryCount } from '../../utils/target-lists.js';
 
 // Base search interface to reduce duplication
 export interface BaseSearchArgs extends ToolArgs {
@@ -1491,11 +1492,9 @@ See the Target List Management guide for configuration details.`;
               'unknown'
             ),
             owner: SafeAccess.getNestedValue(list as any, 'owner', 'unknown'),
-            entry_count: SafeAccess.safeArrayAccess(
-              list.targets,
-              arr => arr.length,
-              0
-            ),
+            // The targets' length, else the API's count: it sends no
+            // targets for Firewalla-managed lists
+            entry_count: targetListEntryCount(list),
           })
         ),
         count: SafeAccess.safeArrayAccess(
