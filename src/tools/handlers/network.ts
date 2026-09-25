@@ -267,6 +267,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
               region: SafeAccess.getNestedValue(flow, 'region', null),
               category: SafeAccess.getNestedValue(flow, 'category', null),
               domain: SafeAccess.getNestedValue(flow, 'domain', null),
+              network: SafeAccess.getNestedValue(flow, 'network', null),
             })
           );
 
@@ -364,6 +365,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
           region: SafeAccess.getNestedValue(flow, 'region', null),
           category: SafeAccess.getNestedValue(flow, 'category', null),
           domain: SafeAccess.getNestedValue(flow, 'domain', null),
+          network: SafeAccess.getNestedValue(flow, 'network', null),
         })
       );
 

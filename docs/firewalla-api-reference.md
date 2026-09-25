@@ -925,6 +925,7 @@ interface Flow {
   source?: Host;                 // Source host information
   destination?: Host;            // Destination host information
   region?: string;               // 2-letter ISO 3166 country code
+  country?: string;              // Equal to region where measured (not in the official model)
   category?: FlowCategory;       // Content category, a plain string
   network: Network;              // Network object
   group?: Group;                 // Group the device belonged to when the flow was captured
@@ -937,7 +938,9 @@ interface Flow {
 // of it (e.g. "example.com" for "www.example.com").
 // Measured 2026-09-25 on another 200 live flows: every flow had numeric
 // `download`, `upload` and `total`, and `total` equaled download + upload
-// on all 200 (0 on the 4 blocked flows).
+// on all 200 (0 on the 4 blocked flows). Every flow had a top-level
+// `network` ({ id, name, type, gid }) and a `country` equal to its
+// `region`; none had `device.network` or `group`.
 
 interface FlowDevice {
   id: DeviceID;                  // Device identifier
