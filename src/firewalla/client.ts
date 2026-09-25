@@ -1171,7 +1171,8 @@ export class FirewallaClient {
     includeOffline = true,
     limit?: number,
     cursor?: string,
-    box?: string
+    box?: string,
+    group?: string
   ): Promise<{
     count: number;
     results: Device[];
@@ -1190,7 +1191,7 @@ export class FirewallaClient {
         const response = await this.request<Device[]>(
           'GET',
           endpoint,
-          this.deviceBoxParams(box)
+          this.deviceBoxParams(box, group)
         );
 
         // Enhanced null safety and error handling
@@ -1378,7 +1379,8 @@ export class FirewallaClient {
   @optimizeResponse('bandwidth')
   async getBandwidthUsage(
     period: string,
-    top = 10
+    top = 10,
+    box?: string
   ): Promise<{
     count: number;
     results: BandwidthUsage[];
@@ -1424,8 +1426,8 @@ export class FirewallaClient {
         sortBy: 'ts:desc',
       };
 
-      // Apply box filter through the query parameter
-      params.query = this.addBoxFilter(params.query as string | undefined);
+      // Scope to the box named, else FIREWALLA_BOX_ID, with the query
+      params.query = this.addBoxFilter(params.query as string | undefined, box);
 
       // Get more data than `top` for client-side grouping
       const response = await this.requestPages<any>(
@@ -5316,15 +5318,17 @@ export class FirewallaClient {
    * Helper method to add box.id qualifier to search queries
    *
    * @param query - Existing query string (optional)
+   * @param box - Box gid to scope to instead of FIREWALLA_BOX_ID (optional)
    * @returns Query string with box.id filter added, or just box.id filter if no query
    * @private
    */
-  private addBoxFilter(query?: string): string | undefined {
-    if (!this.config.boxId) {
+  private addBoxFilter(query?: string, box?: string): string | undefined {
+    const gid = box?.trim() || this.config.boxId;
+    if (!gid) {
       return query;
     }
 
-    const boxFilter = `box.id:${this.config.boxId}`;
+    const boxFilter = `box.id:${gid}`;
 
     if (!query || query.trim() === '') {
       return boxFilter;
@@ -5338,10 +5342,19 @@ export class FirewallaClient {
    * names, else FIREWALLA_BOX_ID. The endpoint documents only `box` and
    * `group` and ignores `query`: measured 2026-09-25, `query=box.id:<gid>`
    * returned both boxes' 224 devices and `box=<gid>` returned that box's 190.
+   * A `group` (box group ID) is sent as well when given.
    */
-  private deviceBoxParams(box?: string): Record<string, unknown> {
+  private deviceBoxParams(
+    box?: string,
+    group?: string
+  ): Record<string, unknown> {
     const gid = box?.trim() || this.config.boxId;
-    return gid ? { box: gid } : {};
+    const params: Record<string, unknown> = gid ? { box: gid } : {};
+    // The endpoint's other documented parameter: a box group ID
+    if (group?.trim()) {
+      params.group = group.trim();
+    }
+    return params;
   }
 
   /**

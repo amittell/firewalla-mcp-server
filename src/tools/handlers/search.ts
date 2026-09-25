@@ -91,7 +91,9 @@ export interface SearchDevicesArgs extends BaseSearchArgs {
   box?: string;
 }
 
-export interface SearchTargetListsArgs extends BaseSearchArgs {}
+export interface SearchTargetListsArgs extends BaseSearchArgs {
+  owner?: string;
+}
 
 export interface SearchCrossReferenceArgs extends ToolArgs {
   primary_query: string;
@@ -1467,6 +1469,21 @@ See the Target List Management guide for configuration details.`;
         return validation.response;
       }
 
+      // Sent to the API as its owner filter
+      const ownerValidation = ParameterValidator.validateOptionalString(
+        searchArgs.owner,
+        'owner'
+      );
+      if (!ownerValidation.isValid) {
+        return createErrorResponse(
+          this.name,
+          'Owner parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          ownerValidation.errors
+        );
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -1477,6 +1494,7 @@ See the Target List Management guide for configuration details.`;
         sort_order: searchArgs.sort_order,
         group_by: searchArgs.group_by,
         aggregate: searchArgs.aggregate,
+        owner: ownerValidation.sanitizedValue as string | undefined,
       };
 
       const result = await withToolTimeout(

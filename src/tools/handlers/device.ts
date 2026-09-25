@@ -74,14 +74,26 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
         args?.box,
         'box'
       );
+      const groupValidation = ParameterValidator.validateOptionalString(
+        args?.group,
+        'group'
+      );
 
-      if (!limitValidation.isValid || !boxValidation.isValid) {
+      if (
+        !limitValidation.isValid ||
+        !boxValidation.isValid ||
+        !groupValidation.isValid
+      ) {
         return createErrorResponse(
           this.name,
           'Parameter validation failed',
           ErrorType.VALIDATION_ERROR,
           undefined,
-          [...limitValidation.errors, ...boxValidation.errors]
+          [
+            ...limitValidation.errors,
+            ...boxValidation.errors,
+            ...groupValidation.errors,
+          ]
         );
       }
 
@@ -91,6 +103,8 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
       const cursor = args?.cursor; // Cursor for pagination
       // The box to list; getDeviceStatus falls back to FIREWALLA_BOX_ID
       const box = boxValidation.sanitizedValue as string | undefined;
+      // A box group ID, sent to /v2/devices as its documented group
+      const group = groupValidation.sanitizedValue as string | undefined;
 
       const devicesResponse = await withToolTimeout(
         async () =>
@@ -99,7 +113,8 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
             includeOffline,
             limit,
             cursor,
-            box
+            box,
+            group
           ),
         this.name
       );
