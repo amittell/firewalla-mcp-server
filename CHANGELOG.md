@@ -116,6 +116,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   MSP subscription.`; `get_specific_alarm` reported it as the alarm not being
   found. The message now quotes the API's reason, says whether the request
   named a box, and points to `get_boxes` for the gids the token can access.
+- `search_flows` and `search_alarms` called without `limit` failed with
+  "limit parameter is required", although their schemas give `limit` a
+  default of 200. The search tools now use the default their schemas
+  advertise: 200 for `search_flows` and `search_alarms`, 50 for
+  `search_devices` and 100 for `search_target_lists`, which returned every
+  match without a `limit`.
 
 ### Changed
 
