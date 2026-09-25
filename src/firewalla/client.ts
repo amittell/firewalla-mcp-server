@@ -6,7 +6,6 @@
  * - **Caching**: Intelligent response caching with configurable TTL
  * - **Rate Limiting**: Built-in protection against API rate limits
  * - **Error Handling**: Comprehensive error mapping and recovery strategies
- * - **Optimization**: Automatic response optimization for token efficiency
  * - **Monitoring**: Request/response logging and performance tracking
  *
  * The client supports all major Firewalla data types including alarms, flows,
@@ -18,10 +17,10 @@
  * @since 2025-06-21
  */
 
-import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import axios, { type AxiosInstance, type AxiosResponse } from 'axios';
 import { createHash } from 'crypto';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
-import {
+import type {
   FirewallaConfig,
   Alarm,
   AlarmGroup,
@@ -53,7 +52,6 @@ import {
   translateSortBy,
   translateToMspQualifiers,
 } from '../utils/msp-qualifiers.js';
-import { optimizeResponse } from '../optimization/index.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
 import { logger } from '../monitoring/logger.js';
 import {
@@ -349,15 +347,14 @@ export function forbiddenMessage(error: {
  * Firewalla API Client for MSP Integration
  *
  * Main client class providing authenticated access to Firewalla MSP APIs.
- * Handles authentication, caching, rate limiting, error handling, and response
- * optimization for efficient integration with Claude through the MCP protocol.
+ * Handles authentication, caching, rate limiting and error handling for the
+ * MCP server's tools.
  *
  * Features:
  * - Automatic token-based authentication with the MSP API
  * - Intelligent caching with configurable TTL policies
  * - Built-in rate limiting and retry mechanisms
  * - Comprehensive error handling with meaningful error messages
- * - Response optimization for MCP protocol constraints
  * - Request/response logging for debugging and monitoring
  *
  * @example
@@ -846,8 +843,7 @@ export class FirewallaClient {
    * Retrieves active security alarms from the Firewalla system
    *
    * Fetches current security alerts, alarms, and notifications with support for
-   * advanced filtering, grouping, and pagination. Results are automatically
-   * optimized for token efficiency while preserving essential security context.
+   * advanced filtering, grouping, and pagination.
    *
    * @param query - Optional search query for filtering alarms
    * @param groupBy - Optional fields to group by (e.g., 'type', 'type,box').
@@ -879,9 +875,7 @@ export class FirewallaClient {
    * ```
    *
    * @public
-   * @optimizeResponse('alarms') - Automatically optimizes response for token efficiency
    */
-  @optimizeResponse('alarms')
   async getActiveAlarms(
     query?: string,
     groupBy?: string,
@@ -1012,7 +1006,6 @@ export class FirewallaClient {
    *   'device', 'category,domain'). The API then returns groups, not flows:
    *   the result has `groups` and `group_by`, and empty `results`.
    */
-  @optimizeResponse('flows')
   async getFlowData(
     query?: string,
     groupBy?: string,
@@ -1165,7 +1158,6 @@ export class FirewallaClient {
     };
   }
 
-  @optimizeResponse('devices')
   async getDeviceStatus(
     deviceId?: string,
     includeOffline = true,
@@ -1254,7 +1246,6 @@ export class FirewallaClient {
     }
   }
 
-  @optimizeResponse('devices')
   async getOfflineDevices(
     sortByLastSeen: boolean = true
   ): Promise<{ count: number; results: Device[]; next_cursor?: string }> {
@@ -1376,7 +1367,6 @@ export class FirewallaClient {
    * });
    * ```
    */
-  @optimizeResponse('bandwidth')
   async getBandwidthUsage(
     period: string,
     top = 10,
@@ -1529,7 +1519,6 @@ export class FirewallaClient {
     }
   }
 
-  @optimizeResponse('rules')
   async getNetworkRules(
     query?: string,
     limit?: number
@@ -1618,7 +1607,6 @@ export class FirewallaClient {
    *   comma-separated list such as `global,<box_gid>`. Without it the API
    *   returns global and Firewalla-managed lists.
    */
-  @optimizeResponse('targets')
   async getTargetLists(
     _listType?: string,
     limit?: number,
@@ -2123,8 +2111,6 @@ export class FirewallaClient {
     return [...threats, ...blockedThreats].slice(0, 100); // Limit total results
   }
 
-  @optimizeResponse('rules')
-  @optimizeResponse('boxes')
   async getBoxes(
     groupId?: string
   ): Promise<{ count: number; results: Box[]; next_cursor?: string }> {
@@ -2195,7 +2181,6 @@ export class FirewallaClient {
     }
   }
 
-  @optimizeResponse('alarms')
   async getSpecificAlarm(
     alarmId: string,
     gid?: string
@@ -2460,7 +2445,6 @@ export class FirewallaClient {
     }
   }
 
-  @optimizeResponse('alarms')
   async deleteAlarm(alarmId: string, gid?: string): Promise<any> {
     try {
       // Enhanced input validation and sanitization
@@ -2869,7 +2853,6 @@ export class FirewallaClient {
   }
 
   // Statistics API Implementation
-  @optimizeResponse('statistics')
   async getSimpleStatistics(group?: string): Promise<{
     count: number;
     results: SimpleStats[];
@@ -2897,7 +2880,6 @@ export class FirewallaClient {
    * Measured 2026-09-25: `limit` below 5 is honoured, and a larger `limit`
    * still returned 5 regions.
    */
-  @optimizeResponse('statistics')
   async getStatisticsByRegion(
     group?: string,
     limit?: number
@@ -3011,7 +2993,6 @@ export class FirewallaClient {
    * Blocked flows per day from GET /v2/trends/flows. No tool calls this; it
    * replaced client-side counting of up to 10000 flows.
    */
-  @optimizeResponse('trends')
   async getFlowTrends(
     period: TrendPeriod = '30d',
     group?: string
@@ -3030,7 +3011,6 @@ export class FirewallaClient {
   }
 
   /** Alarms generated per day from GET /v2/trends/alarms */
-  @optimizeResponse('trends')
   async getAlarmTrends(
     period: TrendPeriod = '30d',
     group?: string
@@ -3055,7 +3035,6 @@ export class FirewallaClient {
    * counted from the creation times (`ts`) of the rules GET /v2/rules
    * returns, per UTC day, and the series says so.
    */
-  @optimizeResponse('trends')
   async getRuleTrends(
     period: TrendPeriod = '30d',
     group?: string
@@ -3144,7 +3123,6 @@ export class FirewallaClient {
    * alarms of the last 30 days, and topBoxesByBlockedFlows summed to within
    * 0.1% of the 30 daily points of /v2/trends/flows.
    */
-  @optimizeResponse('statistics')
   async getStatisticsByBox(
     type: BoxStatisticType = 'topBoxesByBlockedFlows',
     group?: string,
@@ -3507,7 +3485,6 @@ export class FirewallaClient {
   /**
    * Advanced search for security alarms with severity, time, and IP filters
    */
-  @optimizeResponse('alarms')
   async searchAlarms(
     searchQuery: SearchQuery,
     options: SearchOptions = {}
@@ -3797,7 +3774,6 @@ export class FirewallaClient {
   /**
    * Advanced search for firewall rules with target, action, and status filters
    */
-  @optimizeResponse('rules')
   async searchRules(
     searchQuery: SearchQuery,
     options: SearchOptions = {}
@@ -4099,7 +4075,6 @@ export class FirewallaClient {
   /**
    * Advanced search for network devices with network, status, and usage filters
    */
-  @optimizeResponse('devices')
   async searchDevices(
     searchQuery: SearchQuery,
     options: SearchOptions = {}
@@ -4358,7 +4333,6 @@ export class FirewallaClient {
   /**
    * Advanced search for target lists with category and ownership filters
    */
-  @optimizeResponse('targets')
   async searchTargetLists(
     searchQuery: SearchQuery,
     options: SearchOptions = {}
@@ -4616,7 +4590,6 @@ export class FirewallaClient {
    * Multi-entity searches with correlation across different data types
    * Enhanced with proper entity type handling
    */
-  @optimizeResponse('cross-reference')
   async searchCrossReference(
     primaryQuery: SearchQuery,
     secondaryQueries: Record<string, SearchQuery>,
@@ -4747,7 +4720,6 @@ export class FirewallaClient {
   /**
    * Get overview statistics and counts of network rules by category
    */
-  @optimizeResponse('rules')
   async getNetworkRulesSummary(
     activeOnly: boolean = true,
     ruleType?: string
@@ -4898,7 +4870,6 @@ export class FirewallaClient {
   /**
    * Get rules with highest hit counts for traffic analysis
    */
-  @optimizeResponse('rules')
   async getMostActiveRules(
     limit: number = 20,
     minHits: number = 1,
@@ -5026,7 +4997,6 @@ export class FirewallaClient {
   /**
    * Get recently created or modified firewall rules
    */
-  @optimizeResponse('rules')
   async getRecentRules(
     hours: number = 24,
     includeModified: boolean = true,
@@ -5216,7 +5186,6 @@ export class FirewallaClient {
    * console.log(result.message); // "Rule rule-123 paused until resumed"
    * ```
    */
-  @optimizeResponse('rules')
   async pauseRule(
     ruleId: string
   ): Promise<{ success: boolean; message: string }> {
@@ -5262,7 +5231,6 @@ export class FirewallaClient {
    * console.log(result.message); // "Rule rule-123 resumed successfully"
    * ```
    */
-  @optimizeResponse('rules')
   async resumeRule(
     ruleId: string
   ): Promise<{ success: boolean; message: string }> {
