@@ -173,6 +173,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and all 500 flows the API's ts, with no `unknown` source IP. The answers
   are larger (750,289 and 533,035 characters at `limit: 500`); a smaller
   `limit` or a `groupBy` gives a shorter one.
+- `get_recent_flow_activity` reports each flow's bytes. It read the flow's
+  `total`, which the MSP API sends on every flow but the client's flow
+  mappings dropped, so every flow read 0 bytes (live: 0 of 50). Flows from
+  the client now carry `total` (download plus upload, as the API sends
+  it), and `bytes` is the same figure. After the fix 50 of 50 flows
+  reported the `total` the API sent for them.
 
 ### Changed
 
