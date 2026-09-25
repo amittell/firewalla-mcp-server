@@ -114,7 +114,7 @@ export class FirewallaMCPServer {
           {
             name: 'get_active_alarms',
             description:
-              'Retrieve security alarms from the Firewalla MSP API (GET /v2/alarms). No status filter is added: put status:1 in query for active alarms only. Without a ts: qualifier the API covers the last 30 days. Returns up to limit alarms and a cursor for the next page, or groups with groupBy. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
+              'Retrieve active security alarms from the Firewalla MSP API (GET /v2/alarms): status:1 is added unless the query names a status (status:2 for archived alarms). Without a ts: qualifier the API covers the last 30 days. Returns up to limit alarms and a cursor for the next page, or groups with groupBy. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
             annotations: {
               title: 'Get Active Alarms',
               readOnlyHint: true,
@@ -126,7 +126,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query for filtering alarms (no default filter; add status:1 for active alarms only). Use type:N where N is: 1=Security Activity, 2=Abnormal Upload, 3=Large Bandwidth Usage, 4=Monthly Data Plan, 5=New Device, 6=Device Back Online, 7=Device Offline, 8=Video Activity, 9=Gaming Activity, 10=Porn Activity, 11=VPN Activity, 12=VPN Connection Restored, 13=VPN Connection Error, 14=Open Port, 15=Internet Connectivity Update, 16=Large Upload. Examples: type:8 (video), type:10 (porn), region:US, device.ip:192.168.*',
+                    'Search query for filtering alarms. Active alarms only (status:1) unless the query names a status. Use type:N where N is: 1=Security Activity, 2=Abnormal Upload, 3=Large Bandwidth Usage, 4=Monthly Data Plan, 5=New Device, 6=Device Back Online, 7=Device Offline, 8=Video Activity, 9=Gaming Activity, 10=Porn Activity, 11=VPN Activity, 12=VPN Connection Restored, 13=VPN Connection Error, 14=Open Port, 15=Internet Connectivity Update, 16=Large Upload. Examples: type:8 (video), type:10 (porn), region:US, device.ip:192.168.*',
                 },
                 groupBy: {
                   type: 'string',
