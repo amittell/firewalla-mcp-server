@@ -104,6 +104,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `groupBy` their schemas list as well as `group_by`, and take any
   comma-separated API fields (`device`, `box` and `device,category` were
   refused); the API answers an unknown field with 400.
+- `get_target_lists` and `search_target_lists` report each list's entry
+  count. They counted `targets`, which the API does not send for
+  Firewalla-managed lists, so every such list read `entry_count: 0` (live: 13
+  of 13). They use the `count` the API sends on every list (live: 1 to
+  5,968,164), `targets` is `null` rather than `[]` when the API sent none,
+  and a list with neither reads `entry_count: null`, with a note.
 
 ### Changed
 

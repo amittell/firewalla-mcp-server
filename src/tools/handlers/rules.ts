@@ -29,6 +29,10 @@ import {
 } from '../../utils/timeout-manager.js';
 import { validateRuleExists } from '../../validation/resource-validator.js';
 import { logger } from '../../monitoring/logger.js';
+import {
+  targetListEntries,
+  targetListEntryCount,
+} from '../../utils/target-lists.js';
 
 /**
  * Rule status checking utility for preventing redundant operations
@@ -720,6 +724,10 @@ export class GetTargetListsHandler extends BaseToolHandler {
 
       const startTime = Date.now();
 
+      const lists = Array.isArray(listsResponse.results)
+        ? listsResponse.results
+        : [];
+
       const unifiedResponseData = {
         total_lists: SafeAccess.safeArrayAccess(
           listsResponse.results,
@@ -741,11 +749,9 @@ export class GetTargetListsHandler extends BaseToolHandler {
             name: SafeAccess.getNestedValue(list, 'name', 'Unknown List'),
             owner: SafeAccess.getNestedValue(list, 'owner', 'unknown'),
             category: SafeAccess.getNestedValue(list, 'category', 'unknown'),
-            entry_count: SafeAccess.safeArrayAccess(
-              SafeAccess.getNestedValue(list, 'targets', []),
-              arr => arr.length,
-              0
-            ),
+            // The targets' length, else the API's count: it sends no
+            // targets for Firewalla-managed lists
+            entry_count: targetListEntryCount(list),
             // Target List Buffer Strategy: Per-list target limiting
             //
             // Problem: Some target lists (especially threat intelligence feeds)
@@ -762,11 +768,8 @@ export class GetTargetListsHandler extends BaseToolHandler {
             //
             // The 500 limit was chosen as 5x the original 100 limit to provide
             // better visibility into large lists while maintaining performance.
-            targets: SafeAccess.safeArrayAccess(
-              SafeAccess.getNestedValue(list, 'targets', []),
-              arr => arr.slice(0, 500), // Per-list target buffer limit
-              []
-            ),
+            // Per-list target buffer limit; null when the API sent none
+            targets: targetListEntries(list, 500),
             last_updated: safeUnixToISOString(
               SafeAccess.getNestedValue(list, 'lastUpdated', undefined) as
                 | number
@@ -776,6 +779,14 @@ export class GetTargetListsHandler extends BaseToolHandler {
             notes: SafeAccess.getNestedValue(list, 'notes', ''),
           })
         ),
+        ...(lists.some(list => targetListEntries(list, 0) === null) && {
+          targets_note:
+            'targets is null for lists whose entries the API does not return, such as Firewalla-managed lists; their entry_count is the count the API reports.',
+        }),
+        ...(lists.some(list => targetListEntryCount(list) === null) && {
+          entry_count_note:
+            "entry_count is null for lists the API sent neither targets nor a count for; get_specific_target_list returns the API's record of one list.",
+        }),
       };
 
       const executionTime = Date.now() - startTime;
