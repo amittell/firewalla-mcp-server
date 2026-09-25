@@ -291,12 +291,12 @@ export class FirewallaClient {
     this.api.interceptors.request.use(
       config => {
         process.stderr.write(
-          `API Request: ${config.method?.toUpperCase()} ${config.url}\\n`
+          `API Request: ${config.method?.toUpperCase()} ${config.url}\n`
         );
         return config;
       },
       async error => {
-        process.stderr.write(`API Request Error: ${error.message}\\n`);
+        process.stderr.write(`API Request Error: ${error.message}\n`);
         return Promise.reject(error);
       }
     );
@@ -304,13 +304,13 @@ export class FirewallaClient {
     this.api.interceptors.response.use(
       response => {
         process.stderr.write(
-          `API Response: ${response.status} ${response.config.url}\\n`
+          `API Response: ${response.status} ${response.config.url}\n`
         );
         return response;
       },
       async error => {
         process.stderr.write(
-          `API Response Error: ${error.response?.status} ${error.message}\\n`
+          `API Response Error: ${error.response?.status} ${error.message}\n`
         );
 
         if (error.response?.status === 401) {

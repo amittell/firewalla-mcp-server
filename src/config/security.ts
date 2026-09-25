@@ -326,7 +326,7 @@ export class SecurityManager {
     };
 
     // In production, this should go to a proper security log
-    process.stderr.write(`SECURITY_EVENT: ${JSON.stringify(logEntry)}\\n`);
+    process.stderr.write(`SECURITY_EVENT: ${JSON.stringify(logEntry)}\n`);
   }
 
   private sanitizeLogData(

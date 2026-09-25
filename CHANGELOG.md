@@ -56,6 +56,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now closes the MCP server, flushes its output and exits 0. The HTTP transport
   is unchanged. The CI `launch` job's `node dist/server.js` check closes stdin
   after `initialize` and requires the exit.
+- Log lines on stderr end in a newline. The structured logger, the security
+  event log and the API request and response lines wrote a backslash and an
+  `n` instead, so every line ran together.
 
 ### Changed
 

@@ -223,7 +223,9 @@ describe('SecurityManager', () => {
       });
 
       expect(loggedMessages).toHaveLength(1);
-      const cleanedMessage = loggedMessages[0]!.replace('SECURITY_EVENT: ', '').replace(/\\n$/, '');
+      // One line per event: a real newline, not a backslash and an n.
+      expect(loggedMessages[0]).toMatch(/^SECURITY_EVENT: [^\n]*\n$/);
+      const cleanedMessage = loggedMessages[0]!.replace('SECURITY_EVENT: ', '');
       const logEntry = JSON.parse(cleanedMessage);
       
       expect(logEntry.event).toBe('test_event');
