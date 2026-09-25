@@ -50,6 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `update_target_list` called without `targets` sent `targets: []` in its
   PATCH, which asks the API to empty the list. It now sends only the fields
   it is given.
+- Over stdio, the server exits when its stdin closes. MCP clients stop a stdio
+  server by closing its stdin and send SIGTERM only after a grace period, and
+  the server kept running until then, so clients waited out that timeout. It
+  now closes the MCP server, flushes its output and exits 0. The HTTP transport
+  is unchanged. The CI `launch` job's `node dist/server.js` check closes stdin
+  after `initialize` and requires the exit.
 
 ### Changed
 

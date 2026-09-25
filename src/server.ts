@@ -43,6 +43,7 @@ import { setupResources } from './resources/index.js';
 import { setupPrompts } from './prompts/index.js';
 import { logger } from './monitoring/logger.js';
 import { initializeHttpSession } from './http-session.js';
+import { exitWhenStdioCloses } from './stdio-lifecycle.js';
 import { PACKAGE_VERSION } from './utils/package-version.js';
 import { isWriteTool, writeToolsEnabled } from './config/write-tools.js';
 
@@ -1097,6 +1098,16 @@ export class FirewallaMCPServer {
    */
   private async startStdioTransport(): Promise<void> {
     const transport = new StdioServerTransport();
+    // MCP clients stop a stdio server by closing its stdin, so exit then
+    // instead of waiting for the client's SIGTERM.
+    const shutdown = exitWhenStdioCloses({
+      stdin: process.stdin,
+      cleanup: async () => this.server.close(),
+      exit: code => process.exit(code),
+      flush: [process.stdout, process.stderr],
+    });
+    // Server.connect() chains this onclose ahead of its own handler.
+    transport.onclose = () => shutdown('transport closed');
     await this.server.connect(transport);
     logger.info(
       'Firewalla MCP Server running on stdio transport'
