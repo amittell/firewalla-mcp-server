@@ -22,6 +22,11 @@ import {
   batchNormalize,
 } from '../../utils/data-normalizer.js';
 import { normalizeTimestamps } from '../../utils/data-validator.js';
+import type {
+  BoxStatisticType,
+  TrendPeriod,
+  TrendSeries,
+} from '../../types.js';
 
 export class GetBoxesHandler extends BaseToolHandler {
   name = 'get_boxes';
@@ -48,9 +53,10 @@ export class GetBoxesHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
+      // The schema advertises `group`; `group_id` is what this read before
       const groupIdValidation = ParameterValidator.validateOptionalString(
-        _args?.group_id,
-        'group_id'
+        _args?.group ?? _args?.group_id,
+        'group'
       );
 
       if (!groupIdValidation.isValid) {
@@ -165,8 +171,23 @@ export class GetSimpleStatisticsHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
+      const groupValidation = ParameterValidator.validateOptionalString(
+        _args?.group,
+        'group'
+      );
+      if (!groupValidation.isValid) {
+        return this.createErrorResponse(
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          groupValidation.errors
+        );
+      }
       const statsResponse = await withToolTimeout(
-        async () => firewalla.getSimpleStatistics(),
+        async () =>
+          firewalla.getSimpleStatistics(
+            groupValidation.sanitizedValue as string | undefined
+          ),
         this.name
       );
       const stats = SafeAccess.safeArrayAccess(
@@ -277,7 +298,7 @@ export class GetSimpleStatisticsHandler extends BaseToolHandler {
 export class GetStatisticsByRegionHandler extends BaseToolHandler {
   name = 'get_statistics_by_region';
   description =
-    'Get flow statistics grouped by country/region for geographic analysis. No required parameters. Data cached for 1 hour for performance.';
+    'Top regions by blocked flows, from GET /v2/stats/topRegionsByBlockedFlows. Optional group and limit (default 5).';
   category = 'analytics' as const;
 
   constructor() {
@@ -299,95 +320,65 @@ export class GetStatisticsByRegionHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
+      const groupValidation = ParameterValidator.validateOptionalString(
+        _args?.group,
+        'group'
+      );
+      const limitValidation = ParameterValidator.validateNumber(
+        _args?.limit,
+        'limit',
+        { min: 1, integer: true }
+      );
+      if (!groupValidation.isValid || !limitValidation.isValid) {
+        return this.createErrorResponse(
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          [...groupValidation.errors, ...limitValidation.errors]
+        );
+      }
+
+      const startTime = Date.now();
       const stats = await withToolTimeout(
-        async () => firewalla.getStatisticsByRegion(),
+        async () =>
+          firewalla.getStatisticsByRegion(
+            groupValidation.sanitizedValue as string | undefined,
+            limitValidation.sanitizedValue as number | undefined
+          ),
         this.name
       );
 
-      // Validate response structure with comprehensive null/undefined guards
-      if (
-        !stats ||
-        !SafeAccess.getNestedValue(stats, 'results') ||
-        !Array.isArray(stats.results)
-      ) {
-        return this.createSuccessResponse({
-          total_regions: 0,
-          regional_statistics: [],
-          top_regions: [],
-          error:
-            'No regional statistics available - API response missing results array',
-          debug_info: {
-            stats_exists: !!stats,
-            results_exists: !!stats?.results,
-            results_is_array: !!stats?.results && Array.isArray(stats.results),
-            actual_structure: stats ? Object.keys(stats) : 'null',
-          },
-        });
-      }
-
-      // Calculate total flow count for percentage calculations
-      const totalFlowCount = stats.results.reduce((sum: number, stat: any) => {
-        return (
-          sum +
-          (typeof SafeAccess.getNestedValue(stat, 'value') === 'number'
-            ? stat.value
-            : 0)
-        );
-      }, 0);
-
-      // Process regional statistics with defensive programming
-      const regionalStatistics = SafeAccess.safeArrayFilter(
-        stats.results,
-        (stat: any): stat is any =>
-          stat &&
-          typeof SafeAccess.getNestedValue(stat, 'value') === 'number' &&
-          !!SafeAccess.getNestedValue(stat, 'meta')
-      )
-        .map((stat: any) => ({
-          country_code: SafeAccess.getNestedValue(stat, 'meta.code', 'unknown'),
-          flow_count: SafeAccess.getNestedValue(stat, 'value', 0),
-          percentage:
-            totalFlowCount > 0
-              ? Math.round(
-                  ((SafeAccess.getNestedValue(stat, 'value', 0) as number) /
-                    totalFlowCount) *
-                    100
-                )
-              : 0,
-        }))
-        .sort((a: any, b: any) => b.flow_count - a.flow_count);
-
-      // Get top 5 regions with defensive programming
-      const topRegions = SafeAccess.safeArrayFilter(
-        stats.results,
-        (stat: any): stat is any =>
-          stat &&
-          typeof SafeAccess.getNestedValue(stat, 'value') === 'number' &&
-          SafeAccess.getNestedValue(stat, 'meta')
-      )
-        .sort(
-          (a: any, b: any) =>
-            (SafeAccess.getNestedValue(b, 'value', 0) as number) -
-            (SafeAccess.getNestedValue(a, 'value', 0) as number)
+      const rows = (Array.isArray(stats?.results) ? stats.results : [])
+        .filter(
+          (stat: any) =>
+            typeof stat?.value === 'number' &&
+            typeof stat?.meta?.code === 'string'
         )
-        .slice(0, 5)
         .map((stat: any) => ({
-          country_code: SafeAccess.getNestedValue(stat, 'meta.code', 'unknown'),
-          flow_count: SafeAccess.getNestedValue(stat, 'value', 0),
-        }));
-
-      const startTime = Date.now();
+          country_code: stat.meta.code as string,
+          flow_count: stat.value as number,
+        }))
+        .sort((a, b) => b.flow_count - a.flow_count);
+      const totalFlowCount = rows.reduce((sum, row) => sum + row.flow_count, 0);
 
       const unifiedResponseData = {
-        total_regions: stats.results.length,
-        regional_statistics: regionalStatistics,
-        top_regions: topRegions,
+        metric: 'blocked_flows',
+        source: 'GET /v2/stats/topRegionsByBlockedFlows',
+        total_regions: rows.length,
+        regional_statistics: rows.map(row => ({
+          ...row,
+          percentage:
+            totalFlowCount > 0
+              ? Math.round((row.flow_count / totalFlowCount) * 100)
+              : 0,
+        })),
+        top_regions: rows.slice(0, 5),
         total_flow_count: totalFlowCount,
+        note: 'flow_count is the number of blocked flows from each region, in the order the API ranks them. percentage and total_flow_count cover only the listed regions.',
       };
 
-      const executionTime = Date.now() - startTime;
       return this.createUnifiedResponse(unifiedResponseData, {
-        executionTimeMs: executionTime,
+        executionTimeMs: Date.now() - startTime,
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -400,10 +391,25 @@ export class GetStatisticsByRegionHandler extends BaseToolHandler {
   }
 }
 
+/** What each box statistic type counts */
+const BOX_STATISTIC_METRICS: Record<
+  BoxStatisticType,
+  { metric: string; note: string }
+> = {
+  topBoxesByBlockedFlows: {
+    metric: 'blocked_flows',
+    note: 'value is the number of blocked flows on the box. The API does not document the window; it was about the last 30 days when measured.',
+  },
+  topBoxesBySecurityAlarms: {
+    metric: 'security_alarms',
+    note: 'value is the number of Security Activity (type 1) alarms on the box. The API does not document the window; it matched the last 30 days of alarms when measured. Boxes the API does not rank are not listed.',
+  },
+};
+
 export class GetStatisticsByBoxHandler extends BaseToolHandler {
   name = 'get_statistics_by_box';
   description =
-    'Get statistics for each Firewalla box with activity scores and health monitoring. No required parameters. Data cached for 1 hour for performance.';
+    'Top boxes by blocked flows or by security alarms, from GET /v2/stats/{type}, with each box from GET /v2/boxes. Optional type, group and limit.';
   category = 'analytics' as const;
 
   constructor() {
@@ -425,133 +431,102 @@ export class GetStatisticsByBoxHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
+      const typeValidation = ParameterValidator.validateEnum(
+        _args?.type,
+        'type',
+        Object.keys(BOX_STATISTIC_METRICS),
+        false,
+        'topBoxesByBlockedFlows'
+      );
+      const groupValidation = ParameterValidator.validateOptionalString(
+        _args?.group,
+        'group'
+      );
+      const limitValidation = ParameterValidator.validateNumber(
+        _args?.limit,
+        'limit',
+        { min: 1, integer: true }
+      );
+      if (
+        !typeValidation.isValid ||
+        !groupValidation.isValid ||
+        !limitValidation.isValid
+      ) {
+        return this.createErrorResponse(
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          [
+            ...typeValidation.errors,
+            ...groupValidation.errors,
+            ...limitValidation.errors,
+          ]
+        );
+      }
+      const type = typeValidation.sanitizedValue as BoxStatisticType;
+
+      const startTime = Date.now();
       const stats = await withToolTimeout(
-        async () => firewalla.getStatisticsByBox(),
+        async () =>
+          firewalla.getStatisticsByBox(
+            type,
+            groupValidation.sanitizedValue as string | undefined,
+            limitValidation.sanitizedValue as number | undefined
+          ),
         this.name
       );
 
-      // Validate stats response structure
-      if (!stats || typeof stats !== 'object') {
-        throw new Error('Invalid stats response: not an object');
-      }
-
-      if (
-        !SafeAccess.getNestedValue(stats, 'results') ||
-        !Array.isArray(stats.results)
-      ) {
+      if (!Array.isArray(stats?.results)) {
         throw new Error('Invalid stats response: results is not an array');
       }
 
-      // Process and validate each box statistic
       const boxStatistics = SafeAccess.safeArrayMap(
         stats.results,
         (stat: any) => {
           const boxMeta = SafeAccess.getNestedValue(stat, 'meta', {}) as any;
+          const lastSeen = Number(boxMeta.lastSeen) || 0;
           return {
-            box_id: SafeAccess.getNestedValue(
-              boxMeta,
-              'gid',
-              'unknown'
-            ) as string,
-            name: SafeAccess.getNestedValue(
-              boxMeta,
-              'name',
-              'Unknown Box'
-            ) as string,
-            model: SafeAccess.getNestedValue(
-              boxMeta,
-              'model',
-              'unknown'
-            ) as string,
-            status: (SafeAccess.getNestedValue(
-              boxMeta,
-              'online',
-              false
-            ) as boolean)
-              ? 'online'
-              : 'offline',
-            version: SafeAccess.getNestedValue(
-              boxMeta,
-              'version',
-              'unknown'
-            ) as string,
-            location: SafeAccess.getNestedValue(
-              boxMeta,
-              'location',
-              'unknown'
-            ) as string,
-            device_count: SafeAccess.getNestedValue(
-              boxMeta,
-              'deviceCount',
-              0
-            ) as number,
-            rule_count: SafeAccess.getNestedValue(
-              boxMeta,
-              'ruleCount',
-              0
-            ) as number,
-            alarm_count: SafeAccess.getNestedValue(
-              boxMeta,
-              'alarmCount',
-              0
-            ) as number,
-            activity_score: SafeAccess.getNestedValue(
-              stat,
-              'value',
-              0
-            ) as number,
-            last_seen: (SafeAccess.getNestedValue(
-              boxMeta,
-              'lastSeen',
-              0
-            ) as number)
-              ? unixToISOString(
-                  SafeAccess.getNestedValue(boxMeta, 'lastSeen', 0) as number
-                )
-              : 'Never',
+            box_id: String(boxMeta.gid ?? 'unknown'),
+            name: String(boxMeta.name ?? 'Unknown Box'),
+            model: String(boxMeta.model ?? 'unknown'),
+            value: Number(stat.value) || 0,
+            status: boxMeta.online ? 'online' : 'offline',
+            version: String(boxMeta.version ?? 'unknown'),
+            location: String(boxMeta.location ?? 'unknown'),
+            device_count: Number(boxMeta.deviceCount) || 0,
+            rule_count: Number(boxMeta.ruleCount) || 0,
+            alarm_count: Number(boxMeta.alarmCount) || 0,
+            last_seen: lastSeen ? unixToISOString(lastSeen) : 'Never',
           };
         }
-      ).sort((a: any, b: any) => b.activity_score - a.activity_score);
+      ).sort((a: any, b: any) => b.value - a.value);
 
-      // Calculate summary with safe operations
-      const onlineBoxes = SafeAccess.safeArrayFilter(
-        stats.results,
-        (s: any) =>
-          SafeAccess.getNestedValue(s, 'meta.online', false) as boolean
-      ).length;
-
-      const totalDevices = stats.results.reduce(
-        (sum: number, s: any) =>
-          sum + (SafeAccess.getNestedValue(s, 'meta.deviceCount', 0) as number),
-        0
-      );
-      const totalRules = stats.results.reduce(
-        (sum: number, s: any) =>
-          sum + (SafeAccess.getNestedValue(s, 'meta.ruleCount', 0) as number),
-        0
-      );
-      const totalAlarms = stats.results.reduce(
-        (sum: number, s: any) =>
-          sum + (SafeAccess.getNestedValue(s, 'meta.alarmCount', 0) as number),
-        0
-      );
-
-      const startTime = Date.now();
+      const sum = (field: string): number =>
+        boxStatistics.reduce(
+          (total: number, box: any) => total + (Number(box[field]) || 0),
+          0
+        );
 
       const unifiedResponseData = {
-        total_boxes: stats.results.length,
+        stat_type: type,
+        metric: BOX_STATISTIC_METRICS[type].metric,
+        source: `GET /v2/stats/${type}`,
+        total_boxes: boxStatistics.length,
         box_statistics: boxStatistics,
         summary: {
-          online_boxes: onlineBoxes,
-          total_devices: totalDevices,
-          total_rules: totalRules,
-          total_alarms: totalAlarms,
+          online_boxes: boxStatistics.filter(
+            (box: any) => box.status === 'online'
+          ).length,
+          total_devices: sum('device_count'),
+          total_rules: sum('rule_count'),
+          total_alarms: sum('alarm_count'),
+          total_value: sum('value'),
         },
+        note: `${BOX_STATISTIC_METRICS[type].note} device_count, rule_count and alarm_count are the counts GET /v2/boxes reports; the summary covers the listed boxes.`,
       };
 
-      const executionTime = Date.now() - startTime;
       return this.createUnifiedResponse(unifiedResponseData, {
-        executionTimeMs: executionTime,
+        executionTimeMs: Date.now() - startTime,
       });
     } catch (error: unknown) {
       logger.error(
@@ -973,10 +948,82 @@ export class GetFlowInsightsHandler extends BaseToolHandler {
   }
 }
 
+const TREND_PERIODS: TrendPeriod[] = ['1h', '24h', '7d', '30d'];
+
+/**
+ * Validate the trend tools' optional `period` (default 30d, the API's whole
+ * series) and `group`
+ */
+function validateTrendArgs(args: ToolArgs): {
+  errors: string[];
+  period: TrendPeriod;
+  group?: string;
+} {
+  const periodValidation = ParameterValidator.validateEnum(
+    args?.period,
+    'period',
+    TREND_PERIODS,
+    false,
+    '30d'
+  );
+  const groupValidation = ParameterValidator.validateOptionalString(
+    args?.group,
+    'group'
+  );
+  return {
+    errors: [...periodValidation.errors, ...groupValidation.errors],
+    period: (periodValidation.sanitizedValue as TrendPeriod) || '30d',
+    group: groupValidation.sanitizedValue as string | undefined,
+  };
+}
+
+/** Where a trend tool's daily points came from and what they cover */
+function describeTrend(series: TrendSeries, period: TrendPeriod) {
+  const notes = [
+    `The trends API has one point per day, and each timestamp is the start of a day; these are the days that overlap the last ${period}.`,
+  ];
+  if (series.last_point_partial) {
+    notes.push('The last point is the current day so far.');
+  }
+  if (series.note) {
+    notes.push(series.note);
+  }
+  return {
+    interval: series.interval,
+    source: series.source,
+    scope: series.scope,
+    window: {
+      from:
+        series.window_start !== undefined
+          ? unixToISOString(series.window_start)
+          : null,
+      to: unixToISOString(series.window_end),
+    },
+    last_point_partial: series.last_point_partial,
+    note: notes.join(' '),
+  };
+}
+
+/** Total, mean, peak and non-zero days of a series' values */
+function summarizeValues(points: Array<{ value: number }>) {
+  const values = points.map(point => point.value);
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const nonZero = values.filter(value => value > 0).length;
+  return {
+    total,
+    mean:
+      values.length > 0 ? Math.round((total / values.length) * 100) / 100 : 0,
+    peak: values.reduce((max, value) => Math.max(max, value), 0),
+    nonZero,
+    nonZeroPercent:
+      values.length > 0 ? Math.round((nonZero / values.length) * 100) : 0,
+  };
+}
+
 export class GetAlarmTrendsHandler extends BaseToolHandler {
   name = 'get_alarm_trends';
   description =
-    'Get historical alarm data trends over time with configurable periods. Optional period parameter. Data cached for 1 hour for performance.';
+    'Alarms generated per day, from GET /v2/trends/alarms (the last 30 days, one point per day). Optional period (default 30d) and group.';
   category = 'analytics' as const;
 
   constructor() {
@@ -998,129 +1045,44 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      const periodValidation = ParameterValidator.validateEnum(
-        _args?.period,
-        'period',
-        ['1h', '24h', '7d', '30d'],
-        false,
-        '24h'
-      );
-
-      if (!periodValidation.isValid) {
+      const { errors, period, group } = validateTrendArgs(_args);
+      if (errors.length > 0) {
         return this.createErrorResponse(
           'Parameter validation failed',
           ErrorType.VALIDATION_ERROR,
           undefined,
-          periodValidation.errors
+          errors
         );
       }
 
-      const period = periodValidation.sanitizedValue!;
-
-      const trends = await withToolTimeout(
-        async () =>
-          firewalla.getAlarmTrends(period as '1h' | '24h' | '7d' | '30d'),
+      const startTime = Date.now();
+      const series = await withToolTimeout(
+        async () => firewalla.getAlarmTrends(period, group),
         this.name
       );
-
-      // Defensive programming: validate trends response structure
-      if (
-        !trends ||
-        !SafeAccess.getNestedValue(trends, 'results') ||
-        !Array.isArray(trends.results)
-      ) {
-        return this.createSuccessResponse({
-          period,
-          data_points: 0,
-          trends: [],
-          summary: {
-            total_alarms: 0,
-            avg_alarms_per_interval: 0,
-            peak_alarm_count: 0,
-            intervals_with_alarms: 0,
-            alarm_frequency: 0,
-          },
-          error: 'Invalid alarm trends data received',
-        });
-      }
-
-      // Validate individual trend entries
-      const validTrends = SafeAccess.safeArrayFilter(
-        trends.results,
-        (trend: any) =>
-          trend &&
-          typeof SafeAccess.getNestedValue(trend, 'ts') === 'number' &&
-          typeof SafeAccess.getNestedValue(trend, 'value') === 'number' &&
-          (SafeAccess.getNestedValue(trend, 'ts', 0) as number) > 0 &&
-          (SafeAccess.getNestedValue(trend, 'value', 0) as number) >= 0
-      );
-
-      const startTime = Date.now();
+      const points = Array.isArray(series?.results) ? series.results : [];
+      const stats = summarizeValues(points);
 
       const unifiedResponseData = {
         period,
-        data_points: validTrends.length,
-        trends: SafeAccess.safeArrayMap(validTrends, (trend: any) => ({
-          timestamp: SafeAccess.getNestedValue(trend, 'ts', 0),
-          timestamp_iso: unixToISOString(
-            SafeAccess.getNestedValue(trend, 'ts', 0) as number
-          ),
-          alarm_count: SafeAccess.getNestedValue(trend, 'value', 0),
+        data_points: points.length,
+        trends: points.map(point => ({
+          timestamp: point.ts,
+          timestamp_iso: unixToISOString(point.ts),
+          alarm_count: point.value,
         })),
         summary: {
-          total_alarms: validTrends.reduce(
-            (sum: number, t: any) =>
-              sum + (SafeAccess.getNestedValue(t, 'value', 0) as number),
-            0
-          ),
-          avg_alarms_per_interval:
-            validTrends.length > 0
-              ? Math.round(
-                  (validTrends.reduce(
-                    (sum: number, t: any) =>
-                      sum +
-                      (SafeAccess.getNestedValue(t, 'value', 0) as number),
-                    0
-                  ) /
-                    validTrends.length) *
-                    100
-                ) / 100
-              : 0,
-          // Performance Buffer Strategy: Same defensive slicing as flow trends
-          // to prevent call stack overflow with large alarm trend datasets
-          peak_alarm_count:
-            validTrends.length > 0
-              ? Math.max(
-                  ...validTrends
-                    .slice(0, 1000) // Defensive limit to prevent call stack overflow
-                    .map(
-                      (t: any) =>
-                        SafeAccess.getNestedValue(t, 'value', 0) as number
-                    )
-                )
-              : 0,
-          intervals_with_alarms: SafeAccess.safeArrayFilter(
-            validTrends,
-            (t: any) => (SafeAccess.getNestedValue(t, 'value', 0) as number) > 0
-          ).length,
-          alarm_frequency:
-            validTrends.length > 0
-              ? Math.round(
-                  (SafeAccess.safeArrayFilter(
-                    validTrends,
-                    (t: any) =>
-                      (SafeAccess.getNestedValue(t, 'value', 0) as number) > 0
-                  ).length /
-                    validTrends.length) *
-                    100
-                )
-              : 0,
+          total_alarms: stats.total,
+          avg_alarms_per_interval: stats.mean,
+          peak_alarm_count: stats.peak,
+          intervals_with_alarms: stats.nonZero,
+          alarm_frequency: stats.nonZeroPercent,
         },
+        ...describeTrend(series, period),
       };
 
-      const executionTime = Date.now() - startTime;
       return this.createUnifiedResponse(unifiedResponseData, {
-        executionTimeMs: executionTime,
+        executionTimeMs: Date.now() - startTime,
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -1136,7 +1098,7 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
 export class GetRuleTrendsHandler extends BaseToolHandler {
   name = 'get_rule_trends';
   description =
-    'Get historical rule activity trends over time with configurable periods. Optional period parameter. Data cached for 1 hour for performance.';
+    'Rules created per day, from GET /v2/trends/rules (the last 30 days, one point per day), or from the creation times in GET /v2/rules when that endpoint answers 400. Optional period (default 30d) and group.';
   category = 'analytics' as const;
 
   constructor() {
@@ -1158,101 +1120,43 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      const periodValidation = ParameterValidator.validateEnum(
-        _args?.period,
-        'period',
-        ['1h', '24h', '7d', '30d'],
-        false,
-        '24h'
-      );
-
-      if (!periodValidation.isValid) {
+      const { errors, period, group } = validateTrendArgs(_args);
+      if (errors.length > 0) {
         return this.createErrorResponse(
           'Parameter validation failed',
           ErrorType.VALIDATION_ERROR,
           undefined,
-          periodValidation.errors
+          errors
         );
       }
 
-      const period = periodValidation.sanitizedValue!;
-
-      const trends = await withToolTimeout(
-        async () =>
-          firewalla.getRuleTrends(period as '1h' | '24h' | '7d' | '30d'),
+      const startTime = Date.now();
+      const series = await withToolTimeout(
+        async () => firewalla.getRuleTrends(period, group),
         this.name
       );
-
-      // Validate trends response structure
-      if (!trends || typeof trends !== 'object') {
-        throw new Error('Invalid trends response: not an object');
-      }
-
-      if (
-        !SafeAccess.getNestedValue(trends, 'results') ||
-        !Array.isArray(trends.results)
-      ) {
-        throw new Error('Invalid trends response: results is not an array');
-      }
-
-      // Validate each trend item has required properties
-      const validTrends = SafeAccess.safeArrayFilter(
-        trends.results,
-        (trend: any) =>
-          trend &&
-          typeof SafeAccess.getNestedValue(trend, 'ts') === 'number' &&
-          typeof SafeAccess.getNestedValue(trend, 'value') === 'number'
-      );
-
-      const startTime = Date.now();
+      const points = Array.isArray(series?.results) ? series.results : [];
+      const stats = summarizeValues(points);
 
       const unifiedResponseData = {
         period,
-        data_points: validTrends.length,
-        trends: SafeAccess.safeArrayMap(validTrends, (trend: any) => ({
-          timestamp: SafeAccess.getNestedValue(trend, 'ts', 0),
-          timestamp_iso: unixToISOString(
-            SafeAccess.getNestedValue(trend, 'ts', 0) as number
-          ),
-          active_rule_count: SafeAccess.getNestedValue(trend, 'value', 0),
+        data_points: points.length,
+        trends: points.map(point => ({
+          timestamp: point.ts,
+          timestamp_iso: unixToISOString(point.ts),
+          rules_created: point.value,
         })),
         summary: {
-          avg_active_rules:
-            validTrends.length > 0
-              ? Math.round(
-                  validTrends.reduce(
-                    (sum: number, t: any) =>
-                      sum +
-                      (SafeAccess.getNestedValue(t, 'value', 0) as number),
-                    0
-                  ) / validTrends.length
-                )
-              : 0,
-          max_active_rules:
-            validTrends.length > 0
-              ? Math.max(
-                  ...validTrends.map(
-                    (t: any) =>
-                      SafeAccess.getNestedValue(t, 'value', 0) as number
-                  )
-                )
-              : 0,
-          min_active_rules:
-            validTrends.length > 0
-              ? Math.min(
-                  ...validTrends.map(
-                    (t: any) =>
-                      SafeAccess.getNestedValue(t, 'value', 0) as number
-                  )
-                )
-              : 0,
-          rule_stability: this.calculateRuleStability(validTrends),
+          total_rules_created: stats.total,
+          avg_rules_created_per_day: stats.mean,
+          peak_rules_created: stats.peak,
+          days_with_new_rules: stats.nonZero,
         },
+        ...describeTrend(series, period),
       };
 
-      const executionTime = Date.now() - startTime;
       return this.createUnifiedResponse(unifiedResponseData, {
-        executionTimeMs: executionTime,
+        executionTimeMs: Date.now() - startTime,
       });
     } catch (error: unknown) {
       const errorMessage =
@@ -1261,37 +1165,11 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
         `Failed to get rule trends: ${errorMessage}`,
         ErrorType.API_ERROR,
         {
-          period: _args?.period || '24h',
+          period: _args?.period || '30d',
           troubleshooting:
             'Check if Firewalla API is accessible and firewall rules are available',
         }
       );
     }
-  }
-
-  private calculateRuleStability(
-    trends: Array<{ ts: number; value: number }>
-  ): number {
-    if (trends.length < 2) {
-      return 100;
-    }
-
-    const values = trends.map(
-      t => SafeAccess.getNestedValue(t, 'value', 0) as number
-    );
-    const avgValue = values.reduce((sum, val) => sum + val, 0) / values.length;
-
-    if (avgValue === 0) {
-      return 100;
-    }
-
-    const variation =
-      values.reduce((sum, val, i) => {
-        return i > 0 ? sum + Math.abs(val - values[i - 1]) : sum;
-      }, 0) /
-      (values.length - 1);
-
-    const variationPercent = variation / avgValue;
-    return Math.max(0, Math.min(100, Math.round((1 - variationPercent) * 100)));
   }
 }

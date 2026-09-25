@@ -786,7 +786,7 @@ export class FirewallaMCPServer {
                 limit: {
                   type: 'number',
                   description:
-                    'Maximum number of results (optional, default: 5)',
+                    'Maximum number of regions (optional, default: 5; the API returned no more than 5 when a larger limit was tried)',
                   minimum: 1,
                   default: 5,
                 },
@@ -880,10 +880,17 @@ export class FirewallaMCPServer {
           {
             name: 'get_alarm_trends',
             description:
-              'Get historical alarm trend data (alarms generated per day)',
+              'Get historical alarm trend data (alarms generated per day, from the trends API: one point per day for the last 30 days, the last point being today so far)',
             inputSchema: {
               type: 'object',
               properties: {
+                period: {
+                  type: 'string',
+                  enum: ['1h', '24h', '7d', '30d'],
+                  description:
+                    'Return the days that overlap this period (default: 30d). The API has no finer resolution than a day, so 1h returns today so far and 24h returns yesterday and today',
+                  default: '30d',
+                },
                 group: {
                   type: 'string',
                   description: 'Get trends for a specific box group',
@@ -895,10 +902,17 @@ export class FirewallaMCPServer {
           {
             name: 'get_rule_trends',
             description:
-              'Get historical rule trend data (rules created per day)',
+              'Get historical rule trend data (rules created per day, one point per day for the last 30 days). When the trends API refuses the request, the days are counted from the creation times of the existing rules, and the response says so',
             inputSchema: {
               type: 'object',
               properties: {
+                period: {
+                  type: 'string',
+                  enum: ['1h', '24h', '7d', '30d'],
+                  description:
+                    'Return the days that overlap this period (default: 30d). The API has no finer resolution than a day',
+                  default: '30d',
+                },
                 group: {
                   type: 'string',
                   description: 'Get trends for a specific box group',

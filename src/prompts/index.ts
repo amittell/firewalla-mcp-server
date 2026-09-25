@@ -4,7 +4,12 @@ import {
   ListPromptsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { FirewallaClient } from '../firewalla/client.js';
-import type { Device, FirewallSummary, NetworkRule } from '../types.js';
+import type {
+  Device,
+  FirewallSummary,
+  NetworkRule,
+  SecurityMetricsSummary,
+} from '../types.js';
 import { unixToISOString, safeUnixToISOString } from '../utils/timestamp.js';
 
 // Type definitions for health score calculation
@@ -13,6 +18,35 @@ interface SecurityMetrics {
   active_alarms: number;
   threat_level: string;
   blocked_connections?: number;
+  /** Security Activity (type 1) alarms in the last 24 hours */
+  security_alarms?: number;
+}
+
+/** getRecentThreats returns at most this many items */
+const RECENT_THREATS_LIMIT = 100;
+
+/**
+ * A security count as the prompts print it: "at least N" when the API did
+ * not total it and the client counted one page
+ */
+function formatMetric(
+  metrics: Partial<SecurityMetricsSummary>,
+  field: keyof SecurityMetricsSummary['windows']
+): string {
+  const value = metrics[field] ?? 0;
+  return metrics.lower_bounds?.includes(field)
+    ? `at least ${value}`
+    : String(value);
+}
+
+/** The recent threat count, marked when the list stopped at its limit */
+function formatThreatCount(count: number, explain = false): string {
+  if (count < RECENT_THREATS_LIMIT) {
+    return String(count);
+  }
+  return explain
+    ? `at least ${count} (the list stops at ${RECENT_THREATS_LIMIT})`
+    : `at least ${count}`;
 }
 
 interface NetworkTopology {
@@ -119,7 +153,7 @@ export function setupPrompts(server: Server, firewalla: FirewallaClient): void {
 
           // Gather comprehensive security data
           const [alarms, summary, metrics, threats] = await Promise.all([
-            firewalla.getActiveAlarms(),
+            firewalla.getActiveAlarms(undefined, undefined, 'ts:desc', 10),
             firewalla.getFirewallSummary(),
             firewalla.getSecurityMetrics(),
             firewalla.getRecentThreats(getPeriodInHours(period)),
@@ -135,13 +169,13 @@ ${formatBoxStatusLines(summary)}
 - Blocked in the ${summary.recent_flows_sampled} most recent flows: ${summary.blocked_in_sample}
 
 **Security Metrics:**
-- Total Alarms: ${metrics.total_alarms}
-- Active Alarms: ${metrics.active_alarms}
-- Blocked Connections: ${metrics.blocked_connections}
-- Threat Level: ${metrics.threat_level}
-- Recent Threats: ${threats.length}
+- Alarms in the last 30 days: ${formatMetric(metrics, 'total_alarms')} (${formatMetric(metrics, 'active_alarms')} active)
+- Alarms in the last 24 hours: ${formatMetric(metrics, 'suspicious_activities')}, of which Security Activity: ${formatMetric(metrics, 'security_alarms')}
+- Blocked flows in the last 24 hours: ${formatMetric(metrics, 'blocked_connections')}
+- Threat Level: ${metrics.threat_level} (from the Security Activity alarms in the last 24 hours)
+- Recent Threats: ${formatThreatCount(threats.length, true)}
 
-**Active Alarms (${alarms.count}):**
+**Most Recent Alarms (${alarms.results.length} of ${formatMetric(metrics, 'total_alarms')} in the last 30 days):**
 ${alarms.results
   .slice(0, 10)
   .map(
@@ -149,7 +183,7 @@ ${alarms.results
   )
   .join('\n')}
 
-**Recent Threats (${threats.length}):**
+**Recent Threats (${formatThreatCount(threats.length)}):**
 ${threats
   .slice(0, 10)
   .map(
@@ -465,8 +499,9 @@ ${formatBoxStatusLines(summary)}
 - Subnets: ${topology.subnets.length}
 
 **Security Posture:**
-- Threat Level: ${metrics.threat_level}
-- Active Alarms: ${metrics.active_alarms}
+- Threat Level: ${metrics.threat_level} (from the Security Activity alarms in the last 24 hours)
+- Active Alarms (last 30 days): ${formatMetric(metrics, 'active_alarms')}
+- Security Activity Alarms (last 24 hours): ${formatMetric(metrics, 'security_alarms')}
 - Blocked in the ${summary.recent_flows_sampled} most recent flows: ${summary.blocked_in_sample}
 - Active Rules: ${rules.results.filter(r => r.status === 'active' || !r.status).length}
 - Security Score: ${calculateSecurityScore(metrics)}/100
@@ -601,7 +636,7 @@ function formatBoxStatusLines(summary: FirewallSummary): string {
 /**
  * Calculates an overall network health score based on system status, device connectivity, security metrics, network topology, and rule configuration.
  *
- * The score starts at 100 and deducts points for offline or partly offline boxes, offline devices, active alarms, threat severity, lack of active rules, and missing subnets. The result is a non-negative integer representing the network's health.
+ * The score starts at 100 and deducts points for offline or partly offline boxes, offline devices, Security Activity alarms, threat severity, lack of active rules, and missing subnets. The result is a non-negative integer representing the network's health.
  *
  * @param data - Aggregated network and security data used for scoring
  * @returns The computed network health score as an integer between 0 and 100
@@ -622,8 +657,12 @@ function calculateNetworkHealthScore(data: HealthScoreData): number {
     data.devices.results.filter(d => d.online).length / data.devices.count;
   score -= (1 - onlineRatio) * 25;
 
-  // Security (30 points)
-  score -= Math.min(data.metrics.active_alarms * 2, 20);
+  // Security (30 points): Security Activity alarms, not every active alarm;
+  // video, gaming and new-device alarms stay active until archived
+  score -= Math.min(
+    (data.metrics.security_alarms ?? data.metrics.active_alarms) * 2,
+    20
+  );
   const threatPenalty = { low: 0, medium: 5, high: 10, critical: 15 };
   score -=
     threatPenalty[data.metrics.threat_level as keyof typeof threatPenalty] || 0;
@@ -643,18 +682,18 @@ function calculateNetworkHealthScore(data: HealthScoreData): number {
 }
 
 /**
- * Calculates a security score based on the number of active alarms and blocked connections.
+ * Calculates a security score from the Security Activity alarms of the last 24 hours and the blocked connections.
  *
- * The score starts at 100, deducts 5 points for each active alarm, and adds up to 10 bonus points based on the number of blocked connections (1 point per 100 blocked connections, capped at 10). The final score is clamped between 0 and 100.
+ * The score starts at 100, deducts 5 points for each Security Activity alarm (each active alarm when the metrics have no security_alarms), and adds up to 10 bonus points based on the number of blocked connections (1 point per 100 blocked connections, capped at 10). The final score is clamped between 0 and 100.
  *
- * @param metrics - The security metrics containing active alarms and blocked connections
+ * @param metrics - The security metrics containing security alarms and blocked connections
  * @returns The computed security score as an integer between 0 and 100.
  */
 function calculateSecurityScore(
   metrics: SecurityMetrics & { blocked_connections: number }
 ): number {
   const baseScore = 100;
-  const alarmPenalty = metrics.active_alarms * 5;
+  const alarmPenalty = (metrics.security_alarms ?? metrics.active_alarms) * 5;
   const connectionBonus = Math.min(metrics.blocked_connections / 100, 10);
   return Math.max(0, Math.min(100, baseScore - alarmPenalty + connectionBonus));
 }

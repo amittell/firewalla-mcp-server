@@ -213,8 +213,11 @@ export function setupResources(
                           metrics.total_alarms - metrics.active_alarms,
                         blocked_connections: metrics.blocked_connections,
                         suspicious_activities: metrics.suspicious_activities,
+                        security_alarms: metrics.security_alarms,
                         threat_level: metrics.threat_level,
                         last_threat_detected: metrics.last_threat_detected,
+                        windows: metrics.windows,
+                        lower_bounds: metrics.lower_bounds,
                       },
                       threat_indicators: {
                         level_emoji: getThreatLevelEmoji(metrics.threat_level),
@@ -224,7 +227,7 @@ export function setupResources(
                         security_effectiveness: calculateSecurityScore(metrics),
                         recommendation: getSecurityRecommendation(
                           metrics.threat_level,
-                          metrics.active_alarms
+                          metrics.security_alarms
                         ),
                       },
                     },
@@ -380,28 +383,34 @@ function getThreatLevelEmoji(level: string): string {
   return emojis[level] || '⚪';
 }
 
+/**
+ * 100, minus 5 per Security Activity alarm in the last 24 hours, plus up to
+ * 10 for blocked connections. Every active alarm used to cost 5 points, and
+ * alarms stay active until archived, video, gaming and new-device alarms
+ * included.
+ */
 function calculateSecurityScore(metrics: {
   blocked_connections: number;
-  active_alarms: number;
+  security_alarms: number;
 }): number {
   const baseScore = 100;
-  const alarmPenalty = metrics.active_alarms * 5;
+  const alarmPenalty = metrics.security_alarms * 5;
   const connectionBonus = Math.min(metrics.blocked_connections / 100, 10);
   return Math.max(0, Math.min(100, baseScore - alarmPenalty + connectionBonus));
 }
 
 function getSecurityRecommendation(
   threatLevel: string,
-  activeAlarms: number
+  securityAlarms: number
 ): string {
-  if (threatLevel === 'critical' || activeAlarms > 10) {
-    return 'Immediate attention required - review and address active alarms';
+  if (threatLevel === 'critical' || securityAlarms > 10) {
+    return 'Immediate attention required - review and address the Security Activity alarms';
   }
-  if (threatLevel === 'high' || activeAlarms > 5) {
+  if (threatLevel === 'high' || securityAlarms > 5) {
     return 'Monitor closely and consider additional security measures';
   }
-  if (threatLevel === 'medium' || activeAlarms > 0) {
-    return 'Review active alarms and update security policies if needed';
+  if (threatLevel === 'medium' || securityAlarms > 0) {
+    return 'Review the Security Activity alarms and update security policies if needed';
   }
   return 'Security status is good - maintain current monitoring';
 }

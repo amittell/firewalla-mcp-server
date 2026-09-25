@@ -61,15 +61,6 @@ const limits = (request: jest.Mock) =>
   request.mock.calls.map(([, , params]) => params.limit);
 
 describe('requests to capped list endpoints', () => {
-  it('getAlarmTrends pages 500 at a time and counts every alarm', async () => {
-    const { client, request } = makeClient(1234);
-    const trends = await client.getAlarmTrends('24h');
-    expect(limits(request)).toEqual([500, 500, 500]);
-    expect(request.mock.calls[1][2].cursor).toBe('500');
-    const counted = trends.results.reduce((sum, point) => sum + point.value, 0);
-    expect(counted).toBe(1234);
-  });
-
   it('getBandwidthUsage asks for top * 10 flows in pages of at most 500', async () => {
     const { client, request } = makeClient(5000);
     await client.getBandwidthUsage('1h', 60);

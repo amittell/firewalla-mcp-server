@@ -307,13 +307,32 @@ describe('getRuleTrends', () => {
   it('adds no random variation to the counts', async () => {
     const { client } = makeClient();
     const now = Math.floor(Date.now() / 1000);
-    (client as any).getNetworkRules = jest.fn(async () => ({
-      count: 2,
-      results: [
-        { id: 'r1', ts: now - 3600, updateTs: now - 3600, status: 'active' },
-        { id: 'r2', ts: now - 7200, updateTs: now - 7200, status: 'active' },
-      ],
-    }));
+    (client as any).request = jest.fn(
+      async (_method: string, endpoint: string) => {
+        if (endpoint === '/v2/trends/rules') {
+          throw new Error(
+            'Bad Request: Invalid parameters sent to /v2/trends/rules'
+          );
+        }
+        return {
+          count: 2,
+          results: [
+            {
+              id: 'r1',
+              ts: now - 3600,
+              updateTs: now - 3600,
+              status: 'active',
+            },
+            {
+              id: 'r2',
+              ts: now - 7200,
+              updateTs: now - 7200,
+              status: 'active',
+            },
+          ],
+        };
+      }
+    );
     const random = jest.spyOn(Math, 'random');
     const first = await client.getRuleTrends('24h');
     const second = await client.getRuleTrends('24h');

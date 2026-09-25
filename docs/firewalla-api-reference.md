@@ -543,6 +543,14 @@ Both statistics endpoints are documented by Firewalla. Earlier project notes cal
 ]
 ```
 
+**Measured 2026-09-25** on a live account with two boxes (the docs give no time window for any statistic):
+- `topBoxesBySecurityAlarms` counts Security Activity (type 1) alarms. Its one row (23) equalled the type 1 count of `/v2/alarms?groupBy=type` over the default 30-day window. The box with no such alarms was not listed.
+- `topBoxesByBlockedFlows` covers about the last 30 days: its rows summed to within 0.1% of the 30 daily points of `/v2/trends/flows` read minutes earlier.
+- `topRegionsByBlockedFlows`: `limit=3` returned 3 rows; the default, `limit=10` and `limit=50` all returned the same 5 rows.
+- The values of all three types were unchanged over 22 minutes while the current day's point of `/v2/trends/flows` kept growing, so the statistics appear to be computed periodically rather than live.
+
+**MCP tools**: `get_statistics_by_region` (`topRegionsByBlockedFlows`) and `get_statistics_by_box` (`topBoxesByBlockedFlows` or `topBoxesBySecurityAlarms`, joined with `/v2/boxes` for each box's details)
+
 #### Get Simple Statistics
 Retrieve basic statistics overview.
 
@@ -560,6 +568,12 @@ Retrieve basic statistics overview.
   "rules": 25
 }
 ```
+
+**Measured 2026-09-25**: `alarms` and `rules` match no count the list endpoints give, and the docs do not say what they cover. On the account measured, `/v2/stats/simple` reported fewer alarms than `/v2/alarms?groupBy=status` counted in the default 30-day window, and fewer rules than `/v2/rules` returned. The `alarmCount` of each box in `/v2/boxes` does not match either: the online box reported a figure close to its active alarm count in `/v2/alarms`, and the offline box a figure far above the alarms the API holds for it. Use `groupBy` counts on `/v2/alarms` for totals.
+
+**Counting alarms and flows exactly**: `count` on a `/v2/alarms` or `/v2/flows` response is the number of results in that page, not a total. With `groupBy`, each result is one group carrying the group's total `count` (see [Measured Query Behavior](#measured-query-behavior)), so `groupBy=status` on `/v2/alarms` gives exact active and archived counts in one request. The `security_report` and `network_health_check` prompts and `firewalla://metrics/security` count this way.
+
+**MCP tool**: `get_simple_statistics` (passes `group`)
 
 ### Target Lists
 
@@ -691,6 +705,18 @@ Retrieve a statistical trend as a daily time series.
   }
 ]
 ```
+
+The official example lists the points newest first.
+
+**Measured 2026-09-25** on a live account:
+- `/v2/trends/alarms` and `/v2/trends/flows` returned 30 points in ascending `ts` order, 86,400 seconds apart. Each `ts` was the start of a day in the account's local time zone (not UTC midnight), and the last point was the current day so far.
+- Each point also carries `count`, equal to `value`. Flow points also carry `download`, `upload` and `total`, which were all 0.
+- A point is an exact daily count: the alarm point for a day equalled `/v2/alarms?query=ts:<day start>-<day end>&groupBy=box`, and the flow point equalled `/v2/flows?query=status:blocked ts:<day start>-<day end>&groupBy=box`.
+- `group=1`, a group ID the account does not have, returned 30 points of 0 for alarms and for flows rather than an error.
+- `/v2/trends/rules` returned HTTP 400 with an empty body, three times, with and without `group`.
+- No parameter for the time range or the interval is documented. The endpoints take no box, so they cannot be scoped to one box.
+
+**MCP tools**: `get_alarm_trends` (`/v2/trends/alarms`) and `get_rule_trends` (`/v2/trends/rules`; when it answers 400 the tool counts the creation times of the rules in `/v2/rules` per UTC day and says so in its response). Their `period` (`1h`, `24h`, `7d`, `30d`, default `30d`) selects the days that overlap it. The client's `getFlowTrends` reads `/v2/trends/flows`, but no tool exposes it.
 
 ---
 
@@ -1202,6 +1228,7 @@ The official docs do not cover the points below. Each was measured on 2026-09-25
 - **`device.ip:192.168.*` works on alarms**, and so does unqualified free text such as `porn`.
 - **`message:porn` on alarms returns an error.** `message` is not a searchable alarm qualifier.
 - **`id:<rule id>` works on rules**, though it is not a documented rule qualifier. On `/v2/rules`, `id:<box gid>:<n>` alone or with `box.id:<box gid>`, with or without `limit=1`, returned just that rule (count 1; the box had 61 other rules). The status check in `pause_rule`, `resume_rule` and `delete_rule` uses it, and it matches the returned rule's `id` instead of taking the first result.
+- **`groupBy` returns one row per group with the group's total.** On `/v2/alarms`, `groupBy=status` returned `{status, count}` rows, `type` returned `{type, count}` and `box` returned `{gid, count}`; on `/v2/flows`, `box` rows also carried `device`, `download`, `upload` and `total`. The rows have no `ts`, and `count` is the number of matching items in the query window, not limited by `limit`: with `limit=10`, a box's row counted tens of thousands of blocked flows. The row totals agreed across `status`, `type` and `box`. A plain alarm item also carries `count: 1`.
 
 ### Pagination Support
 
