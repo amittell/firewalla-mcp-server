@@ -512,8 +512,12 @@ export interface TargetList {
   name: string;
   /** Owner (required, immutable, either 'global' or box gid) */
   owner: string;
-  /** List of domains, IPs, IP ranges */
-  targets: string[];
+  /**
+   * List of domains, IPs, IP ranges. Absent (or null in this server's
+   * output) for Firewalla-managed lists, for which the API sends only a
+   * `count`.
+   */
+  targets?: string[] | null;
   /**
    * Number of entries. GET /v2/target-lists returns it on every list, and
    * returns no `targets` for Firewalla-managed lists (measured 2026-09-25).

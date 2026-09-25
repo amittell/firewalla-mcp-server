@@ -83,3 +83,51 @@ describe('search_target_lists query', () => {
     expect(targetListMatchesQuery(LISTS[2], 'targets:*')).toBe(false);
   });
 });
+
+describe('target_count and last_updated', () => {
+  const at = (iso: string) => Math.floor(Date.parse(iso) / 1000);
+  const lists = [
+    {
+      id: 'A',
+      name: 'Two',
+      targets: ['a.com', 'b.com'],
+      lastUpdated: at('2026-09-01T00:00:00Z'),
+    },
+    {
+      id: 'B',
+      name: 'One',
+      targets: ['c.com'],
+      lastUpdated: at('2026-09-20T00:00:00Z'),
+    },
+    // A Firewalla-managed list: only a count, no targets
+    {
+      id: 'C',
+      name: 'Managed',
+      count: 9,
+      lastUpdated: at('2025-01-01T00:00:00Z'),
+    },
+    { id: 'D', name: 'Unknown size' },
+  ];
+  const ids = (query: string) =>
+    lists
+      .filter(list => targetListMatchesQuery(list, query))
+      .map(list => list.id);
+
+  it('compares the entry count, using count when there are no targets', () => {
+    expect(ids('target_count:>5')).toEqual(['C']);
+    expect(ids('target_count:2')).toEqual(['A']);
+    expect(ids('target_count:1-2')).toEqual(['A', 'B']);
+    expect(ids('target_count:<=1')).toEqual(['B']);
+    expect(ids('target_count:>=9')).toEqual(['C']);
+  });
+
+  it('compares the last update time as a date or Unix seconds', () => {
+    expect(ids('last_updated:>2026-09-10')).toEqual(['B']);
+    expect(ids('last_updated:<2026-01-01')).toEqual(['C']);
+    expect(ids(`last_updated:>=${at('2026-09-01T00:00:00Z')}`)).toEqual([
+      'A',
+      'B',
+    ]);
+    expect(ids('last_updated:>2026-09-10 AND target_count:1')).toEqual(['B']);
+  });
+});

@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `search_target_lists` evaluates `target_count:` and `last_updated:`, which
+  its query fields list. `target_count` compares the entry count (`>n`,
+  `<=n`, `a-b` or `n`), using the API's `count` for Firewalla-managed lists,
+  and `last_updated` compares Unix seconds or a date; both used to match no
+  list. The `TargetList` type marks `targets` optional, since managed lists
+  come without them.
 
 - `get_specific_alarm` reports "No boxes are visible to this MSP token" as a
   validation error with that message. The client rewrapped the box-selection
