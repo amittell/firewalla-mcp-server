@@ -631,25 +631,15 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
       // The box to list; getDeviceStatus falls back to FIREWALLA_BOX_ID
       const box = boxValidation.sanitizedValue as string | undefined;
 
-      // Buffer Strategy: Fetch extra devices to account for post-processing filtering
-      //
-      // Problem: When filtering for offline devices, we don't know how many devices
-      // are offline until after fetching. If we only fetch the requested limit,
-      // we might get fewer results than requested after filtering.
-      //
-      // Solution: Use a "buffer multiplier" strategy where we fetch 3x the requested
-      // limit to increase the probability of having enough offline devices after
-      // filtering. This trades some API overhead for more consistent result counts.
-      //
-      // The multiplier of 3 is empirically chosen based on typical online/offline
-      // ratios in network environments (usually 60-80% devices are online).
-      const fetchLimit = Math.min(limit * 3, 1000); // 3x buffer with 1000 cap for API limits
+      // GET /v2/devices answers with every device, and getDeviceStatus pages
+      // that list by name on the client. Take the whole list: a page of
+      // 3 x limit missed every offline device after it.
       const allDevicesResponse = await withToolTimeout(
         async () =>
           firewalla.getDeviceStatus(
             undefined,
             undefined,
-            fetchLimit,
+            Number.MAX_SAFE_INTEGER,
             undefined,
             box
           ),
