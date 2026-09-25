@@ -128,28 +128,34 @@ FIREWALLA_MSP_ID=yourdomain.firewalla.net
 - With neither set, single-box operations use the account's only box; on a multi-box account `get_specific_alarm`, `archive_alarm` and `mute_alarm` check each box (the two alarm write tools refuse when several boxes have the alarm ID), and `create_rule` and `rename_device` refuse until given `gid`
 - Box GID format: UUID-like `1eb71e38-3a95-4371-8903-ace24c83ab49`
 
-## Feature Flag System
+## Configuration Variables
 
-The server uses a feature flag system for deployment control and safety:
+Optional environment variables the code reads, besides the credentials and box
+IDs above:
 
-### Environment Variables
 ```env
-# Core safety flags
-MCP_WAVE0_ENABLED=true                    # Master enable/disable (default: true)
-MCP_READ_ONLY_MODE=false                  # Read-only mode (default: false)
-
-# Individual tool control
-MCP_DISABLED_TOOLS=""                     # Comma-separated list of tools to disable
-
-# Performance flags
-MCP_CACHE_ENABLED=true                    # Enable caching (default: true)
-MCP_DEBUG_MODE=false                      # Debug logging (default: false)
+FIREWALLA_ENABLE_WRITE_TOOLS=false        # "true" registers the write tools (default: off)
+MCP_TRANSPORT=stdio                       # stdio or http (default: stdio)
+MCP_HTTP_PORT=3000                        # HTTP transport port (default: 3000)
+MCP_HTTP_PATH=/mcp                        # HTTP transport path (default: /mcp)
+MCP_SESSION_IDLE_TIMEOUT_MS=1800000       # HTTP sessions idle this long are closed (default: 30 min)
+API_TIMEOUT=30000                         # API request timeout in ms (default: 30000, 1000-300000)
+CACHE_TTL=300                             # Response cache TTL in seconds (default: 300, 0-3600)
+DEFAULT_PAGE_SIZE=100                     # Default page size (default: 100)
+MAX_PAGE_SIZE=10000                       # Page size ceiling (default: 10000)
+LOG_LEVEL=info                            # error, warn, info or debug (default: info)
+DEBUG=firewalla:*                         # Debug logging; see Debugging below (default: off)
 ```
 
 ### Tool Configuration
-- **WAVE0_ENABLED=false**: All 28 tools disabled (safe mode)
-- **WAVE0_ENABLED=true**: All 28 tools available
-- **MCP_DISABLED_TOOLS**: Selectively disable specific tools by name
+- The 28 tools are always registered. There is no switch to disable one.
+- `FIREWALLA_ENABLE_WRITE_TOOLS=true` (any case) also registers and lists the
+  write tools named in `WRITE_TOOL_NAMES` in `src/config/write-tools.ts`.
+- There is no read-only mode, safe mode or cache switch: `MCP_WAVE0_ENABLED`,
+  `MCP_READ_ONLY_MODE`, `MCP_DISABLED_TOOLS`, `MCP_CACHE_ENABLED` and
+  `MCP_DEBUG_MODE` are not read by the code. `API_RATE_LIMIT` is range-checked
+  (1-1000) at startup but not applied. Check that `src/` reads a variable before
+  documenting it.
 
 ## Testing Procedures
 
@@ -290,7 +296,7 @@ This file contains the complete, official Firewalla MSP API v2 documentation inc
 
 ### Data Flow
 1. Claude sends MCP request
-2. Server validates tool availability via feature flags
+2. Write tools exist only with `FIREWALLA_ENABLE_WRITE_TOOLS=true`
 3. Server finds tool in TOOL_SCHEMAS
 4. Direct API execution with Firewalla client
 5. Response returned with enhanced error handling
@@ -314,11 +320,10 @@ This file contains the complete, official Firewalla MSP API v2 documentation inc
 - Check Claude Code MCP configuration
 - Verify no port conflicts
 
-### Feature Flag Issues
-- Check environment variables are set correctly
-- Verify tool is enabled via feature flags
-- Review disabled tools list
-- Check server logs for flag validation warnings
+### Write Tools Missing
+- Check `FIREWALLA_ENABLE_WRITE_TOOLS=true` is set in the environment the MCP
+  client starts the server with
+- Any other value, or none, leaves the write tools unregistered
 
 ## Debugging
 
@@ -358,11 +363,12 @@ DEBUG=firewalla:* npm run dev
 3. Follow the authentication and error handling patterns
 4. Implement proper rate limiting as documented
 5. Add to TOOL_SCHEMAS in `src/server.ts`
-6. Add to appropriate category in `src/core/feature-flags.ts`
+6. Register its handler in `src/tools/registry.ts`; a tool that changes state
+   also goes in `WRITE_TOOL_NAMES` in `src/config/write-tools.ts`
 
 ### Tool Architecture Requirements
 - All tools must be defined in TOOL_SCHEMAS with proper schema
-- Add to appropriate tool category in feature flags
+- Tools that change state must be in `WRITE_TOOL_NAMES`, so they stay off by default
 - Include proper input validation and error handling
 - Follow the 28-tool architecture constraints
 - Implement direct API execution in the server
