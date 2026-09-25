@@ -59,6 +59,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Log lines on stderr end in a newline. The structured logger, the security
   event log and the API request and response lines wrote a backslash and an
   `n` instead, so every line ran together.
+- `.env.example` set `FIREWALLA_API_TIMEOUT`, `FIREWALLA_RATE_LIMIT` and
+  `FIREWALLA_CACHE_TTL`, which the server never read. It sets `API_TIMEOUT`
+  and `CACHE_TTL`, and drops the rate limit, which the server does not apply.
 
 ### Changed
 
@@ -110,6 +113,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read as critical. The security scores and the resource's recommendation
   also count Security Activity alarms instead of every active alarm. Alarms
   stay active until archived, and each cost 5 of the score's 100 points.
+- The Docker MCP registry manifest (`servers/firewalla-mcp-server/server.yaml`)
+  follows the registry's format (title `Firewalla`, a pinned `source.commit`,
+  `{{firewalla-mcp-server.<parameter>}}` references) and sets only variables
+  the server reads: the `MCP_WAVE0_ENABLED`, `MCP_READ_ONLY_MODE`,
+  `MCP_CACHE_ENABLED`, `MCP_DEBUG_MODE`, `MCP_CACHE_TTL` and `MCP_RATE_LIMIT_*`
+  entries did nothing. Only `msp_id` is required; `box_id` is optional, and
+  the optional `default_box_id` and `enable_write_tools` set
+  `FIREWALLA_DEFAULT_BOX_ID` and `FIREWALLA_ENABLE_WRITE_TOOLS`.
 
 ### Added
 
