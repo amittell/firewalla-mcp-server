@@ -1189,7 +1189,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query for target lists. Supported fields: name:*Social*, owner:global/box_gid, category:social/games/ad/porn/etc, targets:*.facebook.com, notes:"description text". Examples: "category:social", "owner:global AND name:*Block*", "targets:*.gaming.com"',
+                    'Search query for target lists. Supported fields: name:*Social*, owner:global/box_gid, category:social/games/ad/porn/etc, targets:*.facebook.com, notes:"description text", target_count:>100 (entries: n, >n, >=n, <n, <=n or a range 10-50), last_updated:>2026-09-01 (a date or Unix seconds, with the same comparisons). Examples: "category:social", "owner:global AND name:*Block*", "targets:*.gaming.com", "target_count:>1000", "last_updated:<2026-01-01"',
                 },
                 owner: {
                   type: 'string',

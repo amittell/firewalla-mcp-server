@@ -945,7 +945,13 @@ export class SearchEngine {
       // Build result object
       const result: SearchResult = {
         results,
-        count: response.count || results.length,
+        // The alarm, rule and target-list strategies filter on the client,
+        // so the API's count can include records they dropped. Devices keep
+        // the API's count: their strategy only pages.
+        count:
+          entityType === 'devices'
+            ? response.count || results.length
+            : results.length,
         limit: params.limit || 100,
         offset: params.offset || 0,
         query: finalQuery,
