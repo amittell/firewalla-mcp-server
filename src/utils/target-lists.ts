@@ -57,11 +57,84 @@ function matchesPattern(value: string, pattern: string): boolean {
 }
 
 /**
+ * `value` against a numeric condition: `>n`, `>=n`, `<n`, `<=n`, `a-b`
+ * (inclusive) or `n` (equal). A missing value matches nothing.
+ */
+function matchesNumber(value: number | null, condition: string): boolean {
+  if (value === null) {
+    return false;
+  }
+  const range = /^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/.exec(condition);
+  if (range) {
+    return value >= Number(range[1]) && value <= Number(range[2]);
+  }
+  const comparison = /^(>=|<=|>|<)?(\d+(?:\.\d+)?)$/.exec(condition);
+  if (!comparison) {
+    return false;
+  }
+  const bound = Number(comparison[2]);
+  switch (comparison[1]) {
+    case '>':
+      return value > bound;
+    case '>=':
+      return value >= bound;
+    case '<':
+      return value < bound;
+    case '<=':
+      return value <= bound;
+    default:
+      return value === bound;
+  }
+}
+
+/** Unix seconds from seconds, milliseconds or a date such as 2026-09-01 */
+function toUnixSeconds(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 1e12 ? value / 1000 : value;
+  }
+  if (typeof value !== 'string' || value.trim() === '') {
+    return null;
+  }
+  if (/^\d+(\.\d+)?$/.test(value)) {
+    return toUnixSeconds(Number(value));
+  }
+  const ms = Date.parse(value.toUpperCase());
+  return Number.isNaN(ms) ? null : ms / 1000;
+}
+
+/**
+ * `lastUpdated` against a time condition: `>t`, `>=t`, `<t`, `<=t` or `t`,
+ * where t is Unix seconds or a date (2026-09-01, 2026-09-01T12:00:00Z)
+ */
+function matchesTime(value: unknown, condition: string): boolean {
+  const seconds = toUnixSeconds(value);
+  const parsed = /^(>=|<=|>|<)?(.+)$/.exec(condition);
+  const bound = parsed ? toUnixSeconds(parsed[2]) : null;
+  if (seconds === null || bound === null || !parsed) {
+    return false;
+  }
+  switch (parsed[1]) {
+    case '>':
+      return seconds > bound;
+    case '>=':
+      return seconds >= bound;
+    case '<':
+      return seconds < bound;
+    case '<=':
+      return seconds <= bound;
+    default:
+      return seconds === bound;
+  }
+}
+
+/**
  * Whether a target list satisfies a search_target_lists query. The MSP API
  * does not search target lists (GET /v2/target-lists takes only `owner`), so
  * the query is evaluated here, case-insensitively: `name:` and `notes:`
- * match text they contain, `owner:` and `category:` the whole value, and
- * `targets:` any one entry, each with `*` wildcards. A term without a field
+ * match text they contain, `owner:` and `category:` the whole value,
+ * `targets:` any one entry, each with `*` wildcards, `target_count:` the
+ * entry count (`>n`, `<=n`, `a-b` or `n`) and `last_updated:` the last update
+ * time (Unix seconds or a date, with the same comparisons). A term without a field
  * matches the name, the notes or an entry.
  *
  * @param list - A target list as the API returned it
@@ -108,6 +181,11 @@ export function targetListMatchesQuery(list: unknown, query: string): boolean {
         return matchesPattern(category, value);
       case 'targets':
         return targets.some(target => matchesPattern(target, value));
+      case 'target_count':
+        // The entry count: targets when sent, else the API's `count`
+        return matchesNumber(targetListEntryCount(list), value);
+      case 'last_updated':
+        return matchesTime(item.lastUpdated ?? item.last_updated, value);
       default:
         return matchesText(term);
     }
