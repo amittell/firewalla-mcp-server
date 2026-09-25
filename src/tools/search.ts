@@ -578,8 +578,10 @@ export class SearchEngine {
     this.strategies.set('target_lists', {
       entityType: 'target_lists',
 
-      executeApiCall: async (client, _params, _apiParams, _searchOptions) => {
-        return client.getTargetLists();
+      executeApiCall: async (client, params, _apiParams, _searchOptions) => {
+        // owner is the endpoint's documented filter; without it the API
+        // returns global and Firewalla-managed lists
+        return client.getTargetLists(undefined, undefined, params.owner);
       },
       processResults: (results, params) => {
         if (params.limit) {

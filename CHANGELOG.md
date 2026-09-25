@@ -130,6 +130,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   later in the alphabet was never reported, and `total_offline_devices`
   counted only that page. `GET /v2/devices` returns the whole list in one
   answer; the tool now filters all of it.
+- Schema parameters that no handler read are used or removed:
+  - `get_device_status` sends `group` to `GET /v2/devices`, whose docs
+    define it (a box group ID), alongside `box`.
+  - `get_bandwidth_usage` sums only the flows of `box` (sent as the
+    `box.id` qualifier), ahead of `FIREWALLA_BOX_ID`.
+  - `search_target_lists` sends `owner` to `GET /v2/target-lists`, the
+    documented filter, as `get_target_lists` does. It used to fetch only
+    the global and Firewalla-managed lists, so a box's own lists were
+    never searched.
+  - `search_devices` no longer lists `status` and `search_target_lists` no
+    longer lists `category`. Neither is an API parameter, the handlers
+    never read them, and `query` does both (`online:false`,
+    `category:social`).
 
 ### Changed
 

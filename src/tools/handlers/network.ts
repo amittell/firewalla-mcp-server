@@ -465,9 +465,17 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
         }
       );
 
+      // The box whose flows to sum; getBandwidthUsage falls back to
+      // FIREWALLA_BOX_ID
+      const boxValidation = ParameterValidator.validateOptionalString(
+        args?.box,
+        'box'
+      );
+
       const validationResult = ParameterValidator.combineValidationResults([
         periodValidation,
         limitValidation,
+        boxValidation,
       ]);
 
       if (!validationResult.isValid) {
@@ -483,7 +491,8 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
         async () =>
           firewalla.getBandwidthUsage(
             periodValidation.sanitizedValue as string,
-            limitValidation.sanitizedValue as number
+            limitValidation.sanitizedValue as number,
+            boxValidation.sanitizedValue as string | undefined
           ),
         this.name
       );

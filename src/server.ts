@@ -951,7 +951,8 @@ export class FirewallaMCPServer {
                 },
                 box: {
                   type: 'string',
-                  description: 'Filter devices under a specific Firewalla box',
+                  description:
+                    'Only flows of this box (box gid). Defaults to FIREWALLA_BOX_ID; without either, every box.',
                 },
               },
               required: ['period'],
@@ -996,12 +997,6 @@ export class FirewallaMCPServer {
                   description:
                     'Search query using Firewalla syntax. Supported fields: mac:AA:BB:CC:DD:EE:FF, ip:192.168.1.*, name:*iPhone*, online:true/false, mac_vendor:Apple, gid:box_gid, network.name:*, group.name:*. Examples: "online:false AND mac_vendor:Apple", "ip:192.168.1.* AND name:*laptop*", "mac:AA:* OR name:*phone*"',
                 },
-                status: {
-                  type: 'string',
-                  enum: ['online', 'offline', 'any'],
-                  default: 'any',
-                  description: 'Filter by online status',
-                },
                 limit: {
                   type: 'number',
                   minimum: 1,
@@ -1030,13 +1025,10 @@ export class FirewallaMCPServer {
                   description:
                     'Search query for target lists. Supported fields: name:*Social*, owner:global/box_gid, category:social/games/ad/porn/etc, targets:*.facebook.com, notes:"description text". Examples: "category:social", "owner:global AND name:*Block*", "targets:*.gaming.com"',
                 },
-                category: {
-                  type: 'string',
-                  description: 'Filter by category',
-                },
                 owner: {
                   type: 'string',
-                  description: 'Filter by owner (global or box gid)',
+                  description:
+                    'Only lists with this owner, sent to the API: "global" (MSP lists), a box gid (that box\'s lists), or several comma-separated, e.g. "global,<box_gid>". Default: global and Firewalla-managed lists.',
                 },
                 limit: {
                   type: 'number',
