@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+
 - `get_specific_alarm` reports "No boxes are visible to this MSP token" as a
   validation error with that message. The client rewrapped the box-selection
   error as a generic failure, and `withToolTimeout` rewrapped it again, so the
@@ -62,6 +63,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.env.example` set `FIREWALLA_API_TIMEOUT`, `FIREWALLA_RATE_LIMIT` and
   `FIREWALLA_CACHE_TTL`, which the server never read. It sets `API_TIMEOUT`
   and `CACHE_TTL`, and drops the rate limit, which the server does not apply.
+- Device tools honor `FIREWALLA_BOX_ID`. `get_device_status`,
+  `get_offline_devices` and `search_devices` scoped `/v2/devices` with
+  `query=box.id:<gid>`, which the API ignores, so they returned every box's
+  devices. They send the documented `box=<gid>`, and no longer send `query`,
+  `limit` or `sortBy`, which the endpoint also ignores. Measured on a two-box
+  account: `query=box.id:` returned all 224 devices, `box=` the box's 190.
+- The client sends each endpoint the parameters its docs define. It kept only
+  `query`, `limit`, `sortBy`, `groupBy`, `cursor` and `box` on every GET, so
+  `get_boxes` dropped `group` and target lists could not be filtered by
+  `owner`.
+- The client's `searchFlows` put the sort in `sort_by`, which was dropped
+  before sending; it sends `sortBy`. `get_flow_insights` now gets the flows it
+  asks for, the largest (`total:desc`) and, for blocked flows, the most
+  frequent (`count:desc`), instead of the most recent. Grouping stays on the
+  client: a grouped `/v2/flows` response has one item per group, with no
+  timestamps and, for `device,category`, no device names.
+- Sort fields the API rejects are translated. `/v2/flows` answers
+  `sortBy=bytes:desc` and `sortBy=timestamp:asc` with 400; `bytes` is sent as
+  `total` and `timestamp` as `ts`. Alarm sorts send the documented `ts` as
+  well, and `getActiveAlarms` defaults to `ts:desc`.
 
 ### Changed
 
@@ -148,6 +169,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scripts/launch-smoke.mjs --docker <image>` does the check. A manual run
   with the `image` input (for example `amittell/firewalla-mcp-server:1.4.1`)
   pulls and checks that published image instead of building.
+- `get_target_lists` takes an optional `owner`, the API's documented filter:
+  `global`, a box gid, or a comma-separated list such as `global,<box_gid>`.
+  Without it the API returns global and Firewalla-managed lists.
 
 ## [1.4.1] - 2026-09-25
 

@@ -681,6 +681,21 @@ export class GetTargetListsHandler extends BaseToolHandler {
     const limit = limitValidation.sanitizedValue! as number;
     const listType = args?.list_type as string | undefined;
 
+    const ownerValidation = ParameterValidator.validateOptionalString(
+      args?.owner,
+      'owner'
+    );
+    if (!ownerValidation.isValid) {
+      return createErrorResponse(
+        this.name,
+        'Parameter validation failed',
+        ErrorType.VALIDATION_ERROR,
+        undefined,
+        ownerValidation.errors
+      );
+    }
+    const owner = ownerValidation.sanitizedValue as string | undefined;
+
     // Validate list_type parameter if provided
     if (listType !== undefined) {
       const validTypes = ['cloudflare', 'crowdsec', 'all'];
@@ -697,7 +712,11 @@ export class GetTargetListsHandler extends BaseToolHandler {
 
     // Use timeout wrapper only for the API call and response processing
     return withToolTimeout(async () => {
-      const listsResponse = await firewalla.getTargetLists(listType, limit);
+      const listsResponse = await firewalla.getTargetLists(
+        listType,
+        limit,
+        owner
+      );
 
       const startTime = Date.now();
 

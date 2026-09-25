@@ -47,7 +47,10 @@ import {
 } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
 import { matchesQuery, unquoteQueryValue } from '../search/client-filter.js';
-import { translateToMspQualifiers } from '../utils/msp-qualifiers.js';
+import {
+  translateSortBy,
+  translateToMspQualifiers,
+} from '../utils/msp-qualifiers.js';
 import { optimizeResponse } from '../optimization/index.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
 import { logger } from '../monitoring/logger.js';
@@ -144,6 +147,20 @@ function selectTrendDays(
     ...(about.note && { note: about.note }),
   };
 }
+
+/**
+ * Query parameters the official docs define for a /v2 GET endpoint; a GET to
+ * one of these paths sends no others. Measured 2026-09-25: /v2/devices and
+ * /v2/target-lists answer `query`, `limit` and `sortBy` with 200 and ignore
+ * them, and `box` (devices) and `owner` (target lists) do filter.
+ */
+const DOCUMENTED_GET_PARAMS = new Map<string, readonly string[]>([
+  ['/v2/alarms', ['query', 'groupBy', 'sortBy', 'limit', 'cursor']],
+  ['/v2/flows', ['query', 'groupBy', 'sortBy', 'limit', 'cursor']],
+  ['/v2/devices', ['box', 'group']],
+  ['/v2/boxes', ['group']],
+  ['/v2/target-lists', ['owner']],
+]);
 
 /**
  * A single-box operation could not pick a box: the account has several and
@@ -453,9 +470,10 @@ export class FirewallaClient {
       return params;
     }
 
-    // Allowed scalar parameters for raw /v2/* endpoints. `group` (a box
-    // group ID) is documented on /v2/boxes, /v2/stats and /v2/trends.
-    const allowedParams = [
+    // The parameters the official docs give for this endpoint, else the
+    // scalar parameters every other /v2 GET has always been allowed. `group`
+    // (a box group ID) is documented on /v2/boxes, /v2/stats and /v2/trends.
+    const allowedParams = DOCUMENTED_GET_PARAMS.get(endpoint) ?? [
       'query',
       'limit',
       'sortBy',
@@ -696,7 +714,8 @@ export class FirewallaClient {
    *
    * @param query - Optional search query for filtering alarms
    * @param groupBy - Optional field to group results by (e.g., 'type', 'box')
-   * @param sortBy - Sort order specification (default: 'timestamp:desc')
+   * @param sortBy - Sort order specification (default: 'ts:desc'; `timestamp`
+   *   is sent as `ts`)
    * @param limit - Maximum number of results to return (required for pagination)
    * @param cursor - Pagination cursor from previous response
    * @returns Promise resolving to paginated alarm results with metadata
@@ -707,7 +726,7 @@ export class FirewallaClient {
    * const highSeverityAlarms = await client.getActiveAlarms(
    *   'severity:high',
    *   undefined,
-   *   'timestamp:desc',
+   *   'ts:desc',
    *   50
    * );
    *
@@ -715,7 +734,7 @@ export class FirewallaClient {
    * const groupedAlarms = await client.getActiveAlarms(
    *   undefined,
    *   'type',
-   *   'timestamp:desc',
+   *   'ts:desc',
    *   100
    * );
    * ```
@@ -727,13 +746,13 @@ export class FirewallaClient {
   async getActiveAlarms(
     query?: string,
     groupBy?: string,
-    sortBy = 'timestamp:desc',
+    sortBy = 'ts:desc',
     limit = 200,
     cursor?: string,
     force_refresh = false
   ): Promise<{ count: number; results: Alarm[]; next_cursor?: string }> {
     const params: Record<string, unknown> = {
-      sortBy,
+      sortBy: translateSortBy(sortBy, 'alarms'),
       limit, // Remove artificial limit - let pagination handle large datasets
     };
 
@@ -833,7 +852,8 @@ export class FirewallaClient {
     cursor?: string
   ): Promise<{ count: number; results: Flow[]; next_cursor?: string }> {
     const params: Record<string, unknown> = {
-      sortBy,
+      // timestamp: and bytes: are rejected by /v2/flows; sent as ts: and total:
+      sortBy: translateSortBy(sortBy, 'flows'),
       limit, // Remove artificial limit - let pagination handle large datasets
     };
 
@@ -965,18 +985,14 @@ export class FirewallaClient {
 
       // Create a data fetcher function for pagination
       const dataFetcher = async (): Promise<Device[]> => {
-        const params: Record<string, unknown> = {};
-
-        // Apply box filter through the query parameter
-        const boxQuery = this.addBoxFilter();
-        if (boxQuery) {
-          params.query = boxQuery;
-        }
-
         const endpoint = `/v2/devices`;
 
         // API returns direct array of devices
-        const response = await this.request<Device[]>('GET', endpoint, params);
+        const response = await this.request<Device[]>(
+          'GET',
+          endpoint,
+          this.deviceBoxParams()
+        );
 
         // Enhanced null safety and error handling
         const rawResults = Array.isArray(response) ? response : [];
@@ -1392,23 +1408,26 @@ export class FirewallaClient {
     };
   }
 
+  /**
+   * Get target lists
+   *
+   * @param _listType - Not sent: GET /v2/target-lists has no list type filter
+   * @param limit - Applied on the client; the endpoint takes no `limit`
+   * @param owner - The documented `owner` filter: `global`, a box gid, or a
+   *   comma-separated list such as `global,<box_gid>`. Without it the API
+   *   returns global and Firewalla-managed lists.
+   */
   @optimizeResponse('targets')
   async getTargetLists(
-    listType?: string,
-    limit?: number
+    _listType?: string,
+    limit?: number,
+    owner?: string
   ): Promise<{ count: number; results: TargetList[]; next_cursor?: string }> {
+    // `owner` is the endpoint's only parameter; it ignores query and limit
     const params: Record<string, unknown> = {};
-
-    if (listType && listType !== 'all') {
-      params.list_type = listType;
+    if (owner?.trim()) {
+      params.owner = owner.trim();
     }
-
-    if (limit !== undefined) {
-      params.limit = limit;
-    }
-
-    // Apply box filter through the query parameter
-    params.query = this.addBoxFilter(params.query as string | undefined);
 
     const response = await this.request<
       TargetList[] | { results: TargetList[] }
@@ -3131,7 +3150,8 @@ export class FirewallaClient {
     // Simplified: just use the query as provided, add box filter only if needed
     const params: Record<string, unknown> = {
       limit: searchQuery.limit || 200, // Use API default
-      sort_by: searchQuery.sort_by || 'ts:desc',
+      // The API's sortBy; timestamp: and bytes: are sent as ts: and total:
+      sortBy: translateSortBy(searchQuery.sort_by || 'ts:desc', 'flows'),
     };
 
     // Add query if provided
@@ -3139,14 +3159,12 @@ export class FirewallaClient {
       params.query = searchQuery.query.trim();
     }
 
-    if (searchQuery.group_by) {
-      params.group_by = searchQuery.group_by;
-    }
+    // group_by is not sent as groupBy: a grouped response has one item of
+    // totals per group, with no ts or gid, and groupBy=device,category names
+    // the device only by id (measured 2026-09-25). Callers such as
+    // getFlowInsights group these per-flow results themselves.
     if (searchQuery.cursor) {
       params.cursor = searchQuery.cursor;
-    }
-    if (searchQuery.aggregate) {
-      params.aggregate = true;
     }
 
     // Add box.id filter to query
@@ -3326,9 +3344,9 @@ export class FirewallaClient {
         sortBy,
       };
 
-      if (searchQuery.group_by && typeof searchQuery.group_by === 'string') {
-        params.group_by = searchQuery.group_by.trim();
-      }
+      // group_by is not sent as groupBy: a grouped response has one
+      // { type, count } item per group (measured 2026-09-25), which the
+      // alarm mapping below cannot read
       if (searchQuery.cursor && typeof searchQuery.cursor === 'string') {
         params.cursor = searchQuery.cursor.trim();
       }
@@ -3361,18 +3379,12 @@ export class FirewallaClient {
         requestParams.query = params.query;
       }
 
-      // Include sortBy, groupBy if provided
-      // Convert timestamp:desc to ts:desc for API compatibility
+      // Send timestamp: as the documented ts:
       if (params.sortBy) {
-        requestParams.sortBy =
-          params.sortBy === 'timestamp:desc'
-            ? 'ts:desc'
-            : params.sortBy === 'timestamp:asc'
-              ? 'ts:asc'
-              : params.sortBy;
-      }
-      if (params.groupBy) {
-        requestParams.groupBy = params.groupBy;
+        requestParams.sortBy = translateSortBy(
+          params.sortBy as string,
+          'alarms'
+        );
       }
 
       // Only include cursor if present
@@ -3896,52 +3908,28 @@ export class FirewallaClient {
 
       const startTime = Date.now();
 
-      // Enhanced query parsing with error handling
+      // Enhanced query parsing with error handling; formatQueryForAPI throws
+      // on invalid syntax
       let parsed;
-      let optimizedQuery;
       try {
         parsed = parseSearchQuery(trimmedQuery);
-        optimizedQuery = formatQueryForAPI(trimmedQuery);
+        formatQueryForAPI(trimmedQuery);
       } catch (parseError) {
         throw new Error(
           `Invalid search query syntax: ${parseError instanceof Error ? parseError.message : 'Parse error'}`
         );
       }
 
-      // Enhanced parameter validation and construction
-      const limit = searchQuery.limit
-        ? Math.max(1, Number(searchQuery.limit))
-        : 1000; // Remove artificial cap
-      const sortBy =
-        searchQuery.sort_by && typeof searchQuery.sort_by === 'string'
-          ? searchQuery.sort_by
-          : 'name:asc';
-
-      const params: Record<string, unknown> = {
-        query: optimizedQuery,
-        limit,
-        sortBy,
-      };
-
-      if (searchQuery.group_by && typeof searchQuery.group_by === 'string') {
-        params.group_by = searchQuery.group_by.trim();
-      }
-      if (searchQuery.cursor && typeof searchQuery.cursor === 'string') {
-        params.cursor = searchQuery.cursor.trim();
-      }
-      if (searchQuery.aggregate === true) {
-        params.aggregate = true;
-      }
+      // GET /v2/devices takes only `box` and `group`, and answers query,
+      // limit and sortBy with every device (measured 2026-09-25), so the
+      // query is matched and the limit applied on the client below
+      const params = this.deviceBoxParams();
 
       // Enhanced filter application with validation
-      if (options.include_resolved === false) {
-        params.query = params.query
-          ? `${params.query} AND online:true`
-          : 'online:true';
-      }
-
-      // Apply box filter through the query parameter
-      params.query = this.addBoxFilter(params.query as string | undefined);
+      const clientQuery =
+        options.include_resolved === false
+          ? `(${trimmedQuery}) AND online:true`
+          : trimmedQuery;
 
       // Enhanced API request with better error handling
       let response;
@@ -3956,7 +3944,7 @@ export class FirewallaClient {
         let filteredDevices = deviceArray || [];
 
         if (searchQuery.query?.trim()) {
-          const query = searchQuery.query.trim().toLowerCase();
+          const query = clientQuery.toLowerCase();
           filteredDevices = filteredDevices.filter(device => {
             if (!device) {
               return false;
@@ -5126,6 +5114,16 @@ export class FirewallaClient {
     }
 
     return `${query} ${boxFilter}`;
+  }
+
+  /**
+   * Parameters that scope GET /v2/devices to FIREWALLA_BOX_ID. The endpoint
+   * documents only `box` and `group` and ignores `query`: measured
+   * 2026-09-25, `query=box.id:<gid>` returned both boxes' 224 devices and
+   * `box=<gid>` returned that box's 190.
+   */
+  private deviceBoxParams(): Record<string, unknown> {
+    return this.config.boxId ? { box: this.config.boxId } : {};
   }
 
   /**

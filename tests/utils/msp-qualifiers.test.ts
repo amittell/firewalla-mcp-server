@@ -4,7 +4,10 @@
  * source_ip: (alarms).
  */
 
-import { translateToMspQualifiers } from '../../src/utils/msp-qualifiers.js';
+import {
+  translateSortBy,
+  translateToMspQualifiers,
+} from '../../src/utils/msp-qualifiers.js';
 
 describe('translateToMspQualifiers', () => {
   it.each([
@@ -43,5 +46,32 @@ describe('translateToMspQualifiers', () => {
     ['rules', 'source_ip:192.168.*'],
   ])('%s: leaves %s unchanged', (entityType, query) => {
     expect(translateToMspQualifiers(query, entityType)).toBe(query);
+  });
+});
+
+// Measured 2026-09-25: /v2/flows answers sortBy=timestamp:asc and
+// sortBy=bytes:desc with 400; /v2/alarms sorts timestamp like ts
+describe('translateSortBy', () => {
+  it.each([
+    ['flows', 'timestamp:desc', 'ts:desc'],
+    ['flows', 'bytes:desc', 'total:desc'],
+    ['flows', 'timestamp:asc,bytes:desc', 'ts:asc,total:desc'],
+    ['flows', 'ts:desc, total:asc', 'ts:desc,total:asc'],
+    ['alarms', 'timestamp:desc', 'ts:desc'],
+    ['alarms', 'timestamp:asc', 'ts:asc'],
+  ])('%s: %s -> %s', (entityType, sortBy, expected) => {
+    expect(translateSortBy(sortBy, entityType)).toBe(expected);
+  });
+
+  it.each([
+    ['flows', 'ts:desc'],
+    ['flows', 'total:desc'],
+    ['flows', 'count:desc'],
+    ['alarms', 'bytes:desc'],
+    ['alarms', 'constructor:desc'],
+    ['devices', 'timestamp:desc'],
+    ['flows', ''],
+  ])('%s: leaves %s unchanged', (entityType, sortBy) => {
+    expect(translateSortBy(sortBy, entityType)).toBe(sortBy);
   });
 });
