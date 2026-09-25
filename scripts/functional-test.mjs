@@ -52,6 +52,8 @@ function argsFor(name, schema, seeds) {
     device_id: seeds.deviceId, box_id: seeds.boxId, gid: seeds.boxId,
     target_list_id: seeds.targetListId, list_id: seeds.targetListId,
   };
+  // Target-list tools take their list's id as `id`, not a rule id
+  if (name.includes('target_list')) seedMap.id = seeds.targetListId;
   for (const [key, prop] of Object.entries(props)) {
     const type = prop.type;
     if (key === 'limit') { args.limit = 5; continue; }
@@ -144,16 +146,18 @@ async function stdioPhase() {
       notes: 'created by scripts/functional-test.mjs; safe to delete',
     });
     const tl = payload?.data;
-    seeds.targetListId = tl?.id;
-    record('stdio', 'create_target_list', res.isError ? 'ERR' : 'OK', `id=${seeds.targetListId}`);
-    if (seeds.targetListId) {
+    // Keep the disposable list's id apart from disposableId: it is
+    // deleted below, and get_specific_target_list runs afterwards
+    const disposableId = tl?.id;
+    record('stdio', 'create_target_list', res.isError ? 'ERR' : 'OK', `id=${disposableId}`);
+    if (disposableId) {
       const u = await call('update_target_list', {
-        id: seeds.targetListId, target_list_id: seeds.targetListId,
+        id: disposableId, target_list_id: disposableId,
         name: 'mcp-refresh-functional-test', targets: ['example.com', 'example.org'],
       });
       record('stdio', 'update_target_list', u.res.isError ? 'ERR' : 'OK',
              u.res.isError ? JSON.stringify(u.payload).slice(0, 80) : 'targets updated');
-      const d = await call('delete_target_list', { id: seeds.targetListId, target_list_id: seeds.targetListId });
+      const d = await call('delete_target_list', { id: disposableId, target_list_id: disposableId });
       record('stdio', 'delete_target_list', d.res.isError ? 'ERR' : 'OK', 'disposable list removed');
     }
   } catch (e) { record('stdio', 'target_list_crud', 'THREW', e.message); }
