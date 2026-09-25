@@ -954,6 +954,10 @@ export class FirewallaClient {
           flow.category = item.category;
         }
 
+        if (item.domain) {
+          flow.domain = item.domain;
+        }
+
         return flow;
       }
     );
@@ -3263,6 +3267,10 @@ export class FirewallaClient {
       }
       if (item.category) {
         flow.category = item.category;
+      }
+      // getFlowInsights groups by it; empty for flows to a bare IP
+      if (item.domain) {
+        flow.domain = item.domain;
       }
 
       return flow;

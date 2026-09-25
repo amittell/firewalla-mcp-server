@@ -295,6 +295,12 @@ export interface Flow {
   region?: string;
   /** Remote host category */
   category?: CategoryType;
+  /**
+   * Remote domain, e.g. "example.com" for a flow to "www.example.com". The
+   * MSP API sends it on every flow, empty for a flow to a bare IP; the
+   * official Flow Model does not list it (measured 2026-09-25).
+   */
+  domain?: string;
 }
 
 /**

@@ -372,6 +372,7 @@ export function optimizeFlowResponse(
           ),
           ...((typedFlow.region as any) && { region: typedFlow.region }),
           ...((typedFlow.category as any) && { category: typedFlow.category }),
+          ...(typedFlow.domain && { domain: typedFlow.domain }),
         };
       }),
     next_cursor: response.next_cursor,
