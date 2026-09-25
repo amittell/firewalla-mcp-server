@@ -1,0 +1,47 @@
+name: Docker Build
+
+# Builds the image for every platform docker-publish.yml pushes, without
+# pushing, so a base image that lacks one of them fails a pull request
+# instead of a release tag (1.4.0: node:24-alpine has no linux/arm/v7).
+# Keep `platforms` in step with docker-publish.yml.
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - Dockerfile
+      - package.json
+      - package-lock.json
+      - .github/workflows/docker-build.yml
+      - .github/workflows/docker-publish.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build for every published platform (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

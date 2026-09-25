@@ -1,5 +1,7 @@
 # Multi-stage build for optimal image size
-FROM node:24-alpine AS builder
+# node:22-alpine, not 24: node:24-alpine publishes no linux/arm/v7 image,
+# and docker-publish.yml builds amd64, arm64 and arm/v7
+FROM node:22-alpine AS builder
 
 # Install build dependencies for native modules
 RUN apk add --no-cache python3 make g++
@@ -20,7 +22,7 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM node:24-alpine AS production
+FROM node:22-alpine AS production
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
