@@ -18,12 +18,15 @@
 // given and not empty, else the image tag when it is a version (`...:1.4.1`),
 // else package.json's. --pull pulls the image first, outside the timeout;
 // without it the image must already be local (`--pull never`), so a registry
-// image cannot stand in for a local build that failed. The server does not exit
-// when its stdin closes, so the container is named and removed with
-// `docker rm --force` once the probe ends. Used by the Docker Build workflow.
+// image cannot stand in for a local build that failed. The container is named
+// and removed with `docker rm --force` once the probe ends, in case it outlives
+// the docker client the probe kills. Used by the Docker Build workflow.
 //
 // Exits 1 if any path does not answer within its timeout. Credentials are dummies;
 // `initialize` is answered locally, so nothing is sent to Firewalla.
+//
+// The node path then closes the server's stdin, as MCP clients do to stop a stdio
+// server, and requires it to exit 0 within STDIN_CLOSE_EXIT_MS.
 
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -62,6 +65,8 @@ const env = {
   MCP_TRANSPORT: 'stdio',
 };
 delete env.FIREWALLA_BOX_ID;
+
+const STDIN_CLOSE_EXIT_MS = 5_000;
 
 const INITIALIZE = JSON.stringify({
   jsonrpc: '2.0',
@@ -129,7 +134,9 @@ function killTree(child) {
 // `command` is a full command line when `shell` is true (the bin and npx go
 // through the shell, as MCP clients launch them), otherwise an executable.
 // With `expectVersion`, an answer that reports another serverInfo.version fails.
-function probe(label, command, args, { shell, timeoutMs, expectVersion }) {
+// With `exitOnStdinClose`, answering is not enough: after the answer the probe
+// closes stdin and passes only if the server then exits 0 on its own.
+function probe(label, command, args, { shell, timeoutMs, expectVersion, exitOnStdinClose = false }) {
   return new Promise(resolve => {
     const started = Date.now();
     const child = spawn(command, shell ? [] : args, {
@@ -142,6 +149,8 @@ function probe(label, command, args, { shell, timeoutMs, expectVersion }) {
     let stdout = '';
     let stderr = '';
     let done = false;
+    let answer = null;
+    let stdinClosedAt = null;
     const finish = (ok, detail) => {
       if (done) return;
       done = true;
@@ -149,11 +158,22 @@ function probe(label, command, args, { shell, timeoutMs, expectVersion }) {
       killTree(child);
       resolve({ label, ok, ms: Date.now() - started, detail, stderr: stderr.slice(-2000) });
     };
-    const timer = setTimeout(
+    let timer = setTimeout(
       () => finish(false, `no initialize response within ${timeoutMs / 1000}s`),
       timeoutMs
     );
+    const closeStdinAndAwaitExit = () => {
+      clearTimeout(timer);
+      timer = setTimeout(
+        () =>
+          finish(false, `${answer}, still running ${STDIN_CLOSE_EXIT_MS / 1000}s after stdin closed`),
+        STDIN_CLOSE_EXIT_MS
+      );
+      stdinClosedAt = Date.now();
+      child.stdin.end();
+    };
     child.stdout.on('data', chunk => {
+      if (answer !== null) return;
       stdout += chunk;
       for (const line of stdout.split('\n')) {
         if (!line.trim()) continue;
@@ -165,10 +185,13 @@ function probe(label, command, args, { shell, timeoutMs, expectVersion }) {
         }
         if (msg.id === 0 && msg.result?.serverInfo) {
           const { name, version } = msg.result.serverInfo;
+          answer = `${name} ${version}`;
           if (expectVersion !== undefined && version !== expectVersion) {
-            finish(false, `${name} ${version}, expected version ${expectVersion}`);
+            finish(false, `${answer}, expected version ${expectVersion}`);
+          } else if (exitOnStdinClose) {
+            closeStdinAndAwaitExit();
           } else {
-            finish(true, `${name} ${version}`);
+            finish(true, answer);
           }
           return;
         }
@@ -179,7 +202,17 @@ function probe(label, command, args, { shell, timeoutMs, expectVersion }) {
     });
     child.on('error', err => finish(false, `spawn failed: ${err.message}`));
     child.on('exit', (code, signal) => {
-      if (!done) finish(false, `exited before answering (code ${code}, signal ${signal})`);
+      if (done) return;
+      if (stdinClosedAt === null) {
+        finish(false, `exited before answering (code ${code}, signal ${signal})`);
+        return;
+      }
+      const after = `${Date.now() - stdinClosedAt} ms after stdin closed`;
+      if (code === 0) {
+        finish(true, `${answer}, exited 0 ${after}`);
+      } else {
+        finish(false, `${answer}, exited with code ${code}, signal ${signal} ${after}`);
+      }
     });
     child.stdin.on('error', () => {});
     child.stdin.write(`${INITIALIZE}\n`);
@@ -214,6 +247,7 @@ async function probeLaunchPaths() {
     await probe('node', process.execPath, [path.join(repoRoot, 'dist', 'server.js')], {
       shell: false,
       timeoutMs: 30_000,
+      exitOnStdinClose: true,
     })
   );
   return results;
