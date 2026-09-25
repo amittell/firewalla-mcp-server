@@ -582,6 +582,7 @@ export class SearchFlowsHandler extends BaseToolHandler {
             'unknown'
           ),
           device: SafeAccess.getNestedValue(flow as any, 'device', {}),
+          network: SafeAccess.getNestedValue(flow as any, 'network', null),
         })
       );
 

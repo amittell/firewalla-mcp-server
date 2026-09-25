@@ -300,6 +300,12 @@ export interface Flow {
   };
   /** Remote IP region (ISO 3166 code) */
   region?: string;
+  /**
+   * Remote IP country (ISO 3166 code). The MSP API sends it beside region;
+   * the official Flow Model does not list it (measured 2026-09-25: equal to
+   * region on 200 of 200 flows).
+   */
+  country?: string;
   /** Remote host category */
   category?: CategoryType;
   /**
@@ -308,6 +314,13 @@ export interface Flow {
    * official Flow Model does not list it (measured 2026-09-25).
    */
   domain?: string;
+  /** The network the flow was on */
+  network?: {
+    /** Network ID */
+    id: string;
+    /** Network name */
+    name: string;
+  };
 }
 
 /**

@@ -1152,12 +1152,21 @@ export class FirewallaClient {
           flow.region = item.region;
         }
 
+        if (item.country) {
+          flow.country = item.country;
+        }
+
         if (item.category) {
           flow.category = item.category;
         }
 
         if (item.domain) {
           flow.domain = item.domain;
+        }
+
+        // The flow's network is top-level; the API sends no device.network
+        if (item.network) {
+          flow.network = { id: item.network.id, name: item.network.name };
         }
 
         return flow;
@@ -3466,12 +3475,18 @@ export class FirewallaClient {
       if (item.region) {
         flow.region = item.region;
       }
+      if (item.country) {
+        flow.country = item.country;
+      }
       if (item.category) {
         flow.category = item.category;
       }
       // getFlowInsights groups by it; empty for flows to a bare IP
       if (item.domain) {
         flow.domain = item.domain;
+      }
+      if (item.network) {
+        flow.network = { id: item.network.id, name: item.network.name };
       }
 
       return flow;

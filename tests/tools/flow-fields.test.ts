@@ -3,12 +3,17 @@
  * (`total` is not in the official Flow Model; measured 2026-09-25, it
  * equaled download + upload on 200 of 200 flows). The client's flow
  * mappings dropped `total`, and get_recent_flow_activity, which reads it,
- * reported 0 bytes for every flow. The HTTP layer (axios) is stubbed with
- * flows shaped like the live API's; all values are invented.
+ * reported 0 bytes for every flow. They also dropped the flow's top-level
+ * `network` (documented, and sent on 200 of 200 flows; no flow had a
+ * `device.network`) and `country` (undocumented, sent beside `region`).
+ * The HTTP layer (axios) is stubbed with flows shaped like the live API's;
+ * all values are invented.
  */
 
 import { FirewallaClient } from '../../src/firewalla/client.js';
 import { GetRecentFlowActivityHandler } from '../../src/tools/handlers/analytics.js';
+import { GetFlowDataHandler } from '../../src/tools/handlers/network.js';
+import { SearchFlowsHandler } from '../../src/tools/handlers/search.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -149,5 +154,73 @@ describe('flow bytes', () => {
     expect(response.isError).toBeFalsy();
     const { flows } = JSON.parse(response.content[0].text).data;
     expect(flows.map((flow: any) => flow.bytes)).toEqual([5000, 300, 70000, 0]);
+  });
+});
+
+describe('flow network and country', () => {
+  const LAN = { id: 'net-1', name: 'LAN' };
+
+  it('getFlowData and searchFlows carry the network and country', async () => {
+    const client = makeClient();
+    const byData = await client.getFlowData(
+      undefined,
+      undefined,
+      'ts:desc',
+      10
+    );
+    const bySearch = await client.searchFlows({
+      query: 'protocol:tcp',
+      limit: 10,
+    });
+    for (const result of [byData, bySearch]) {
+      expect(result.results.map(flow => flow.network)).toEqual(
+        FLOWS.map(() => LAN)
+      );
+      expect(result.results.map(flow => flow.country)).toEqual(
+        FLOWS.map(() => 'US')
+      );
+    }
+  });
+
+  it('a flow without them has neither', async () => {
+    const { network: _network, country: _country, ...bare } = liveFlow(0, 1, 1);
+    const result = await makeClient([bare]).getFlowData(
+      undefined,
+      undefined,
+      'ts:desc',
+      10
+    );
+    expect(result.results[0]).not.toHaveProperty('network');
+    expect(result.results[0]).not.toHaveProperty('country');
+  });
+
+  it('get_flow_data and search_flows return the network of each flow', async () => {
+    const byData = await new GetFlowDataHandler().execute(
+      { limit: 10 },
+      makeClient()
+    );
+    const bySearch = await new SearchFlowsHandler().execute(
+      { query: 'protocol:tcp', limit: 10 },
+      makeClient()
+    );
+    expect(
+      JSON.parse(byData.content[0].text).data.results.map(
+        (flow: any) => flow.network
+      )
+    ).toEqual(FLOWS.map(() => LAN));
+    expect(
+      JSON.parse(bySearch.content[0].text).data.flows.map(
+        (flow: any) => flow.network
+      )
+    ).toEqual(FLOWS.map(() => LAN));
+  });
+
+  it('get_recent_flow_activity falls back to the country without a region', async () => {
+    const response = await new GetRecentFlowActivityHandler().execute(
+      {},
+      makeClient([{ ...liveFlow(0, 1, 1), region: '', country: 'CA' }])
+    );
+    const { flows } = JSON.parse(response.content[0].text).data;
+    expect(flows.map((flow: any) => flow.region)).toEqual(['CA']);
   });
 });

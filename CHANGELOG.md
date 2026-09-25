@@ -179,6 +179,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the client now carry `total` (download plus upload, as the API sends
   it), and `bytes` is the same figure. After the fix 50 of 50 flows
   reported the `total` the API sent for them.
+- Flows keep their `network`. The MSP API sends it at the top of every
+  flow, as its Flow Model documents, and the client's flow mappings read
+  only a `device.network`, which the API does not send, so no flow had a
+  network (live: 0 of 50 in `get_flow_data` and `search_flows`; 50 of 50
+  after). `get_flow_data` and `search_flows` return it as
+  `network: { id, name }`. Flows also keep the undocumented `country` the
+  API sends beside `region`, which `get_recent_flow_activity` falls back
+  to when `region` is empty.
 
 ### Changed
 
