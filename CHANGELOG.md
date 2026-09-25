@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - Unreleased
+
+### Fixed
+- The Docker image builds again. 1.4.0 moved it to `node:24-alpine`, which
+  publishes no `linux/arm/v7` image, so the tag's image build failed and no
+  1.4.0 image reached Docker Hub (`latest` stayed on 1.3.0). The image now uses
+  `node:22-alpine`, which has amd64, arm64 and arm/v7. The npm package's code
+  is unchanged from 1.4.0.
+
+### Added
+- CI `Docker Build` workflow: a pull request that touches the Dockerfile, the
+  package files or the Docker workflows builds the image for amd64, arm64 and
+  arm/v7 without pushing it.
+
 ## [1.4.0] - 2026-09-25
 
 ### Added
