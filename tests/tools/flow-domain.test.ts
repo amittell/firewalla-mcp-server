@@ -9,7 +9,6 @@
 import { FirewallaClient } from '../../src/firewalla/client.js';
 import { GetFlowDataHandler } from '../../src/tools/handlers/network.js';
 import { SearchFlowsHandler } from '../../src/tools/handlers/search.js';
-import { optimizeFlowResponse } from '../../src/optimization/index.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -183,21 +182,5 @@ describe('flow domain', () => {
       'example.net',
       null,
     ]);
-  });
-
-  it('the compact flow form of a large response keeps the domain', () => {
-    const optimized = optimizeFlowResponse(
-      {
-        count: 1,
-        results: [{ ...FLOWS[0], bytes: 3000 }] as any,
-      },
-      {
-        maxResponseSize: 1,
-        autoTruncate: true,
-        truncationStrategy: 'summary',
-        summaryMode: { maxItems: 10, includeFields: [], excludeFields: [] },
-      }
-    );
-    expect((optimized.results[0] as any).domain).toBe('example.com');
   });
 });

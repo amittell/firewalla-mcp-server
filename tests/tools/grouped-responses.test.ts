@@ -15,7 +15,6 @@ import {
   SearchAlarmsHandler,
   SearchFlowsHandler,
 } from '../../src/tools/handlers/search.js';
-import { autoOptimizeResponse } from '../../src/optimization/index.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -389,20 +388,4 @@ describe('grouped flows', () => {
     expect(response.isError).toBe(true);
     expect(get).not.toHaveBeenCalled();
   });
-});
-
-it('the size optimizer passes groups through', () => {
-  const groups = Array.from({ length: 3 }, (_, i) => ({
-    key: { category: `c${i}` },
-    ...totals(i, i),
-  }));
-  const response = { count: 3, results: [], groups, group_by: 'category' };
-  expect(
-    autoOptimizeResponse(response, 'flows', {
-      maxResponseSize: 1,
-      autoTruncate: true,
-      truncationStrategy: 'summary',
-      summaryMode: { maxItems: 1, includeFields: [], excludeFields: [] },
-    })
-  ).toBe(response);
 });

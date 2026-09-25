@@ -154,6 +154,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evaluated on the client, as `search_devices` does. The `targets:` and
   `notes:` fields its schema lists, and the schema's own example
   `targets:*.gaming.com`, were refused as invalid fields; they are accepted.
+- Large responses keep their data. The client rewrote any alarm, flow,
+  device or rule result over 100,000 characters into a compact form with
+  other field names (`aid` became `alarm_id`, `ts` an ISO `timestamp`, a
+  flow's `source.ip` became `source_ip`, a device's `network` became
+  `network_name`), and cut other results' strings to 100 characters and
+  their lists to 5 items. The tools read the API's field names, so on
+  2026-09-25 `get_active_alarms` with `limit: 500` returned all 500 alarms
+  with aid `unknown`, the current time and no `device` or `remote`, and
+  `get_flow_data` with `limit: 500` all 500 flows with the current time,
+  source IP `unknown` and an empty `device`. Rules lost their target and
+  hit count, devices their network and group, and a target list's
+  `entry_count` read 5. The compaction is removed. It was meant to keep
+  answers within a token budget, and did not: the tools build their own
+  output from what the client returns, so those two answers were still
+  177,096 and 242,070 characters. A tool's `limit` and `cursor` bound its
+  answer. After the fix all 500 alarms matched the API's aid, ts and type,
+  and all 500 flows the API's ts, with no `unknown` source IP. The answers
+  are larger (750,289 and 533,035 characters at `limit: 500`); a smaller
+  `limit` or a `groupBy` gives a shorter one.
 
 ### Changed
 
