@@ -154,8 +154,9 @@ export class FirewallaMCPServer {
               type: 'object',
               properties: {
                 alarm_id: {
-                  type: 'string',
-                  description: 'Alarm ID (required for API call)',
+                  type: ['string', 'number'],
+                  description:
+                    'Alarm ID (required for API call): the aid from get_active_alarms or search_alarms, as a number or a string',
                 },
                 gid: {
                   type: 'string',

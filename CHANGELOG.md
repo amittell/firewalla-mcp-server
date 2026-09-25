@@ -13,8 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Docker image builds again. 1.4.0 moved it to `node:24-alpine`, which
   publishes no `linux/arm/v7` image, so the tag's image build failed and no
   1.4.0 image reached Docker Hub (`latest` stayed on 1.3.0). The image now uses
-  `node:22-alpine`, which has amd64, arm64 and arm/v7. The npm package's code
-  is unchanged from 1.4.0.
+  `node:22-alpine`, which has amd64, arm64 and arm/v7.
+- `force_refresh` on alarm queries bypasses the cache again: the paging added
+  in 1.4.0 passed the cache flag where `request()` expects the body.
+- `get_flow_insights` with `include_blocked` asked the API for `blocked:true`,
+  which it refuses; it asks for `status:blocked`. The client's `searchFlows` and
+  `searchAlarms`, which the flow insights and the geography helpers use, now
+  translate `blocked:`, `bytes:` and alarm `source_ip:` the way `get_flow_data`
+  and `get_active_alarms` already did.
+- The `get_specific_alarm` schema lists `alarm_id` as a string or a number, to
+  match the numeric `aid` that `get_active_alarms` returns.
 
 ### Added
 - CI `Docker Build` workflow: a pull request that touches the Dockerfile, the
