@@ -30,6 +30,7 @@ import {
   enrichObjectWithGeo,
 } from '../utils/geographic.js';
 import { correlateResults } from '../validation/enhanced-correlation.js';
+import { targetListMatchesQuery } from '../utils/target-lists.js';
 
 /**
  * Configuration interface for risk thresholds and performance settings
@@ -584,10 +585,14 @@ export class SearchEngine {
         return client.getTargetLists(undefined, undefined, params.owner);
       },
       processResults: (results, params) => {
+        // The API does not search target lists: apply the query here
+        const matching = params.query?.trim()
+          ? results.filter(list => targetListMatchesQuery(list, params.query))
+          : results;
         if (params.limit) {
-          return results.slice(0, params.limit);
+          return matching.slice(0, params.limit);
         }
-        return results;
+        return matching;
       },
     });
   }

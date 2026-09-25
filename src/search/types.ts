@@ -330,7 +330,16 @@ export const SEARCH_FIELDS = {
     'total_download',
     'total_upload',
   ],
-  target_lists: ['name', 'owner', 'category', 'target_count', 'last_updated'],
+  // targets and notes: the query fields the search_target_lists schema lists
+  target_lists: [
+    'name',
+    'owner',
+    'category',
+    'targets',
+    'notes',
+    'target_count',
+    'last_updated',
+  ],
 };
 
 /**
