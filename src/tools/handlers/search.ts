@@ -321,13 +321,13 @@ OPTIONAL PARAMETERS:
 - group_by: Field to group results by for aggregation
 - aggregate: Enable aggregation statistics
 
-QUERY EXAMPLES (with automatic boolean translation):
-- Boolean fields (both syntaxes supported): "blocked:true" OR "blocked=true", "allowed:false" OR "allowed=false" (automatically converted to backend format)
-- Basic field queries: "protocol:tcp", "source_ip:192.168.1.100", "destination_port:443"
-- Logical operators: "protocol:tcp AND blocked:false", "blocked=true OR allowed=false"
-- Wildcards: "source_ip:192.168.*", "destination_domain:*.facebook.com"
-- Ranges: "bytes:[1000 TO 50000]", "timestamp:>=2024-01-01"
-- Complex queries: "(protocol:tcp OR protocol:udp) AND source_ip:192.168.* NOT blocked=true"
+QUERY EXAMPLES:
+- Blocked traffic: "status:blocked" ("blocked:true" is still accepted and sent as status:blocked, "blocked:false" as -status:blocked)
+- Basic field queries: "protocol:tcp", "device.ip:192.168.1.100", "region:US"
+- Logical operators: "protocol:tcp AND status:blocked", "category:social OR category:games"
+- Wildcards: "device.ip:192.168.*", "domain:*.facebook.com"
+- Data transfer (units B, KB, MB, GB, TB): "total:>1MB", "download:>10MB", "upload:1000-50000" ("bytes:" is still accepted and sent as total:)
+- Time: "ts:>1h", "ts:1735689600-1735693200"
 
 CACHE CONTROL:
 - Default: 15-second cache for optimal performance
@@ -668,12 +668,13 @@ OPTIONAL PARAMETERS:
 - sort_by: Field to sort results by
 - aggregate: Enable aggregation statistics
 
-QUERY EXAMPLES (with automatic boolean translation):
-- Boolean status (both syntaxes supported): "resolved:true" OR "resolved=true", "acknowledged:false" OR "acknowledged=false" (automatically converted to backend format)
-- IP-based searches: "source_ip:192.168.1.100", "destination_ip:10.0.*"
+QUERY EXAMPLES:
+- Status: "status:1" (active), "status:2" (archived)
+- Device searches: "device.ip:192.168.1.100", "device.name:*iphone*" ("source_ip:" is still accepted and sent as device.ip:)
 - Type filtering: "type:8", "type:9", "type:10" (use numeric alarm types)
-- Time-based: "timestamp:>=2024-01-01", "last_24_hours:true"
-- Complex combinations: "type:8 AND source_ip:192.168.* NOT resolved:true"
+- Time-based: "ts:>=1735689600", "ts:1735689600-1735693200"
+- Free text (a term without a qualifier): "porn"
+- Complex combinations: "type:8 AND device.ip:192.168.* AND status:1"
 
 CACHE CONTROL:
 - Default: 15-second cache for optimal performance
@@ -681,8 +682,8 @@ CACHE CONTROL:
 - Cache info included in responses for timing awareness
 
 COMMON USE CASES:
-- Active security alerts: "type:1 AND resolved:false"
-- Geographic threats: "country:China AND type:2"
+- Active security alerts: "type:1 AND status:1"
+- Geographic threats: "region:CN AND type:2"
 - Video/Gaming/Porn activity: "type:8 OR type:9 OR type:10"
 - VPN issues: "type:13" (VPN Connection Error)
 

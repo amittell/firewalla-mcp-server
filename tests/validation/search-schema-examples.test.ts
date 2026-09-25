@@ -3,6 +3,10 @@
  * search_rules and search_devices schemas in src/server.ts advertise must get
  * past validation and reach the API (issue #42). The queries are read from the
  * schema source, so a new field or example is covered as soon as it is added.
+ *
+ * Run live against the MSP API on 2026-09-25, /v2/flows answered `blocked:`
+ * and `bytes:`, and /v2/alarms `source_ip:` and `message:`, with 400 "Invalid
+ * parameters". Those names must never reach the API.
  */
 
 import { readFileSync } from 'node:fs';
@@ -140,6 +144,16 @@ async function runSearch(tool: SearchTool, query: string) {
   return { request, response, error };
 }
 
+// Field names the live MSP API rejected, by tool
+const REJECTED_BY_API: Partial<Record<SearchTool, RegExp>> = {
+  search_flows: /(?<![\w.])(blocked|block|bytes):/,
+  search_alarms: /(?<![\w.])(source_ip|message):/,
+};
+
+const sentQuery = (request: jest.Mock): string | undefined =>
+  (request.mock.calls[0] as unknown as [string, string, { query?: string }])[2]
+    .query;
+
 const cases = (Object.keys(SEARCH_TOOLS) as SearchTool[]).flatMap(tool =>
   advertisedQueries(tool).map(query => [tool, query] as const)
 );
@@ -187,6 +201,36 @@ describe('search schema fields and examples (#42)', () => {
         expect(params.query).toContain(`${field}:`);
       }
     }
+    const rejected = REJECTED_BY_API[tool];
+    if (rejected) {
+      expect(params.query).not.toMatch(rejected);
+    }
+  });
+
+  // Older forms keep working: they reach the API as the documented qualifier
+  it.each([
+    ['search_flows', 'blocked:true', 'status:blocked'],
+    ['search_flows', 'blocked:false', '-status:blocked'],
+    ['search_flows', 'bytes:>1MB', 'total:>1MB'],
+    ['search_flows', 'blocked:true AND bytes:>1MB', 'status:blocked AND total:>1MB'],
+    ['search_alarms', 'source_ip:192.168.*', 'device.ip:192.168.*'],
+    [
+      'search_alarms',
+      'source_ip:192.168.* AND status:1',
+      'device.ip:192.168.* AND status:1',
+    ],
+  ] as const)('%s sends %s to the API as %s', async (tool, query, expected) => {
+    const { request, error } = await runSearch(tool, query);
+
+    expect(error).toBeUndefined();
+    expect(sentQuery(request)).toBe(`${expected} box.id:test-box-id`);
+  });
+
+  it('sends an unqualified alarm search term unchanged', async () => {
+    const { request, error } = await runSearch('search_alarms', 'porn');
+
+    expect(error).toBeUndefined();
+    expect(sentQuery(request)).toBe('porn box.id:test-box-id');
   });
 
   it.each([
@@ -200,4 +244,17 @@ describe('search schema fields and examples (#42)', () => {
     expect(error).toBeDefined();
     expect(request).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['message:"text search"', 'unqualified term'],
+    ['resolved:true', 'status:1'],
+  ])(
+    'search_alarms rejects %s and names the replacement',
+    async (query, replacement) => {
+      const { request, error } = await runSearch('search_alarms', query);
+
+      expect(request).not.toHaveBeenCalled();
+      expect(error.validation_errors.join(' ')).toContain(replacement);
+    }
+  );
 });

@@ -120,7 +120,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query for filtering alarms (default: status:1 for active). Use type:N where N is: 1=Security Activity, 2=Abnormal Upload, 3=Large Bandwidth Usage, 4=Monthly Data Plan, 5=New Device, 6=Device Back Online, 7=Device Offline, 8=Video Activity, 9=Gaming Activity, 10=Porn Activity, 11=VPN Activity, 12=VPN Connection Restored, 13=VPN Connection Error, 14=Open Port, 15=Internet Connectivity Update, 16=Large Upload. Examples: type:8 (video), type:10 (porn), region:US, source_ip:*',
+                    'Search query for filtering alarms (default: status:1 for active). Use type:N where N is: 1=Security Activity, 2=Abnormal Upload, 3=Large Bandwidth Usage, 4=Monthly Data Plan, 5=New Device, 6=Device Back Online, 7=Device Offline, 8=Video Activity, 9=Gaming Activity, 10=Porn Activity, 11=VPN Activity, 12=VPN Connection Restored, 13=VPN Connection Error, 14=Open Port, 15=Internet Connectivity Update, 16=Large Upload. Examples: type:8 (video), type:10 (porn), region:US, device.ip:192.168.*',
                 },
                 groupBy: {
                   type: 'string',
@@ -191,7 +191,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query for flows. Supports region:US for geographic filtering, protocol:tcp, blocked:true, domain:*, category:social, etc.',
+                    'Search query for flows. Supports region:US for geographic filtering, protocol:tcp, status:blocked, domain:*, category:social, etc.',
                 },
                 groupBy: {
                   type: 'string',
@@ -595,7 +595,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Supported fields: protocol:tcp/udp, direction:inbound/outbound/local, blocked:true/false, bytes:>1MB, domain:*.example.com, region:US (country code), category:social/games/porn/etc, box.id:box_gid, device.ip:192.168.*, source.ip:*, destination.ip:*, ts:>1h. Examples: "region:US AND protocol:tcp", "blocked:true AND bytes:>1MB", "category:social OR category:games"',
+                    'Search query using Firewalla syntax. Supported fields: protocol:tcp/udp, direction:inbound/outbound/local, status:blocked/ok, total:>1MB (download + upload in B/KB/MB/GB/TB), download:>10MB, upload:>10MB, domain:*.example.com, region:US (country code), category:social/games/porn/etc, box.id:box_gid, device.ip:192.168.*, source.ip:*, destination.ip:*, ts:>1h. Examples: "region:US AND protocol:tcp", "status:blocked AND region:CN", "category:social OR category:games"',
                 },
                 groupBy: {
                   type: 'string',
@@ -633,7 +633,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Supported fields: type:1-16 (see alarm types above), status:1/2 (active/archived), source_ip:192.168.*, region:US (country code), box.id:box_gid, device.name:*, message:"text search". Examples: "type:8 AND region:US" (video from US), "type:10 AND status:1" (active porn alerts), "source_ip:192.168.* AND status:1" (active alarms from the LAN)',
+                    'Search query using Firewalla syntax. Supported fields: type:1-16 (see alarm types above), status:1/2 (active/archived), device.ip:192.168.*, region:US (country code), box.id:box_gid, device.name:*. Examples: "type:8 AND region:US" (video from US), "type:10 AND status:1" (active porn alerts), "device.ip:192.168.* AND status:1" (active alarms from the LAN), "porn" (free text: a term without a qualifier searches alarm text)',
                 },
                 groupBy: {
                   type: 'string',
