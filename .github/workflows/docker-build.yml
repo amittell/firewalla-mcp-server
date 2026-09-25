@@ -4,6 +4,17 @@ name: Docker Build
 # pushing, so a base image that lacks one of them fails a pull request
 # instead of a release tag (1.4.0: node:24-alpine has no linux/arm/v7).
 # Keep `platforms` in step with docker-publish.yml.
+#
+# A build proves the image builds, not that it starts. So the job then loads
+# the linux/amd64 image and runs it the way the README's MCP client config
+# does (`docker run -i --rm`, credentials by -e, dummy values), and requires
+# an answer to MCP `initialize` over stdio that reports package.json's
+# version (scripts/launch-smoke.mjs --docker).
+#
+# A manual run with the `image` input set (for example
+# amittell/firewalla-mcp-server:1.4.1) builds nothing: it pulls that
+# published image and runs the same check on it. Pull requests have no
+# inputs, so they always build. Neither path logs in to Docker Hub.
 
 on:
   pull_request:
@@ -12,16 +23,29 @@ on:
       - Dockerfile
       - package.json
       - package-lock.json
+      - scripts/launch-smoke.mjs
       - .github/workflows/docker-build.yml
       - .github/workflows/docker-publish.yml
   workflow_dispatch:
+    inputs:
+      image:
+        description: Published image to pull and check instead of building, for example amittell/firewalla-mcp-server:1.4.1. Empty builds this ref.
+        required: false
+        default: ''
+        type: string
+      expect_version:
+        description: serverInfo.version the published image must report. Empty means the image tag when it is a version, else package.json.
+        required: false
+        default: ''
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.image }}
   cancel-in-progress: true
 
 jobs:
   build:
+    if: github.event_name != 'workflow_dispatch' || inputs.image == ''
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -45,3 +69,49 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Same builder and Dockerfile as the step above, so every layer is a
+      # cache hit; this only exports the amd64 image into the runner's Docker.
+      - name: Load the linux/amd64 image (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: firewalla-mcp-server:launch-smoke
+          cache-from: type=gha
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Answer initialize from the image over stdio
+        timeout-minutes: 5
+        run: node scripts/launch-smoke.mjs --docker firewalla-mcp-server:launch-smoke
+
+  published-image:
+    name: Check a published image
+    if: github.event_name == 'workflow_dispatch' && inputs.image != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # Inputs reach the shell as environment variables, never as ${{ }}
+      # text; the script refuses an image reference that starts with `-`.
+      - name: Pull the image and answer initialize from it over stdio
+        env:
+          IMAGE: ${{ inputs.image }}
+          EXPECT_VERSION: ${{ inputs.expect_version }}
+        run: node scripts/launch-smoke.mjs --docker "$IMAGE" --pull --expect-version "$EXPECT_VERSION"

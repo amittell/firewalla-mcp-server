@@ -59,6 +59,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `muteAlarm`. Checked live on 2026-09-25 with error-path calls only:
   both routes exist on the MSP (a mute without `target.value` answers 400
   `target.value is required for domain target`).
+- CI `Docker Build` workflow runs the image as well as building it. After the
+  multi-platform build it loads the linux/amd64 image, starts it with
+  `docker run -i --rm` and dummy credentials, and requires an answer to MCP
+  `initialize` over stdio whose `serverInfo.version` is package.json's.
+  `scripts/launch-smoke.mjs --docker <image>` does the check. A manual run
+  with the `image` input (for example `amittell/firewalla-mcp-server:1.4.1`)
+  pulls and checks that published image instead of building.
 
 ## [1.4.1] - 2026-09-25
 
