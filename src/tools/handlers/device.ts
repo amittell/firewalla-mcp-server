@@ -35,7 +35,7 @@ import {
 export class GetDeviceStatusHandler extends BaseToolHandler {
   name = 'get_device_status';
   description =
-    'Check online/offline status of all network devices with detailed information including MAC addresses, IP addresses, device types, and last seen timestamps. Requires limit parameter. Data is cached for 2 minutes for performance.';
+    'Check online/offline status of devices on the Firewalla network. Reads the device list from GET /v2/devices (box, else FIREWALLA_BOX_ID, else every box; group limits it to a box group) and returns up to limit devices, sorted by name.';
   category = 'device' as const;
 
   constructor() {
@@ -275,7 +275,7 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
 export class RenameDeviceHandler extends BaseToolHandler {
   name = 'rename_device';
   description =
-    "Rename a network device on one box (gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box). The MSP API only supports changing the name (32 characters max); other device fields cannot be modified. Requires device_id (MAC address).";
+    "Rename a network device (PATCH /v2/boxes/{gid}/devices/{id}; the only device field the MSP API allows changing; 32 characters max). Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box.";
   category = 'device' as const;
 
   constructor() {

@@ -137,7 +137,7 @@ async function checkRuleStatus(
 export class GetNetworkRulesHandler extends BaseToolHandler {
   name = 'get_network_rules';
   description =
-    'Retrieve firewall rules and conditions including target domains, actions, and status. Requires limit parameter. Data is cached for 10 minutes for performance.';
+    'Retrieve firewall rules and conditions (GET /v2/rules). The API returns every matching rule; the tool returns the first limit. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
   category = 'rule' as const;
 
   constructor() {
@@ -332,7 +332,7 @@ const PAUSE_DURATION_IGNORED_NOTE =
 export class PauseRuleHandler extends BaseToolHandler {
   name = 'pause_rule';
   description =
-    'Pause a firewall rule until resume_rule reactivates it. Requires rule_id parameter. The MSP API takes no duration, so the pause does not expire on its own.';
+    "Pause an active firewall rule on the box until resume_rule reactivates it (POST /v2/rules/{id}/pause, no body). The MSP API takes no duration, so the pause does not expire on its own. Checks the rule's status first and changes nothing if it is already paused.";
   category = 'rule' as const;
 
   constructor() {
@@ -520,7 +520,7 @@ export class PauseRuleHandler extends BaseToolHandler {
 export class ResumeRuleHandler extends BaseToolHandler {
   name = 'resume_rule';
   description =
-    'Resume a previously paused firewall rule. Requires rule_id parameter.';
+    "Resume a paused firewall rule on the box, restoring it to active (POST /v2/rules/{id}/resume, no body). Checks the rule's status first and changes nothing if it is already active.";
   category = 'rule' as const;
 
   constructor() {
@@ -641,7 +641,7 @@ export class ResumeRuleHandler extends BaseToolHandler {
 export class GetTargetListsHandler extends BaseToolHandler {
   name = 'get_target_lists';
   description =
-    'Access security target lists (CloudFlare, CrowdSec) with domains and IPs. Requires limit parameter. Data cached for 1 hour for performance.';
+    "Retrieve target lists (GET /v2/target-lists). Without owner the API returns the MSP's global lists and the Firewalla-managed lists; owner selects global lists, a box's lists, or several. entry_count is the number of entries in each list; the API does not return the entries of Firewalla-managed lists, so their targets is null. Returns up to limit lists.";
   category = 'rule' as const;
 
   constructor() {
@@ -800,7 +800,7 @@ export class GetTargetListsHandler extends BaseToolHandler {
 export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
   name = 'get_network_rules_summary';
   description =
-    'Get overview statistics and counts of network rules by category. Requires limit parameter. Data cached for 10 minutes for performance.';
+    'Get overview counts of network rules by action, direction, status and target type (convenience wrapper): reads the rules from GET /v2/rules and counts them locally. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
   category = 'rule' as const;
 
   constructor() {
@@ -1476,7 +1476,8 @@ export class GetRecentRulesHandler extends BaseToolHandler {
  */
 export class GetSpecificTargetListHandler extends BaseToolHandler {
   name = 'get_specific_target_list';
-  description = 'Retrieve a specific target list by ID from Firewalla';
+  description =
+    'Retrieve one target list by ID, including its targets (GET /v2/target-lists/{id}).';
   category = 'rule' as const;
 
   constructor() {
@@ -1543,7 +1544,8 @@ export class GetSpecificTargetListHandler extends BaseToolHandler {
  */
 export class CreateTargetListHandler extends BaseToolHandler {
   name = 'create_target_list';
-  description = 'Create a new target list in Firewalla';
+  description =
+    'Create a new target list (POST /v2/target-lists); each call creates another list. owner global makes it shareable across all boxes, a box GID ties it to that box.';
   category = 'rule' as const;
 
   constructor() {
@@ -1661,7 +1663,8 @@ export class CreateTargetListHandler extends BaseToolHandler {
  */
 export class UpdateTargetListHandler extends BaseToolHandler {
   name = 'update_target_list';
-  description = 'Update an existing target list in Firewalla';
+  description =
+    'Update an existing target list (PATCH /v2/target-lists/{id}). Only the fields given are sent; targets, when given, is the complete new list and is not merged with the current targets.';
   category = 'rule' as const;
 
   constructor() {
@@ -1784,7 +1787,8 @@ export class UpdateTargetListHandler extends BaseToolHandler {
  */
 export class DeleteTargetListHandler extends BaseToolHandler {
   name = 'delete_target_list';
-  description = 'Delete a target list from Firewalla';
+  description =
+    'Permanently delete a target list (DELETE /v2/target-lists/{id}); cannot be undone. The tool does not check whether a rule still targets the list.';
   category = 'rule' as const;
 
   constructor() {
@@ -1852,7 +1856,7 @@ export class DeleteTargetListHandler extends BaseToolHandler {
 export class CreateRuleHandler extends BaseToolHandler {
   name = 'create_rule';
   description =
-    "Create a new firewall rule (block or allow) on one box (gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box). Target types: app, category, domain, internet, intranet, ip, net, region, remotePort, targetlist. Optionally scope the rule to a device (MAC address), group, user, or network, and schedule it with cron_time + duration.";
+    "Create a new firewall rule (block or allow) on one box (POST /v2/rules), with optional device/group/network scope and cron schedule. Each call adds another rule; delete_rule removes one. Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box; refuses on a multi-box account with none of those.";
   category = 'rule' as const;
 
   constructor() {
@@ -2106,7 +2110,7 @@ export class CreateRuleHandler extends BaseToolHandler {
 export class DeleteRuleHandler extends BaseToolHandler {
   name = 'delete_rule';
   description =
-    'Permanently delete a firewall rule. Unlike pause_rule this cannot be undone; the rule must be recreated to restore it. Requires MSP 2.11.0 or later.';
+    'Permanently delete a firewall rule (DELETE /v2/rules/{id}; cannot be undone; MSP 2.11.0+). Checks the rule exists first and sends nothing for an unknown ID. Use pause_rule for a temporary disable.';
   category = 'rule' as const;
 
   constructor() {

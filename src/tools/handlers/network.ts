@@ -37,7 +37,7 @@ import {
 export class GetFlowDataHandler extends BaseToolHandler {
   name = 'get_flow_data';
   description =
-    'Query network traffic flows with pagination. Data is cached for 15 seconds for performance. Use force_refresh=true to bypass cache for real-time data.';
+    'Query network traffic flows from the Firewalla MSP API (GET /v2/flows). Without a ts: qualifier the API covers the last 24 hours. Returns up to limit flows and a cursor for the next page, or groups with groupBy. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
   category = 'network' as const;
 
   constructor() {
@@ -426,7 +426,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
 export class GetBandwidthUsageHandler extends BaseToolHandler {
   name = 'get_bandwidth_usage';
   description =
-    'Get top bandwidth consuming devices by data usage. Requires limit and period parameters. Data is cached for 5 minutes for performance.';
+    "Top devices by upload plus download over the period, summed client-side from up to 10 times limit (1,000 at most) of the period's most recent flows (GET /v2/flows, 500 per request), so on a busy network the totals cover a sample. Scoped to box, else FIREWALLA_BOX_ID, else every box.";
   category = 'network' as const;
 
   constructor() {
@@ -577,7 +577,7 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
 export class GetOfflineDevicesHandler extends BaseToolHandler {
   name = 'get_offline_devices';
   description =
-    'Get all offline devices with last seen timestamps and detailed device information. Requires limit parameter. Data cached for 2 minutes for performance.';
+    'List offline devices from the full device list (GET /v2/devices), most recently seen first by default, up to limit; total_offline_devices counts all of them. Scoped to box, else FIREWALLA_BOX_ID, else every box.';
   category = 'network' as const;
 
   constructor() {

@@ -221,7 +221,11 @@ export interface ToolHandler {
   /** @description Unique tool identifier used in MCP tool registration */
   name: string;
 
-  /** @description Human-readable description of tool functionality */
+  /**
+   * @description Human-readable description of tool functionality. Clients
+   * get the description from the ListTools handler in src/server.ts; this
+   * copy must match it (tests/server/tool-annotations.test.ts).
+   */
   description: string;
 
   /** @description Tool category for organizational and filtering purposes */
@@ -268,7 +272,10 @@ export abstract class BaseToolHandler implements ToolHandler {
   /** @description Tool identifier - must be implemented by concrete classes */
   abstract name: string;
 
-  /** @description Tool description - must be implemented by concrete classes */
+  /**
+   * @description Tool description - must be implemented by concrete classes,
+   * and must match the tool's description in src/server.ts
+   */
   abstract description: string;
 
   /** @description Tool category - must be implemented by concrete classes */

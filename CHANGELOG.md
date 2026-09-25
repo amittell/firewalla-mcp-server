@@ -213,6 +213,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entries did nothing. Only `msp_id` is required; `box_id` is optional, and
   the optional `default_box_id` and `enable_write_tools` set
   `FIREWALLA_DEFAULT_BOX_ID` and `FIREWALLA_ENABLE_WRITE_TOOLS`.
+- Tool descriptions say what each tool calls and how far its results reach:
+  the endpoint, paging (`/v2/alarms` and `/v2/flows` return at most 500 per
+  request), box scoping (`box`, `FIREWALLA_BOX_ID`, or none for the trends
+  and statistics endpoints), where results are computed on the client from
+  a sample, and what the state-changing tools change. Descriptions that did
+  not match the code now do:
+  - `get_active_alarms` adds no `status:1` filter; the `query` schema said
+    it did.
+  - `get_bandwidth_usage` sums flows over the period and `get_offline_devices`
+    filters the device list; neither is a wrapper around
+    `get_device_status`.
+  - `get_target_lists` returns the global and Firewalla-managed lists unless
+    `owner` names others, not "all target lists".
+  - `get_network_rules_summary` counts rules by action, direction, status
+    and target type, not by category.
+  - `get_recent_flow_activity` returns the 50 most recent flows, whatever
+    time they span, not "the last 10-20 minutes".
+- The handler classes' `description` fields match what tools/list sends.
+  They are not sent to clients and had drifted from it.
 
 ### Added
 
@@ -243,6 +262,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `get_target_lists` takes an optional `owner`, the API's documented filter:
   `global`, a box gid, or a comma-separated list such as `global,<box_gid>`.
   Without it the API returns global and Firewalla-managed lists.
+- MCP tool annotations on every tool, not only the opt-in write tools: a
+  `title`, `readOnlyHint`, and `openWorldHint: true` (each tool calls the
+  Firewalla MSP API), and on the ten tools that change state
+  `destructiveHint` and `idempotentHint` as well. The `get_*` and `search_*`
+  tools are read-only. `pause_rule` and `resume_rule` are idempotent and not
+  destructive: each checks the rule's status first and changes nothing if it
+  is already paused or active. `update_target_list`, `delete_target_list`
+  and `delete_rule` are destructive; `create_rule` keeps
+  `destructiveHint: true`, and `archive_alarm` and `mute_alarm` keep theirs.
+  The target list tools, `pause_rule` and `resume_rule` still work without
+  `FIREWALLA_ENABLE_WRITE_TOOLS`. See "Tool annotations" in the README.
+- A test lists the tools through the server's ListTools handler and calls
+  each one through CallTool with the HTTP layer mocked. It checks that every
+  tool has annotations, that every `get_*` and `search_*` tool is read-only,
+  that `readOnlyHint` is false on exactly the tools that send a POST, PATCH
+  or DELETE, and that each handler's `description` is the one tools/list
+  sends. So that tests can import `src/server.ts`, jest rewrites
+  `import.meta.url` (`tests/setup/import-meta-url.cjs`).
 
 ## [1.4.1] - 2026-09-25
 

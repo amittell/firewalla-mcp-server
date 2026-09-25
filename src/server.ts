@@ -114,14 +114,19 @@ export class FirewallaMCPServer {
           {
             name: 'get_active_alarms',
             description:
-              'Retrieve current security alerts and alarms from Firewalla firewall',
+              'Retrieve security alarms from the Firewalla MSP API (GET /v2/alarms). No status filter is added: put status:1 in query for active alarms only. Without a ts: qualifier the API covers the last 30 days. Returns up to limit alarms and a cursor for the next page, or groups with groupBy. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
+            annotations: {
+              title: 'Get Active Alarms',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
                   description:
-                    'Search query for filtering alarms (default: status:1 for active). Use type:N where N is: 1=Security Activity, 2=Abnormal Upload, 3=Large Bandwidth Usage, 4=Monthly Data Plan, 5=New Device, 6=Device Back Online, 7=Device Offline, 8=Video Activity, 9=Gaming Activity, 10=Porn Activity, 11=VPN Activity, 12=VPN Connection Restored, 13=VPN Connection Error, 14=Open Port, 15=Internet Connectivity Update, 16=Large Upload. Examples: type:8 (video), type:10 (porn), region:US, device.ip:192.168.*',
+                    'Search query for filtering alarms (no default filter; add status:1 for active alarms only). Use type:N where N is: 1=Security Activity, 2=Abnormal Upload, 3=Large Bandwidth Usage, 4=Monthly Data Plan, 5=New Device, 6=Device Back Online, 7=Device Offline, 8=Video Activity, 9=Gaming Activity, 10=Porn Activity, 11=VPN Activity, 12=VPN Connection Restored, 13=VPN Connection Error, 14=Open Port, 15=Internet Connectivity Update, 16=Large Upload. Examples: type:8 (video), type:10 (porn), region:US, device.ip:192.168.*',
                 },
                 groupBy: {
                   type: 'string',
@@ -151,7 +156,12 @@ export class FirewallaMCPServer {
           {
             name: 'get_specific_alarm',
             description:
-              'Get detailed information for a specific Firewalla alarm. Alarm IDs are per box: pass gid on a multi-box account, or each box is checked.',
+              'Get detailed information for one Firewalla alarm (GET /v2/alarms/{gid}/{aid}). Alarm IDs are per box: pass gid on a multi-box account, or each box is checked, one request per box, until one has the alarm.',
+            annotations: {
+              title: 'Get Alarm Details',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -191,9 +201,11 @@ export class FirewallaMCPServer {
             description:
               "Archive an alarm (MSP 2.11.0 or later): it leaves the active alarms. It creates no silence exception, so future matching traffic can still raise new alarms (mute_alarm silences them). Alarm IDs are per box: pass gid (the alarm's gid field); without gid or FIREWALLA_BOX_ID each box is checked, and the tool refuses when several boxes have that aid and none is FIREWALLA_DEFAULT_BOX_ID.",
             annotations: {
+              title: 'Archive Alarm',
               readOnlyHint: false,
               destructiveHint: false,
               idempotentHint: true,
+              openWorldHint: true,
             },
             inputSchema: {
               type: 'object',
@@ -217,9 +229,11 @@ export class FirewallaMCPServer {
             description:
               "Mute an alarm (MSP 2.11.0 or later): the API archives it and has the box create a lasting silence exception, so future alarms matching the target within the scope are no longer raised. target_type alarmType silences every future alarm of this alarm's type (for example all Security Activity alarms), domain a domain and its subdomains, ip one IP address. scope_type all covers every device on the box; device, group, user or network limit it to the one named by scope_value. This server has no tool to remove the exception. Box selection is the same as archive_alarm.",
             annotations: {
+              title: 'Mute Alarm',
               readOnlyHint: false,
               destructiveHint: false,
               idempotentHint: false,
+              openWorldHint: true,
             },
             inputSchema: {
               type: 'object',
@@ -262,7 +276,13 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_flow_data',
-            description: 'Query network traffic flows from Firewalla firewall',
+            description:
+              'Query network traffic flows from the Firewalla MSP API (GET /v2/flows). Without a ts: qualifier the API covers the last 24 hours. Returns up to limit flows and a cursor for the next page, or groups with groupBy. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
+            annotations: {
+              title: 'Get Flow Data',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -299,7 +319,12 @@ export class FirewallaMCPServer {
           {
             name: 'get_device_status',
             description:
-              'Check online/offline status of devices on Firewalla network',
+              'Check online/offline status of devices on the Firewalla network. Reads the device list from GET /v2/devices (box, else FIREWALLA_BOX_ID, else every box; group limits it to a box group) and returns up to limit devices, sorted by name.',
+            annotations: {
+              title: 'Get Device Status',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -325,7 +350,13 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_network_rules',
-            description: 'Retrieve firewall rules and conditions',
+            description:
+              'Retrieve firewall rules and conditions (GET /v2/rules). The API returns every matching rule; the tool returns the first limit. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
+            annotations: {
+              title: 'Get Firewall Rules',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -346,7 +377,14 @@ export class FirewallaMCPServer {
           {
             name: 'pause_rule',
             description:
-              'Pause an active firewall rule until resume_rule reactivates it. The MSP API takes no duration, so the pause does not expire on its own.',
+              "Pause an active firewall rule on the box until resume_rule reactivates it (POST /v2/rules/{id}/pause, no body). The MSP API takes no duration, so the pause does not expire on its own. Checks the rule's status first and changes nothing if it is already paused.",
+            annotations: {
+              title: 'Pause Firewall Rule',
+              readOnlyHint: false,
+              destructiveHint: false,
+              idempotentHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -361,7 +399,14 @@ export class FirewallaMCPServer {
           {
             name: 'resume_rule',
             description:
-              'Resume a previously paused firewall rule, restoring it to active state',
+              "Resume a paused firewall rule on the box, restoring it to active (POST /v2/rules/{id}/resume, no body). Checks the rule's status first and changes nothing if it is already active.",
+            annotations: {
+              title: 'Resume Firewall Rule',
+              readOnlyHint: false,
+              destructiveHint: false,
+              idempotentHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -376,7 +421,12 @@ export class FirewallaMCPServer {
           {
             name: 'get_target_lists',
             description:
-              'Retrieve all target lists from Firewalla. entry_count is the number of entries in each list; the API does not return the entries of Firewalla-managed lists, so their targets is null.',
+              "Retrieve target lists (GET /v2/target-lists). Without owner the API returns the MSP's global lists and the Firewalla-managed lists; owner selects global lists, a box's lists, or several. entry_count is the number of entries in each list; the API does not return the entries of Firewalla-managed lists, so their targets is null. Returns up to limit lists.",
+            annotations: {
+              title: 'Get Target Lists',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -398,7 +448,13 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_specific_target_list',
-            description: 'Retrieve a specific target list by ID',
+            description:
+              'Retrieve one target list by ID, including its targets (GET /v2/target-lists/{id}).',
+            annotations: {
+              title: 'Get Target List',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -413,10 +469,13 @@ export class FirewallaMCPServer {
           {
             name: 'create_rule',
             description:
-              "Create a new firewall rule (block or allow) on one box, with optional device/group/network scope and cron schedule. Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box; refuses on a multi-box account with none of those.",
+              "Create a new firewall rule (block or allow) on one box (POST /v2/rules), with optional device/group/network scope and cron schedule. Each call adds another rule; delete_rule removes one. Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box; refuses on a multi-box account with none of those.",
             annotations: {
+              title: 'Create Firewall Rule',
               readOnlyHint: false,
               destructiveHint: true,
+              idempotentHint: false,
+              openWorldHint: true,
             },
             inputSchema: {
               type: 'object',
@@ -496,10 +555,13 @@ export class FirewallaMCPServer {
           {
             name: 'delete_rule',
             description:
-              'Permanently delete a firewall rule (cannot be undone; MSP 2.11.0+). Use pause_rule for a temporary disable.',
+              'Permanently delete a firewall rule (DELETE /v2/rules/{id}; cannot be undone; MSP 2.11.0+). Checks the rule exists first and sends nothing for an unknown ID. Use pause_rule for a temporary disable.',
             annotations: {
+              title: 'Delete Firewall Rule',
               readOnlyHint: false,
               destructiveHint: true,
+              idempotentHint: true,
+              openWorldHint: true,
             },
             inputSchema: {
               type: 'object',
@@ -515,11 +577,13 @@ export class FirewallaMCPServer {
           {
             name: 'rename_device',
             description:
-              "Rename a network device (the only device field the MSP API allows changing; 32 characters max). Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box.",
+              "Rename a network device (PATCH /v2/boxes/{gid}/devices/{id}; the only device field the MSP API allows changing; 32 characters max). Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box.",
             annotations: {
+              title: 'Rename Device',
               readOnlyHint: false,
               destructiveHint: false,
               idempotentHint: true,
+              openWorldHint: true,
             },
             inputSchema: {
               type: 'object',
@@ -544,7 +608,15 @@ export class FirewallaMCPServer {
           },
           {
             name: 'create_target_list',
-            description: 'Create a new target list',
+            description:
+              'Create a new target list (POST /v2/target-lists); each call creates another list. owner global makes it shareable across all boxes, a box GID ties it to that box.',
+            annotations: {
+              title: 'Create Target List',
+              readOnlyHint: false,
+              destructiveHint: false,
+              idempotentHint: false,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -593,7 +665,15 @@ export class FirewallaMCPServer {
           },
           {
             name: 'update_target_list',
-            description: 'Update an existing target list',
+            description:
+              'Update an existing target list (PATCH /v2/target-lists/{id}). Only the fields given are sent; targets, when given, is the complete new list and is not merged with the current targets.',
+            annotations: {
+              title: 'Update Target List',
+              readOnlyHint: false,
+              destructiveHint: true,
+              idempotentHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -641,7 +721,15 @@ export class FirewallaMCPServer {
           },
           {
             name: 'delete_target_list',
-            description: 'Delete a target list',
+            description:
+              'Permanently delete a target list (DELETE /v2/target-lists/{id}); cannot be undone. The tool does not check whether a rule still targets the list.',
+            annotations: {
+              title: 'Delete Target List',
+              readOnlyHint: false,
+              destructiveHint: true,
+              idempotentHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -656,7 +744,12 @@ export class FirewallaMCPServer {
           {
             name: 'search_flows',
             description:
-              'Search network flows with advanced query filters. Use this for: historical analysis, specific time ranges, complex filtering, or when you need more than 50 flows. Supports pagination, time-based queries (e.g., "ts:>1h" for the last hour, or Unix seconds such as "ts:1735689600-1735693200"), and all flow fields including geographic filtering. For quick "what\'s happening now" snapshots, use get_recent_flow_activity instead.',
+              'Search network flows with advanced query filters. Use this for: historical analysis, specific time ranges, complex filtering, or when you need more than 50 flows. Supports pagination, time-based queries (e.g., "ts:>1h" for the last hour, or Unix seconds such as "ts:1735689600-1735693200"), and all flow fields including geographic filtering. For quick "what\'s happening now" snapshots, use get_recent_flow_activity instead. Reads GET /v2/flows, 500 per request, following the cursor up to limit. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
+            annotations: {
+              title: 'Search Flows',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -694,7 +787,12 @@ export class FirewallaMCPServer {
           {
             name: 'search_alarms',
             description:
-              'Search alarms using full-text or field filters. Alarm types: 1=Security Activity, 2=Abnormal Upload, 3=Large Bandwidth Usage, 4=Monthly Data Plan, 5=New Device, 6=Device Back Online, 7=Device Offline, 8=Video Activity, 9=Gaming Activity, 10=Porn Activity, 11=VPN Activity, 12=VPN Connection Restored, 13=VPN Connection Error, 14=Open Port, 15=Internet Connectivity Update, 16=Large Upload.',
+              'Search alarms using full-text or field filters. Alarm types: 1=Security Activity, 2=Abnormal Upload, 3=Large Bandwidth Usage, 4=Monthly Data Plan, 5=New Device, 6=Device Back Online, 7=Device Offline, 8=Video Activity, 9=Gaming Activity, 10=Porn Activity, 11=VPN Activity, 12=VPN Connection Restored, 13=VPN Connection Error, 14=Open Port, 15=Internet Connectivity Update, 16=Large Upload. Reads GET /v2/alarms, 500 per request, following the cursor up to limit. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
+            annotations: {
+              title: 'Search Alarms',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -732,7 +830,12 @@ export class FirewallaMCPServer {
           {
             name: 'search_rules',
             description:
-              'Search firewall rules by target, action or status. Supports all rule fields.',
+              'Search firewall rules by target, action or status; the MSP API applies the query (GET /v2/rules). Supports all rule fields. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
+            annotations: {
+              title: 'Search Firewall Rules',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -753,7 +856,13 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_boxes',
-            description: 'Retrieve list of Firewalla boxes',
+            description:
+              'List the Firewalla boxes this MSP token can see (GET /v2/boxes, optionally one box group), with online status, model and version. Not limited by FIREWALLA_BOX_ID.',
+            annotations: {
+              title: 'List Firewalla Boxes',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -768,7 +877,13 @@ export class FirewallaMCPServer {
           },
           {
             name: 'get_simple_statistics',
-            description: 'Retrieve basic statistics overview',
+            description:
+              'Get account-wide counts from GET /v2/stats/simple: online boxes, offline boxes, alarms and rules, optionally for one box group. Not limited by FIREWALLA_BOX_ID.',
+            annotations: {
+              title: 'Get Simple Statistics',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -783,7 +898,12 @@ export class FirewallaMCPServer {
           {
             name: 'get_statistics_by_region',
             description:
-              'Retrieve statistics by region (top regions by blocked flows)',
+              'Top regions by blocked flows, from GET /v2/stats/topRegionsByBlockedFlows, optionally for one box group; the API returned no more than 5 regions. Not limited by FIREWALLA_BOX_ID.',
+            annotations: {
+              title: 'Top Regions by Blocked Flows',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -805,7 +925,12 @@ export class FirewallaMCPServer {
           {
             name: 'get_statistics_by_box',
             description:
-              'Get statistics for each Firewalla box (top boxes by blocked flows or security alarms)',
+              "Top boxes by blocked flows (the default) or by Security Activity alarms, from GET /v2/stats/{type}, with each box's details from GET /v2/boxes; each box's value is the statistic, over about the last 30 days when measured. Not limited by FIREWALLA_BOX_ID.",
+            annotations: {
+              title: 'Top Boxes',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -833,7 +958,12 @@ export class FirewallaMCPServer {
           {
             name: 'get_recent_flow_activity',
             description:
-              'Get recent network flow activity snapshot (last 10-20 minutes). Returns up to 50 most recent flows for immediate analysis. CRITICAL: This is a quick snapshot tool only. Use this for: "what\'s happening right now?", current security threats, immediate network issues. DO NOT use for: historical analysis (use search_flows), getting more than 50 flows (use search_flows with limit), daily/weekly patterns (use search_flows with time queries like "ts:>24h"). For comprehensive analysis, always prefer search_flows.',
+              'Get a snapshot of the 50 most recent network flows (one GET /v2/flows request) with protocol, region and blocked/allowed counts; the minutes they span depend on how busy the network is. Use this for: "what\'s happening right now?", current security threats, immediate network issues. DO NOT use for: historical analysis, more than 50 flows, or daily/weekly patterns; use search_flows with time queries like "ts:>24h" for those. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
+            annotations: {
+              title: 'Recent Flow Activity',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {},
@@ -843,7 +973,12 @@ export class FirewallaMCPServer {
           {
             name: 'get_flow_insights',
             description:
-              'Get category-based flow analysis including top content categories, bandwidth consumers, and blocked traffic. Ideal for answering questions like "what porn sites were accessed" or "what social media was used". Replaces time-based trends with actionable insights.',
+              'Get category-based flow analysis for a period: top content categories and their domains, top devices by bandwidth, and optionally blocked traffic. Ideal for answering questions like "what porn sites were accessed" or "what social media was used". Computed client-side from the period\'s largest flows (GET /v2/flows by total bytes: up to 500 for categories, 200 for devices) and, with include_blocked, the 50 most frequent blocked flows, so on a busy network it covers the largest flows, not all of them. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
+            annotations: {
+              title: 'Flow Category Insights',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -888,7 +1023,12 @@ export class FirewallaMCPServer {
           {
             name: 'get_alarm_trends',
             description:
-              'Get historical alarm trend data (alarms generated per day, from the trends API: one point per day for the last 30 days, the last point being today so far)',
+              'Alarms generated per day, from GET /v2/trends/alarms: one point per day for the last 30 days, the last point being today so far. period (default 30d) returns the days that overlap it. The trends API takes no box, so it covers every box (or the group) even with FIREWALLA_BOX_ID set.',
+            annotations: {
+              title: 'Alarm Trends',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -910,7 +1050,12 @@ export class FirewallaMCPServer {
           {
             name: 'get_rule_trends',
             description:
-              'Get historical rule trend data (rules created per day, one point per day for the last 30 days). When the trends API refuses the request, the days are counted from the creation times of the existing rules, and the response says so',
+              'Rules created per day for the last 30 days, from GET /v2/trends/rules; period and group work as in get_alarm_trends. When that endpoint answers 400 (it did when measured), each UTC day counts the rules in GET /v2/rules created on it, scoped to FIREWALLA_BOX_ID when set (rules deleted since are not counted), and the response says so.',
+            annotations: {
+              title: 'Rule Trends',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -933,7 +1078,12 @@ export class FirewallaMCPServer {
           {
             name: 'get_bandwidth_usage',
             description:
-              'Get top bandwidth consuming devices (convenience wrapper around get_device_status)',
+              "Top devices by upload plus download over the period, summed client-side from up to 10 times limit (1,000 at most) of the period's most recent flows (GET /v2/flows, 500 per request), so on a busy network the totals cover a sample. Scoped to box, else FIREWALLA_BOX_ID, else every box.",
+            annotations: {
+              title: 'Top Bandwidth Devices',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -961,7 +1111,12 @@ export class FirewallaMCPServer {
           {
             name: 'get_offline_devices',
             description:
-              'Get all offline devices (convenience wrapper around get_device_status)',
+              'List offline devices from the full device list (GET /v2/devices), most recently seen first by default, up to limit; total_offline_devices counts all of them. Scoped to box, else FIREWALLA_BOX_ID, else every box.',
+            annotations: {
+              title: 'Offline Devices',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -988,7 +1143,12 @@ export class FirewallaMCPServer {
           {
             name: 'search_devices',
             description:
-              'Search devices by name, IP, MAC or status (convenience wrapper with client-side filtering)',
+              'Search devices by name, IP, MAC or status (convenience wrapper with client-side filtering): reads the device list from GET /v2/devices (box, else FIREWALLA_BOX_ID, else every box) and filters it locally.',
+            annotations: {
+              title: 'Search Devices',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -1016,7 +1176,12 @@ export class FirewallaMCPServer {
           {
             name: 'search_target_lists',
             description:
-              'Search target lists with client-side filtering (convenience wrapper around get_target_lists)',
+              'Search target lists (convenience wrapper with client-side filtering): reads GET /v2/target-lists, sending owner if given (without it, the global and Firewalla-managed lists), and applies the query locally.',
+            annotations: {
+              title: 'Search Target Lists',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
@@ -1045,7 +1210,12 @@ export class FirewallaMCPServer {
           {
             name: 'get_network_rules_summary',
             description:
-              'Get overview statistics and counts of network rules by category (convenience wrapper)',
+              'Get overview counts of network rules by action, direction, status and target type (convenience wrapper): reads the rules from GET /v2/rules and counts them locally. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
+            annotations: {
+              title: 'Firewall Rules Summary',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
             inputSchema: {
               type: 'object',
               properties: {
