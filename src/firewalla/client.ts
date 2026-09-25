@@ -43,6 +43,7 @@ import {
 } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
 import { matchesQuery, unquoteQueryValue } from '../search/client-filter.js';
+import { translateToMspQualifiers } from '../utils/msp-qualifiers.js';
 import { optimizeResponse } from '../optimization/index.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
 import { logger } from '../monitoring/logger.js';
@@ -622,7 +623,8 @@ export class FirewallaClient {
     };
 
     if (query) {
-      params.query = query;
+      // source_ip: is rejected by /v2/alarms; send it as device.ip:
+      params.query = translateToMspQualifiers(query, 'alarms');
     }
     if (groupBy) {
       params.groupBy = groupBy;
@@ -720,9 +722,10 @@ export class FirewallaClient {
       limit, // Remove artificial limit - let pagination handle large datasets
     };
 
-    // Simplified: only add query if provided
+    // Simplified: only add query if provided. blocked: and bytes: are
+    // rejected by /v2/flows; send them as status:blocked and total:
     if (query?.trim()) {
-      params.query = query.trim();
+      params.query = translateToMspQualifiers(query.trim(), 'flows');
     }
     if (groupBy) {
       params.groupBy = groupBy;

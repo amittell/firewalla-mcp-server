@@ -201,6 +201,8 @@ export const SEARCH_FIELDS = {
     'region',
     'category',
     'domain', // MSP flow qualifier: domain:*.example.com
+    'status', // MSP flow qualifier: status:blocked, status:ok
+    'total', // MSP flow qualifier: total:>1MB (download + upload)
     // Enhanced geographic fields
     'country',
     'country_code',

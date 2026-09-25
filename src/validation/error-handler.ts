@@ -1161,6 +1161,19 @@ export class SafeAccess {
 }
 
 /**
+ * Fields the MSP API has no qualifier for, with what to use instead. They are
+ * rejected before the request, which the API would answer with an error.
+ */
+const UNSUPPORTED_QUERY_FIELDS: Record<string, Record<string, string>> = {
+  alarms: {
+    message:
+      'the MSP API has no message qualifier; search alarm text with an unqualified term, e.g. porn',
+    resolved:
+      'the MSP API has no resolved qualifier; use status:1 (active) or status:2 (archived)',
+  },
+};
+
+/**
  * Search query sanitization utilities
  */
 export class QuerySanitizer {
@@ -1448,6 +1461,12 @@ export class QuerySanitizer {
     // API is the authority on them; only flat names are checked here.
     for (const field of foundFields) {
       if (field.includes('.')) {
+        continue;
+      }
+      const replacement = UNSUPPORTED_QUERY_FIELDS[entityType]?.[field];
+      if (replacement) {
+        invalidFields.push(field);
+        suggestions.push(`${field}: ${replacement}`);
         continue;
       }
       const validation = FieldValidator.validateField(field, entityType as any);

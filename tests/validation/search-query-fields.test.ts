@@ -119,8 +119,8 @@ describe('values containing colons', () => {
 
   it('does not read a quoted value as a field name', () => {
     const result = QuerySanitizer.validateQueryFields(
-      'message:"alert from:host at:noon"',
-      'alarms'
+      'domain:"alert from:host at:noon"',
+      'flows'
     );
     expect(result.errors).toEqual([]);
   });

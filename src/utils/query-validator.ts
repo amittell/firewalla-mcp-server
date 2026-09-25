@@ -298,7 +298,7 @@ export function validateFirewallaQuerySyntax(query: string): ValidationResult {
     trimmedQuery.includes('$')
   ) {
     errors.push(
-      `Query contains invalid special characters. Use field:value syntax (e.g., severity:high, source_ip:192.168.*)`
+      `Query contains invalid special characters. Use field:value syntax (e.g., protocol:tcp, device.ip:192.168.*)`
     );
   }
 
@@ -315,17 +315,17 @@ export function validateFirewallaQuerySyntax(query: string): ValidationResult {
 export function getExampleQueries(entityType: string): string[] {
   const examples: Record<string, string[]> = {
     flows: [
-      'protocol:tcp AND blocked:true',
-      'region:US AND bytes:>1000000',
+      'protocol:tcp AND status:blocked',
+      'region:US AND total:>1MB',
       'domain:*.facebook.com',
       'category:social OR category:games',
-      'source_ip:192.168.1.* AND direction:outbound',
+      'device.ip:192.168.1.* AND direction:outbound',
     ],
     alarms: [
       'severity:high AND status:1',
       'region:CN AND type:1',
-      'source_ip:192.168.* AND status:1',
-      'message:"suspicious activity"',
+      'device.ip:192.168.* AND status:1',
+      'porn',
       'device.name:*laptop* AND severity:>=medium',
     ],
     rules: [

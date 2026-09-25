@@ -111,6 +111,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (the MSP API has no such qualifier; use `status`), `gid:` on flows, alarms
   and rules (use the documented `box.id:`), and `vendor:` on devices (use
   `mac_vendor:`).
+- Flow and alarm queries use the qualifiers the MSP API accepts (#42). Run
+  live, `/v2/flows` answered `blocked:` and `bytes:` and `/v2/alarms`
+  answered `source_ip:` and `message:` with 400 "Invalid parameters", and
+  `block:true` matched no flows. The flow and alarm clients now send
+  `blocked:true` as `status:blocked`, `blocked:false` as `-status:blocked`,
+  `bytes:` as `total:`, and alarm `source_ip:` as `device.ip:`, so existing
+  queries keep working in `search_flows`, `search_alarms`, `get_flow_data`
+  and `get_active_alarms`. `blocked_connections` in the security metrics
+  resource and prompts now counts `status:blocked` flows; it queried
+  `block:true`, which matched no flows in the live run. The schemas, tool
+  descriptions and example
+  queries advertise `status:blocked`/`status:ok`, `total:`, `download:`,
+  `upload:` and alarm `device.ip:`, and show an unqualified term (`porn`) for
+  alarm text search. Alarm `message:` and `resolved:` are rejected before the
+  request with the replacement to use.
 - Installing the package (`npm install -g`, npx) no longer prints
   `npm warn deprecated` for `inflight@1.0.6`, `rimraf@2.7.1` and
   `glob@7.2.3` (#32). All three came from geoip-lite

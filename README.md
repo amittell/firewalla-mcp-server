@@ -347,7 +347,7 @@ Open Claude Desktop and try these starter queries:
 ```text
 search for: security activity alarms from IP range 10.0.0.* in the last 24 hours
 ```
-*Uses: `search_alarms` with query: "type:1 AND source_ip:10.0.0.* AND timestamp:>24h"*
+*Uses: `search_alarms` with query: "type:1 AND device.ip:10.0.0.* AND ts:>=<unix time 24 hours ago>"*
 
 **Analyze Rule Effectiveness:**
 ```text
