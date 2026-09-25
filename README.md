@@ -426,7 +426,7 @@ Every tool carries MCP tool annotations: a `title`, `readOnlyHint`, and `openWor
 | `delete_rule` | true | true | yes |
 | `rename_device` | false | true | yes |
 | `archive_alarm` | false | true | yes |
-| `mute_alarm` | false | false | yes |
+| `mute_alarm` | true | false | yes |
 
 `pause_rule` and `resume_rule` check the rule's status first and change nothing when it is already paused or active. Clients that honor annotations can ask before calling any tool that is not read-only.
 

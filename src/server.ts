@@ -231,7 +231,8 @@ export class FirewallaMCPServer {
             annotations: {
               title: 'Mute Alarm',
               readOnlyHint: false,
-              destructiveHint: false,
+              // A lasting silence of future alarms, which this server cannot undo
+              destructiveHint: true,
               idempotentHint: false,
               openWorldHint: true,
             },

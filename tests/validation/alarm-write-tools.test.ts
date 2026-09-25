@@ -641,7 +641,7 @@ describe('archive_alarm and mute_alarm schemas', () => {
     expect(schema.annotations).toEqual({
       title: 'Mute Alarm',
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: false,
       openWorldHint: true,
     });
