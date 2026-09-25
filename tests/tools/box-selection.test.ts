@@ -178,6 +178,18 @@ describe('getSpecificAlarm', () => {
 });
 
 describe('get_specific_alarm tool', () => {
+  it('reports "no boxes visible" as a validation error with its own message', async () => {
+    const { client } = makeClient({ boxes: [] });
+    const res = await new GetSpecificAlarmHandler().execute(
+      { alarm_id: '42' },
+      client
+    );
+    expect(res.isError).toBe(true);
+    const body = JSON.parse(res.content[0].text as string);
+    expect(body.errorType).toBe('validation_error');
+    expect(body.message).toBe('No boxes are visible to this MSP token');
+  });
+
   it('advertises alarm_id as a string or a number', () => {
     const source = readFileSync(
       path.join(process.cwd(), 'src', 'server.ts'),

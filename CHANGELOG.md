@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `get_specific_alarm` reports "No boxes are visible to this MSP token" as a
+  validation error with that message. The client rewrapped the box-selection
+  error as a generic failure, and `withToolTimeout` rewrapped it again, so the
+  handler's check for it never matched; the wrapped errors now keep the
+  original as `cause`.
+
 ## [1.4.1] - 2026-09-25
 
 ### Fixed

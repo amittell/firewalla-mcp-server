@@ -588,9 +588,16 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
         );
       }
 
-      if (error instanceof BoxSelectionError) {
+      // withToolTimeout rewraps errors; the original is kept as `cause`
+      const selectionError =
+        error instanceof BoxSelectionError
+          ? error
+          : (error as { cause?: unknown })?.cause instanceof BoxSelectionError
+            ? ((error as { cause?: unknown }).cause as BoxSelectionError)
+            : undefined;
+      if (selectionError) {
         return this.createErrorResponse(
-          error.message,
+          selectionError.message,
           ErrorType.VALIDATION_ERROR
         );
       }
