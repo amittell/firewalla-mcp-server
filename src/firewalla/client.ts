@@ -71,6 +71,17 @@ interface APIResponse<T> {
   error?: string;
 }
 
+/**
+ * A flow's content category. The MSP API sends it as a string ("games",
+ * "social", or "" when uncategorized); older data models describe an object
+ * with a name, so both are read.
+ */
+function flowCategory(item: any): string {
+  const category =
+    typeof item?.category === 'string' ? item.category : item?.category?.name;
+  return category || 'uncategorized';
+}
+
 /** Largest `limit` the MSP API accepts on its /v2 list endpoints */
 const MAX_API_PAGE_SIZE = 500;
 
@@ -5224,7 +5235,8 @@ export class FirewallaClient {
       }
 
       // Get category breakdown with error handling
-      const categoryQuery = `ts:${begin}-${end}${options?.categories ? ` AND (${options.categories.map(c => `category:${c}`).join(' OR ')})` : ''}`;
+      // An empty categories list means all categories: " AND ()" matches nothing
+      const categoryQuery = `ts:${begin}-${end}${options?.categories?.length ? ` AND (${options.categories.map(c => `category:${c}`).join(' OR ')})` : ''}`;
 
       let categoryData;
       try {
@@ -5253,7 +5265,7 @@ export class FirewallaClient {
       >();
 
       categoryData.results.forEach((item: any) => {
-        const category = item.category?.name || 'uncategorized';
+        const category = flowCategory(item);
         const domain = item.domain || 'unknown';
 
         if (!categoryMap.has(category)) {
@@ -5304,7 +5316,7 @@ export class FirewallaClient {
 
       deviceData.results.forEach((item: any) => {
         const deviceName = item.device?.name || item.device?.ip || 'unknown';
-        const category = item.category?.name || 'uncategorized';
+        const category = flowCategory(item);
 
         if (!deviceMap.has(deviceName)) {
           deviceMap.set(deviceName, {
@@ -5339,7 +5351,7 @@ export class FirewallaClient {
           blockedSummary = {
             totalBlocked: blockedData.count,
             byCategory: blockedData.results.map((item: any) => ({
-              category: item.category?.name || 'uncategorized',
+              category: flowCategory(item),
               count: item.count || 0,
             })),
           };
