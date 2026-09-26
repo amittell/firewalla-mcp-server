@@ -11,7 +11,11 @@ import type {
   SecurityMetricsSummary,
 } from '../types.js';
 import { unixToISOString, safeUnixToISOString } from '../utils/timestamp.js';
-import { apiDataBlock, oneLine } from '../utils/untrusted-text.js';
+import {
+  apiDataBlock,
+  apiErrorBlock,
+  oneLine,
+} from '../utils/untrusted-text.js';
 
 // Type definitions for health score calculation
 
@@ -562,6 +566,7 @@ Please assess and provide:
           throw new Error(`Unknown prompt: ${name}`);
       }
     } catch (error: unknown) {
+      // The message can quote the API's answer: fence it like API data
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return {
@@ -570,7 +575,7 @@ Please assess and provide:
             role: 'user',
             content: {
               type: 'text',
-              text: `Error generating prompt '${name}': ${errorMessage}`,
+              text: `Error generating prompt '${name}'.\n\n${apiErrorBlock(errorMessage)}`,
             },
           },
         ],
