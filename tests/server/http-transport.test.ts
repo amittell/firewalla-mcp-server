@@ -21,6 +21,7 @@ import {
 import {
   createHttpTransportServer,
   HEADERS_TIMEOUT_MS,
+  isEndpointPath,
   listenHttpTransport,
   REQUEST_TIMEOUT_MS,
 } from '../../src/http-transport';
@@ -548,6 +549,83 @@ describe('HTTP transport', () => {
       }))
     );
     expect(createServerInstance).not.toHaveBeenCalled();
+  });
+
+  it('serves the endpoint path only, with or without a query string or a trailing slash', async () => {
+    const { address, createServerInstance } = await start();
+    for (const path of ['/mcp-typo', '/mcpx', '/mcp/x', '/', '/mcp//']) {
+      const reply = await send(address, {
+        path,
+        headers: MCP_HEADERS,
+        body: INITIALIZE,
+      });
+      expect({ path, status: reply.status }).toEqual({ path, status: 404 });
+      expect(reply.headers['mcp-session-id']).toBeUndefined();
+    }
+    expect(createServerInstance).not.toHaveBeenCalled();
+
+    for (const path of ['/mcp?x=1', '/mcp/']) {
+      const reply = await send(address, {
+        path,
+        headers: MCP_HEADERS,
+        body: INITIALIZE,
+      });
+      expect({ path, status: reply.status }).toEqual({ path, status: 200 });
+      expect(reply.headers['mcp-session-id']).toMatch(/^[0-9a-f-]{36}$/);
+      expect(reply.headers.connection).not.toBe('close');
+    }
+    expect(createServerInstance).toHaveBeenCalledTimes(2);
+  });
+
+  it('answers a CORS preflight for the endpoint path only', async () => {
+    const { address } = await start({
+      MCP_HTTP_ALLOWED_ORIGINS: 'http://localhost:6274',
+    });
+    const preflight = (path: string) =>
+      send(address, {
+        method: 'OPTIONS',
+        path,
+        headers: {
+          origin: 'http://localhost:6274',
+          'access-control-request-method': 'POST',
+        },
+      });
+
+    for (const path of ['/mcp-typo', '/mcpx', '/elsewhere']) {
+      const reply = await preflight(path);
+      expect({ path, status: reply.status }).toEqual({ path, status: 404 });
+      expect(reply.headers['access-control-allow-methods']).toBeUndefined();
+    }
+    const reply = await preflight('/mcp?x=1');
+    expect(reply.status).toBe(204);
+    expect(reply.headers['access-control-allow-methods']).toContain('POST');
+  });
+});
+
+describe('isEndpointPath', () => {
+  it('matches the path and one trailing slash, ignoring the query string', () => {
+    expect(isEndpointPath('/mcp', '/mcp')).toBe(true);
+    expect(isEndpointPath('/mcp/', '/mcp')).toBe(true);
+    expect(isEndpointPath('/mcp?x=1', '/mcp')).toBe(true);
+    expect(isEndpointPath('/mcp/?x=1', '/mcp')).toBe(true);
+    expect(isEndpointPath('/mcp', '/mcp/')).toBe(true);
+    for (const url of [
+      '/mcpx',
+      '/mcp-typo',
+      '/mcp/x',
+      '/mcp//',
+      '/MCP',
+      '',
+      undefined,
+    ]) {
+      expect({ url, match: isEndpointPath(url, '/mcp') }).toEqual({
+        url,
+        match: false,
+      });
+    }
+    expect(isEndpointPath('/', '/')).toBe(true);
+    expect(isEndpointPath('/?x=1', '/')).toBe(true);
+    expect(isEndpointPath('/mcp', '/')).toBe(false);
   });
 });
 

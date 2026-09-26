@@ -187,7 +187,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     request body: the 401 and 403 refusals, 404, 405, a malformed session
     ID and CORS preflight answers. Node kept the connection open to read
     and discard the body, so a client that sent it a byte every 2 s held
-    the connection for 60 s, without a token.
+    the connection for 60 s, without a token;
+  - serves the MCP endpoint at the `MCP_HTTP_PATH` path only: `/mcp`,
+    `/mcp/`, and either with a query string. It served every path that
+    began with it, so an `initialize` sent to `/mcpx` or `/mcp-typo` opened
+    a session there. Any other path gets 404, CORS preflight requests
+    included.
 
   Migration: the Docker image sets `MCP_HTTP_HOST=0.0.0.0`, so
   `docker run -p 3000:3000 -e MCP_TRANSPORT=http ...` serves
@@ -249,8 +254,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Authorization: Bearer <token>`. The token is compared in constant time.
   The server logs a warning when it listens beyond loopback without one.
 - `MCP_HTTP_ALLOWED_ORIGINS` origins get CORS headers, and answers to their
-  preflight requests, so a web page on an allowed origin can call the HTTP
-  transport; before, every preflight got 405.
+  preflight requests for the MCP endpoint, so a web page on an allowed
+  origin can call the HTTP transport; before, every preflight got 405.
 - `SECURITY.md`: which releases get security fixes, how to report a
   vulnerability privately, what is in scope, and the server's defaults.
 - CI runs `npm audit --audit-level=high --omit=dev` and fails on a high or

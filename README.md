@@ -195,7 +195,7 @@ MCP_TRANSPORT=stdio
 ```env
 MCP_TRANSPORT=http
 MCP_HTTP_PORT=3000          # Default: 3000
-MCP_HTTP_PATH=/mcp          # Default: /mcp
+MCP_HTTP_PATH=/mcp          # Default: /mcp. Other paths get 404
 MCP_HTTP_HOST=127.0.0.1     # Address to listen on. Default: 127.0.0.1 (0.0.0.0 in the Docker image)
 MCP_HTTP_BEARER_TOKEN=      # When set, clients must send Authorization: Bearer <token>
 MCP_HTTP_ALLOWED_HOSTS=     # More Host header names to accept, comma-separated
@@ -209,6 +209,7 @@ MCP_HTTP_ALLOWED_ORIGINS=   # Browser origins to accept, comma-separated, e.g. h
 - With `MCP_HTTP_BEARER_TOKEN` set, a request without `Authorization: Bearer <token>` gets 401.
 - A request whose `Host` header is not `localhost`, `127.0.0.1`, `[::1]`, the `MCP_HTTP_HOST` address or a name in `MCP_HTTP_ALLOWED_HOSTS` gets 403. This stops DNS rebinding, where a web page points its own domain name at your machine.
 - A request with an `Origin` header, which browsers send, gets 403 unless the origin is in `MCP_HTTP_ALLOWED_ORIGINS`. Non-browser MCP clients send no `Origin` and are not affected. An allowed origin gets CORS headers, so a web page on it can call the server.
+- The MCP endpoint is the `MCP_HTTP_PATH` path exactly: `/mcp`, `/mcp/` and either with a query string. Any other path, such as `/mcpx` or `/mcp/x`, gets 404, CORS preflight requests included.
 - A request body may be at most 1 MB, and a client has 10 seconds to send the headers and 30 seconds for the whole request. An answer given without reading the body (401, 403, 404, 405, a malformed session ID, a CORS preflight) closes the connection, so a client cannot hold one open by sending the body slowly.
 
 **When to use HTTP transport:**

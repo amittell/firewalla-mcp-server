@@ -98,6 +98,21 @@ function closeAfterAnswer(res: ServerResponse): void {
 }
 
 /**
+ * Whether a request target names the MCP endpoint: its path is `path`, or
+ * `path` with one trailing slash, with or without a query string. Any other
+ * path, including /mcpx, /mcp-typo and /mcp/x for /mcp, is not the endpoint.
+ */
+export function isEndpointPath(url: string | undefined, path: string): boolean {
+  const target = url ?? '';
+  const query = target.indexOf('?');
+  const pathname = query === -1 ? target : target.slice(0, query);
+  const endpoint = path.length > 1 ? path.replace(/\/+$/, '') : path;
+  return (
+    pathname === endpoint || (endpoint !== '/' && pathname === `${endpoint}/`)
+  );
+}
+
+/**
  * Reads a JSON request body of at most maxBytes. Over the limit is a 413,
  * a body that is not JSON a 400, and an empty body undefined.
  */
@@ -227,24 +242,26 @@ export function createHttpTransportServer(
       return;
     }
 
+    // Set when the request has an Origin: checkHttpRequest refused any other
     const origin = allowedOriginOf(req, security);
     if (origin) {
-      if (isPreflight) {
-        closeAfterAnswer(res);
-        res.writeHead(204, corsPreflightHeaders(origin));
-        res.end();
-        return;
-      }
       for (const [name, value] of Object.entries(corsResponseHeaders(origin))) {
         res.setHeader(name, value);
       }
     }
 
-    // Only handle requests to our configured path
-    if (!req.url?.startsWith(path)) {
+    // The endpoint path only, before a preflight is answered for it
+    if (!isEndpointPath(req.url, path)) {
       closeAfterAnswer(res);
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
+      return;
+    }
+
+    if (isPreflight && origin) {
+      closeAfterAnswer(res);
+      res.writeHead(204, corsPreflightHeaders(origin));
+      res.end();
       return;
     }
 

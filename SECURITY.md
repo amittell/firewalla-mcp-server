@@ -60,8 +60,9 @@ Out of scope:
 - **The HTTP transport** (`MCP_TRANSPORT=http`) listens on 127.0.0.1,
   answers 403 to a Host header it does not know and to a browser Origin that
   is not in `MCP_HTTP_ALLOWED_ORIGINS`, and with `MCP_HTTP_BEARER_TOKEN` set
-  answers 401 to a request without that token. It closes the connection of
-  a request it answers without reading the body. The Docker image listens on
+  answers 401 to a request without that token. It serves the
+  `MCP_HTTP_PATH` path only, and closes the connection of a request it
+  answers without reading the body. The Docker image listens on
   every interface of the container so a published port reaches it: set
   `MCP_HTTP_BEARER_TOKEN` whenever the port is reachable from other machines.
   See [HTTP transport security](README.md#http-transport-security).
