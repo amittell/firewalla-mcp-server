@@ -955,6 +955,12 @@ function mergeRepeatedFields(conjuncts: Literal[], query: string): Literal[] {
       // A strict bound cannot be kept: a range includes both ends, and the
       // two terms side by side would be read as OR
       const range = renderLiteral(bounds.range);
+      // The whole query with the inclusive range in place of the pair
+      const suggestion = result
+        .map((literal, i) => (i === first ? bounds.range : literal))
+        .filter((_, i) => i !== second && !dropped.has(i))
+        .map(renderLiteral)
+        .join(' ');
       throw new MspQueryError(
         cannotSend(
           query,
@@ -962,7 +968,7 @@ function mergeRepeatedFields(conjuncts: Literal[], query: string): Literal[] {
         ),
         query,
         part,
-        [range]
+        [suggestion]
       );
     }
     const exact = [a, b].every(
@@ -1083,7 +1089,13 @@ export function mspBoxScope(query: string | undefined, gid: string): string {
     return [...terms, scope].map(renderLiteral).join(' ');
   }
   const names = named.values.map(value => value.replace(/^"(.*)"$/s, '$1'));
-  if (named.kind === 'exact' && names.includes(gid)) {
+  // Only the scoped box itself may be named: a list with another box would
+  // silently drop that box from what the query asked for
+  if (
+    named.kind === 'exact' &&
+    names.length > 0 &&
+    names.every(name => name.toLowerCase() === gid.toLowerCase())
+  ) {
     return [...terms.filter(term => term !== named), scope]
       .map(renderLiteral)
       .join(' ');
