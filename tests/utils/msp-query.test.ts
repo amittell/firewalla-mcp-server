@@ -233,6 +233,69 @@ describe('toMspQuery', () => {
   });
 });
 
+describe('suggestions for an OR the API cannot run', () => {
+  // One query per disjunct of the query's disjunctive normal form, in API
+  // form; run together, their results are the query's
+  it.each([
+    [
+      'region:US OR (category:social AND status:blocked)',
+      ['region:US', 'category:social status:blocked'],
+    ],
+    [
+      'status:blocked AND (region:US OR category:social)',
+      ['status:blocked region:US', 'status:blocked category:social'],
+    ],
+    [
+      'status:blocked AND (region:US OR region:CN OR category:social)',
+      ['status:blocked region:US,CN', 'status:blocked category:social'],
+    ],
+    [
+      '(type:1 OR region:US) AND (status:1 OR device.name:tv)',
+      [
+        'type:1 status:1',
+        'type:1 device.name:tv',
+        'region:US status:1',
+        'region:US device.name:tv',
+      ],
+    ],
+    ['NOT (action:block AND status:paused)', ['-action:block', '-status:paused']],
+    [
+      'type:8 AND NOT (status:1 AND region:US)',
+      ['type:8 -status:1', 'type:8 -region:US'],
+    ],
+    ['region:US OR NOT protocol:tcp', ['region:US', '-protocol:tcp']],
+    ['porn OR type:10', ['porn', 'type:10']],
+    ['total:>1MB OR total:<1KB', ['total:>1MB', 'total:<1KB']],
+  ])('%s -> %j', (query, expected) => {
+    const error = refusal(query);
+    expect(error.suggestions).toEqual(expected);
+    expect(error.message).toContain(
+      `combine the results: ${expected.map(q => `"${q}"`).join(', ')}`
+    );
+    // Each suggestion is a query the API can run as it is
+    for (const suggestion of expected) {
+      expect(toMspQuery(suggestion)).toBe(suggestion);
+    }
+  });
+
+  it('gives none when a disjunct has no API form either', () => {
+    // (type:1 AND type:10) needs one alarm with two types
+    const error = refusal('(type:1 AND type:10) OR region:US');
+    expect(error.suggestions).toEqual([]);
+    expect(error.message).toContain('Split it into separate searches');
+  });
+
+  it('gives none past 64 disjuncts, and still refuses', () => {
+    const query = Array.from(
+      { length: 7 },
+      (_v, i) => `(a${i}:1 OR b${i}:1)`
+    ).join(' AND ');
+    const error = refusal(query);
+    expect(error.message).toContain('OR between different fields');
+    expect(error.suggestions).toEqual([]);
+  });
+});
+
 describe('mspAnd', () => {
   it('ANDs parts without letting an OR in one bind to another', () => {
     expect(mspAnd('type:1 OR type:10', 'status:1')).toBe('type:1,10 status:1');

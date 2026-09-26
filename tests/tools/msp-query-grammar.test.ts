@@ -314,3 +314,18 @@ describe('search_rules re-checks the API answer against the whole query', () => 
     expect(ids(res)).toEqual(['r1', 'r3']);
   });
 });
+
+describe('suggestions name every disjunct', () => {
+  it('search_flows keeps both terms of an AND inside an OR', async () => {
+    const { client, get } = makeClient();
+    const res = await new SearchFlowsHandler().execute(
+      { query: 'region:US OR (category:social AND status:blocked)', limit: 10 },
+      client
+    );
+    expect(errorOf(res).details.suggested_queries).toEqual([
+      'region:US',
+      'category:social status:blocked',
+    ]);
+    expect(get).not.toHaveBeenCalled();
+  });
+});
