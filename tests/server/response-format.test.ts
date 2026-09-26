@@ -357,13 +357,23 @@ describe('markdown', () => {
     expect(result.content[0].text).not.toMatch(/(?<!\\)<img|(?<!\\)\[update/);
   });
 
-  it('accepts the value in any case', async () => {
-    bodies['/v2/devices'] = [device(0)];
-    const result = await call('get_device_status', {
-      response_format: 'Markdown',
-    });
-    expect(result.content[0].text).toMatch(/^## get_device_status/);
-  });
+  it.each([['Markdown'], [' markdown ']])(
+    'refuses %j, which the schema does not allow, before any request',
+    async value => {
+      bodies['/v2/devices'] = [device(0)];
+      const result = await call('get_device_status', {
+        response_format: value,
+      });
+      expect(result.isError).toBe(true);
+      expect(JSON.parse(result.content[0].text)).toEqual(
+        expect.objectContaining({
+          errorType: 'validation_error',
+          message: `response_format must be 'json' or 'markdown', not ${JSON.stringify(value)}`,
+        })
+      );
+      expect(requests).toEqual([]);
+    }
+  );
 });
 
 describe('errors stay JSON', () => {

@@ -76,10 +76,10 @@ export function withResponseFormatProperty<T extends ListedTool>(tool: T): T {
 
 /**
  * The format a call asks for, and its arguments without response_format.
- * Arguments without the property come back as the same object. A value
- * other than json or markdown (in any case) is an error; null is not given,
- * as the tools' validators treat null for every optional argument, so it is
- * json.
+ * Arguments without the property come back as the same object. Only the
+ * schema's values are taken, exactly: json, markdown, or null, which is not
+ * given (as the tools' validators treat null for every optional argument)
+ * and so json. Anything else, another case or spaces included, is an error.
  */
 export function takeResponseFormat(
   args: Record<string, unknown> | undefined
@@ -93,13 +93,12 @@ export function takeResponseFormat(
   if (value === undefined || value === null) {
     return { format: 'json', args: rest };
   }
-  const format = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (format !== 'json' && format !== 'markdown') {
+  if (value !== 'json' && value !== 'markdown') {
     return {
       error: `response_format must be 'json' or 'markdown', not ${JSON.stringify(value)}`,
     };
   }
-  return { format, args: rest };
+  return { format: value, args: rest };
 }
 
 /** Options for the markdown rendering */
@@ -279,13 +278,19 @@ function cellText(value: unknown, state: RenderState): string {
   } else if (Array.isArray(value)) {
     if (value.length === 0) {
       text = '';
-    } else if (value.some(item => typeof item === 'object' && item !== null)) {
+    } else if (value.every(isPlainObject)) {
       text = `${value.length} ${value.length === 1 ? 'record' : 'records'}`;
       state.cellLists = true;
     } else {
+      // Scalars as they are, objects and lists among them as JSON; the cell
+      // is escaped as a whole below
       text = value
         .slice(0, MAX_CELL_ITEMS)
-        .map(item => String(item))
+        .map(item =>
+          typeof item === 'object' && item !== null
+            ? JSON.stringify(item)
+            : String(item)
+        )
         .join(', ');
       if (value.length > MAX_CELL_ITEMS) {
         text += ` (+${value.length - MAX_CELL_ITEMS} more)`;
