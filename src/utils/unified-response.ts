@@ -97,7 +97,7 @@ export function toCallToolResult(
     content: [
       {
         type: 'text',
-        text: JSON.stringify(unifiedResponse, null, 2),
+        text: JSON.stringify(unifiedResponse),
       },
     ],
     isError: !unifiedResponse.success,

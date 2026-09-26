@@ -322,7 +322,7 @@ export abstract class BaseToolHandler implements ToolHandler {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(data, null, 2),
+          text: JSON.stringify(data),
         },
       ],
     };
@@ -395,7 +395,7 @@ export abstract class BaseToolHandler implements ToolHandler {
       content: [
         {
           type: 'text',
-          text: JSON.stringify(unifiedResponse, null, 2),
+          text: JSON.stringify(unifiedResponse),
         },
       ],
     };
