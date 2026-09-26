@@ -36,9 +36,9 @@ jest.mock('axios', () => {
 /** The stubbed axios instance every client shares */
 let mockApi: { get: jest.Mock; post: jest.Mock };
 
-const BOX = 'f00f1740-fe0f-475a-8b9a-e4904c470b60';
-const RULE = `${BOX}:630`;
-const DECOY = `${BOX}:519`;
+const BOX = '11111111-2222-3333-4444-555555555555';
+const RULE = `${BOX}:101`;
+const DECOY = `${BOX}:102`;
 
 /**
  * A box with one disposable rule. GET /v2/rules ignores the query and returns

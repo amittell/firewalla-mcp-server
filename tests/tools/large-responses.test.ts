@@ -113,7 +113,7 @@ function device(i: number) {
   return {
     id: mac(i),
     gid: BOX,
-    name: `Living room media streamer number ${i}`,
+    name: `Media streamer number ${i}`,
     ip: localIp(i),
     mac: mac(i),
     macVendor: 'A vendor with a long company name',
