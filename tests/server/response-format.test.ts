@@ -434,3 +434,41 @@ describe('tools that change state', () => {
     }
   });
 });
+
+describe('every listed tool, with the write tools on', () => {
+  it('reads response_format on each read tool and on no write tool', async () => {
+    const client = await connect();
+    let tools: Tool[];
+    try {
+      tools = (await client.listTools()).tools;
+    } finally {
+      await client.close();
+    }
+    const reads = tools.filter(tool => tool.annotations?.readOnlyHint === true);
+    const writes = tools.filter(
+      tool => tool.annotations?.readOnlyHint !== true
+    );
+    expect(reads.length).toBeGreaterThanOrEqual(24);
+    expect(writes.length).toBeGreaterThanOrEqual(11);
+
+    // A value the schema refuses: the dispatcher answers for a read tool
+    // before the tool or the API sees the call, and leaves a write tool's
+    // arguments to the tool
+    const refusal = "response_format must be 'json' or 'markdown'";
+    for (const tool of tools) {
+      requests.length = 0;
+      const result = await call(tool.name, { response_format: 'bogus' });
+      const text = result.content[0].text;
+      if (tool.annotations?.readOnlyHint === true) {
+        expect([tool.name, result.isError, text.includes(refusal)]).toEqual([
+          tool.name,
+          true,
+          true,
+        ]);
+        expect([tool.name, requests]).toEqual([tool.name, []]);
+      } else {
+        expect([tool.name, text.includes(refusal)]).toEqual([tool.name, false]);
+      }
+    }
+  });
+});
