@@ -583,6 +583,32 @@ describe('getRuleTrends', () => {
     });
   });
 
+  it('counts the group, not FIREWALLA_BOX_ID, when a group is given', async () => {
+    const utcToday = Math.floor(NOW / DAY) * DAY;
+    const { client, calls } = makeClient(
+      {
+        '/v2/trends/rules': () => new HttpStatus(400),
+        '/v2/rules': () => ({
+          count: 2,
+          results: [
+            { id: 'r1', gid: BOX_A, ts: utcToday + 1 },
+            { id: 'r2', group: 'group-7', ts: utcToday + 2 },
+          ],
+        }),
+        '/v2/boxes': () => [{ gid: BOX_A, name: 'Box A', online: true }],
+      },
+      { boxId: BOX_B }
+    );
+    const series = await client.getRuleTrends('24h', 'group-7');
+    expect(calls).toContainEqual({ url: '/v2/rules', params: {} });
+    expect(series.scope).toBe('box group group-7');
+    expect(series.note).toContain('FIREWALLA_BOX_ID is not applied');
+    expect(series.results[series.results.length - 1]).toEqual({
+      ts: utcToday,
+      value: 2,
+    });
+  });
+
   it('does not hide other errors behind the fallback', async () => {
     const { client, calls } = makeClient({
       '/v2/trends/rules': () => new HttpStatus(500),

@@ -1149,7 +1149,7 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
 export class GetRuleTrendsHandler extends BaseToolHandler {
   name = 'get_rule_trends';
   description =
-    'Rules created per day for the last 30 days, from GET /v2/trends/rules; period and group work as in get_alarm_trends. When that endpoint answers 400 (it did when measured), each UTC day counts the rules in GET /v2/rules created on it, scoped to FIREWALLA_BOX_ID when set (rules deleted since are not counted), and the response says so.';
+    'Rules created per day for the last 30 days, from GET /v2/trends/rules; period and group work as in get_alarm_trends. When that endpoint answers 400 (it did when measured), each UTC day counts the rules in GET /v2/rules created on it, scoped to FIREWALLA_BOX_ID when set and no group is given (rules deleted since are not counted), and the response says so.';
   category = 'analytics' as const;
 
   constructor() {

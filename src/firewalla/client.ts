@@ -3272,6 +3272,10 @@ export class FirewallaClient {
         }
         note =
           'GET /v2/trends/rules answered 400, so each day counts the rules in GET /v2/rules whose creation time (ts) falls in it, by UTC day. Rules deleted since are not counted.';
+        if (groupId && this.config.boxId) {
+          note +=
+            ' FIREWALLA_BOX_ID is not applied: an explicit group takes precedence over it.';
+        }
       }
       return selectTrendDays(points, validated, now, { source, scope, note });
     } catch (error) {
@@ -3288,13 +3292,16 @@ export class FirewallaClient {
   /**
    * Rules created on each of the last 30 UTC days (today last), from the
    * creation times of the rules GET /v2/rules returns. With `group`, only
-   * rules for that box group or for a box in it.
+   * rules for that box group or for a box in it; without, scoped to
+   * FIREWALLA_BOX_ID. An explicit group takes precedence over
+   * FIREWALLA_BOX_ID, as in getAlarmTrends: filtering the group's rules to
+   * one box as well counted only that box while the scope said the group.
    */
   private async ruleCreationsPerDay(
     now: number,
     group?: string
   ): Promise<Trend[]> {
-    const query = this.addBoxFilter(undefined);
+    const query = group ? undefined : this.addBoxFilter(undefined);
     const [rules, boxes] = await Promise.all([
       this.request<{ results?: Array<Record<string, unknown>> }>(
         'GET',
