@@ -194,6 +194,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that is not JSON with 400 and a JSON-RPC parse error (-32700). Over 1 MB
   it closed the connection without an answer, and a body that is not JSON
   got a 500 "Internal server error".
+- Tool results, resources and prompts passed on characters that do not
+  display and that a model still reads: Unicode tag characters
+  (U+E0000-U+E007F), bidi embeddings, overrides and isolates
+  (U+202A-U+202E, U+2066-U+2069), zero-width characters (U+200B-U+200D,
+  U+2060) and U+FEFF. Each is now shown as a marker such as `<U+E0041>`, in
+  keys and values alike. It happens where the request handlers are
+  registered, so every result passes through it, whichever builder made
+  it. A zero-width joiner between two emoji (the family and profession
+  emoji) and the flags of England, Scotland and Wales are kept; any other
+  tag characters after U+1F3F4 are marked, so a flag cannot hide text. A
+  result without these characters is the same object, byte for byte.
 
 ### Changed
 
