@@ -181,6 +181,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   first request that timed out and a second that answered reported
   `api_requests: 1`; they now report 2. `cached_pages` counts both attempts
   too.
+- The client's `getSpecificAlarm` checks the alarm ID before it lists the
+  boxes. Called without a gid and without `FIREWALLA_BOX_ID`, it sent
+  `GET /v2/boxes` and only then refused an ID that cannot be a path segment,
+  such as `..` or one holding `/`; it now refuses it with nothing sent. The
+  `get_specific_alarm`, `archive_alarm`, `mute_alarm` and `delete_alarm`
+  tools already refused such an ID before any request, and tests now check
+  that for each of them without a gid.
 - The HTTP transport answers a request body over 1 MB with 413, and a body
   that is not JSON with 400 and a JSON-RPC parse error (-32700). Over 1 MB
   it closed the connection without an answer, and a body that is not JSON

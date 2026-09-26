@@ -2601,6 +2601,12 @@ export class FirewallaClient {
     gid?: string
   ): Promise<{ count: number; results: Alarm[]; next_cursor?: string }> {
     try {
+      // The alarm ID goes into the request path. It is checked as given and
+      // refused, not cleaned (a cleaned ID can name another alarm), before
+      // the boxes are listed, so a refused ID sends nothing.
+      pathSegment(alarmId, 'alarm_id');
+      const validatedAlarmId = validateAlarmId(alarmId);
+
       // An explicit gid or FIREWALLA_BOX_ID names the one box to ask. Without
       // either, ask each box on the account (FIREWALLA_DEFAULT_BOX_ID first)
       // until one has the alarm: alarm IDs are per box.
@@ -2625,9 +2631,9 @@ export class FirewallaClient {
         }
       }
 
-      // The gids and the alarm ID go into the request path. They are
-      // checked as given and refused, not cleaned: a cleaned ID can name
-      // another box or alarm.
+      // The gids go into the request path too and are checked the same way:
+      // a gid from the caller or FIREWALLA_BOX_ID before any request, the
+      // listed ones after GET /v2/boxes
       const validatedGids = candidateGids.map(candidate => {
         pathSegment(candidate, 'gid');
         if (!/^[a-zA-Z0-9_-]+$/.test(candidate)) {
@@ -2635,8 +2641,6 @@ export class FirewallaClient {
         }
         return candidate;
       });
-      pathSegment(alarmId, 'alarm_id');
-      const validatedAlarmId = validateAlarmId(alarmId);
 
       // Get all possible alarm ID variations to try
       const idVariations = [validatedAlarmId]; // Just use the validated ID
