@@ -27,11 +27,11 @@ A Model Context Protocol (MCP) server that provides Claude with access to Firewa
 
 ### Tool Categories (28 total)
 - **Security (2 tools)**: get_active_alarms, get_specific_alarm
-- **Network (1 tool)**: get_flow_data
+- **Network (2 tools)**: get_flow_data, get_recent_flow_activity
 - **Device (1 tool)**: get_device_status
 - **Rules (8 tools)**: get_network_rules, pause_rule, resume_rule, get_target_lists, get_specific_target_list, create_target_list, update_target_list, delete_target_list
 - **Search (3 tools)**: search_flows, search_alarms, search_rules
-- **Analytics (8 tools)**: get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_insights, get_flow_trends, get_alarm_trends, get_rule_trends
+- **Analytics (7 tools)**: get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_insights, get_alarm_trends, get_rule_trends
 - **Convenience Wrappers (5 tools)**: get_bandwidth_usage, get_offline_devices, search_devices, search_target_lists, get_network_rules_summary
 - **Write tools (5, opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)**: create_rule, delete_rule, rename_device, archive_alarm, mute_alarm. Not counted in the 28.
 
@@ -216,9 +216,16 @@ status:blocked                # blocked flows (blocked:true is translated to thi
 total:>1MB                    # also download:/upload: (bytes: is translated to total:)
 ts:>1h                        # the last hour
 
-# Complex queries
-(type:8 OR type:9 OR type:10) AND device.ip:192.168.* AND status:1
+# Several values of one field: a comma list
+type:8,9,10 AND device.ip:192.168.* AND status:1
 ```
+
+Parentheses are not supported: the API answers a query that contains them
+with no results, and the search tools pass them through. A space-joined
+qualifier applies to every `OR` branch, so `type:1 OR type:5 box.id:<gid>`
+stays on that box. An unknown field is not an error either; it matches
+nothing. Measured details: "Measured Query Behavior" in
+`docs/firewalla-api-reference.md`.
 
 ### Example Search Queries
 
@@ -334,19 +341,21 @@ DEBUG=firewalla:* npm run mcp:start
 
 # Enable specific debugging namespaces
 DEBUG=cache,performance,api npm run mcp:start
-DEBUG=validation,error-handler npm run mcp:start
+DEBUG=validation,query npm run mcp:start
 
 # Debug with performance monitoring
 DEBUG=firewalla:* npm run dev
 ```
 
 ### Debug Categories
-- **cache**: Cache operations and performance
-- **performance**: Performance metrics and timing
-- **api**: API request/response cycles
-- **validation**: Input validation and errors
-- **error-handler**: Error processing and recovery
-- **firewalla**: All Firewalla-related debugging
+`DEBUG=firewalla:*`, `DEBUG=1` or `DEBUG=true` enables all debug output. A
+comma-separated list enables these namespaces (a trailing `*` matches a prefix):
+- **api**: API request/response details
+- **cache**: Cache operations
+- **performance**: Timing
+- **pipeline**: Geographic enrichment
+- **query**: Query translation
+- **validation**: Input validation
 
 ## Critical Development Guidelines
 
@@ -368,7 +377,9 @@ DEBUG=firewalla:* npm run dev
 
 ### Tool Architecture Requirements
 - All tools must be defined in TOOL_SCHEMAS with proper schema
-- Tools that change state must be in `WRITE_TOOL_NAMES`, so they stay off by default
+- New tools that change state go in `WRITE_TOOL_NAMES`, so they stay off by default
+  (`pause_rule`, `resume_rule` and the target-list create/update/delete tools
+  predate the switch and are always registered)
 - Include proper input validation and error handling
 - Follow the 28-tool architecture constraints
 - Implement direct API execution in the server
@@ -389,7 +400,7 @@ DEBUG=firewalla:* npm run dev
 ### Monitoring
 ```bash
 # Enable performance monitoring
-DEBUG=performance,metrics npm run dev
+DEBUG=performance npm run dev
 
 # Track cache performance  
 DEBUG=cache npm run mcp:start
@@ -397,8 +408,8 @@ DEBUG=cache npm run mcp:start
 
 ## Version Information
 
-- **Current Version**: 1.0.0
-- **Architecture**: 28-tool design (23 direct API + 5 convenience)
+- **Version**: see `package.json`; `CHANGELOG.md` has the history
+- **Architecture**: 28-tool design (23 direct API + 5 convenience), plus 5 opt-in write tools
 - **API Support**: Firewalla MSP API v2 with CRUD operations
 - **Node.js**: Requires 18+
 - **TypeScript**: ES2020 target with strict mode
