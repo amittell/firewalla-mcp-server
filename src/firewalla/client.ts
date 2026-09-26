@@ -2179,14 +2179,12 @@ export class FirewallaClient {
   async deleteRule(
     ruleId: string
   ): Promise<{ success: boolean; message: string }> {
-    const validatedRuleId = this.sanitizeInput(ruleId);
-    if (!validatedRuleId) {
-      throw new Error('Invalid rule ID provided');
-    }
+    // Checked as given, not cleaned first: a cleaned ID can name another rule
+    const segment = pathSegment(ruleId, 'rule_id');
 
     return this.request<{ success: boolean; message: string }>(
       'DELETE',
-      `/v2/rules/${pathSegment(validatedRuleId, 'rule_id')}`,
+      `/v2/rules/${segment}`,
       {},
       undefined,
       false
@@ -2206,18 +2204,20 @@ export class FirewallaClient {
     name: string,
     gid: string
   ): Promise<Device> {
-    const validatedDeviceId = this.sanitizeInput(deviceId);
-    if (!validatedDeviceId) {
-      throw new Error('Invalid device ID provided');
-    }
     if (!gid) {
       throw new Error('renameDevice requires a box gid');
     }
+    // Both are checked as given, not cleaned first: a cleaned ID can name
+    // another device. The colons stay percent-encoded, as they always were
+    // here.
+    const gidSegment = pathSegment(gid, 'gid', { encodeColons: true });
+    const deviceSegment = pathSegment(deviceId, 'device_id', {
+      encodeColons: true,
+    });
 
     return this.request<Device>(
       'PATCH',
-      // The device id's colons stay percent-encoded, as they always were here
-      `/v2/boxes/${pathSegment(gid, 'gid', { encodeColons: true })}/devices/${pathSegment(validatedDeviceId, 'device_id', { encodeColons: true })}`,
+      `/v2/boxes/${gidSegment}/devices/${deviceSegment}`,
       {},
       { name },
       false
@@ -2593,7 +2593,9 @@ export class FirewallaClient {
       // An explicit gid or FIREWALLA_BOX_ID names the one box to ask. Without
       // either, ask each box on the account (FIREWALLA_DEFAULT_BOX_ID first)
       // until one has the alarm: alarm IDs are per box.
-      const namedGid = gid?.trim() || this.config.boxId;
+      // A gid is used as given: trimming it could name another box
+      const namedGid =
+        gid === undefined || gid === '' ? this.config.boxId : gid;
       let candidateGids: string[];
       if (namedGid) {
         candidateGids = [namedGid];
@@ -2612,23 +2614,17 @@ export class FirewallaClient {
         }
       }
 
-      // Enhanced input validation and sanitization
+      // The gids and the alarm ID go into the request path. They are
+      // checked as given and refused, not cleaned: a cleaned ID can name
+      // another box or alarm.
       const validatedGids = candidateGids.map(candidate => {
-        const validatedGid = this.sanitizeInput(candidate);
-
-        if (!validatedGid || validatedGid.length === 0) {
-          throw new Error('Invalid or empty gid provided');
-        }
-
-        // Additional validation for GID format
-        if (!/^[a-zA-Z0-9_-]+$/.test(validatedGid)) {
+        pathSegment(candidate, 'gid');
+        if (!/^[a-zA-Z0-9_-]+$/.test(candidate)) {
           throw new Error('GID contains invalid characters');
         }
-
-        return validatedGid;
+        return candidate;
       });
-
-      // Simple alarm ID validation
+      pathSegment(alarmId, 'alarm_id');
       const validatedAlarmId = validateAlarmId(alarmId);
 
       // Get all possible alarm ID variations to try
@@ -2649,13 +2645,7 @@ export class FirewallaClient {
 
       // Try each box, and each ID variation on it, until one succeeds
       for (const validatedGid of validatedGids) {
-        for (const idVariation of idVariations) {
-          const validatedAlarmId = this.sanitizeInput(idVariation);
-
-          if (!validatedAlarmId || validatedAlarmId.length === 0) {
-            continue; // Skip invalid variations
-          }
-
+        for (const validatedAlarmId of idVariations) {
           // Additional validation for alarm ID format (relaxed for ID variations)
           if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
             continue; // Skip invalid format variations
@@ -2934,6 +2924,12 @@ export class FirewallaClient {
     alarmId: string | number,
     gid?: string
   ): Promise<{ gid: string; aid: string; alarm: Record<string, any> }> {
+    // The aid and gid go into the request path: checked as given and
+    // refused, not trimmed, since a trimmed ID can name another alarm or box
+    pathSegment(alarmId, 'alarm_id');
+    if (gid !== undefined && gid !== '') {
+      pathSegment(gid, 'gid');
+    }
     const aid = validateAlarmId(alarmId);
     if (!/^\d+$/.test(aid)) {
       throw new Error(
@@ -2941,7 +2937,7 @@ export class FirewallaClient {
       );
     }
 
-    const named = gid?.trim() || this.config.boxId;
+    const named = gid === undefined || gid === '' ? this.config.boxId : gid;
     if (named) {
       const alarm = await this.findAlarmOnBox(named, aid);
       if (!alarm) {
@@ -5597,29 +5593,20 @@ export class FirewallaClient {
     ruleId: string
   ): Promise<{ success: boolean; message: string }> {
     try {
-      // Enhanced input validation and sanitization
-      const validatedRuleId = this.sanitizeInput(ruleId);
-      if (!validatedRuleId) {
-        throw new Error('Invalid rule ID provided');
-      }
+      // Checked as given, not cleaned first: a cleaned ID can name another
+      // rule
+      const segment = pathSegment(ruleId, 'rule_id');
 
       // The API answers 200 with the JSON string "ok"
       const response = await this.request<{
         success?: boolean;
         message?: string;
-      }>(
-        'POST',
-        `/v2/rules/${pathSegment(validatedRuleId, 'rule_id')}/pause`,
-        {},
-        undefined,
-        false
-      );
+      }>('POST', `/v2/rules/${segment}/pause`, {}, undefined, false);
       this.invalidateRuleCache();
 
       return {
         success: response?.success ?? true, // Default to true if API doesn't return success field
-        message:
-          response?.message || `Rule ${validatedRuleId} paused until resumed`,
+        message: response?.message || `Rule ${ruleId} paused until resumed`,
       };
     } catch (error) {
       logger.error(
@@ -5648,29 +5635,20 @@ export class FirewallaClient {
     ruleId: string
   ): Promise<{ success: boolean; message: string }> {
     try {
-      // Enhanced input validation and sanitization
-      const validatedRuleId = this.sanitizeInput(ruleId);
-      if (!validatedRuleId) {
-        throw new Error('Invalid rule ID provided');
-      }
+      // Checked as given, not cleaned first: a cleaned ID can name another
+      // rule
+      const segment = pathSegment(ruleId, 'rule_id');
 
       // The API answers 200 with the JSON string "ok"
       const response = await this.request<{
         success?: boolean;
         message?: string;
-      }>(
-        'POST',
-        `/v2/rules/${pathSegment(validatedRuleId, 'rule_id')}/resume`,
-        {},
-        undefined,
-        false
-      );
+      }>('POST', `/v2/rules/${segment}/resume`, {}, undefined, false);
       this.invalidateRuleCache();
 
       return {
         success: response?.success ?? true, // Default to true if API doesn't return success field
-        message:
-          response?.message || `Rule ${validatedRuleId} resumed successfully`,
+        message: response?.message || `Rule ${ruleId} resumed successfully`,
       };
     } catch (error) {
       logger.error(

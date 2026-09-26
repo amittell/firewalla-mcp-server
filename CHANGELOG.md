@@ -48,9 +48,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   error naming the argument and before any request, when it holds `/`, a
   backslash, `?`, `#`, `%`, whitespace or a control character, or is `.` or
   `..`. `:` is still allowed, for rule ids (`<box gid>:<n>`), MAC device ids
-  and `ovpn:` ids. Path segments are also percent-encoded, which changes
-  nothing for the ids the API returns: a rule id's `:` is sent as it is, and
-  a device id's as `%3A`, as before.
+  and `ovpn:` ids. The ID is checked as given. The client used to remove NUL
+  bytes, quotes and angle brackets from rule ids, device ids and the gid and
+  aid of `get_specific_alarm`, and to trim whitespace from those and from the
+  gid and aid of the alarm write tools, and the tools trimmed every such ID.
+  So a rule id followed by a NUL and more text went out as a request for the
+  rule id with the text appended, and one followed by a tab or newline as a
+  request for the rule id. Such an ID is now refused, and one with leading or
+  trailing whitespace is refused instead of trimmed. Path segments are also
+  percent-encoded (quotes and angle brackets included, where they used to be
+  removed), which changes nothing for the ids the API returns: a rule id's
+  `:` is sent as it is, and a device id's as `%3A`, as before.
 - `pause_rule`, `resume_rule` and `delete_rule` read the rule once, by id,
   before acting. They also listed every rule first, through a 30-second
   existence cache that writes never cleared, so each call cost an extra

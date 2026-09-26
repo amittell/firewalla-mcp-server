@@ -41,6 +41,7 @@ import {
   pathSegmentProblem,
 } from '../../src/validation/path-segment.js';
 import { ResourceValidator } from '../../src/validation/resource-validator.js';
+import { ParameterValidator } from '../../src/validation/error-handler.js';
 
 const BOX = '00000000-0000-0000-0000-000000000000';
 const RULE = `${BOX}:1`;
@@ -107,7 +108,12 @@ afterEach(() => {
 
 describe('an ID that would change the request path', () => {
   const cases: Array<[string, ToolHandler, Record<string, unknown>, string]> = [
-    ['delete_target_list', new DeleteTargetListHandler(), { id: TRAVERSAL }, 'id'],
+    [
+      'delete_target_list',
+      new DeleteTargetListHandler(),
+      { id: TRAVERSAL },
+      'id',
+    ],
     [
       'update_target_list',
       new UpdateTargetListHandler(),
@@ -237,6 +243,311 @@ describe('an ID that would change the request path', () => {
   });
 });
 
+/**
+ * Ways to put a refused character into an otherwise valid ID. Before this
+ * was fixed, the client's sanitizeInput removed a NUL and trimmed
+ * whitespace (tab, newline and carriage return included), and the handlers
+ * and the alarm code trimmed too, so the request went out for a rewritten
+ * ID, which can name a different object, instead of being refused.
+ */
+const variants = (id: string): Array<[string, string]> => [
+  ['a NUL inside', `${id}\u0000x`],
+  ['a trailing NUL', `${id}\u0000`],
+  ['a leading NUL', `\u0000${id}`],
+  ['a leading tab', `\t${id}`],
+  ['a trailing newline', `${id}\n`],
+  ['a trailing CR LF', `${id}\r\n`],
+  ['a leading space', ` ${id}`],
+  ['a trailing space', `${id} `],
+  ['a DEL', `${id}\u007f`],
+];
+
+const MUTE = {
+  target: { type: 'alarmType' as const },
+  scope: { type: 'all' as const },
+};
+
+describe('a refused character is refused, not removed or trimmed, by the client', () => {
+  const calls: Array<
+    [
+      string,
+      string,
+      string,
+      (client: FirewallaClient, id: string) => Promise<unknown>,
+    ]
+  > = [
+    [
+      'getSpecificTargetList',
+      LIST,
+      'id',
+      (c, id) => c.getSpecificTargetList(id),
+    ],
+    [
+      'updateTargetList',
+      LIST,
+      'id',
+      (c, id) => c.updateTargetList(id, { name: 'x' }),
+    ],
+    ['deleteTargetList', LIST, 'id', (c, id) => c.deleteTargetList(id)],
+    ['deleteRule', RULE, 'rule_id', (c, id) => c.deleteRule(id)],
+    ['pauseRule', RULE, 'rule_id', (c, id) => c.pauseRule(id)],
+    ['resumeRule', RULE, 'rule_id', (c, id) => c.resumeRule(id)],
+    [
+      'renameDevice (device id)',
+      MAC,
+      'device_id',
+      (c, id) => c.renameDevice(id, 'nas', BOX),
+    ],
+    [
+      'renameDevice (gid)',
+      BOX,
+      'gid',
+      (c, id) => c.renameDevice(MAC, 'nas', id),
+    ],
+    [
+      'getSpecificAlarm (aid)',
+      '12',
+      'alarm_id',
+      (c, id) => c.getSpecificAlarm(id, BOX),
+    ],
+    [
+      'getSpecificAlarm (gid)',
+      BOX,
+      'gid',
+      (c, id) => c.getSpecificAlarm('12', id),
+    ],
+    [
+      'archiveAlarm (aid)',
+      '12',
+      'alarm_id',
+      (c, id) => c.archiveAlarm(id, BOX),
+    ],
+    ['archiveAlarm (gid)', BOX, 'gid', (c, id) => c.archiveAlarm('12', id)],
+    [
+      'muteAlarm (aid)',
+      '12',
+      'alarm_id',
+      (c, id) => c.muteAlarm(id, MUTE, BOX),
+    ],
+    ['muteAlarm (gid)', BOX, 'gid', (c, id) => c.muteAlarm('12', MUTE, id)],
+    ['deleteAlarm (aid)', '12', 'alarm_id', (c, id) => c.deleteAlarm(id, BOX)],
+    ['deleteAlarm (gid)', BOX, 'gid', (c, id) => c.deleteAlarm('12', id)],
+  ];
+
+  it.each(calls)(
+    '%s refuses each variant of %s and sends nothing',
+    async (_name, valid, argument, call) => {
+      const outcomes: string[] = [];
+      for (const [what, id] of variants(valid)) {
+        const { client, sent } = makeClient();
+        const error = await call(client, id).then(
+          () => undefined,
+          (e: unknown) => e
+        );
+        const message = error instanceof Error ? error.message : 'resolved';
+        const refused = message.includes(`Invalid ${argument}`);
+        outcomes.push(
+          `${what}: ${refused ? 'refused' : message}; sent ${JSON.stringify(sent)}`
+        );
+      }
+      expect(outcomes).toEqual(
+        variants(valid).map(([what]) => `${what}: refused; sent []`)
+      );
+    }
+  );
+
+  it.each(calls)(
+    '%s still sends the valid %s',
+    async (_name, valid, _argument, call) => {
+      const { client, sent } = makeClient();
+      await call(client, valid);
+      expect(
+        sent.filter(line => !line.startsWith('GET /v2/rules'))
+      ).not.toEqual([]);
+    }
+  );
+
+  it('characters the path may hold are percent-encoded, not removed', async () => {
+    const { client, sent } = makeClient();
+    await client.deleteRule('a"b<c>d');
+    await client.deleteTargetList("a'b");
+    await client.renameDevice('a"b', 'nas', BOX);
+    expect(sent).toEqual([
+      'DELETE /v2/rules/a%22b%3Cc%3Ed',
+      "DELETE /v2/target-lists/a'b",
+      `PATCH /v2/boxes/${BOX}/devices/a%22b`,
+    ]);
+  });
+});
+
+describe('a refused character is refused, not trimmed, by the tools', () => {
+  const tools: Array<
+    [
+      string,
+      string,
+      ToolHandler,
+      string,
+      (id: string) => Record<string, unknown>,
+    ]
+  > = [
+    [
+      'get_specific_target_list',
+      'id',
+      new GetSpecificTargetListHandler(),
+      LIST,
+      id => ({ id }),
+    ],
+    [
+      'update_target_list',
+      'id',
+      new UpdateTargetListHandler(),
+      LIST,
+      id => ({ id, name: 'x' }),
+    ],
+    [
+      'delete_target_list',
+      'id',
+      new DeleteTargetListHandler(),
+      LIST,
+      id => ({ id }),
+    ],
+    [
+      'pause_rule',
+      'rule_id',
+      new PauseRuleHandler(),
+      RULE,
+      id => ({ rule_id: id }),
+    ],
+    [
+      'resume_rule',
+      'rule_id',
+      new ResumeRuleHandler(),
+      RULE,
+      id => ({ rule_id: id }),
+    ],
+    [
+      'delete_rule',
+      'rule_id',
+      new DeleteRuleHandler(),
+      RULE,
+      id => ({ rule_id: id }),
+    ],
+    [
+      'rename_device (device_id)',
+      'device_id',
+      new RenameDeviceHandler(),
+      MAC,
+      id => ({ device_id: id, name: 'nas', gid: BOX }),
+    ],
+    [
+      'rename_device (gid)',
+      'gid',
+      new RenameDeviceHandler(),
+      BOX,
+      id => ({ device_id: MAC, name: 'nas', gid: id }),
+    ],
+    [
+      'get_specific_alarm (alarm_id)',
+      'alarm_id',
+      new GetSpecificAlarmHandler(),
+      '12',
+      id => ({ alarm_id: id, gid: BOX }),
+    ],
+    [
+      'get_specific_alarm (gid)',
+      'gid',
+      new GetSpecificAlarmHandler(),
+      BOX,
+      id => ({ alarm_id: '12', gid: id }),
+    ],
+    [
+      'archive_alarm (alarm_id)',
+      'alarm_id',
+      new ArchiveAlarmHandler(),
+      '12',
+      id => ({ alarm_id: id, gid: BOX }),
+    ],
+    [
+      'archive_alarm (gid)',
+      'gid',
+      new ArchiveAlarmHandler(),
+      BOX,
+      id => ({ alarm_id: '12', gid: id }),
+    ],
+    [
+      'mute_alarm (alarm_id)',
+      'alarm_id',
+      new MuteAlarmHandler(),
+      '12',
+      id => ({
+        alarm_id: id,
+        gid: BOX,
+        target_type: 'alarmType',
+        scope_type: 'all',
+      }),
+    ],
+    [
+      'mute_alarm (gid)',
+      'gid',
+      new MuteAlarmHandler(),
+      BOX,
+      id => ({
+        alarm_id: '12',
+        gid: id,
+        target_type: 'alarmType',
+        scope_type: 'all',
+      }),
+    ],
+    [
+      'delete_alarm (alarm_id)',
+      'alarm_id',
+      new DeleteAlarmHandler(),
+      '12',
+      id => ({ alarm_id: id, gid: BOX }),
+    ],
+    [
+      'delete_alarm (gid)',
+      'gid',
+      new DeleteAlarmHandler(),
+      BOX,
+      id => ({ alarm_id: '12', gid: id }),
+    ],
+  ];
+
+  it.each(tools)(
+    '%s: each variant of %s is a validation error naming it, and nothing is sent',
+    async (_name, argument, handler, valid, args) => {
+      const outcomes: string[] = [];
+      for (const [what, id] of variants(valid)) {
+        const { client, sent } = makeClient();
+        const body = parse(await handler.execute(args(id), client));
+        const named = JSON.stringify(body.validation_errors ?? []).includes(
+          argument
+        );
+        outcomes.push(
+          `${what}: ${body.errorType === 'validation_error' && named ? 'refused' : `${body.errorType} ${body.message}`}; sent ${JSON.stringify(sent)}`
+        );
+      }
+      expect(outcomes).toEqual(
+        variants(valid).map(([what]) => `${what}: refused; sent []`)
+      );
+    }
+  );
+
+  it.each(tools)(
+    '%s still accepts a valid %s',
+    async (_name, _argument, handler, valid, args) => {
+      const { client, sent } = makeClient();
+      const res = await handler.execute(args(valid), client);
+      // resume_rule answers that the stubbed rule is already active
+      if (res.isError) {
+        expect(parse(res).errorType).not.toBe('validation_error');
+      }
+      expect(sent).not.toEqual([]);
+    }
+  );
+});
+
 describe('valid IDs are sent as before', () => {
   it('a <box gid>:<n> rule id keeps its colon (pause_rule)', async () => {
     const { client, sent } = makeClient();
@@ -247,14 +558,20 @@ describe('valid IDs are sent as before', () => {
 
   it('delete_rule sends DELETE /v2/rules/<box gid>:<n>', async () => {
     const { client, sent } = makeClient();
-    const res = await new DeleteRuleHandler().execute({ rule_id: RULE }, client);
+    const res = await new DeleteRuleHandler().execute(
+      { rule_id: RULE },
+      client
+    );
     expect(res.isError).toBeFalsy();
     expect(sent).toEqual(['GET /v2/rules', `DELETE /v2/rules/${RULE}`]);
   });
 
   it.each([
     [MAC, 'AA%3ABB%3ACC%3ADD%3AEE%3AFF'],
-    ['ovpn:00000000-0000-0000-0000-000000000000', 'ovpn%3A00000000-0000-0000-0000-000000000000'],
+    [
+      'ovpn:00000000-0000-0000-0000-000000000000',
+      'ovpn%3A00000000-0000-0000-0000-000000000000',
+    ],
     ['wg_peer:abc123', 'wg_peer%3Aabc123'],
   ])(
     'rename_device sends device id %s as it always did',
@@ -283,6 +600,62 @@ describe('valid IDs are sent as before', () => {
       `GET /v2/alarms/${BOX}/12`,
       `DELETE /v2/alarms/${BOX}/12`,
     ]);
+  });
+});
+
+describe("the handlers' ID validators check the value as given", () => {
+  it.each([
+    [
+      'validatePathSegment',
+      (v: unknown) => ParameterValidator.validatePathSegment(v, 'id'),
+    ],
+    [
+      'validateRuleId',
+      (v: unknown) => ParameterValidator.validateRuleId(v, 'id'),
+    ],
+    [
+      'validateAlarmId',
+      (v: unknown) => ParameterValidator.validateAlarmId(v, 'id'),
+    ],
+  ])(
+    '%s refuses surrounding whitespace and control characters, never trims',
+    (_name, validate) => {
+      for (const value of [
+        ' 12',
+        '12 ',
+        '\t12',
+        '12\n',
+        '12\u0000',
+        '1\u00002',
+      ]) {
+        expect([JSON.stringify(value), validate(value).isValid]).toEqual([
+          JSON.stringify(value),
+          false,
+        ]);
+      }
+      expect(validate('12')).toMatchObject({
+        isValid: true,
+        sanitizedValue: '12',
+      });
+    }
+  );
+
+  it('validatePathSegment treats a missing or empty optional ID as not given', () => {
+    for (const value of [undefined, null, '']) {
+      expect(
+        ParameterValidator.validatePathSegment(value, 'gid', {
+          required: false,
+        })
+      ).toMatchObject({ isValid: true, sanitizedValue: undefined });
+    }
+    expect(
+      ParameterValidator.validatePathSegment('  ', 'gid', { required: false })
+        .isValid
+    ).toBe(false);
+    expect(ParameterValidator.validatePathSegment('', 'id').errors).toEqual([
+      'id cannot be empty',
+    ]);
+    expect(ParameterValidator.validatePathSegment(7, 'id').isValid).toBe(false);
   });
 });
 

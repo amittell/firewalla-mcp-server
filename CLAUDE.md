@@ -414,7 +414,9 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
   `readOnlyHint: false` is missing from the list
 - An ID that goes into a request path goes through `pathSegment()` in
   `src/validation/path-segment.ts` (and the handler checks it with
-  `ParameterValidator.validatePathSegment`), never straight into a template string
+  `ParameterValidator.validatePathSegment`), never straight into a template string.
+  Check the value as given: never trim or `sanitizeInput()` an ID first, which
+  turns a refused ID into a different one
 - Include proper input validation and error handling
 - Keep the default server read-only: 24 tools, none with `readOnlyHint: false`
 - Implement direct API execution in the server

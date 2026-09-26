@@ -439,7 +439,7 @@ Up to 1.5.0, `pause_rule`, `resume_rule` and the three target-list tools were al
 
 The write tools need an MSP API token with write access. Firewalla said on 2026-09-08 that MSP 2.12 adds read-only API tokens, which cannot make changes. When a write gets HTTP 403, the error says the token may be read-only and that the write tools need a token with write access. A 403 can also mean the request named a box the token cannot access, and the error says that too; `get_boxes` lists the boxes the token can access.
 
-IDs that go into a request path (`id`, `rule_id`, `alarm_id`, `gid`, `device_id`) are checked before anything is sent. One holding `/`, a backslash, `?`, `#`, `%`, whitespace or a control character, or that is `.` or `..`, is refused as a validation error naming the argument. Rule IDs such as `<box gid>:<n>`, MAC device IDs and `ovpn:` device IDs are accepted.
+IDs that go into a request path (`id`, `rule_id`, `alarm_id`, `gid`, `device_id`) are checked before anything is sent. One holding `/`, a backslash, `?`, `#`, `%`, whitespace or a control character, or that is `.` or `..`, is refused as a validation error naming the argument; leading or trailing whitespace is refused too, not trimmed. Rule IDs such as `<box gid>:<n>`, MAC device IDs and `ovpn:` device IDs are accepted.
 
 `create_rule` and `rename_device` act on one box: `gid`, else `FIREWALLA_BOX_ID` or `FIREWALLA_DEFAULT_BOX_ID`, else the account's only box. On a multi-box account with none of those, they refuse without writing anything, because the MSP API applies a rule with no `gid` to every box in the account, including boxes added later. `delete_rule` needs MSP 2.11.0 or later.
 
