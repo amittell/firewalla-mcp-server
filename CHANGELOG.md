@@ -345,6 +345,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `readOnlyHint: true`, and the call dispatcher takes it out of the
   arguments before the tool runs, so a read tool added later takes it too;
   the tools that change state do not take it.
+- `docs/clients/open-webui.md`: Open WebUI through mcpo or its native MCP
+  connection, tested with mcpo 0.0.20 and Open WebUI 0.11.4, with the
+  `MCP_HTTP_ALLOWED_HOSTS` and token settings a container needs, and why
+  mcpo never opened its port with releases before 1.4.0 under `npx`.
 
 ### Changed
 
