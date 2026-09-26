@@ -73,6 +73,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A query that names a `box.id` other than the box a request is scoped to
   (the `box` argument, else `FIREWALLA_BOX_ID`) is refused. The API reads
   two `box.id` terms as either box, so the query widened the scope.
+- `search_devices` matches `ip:192.168.*` against four-part addresses (the
+  search engine's IP filter read `*` as exactly one octet, so
+  `192.168.*` matched no device while `192.168.*.*` did), matches `mac:` against a device id that is a plain MAC address,
+  as the API reference gives device ids, and matches `id:` against the
+  device id, exactly or with `*`. A bare MAC address is still refused, with
+  a hint to write `mac:<address>`.
 
 ### Changed
 
