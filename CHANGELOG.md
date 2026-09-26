@@ -235,6 +235,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `MCP_HTTP_ALLOWED_ORIGINS` origins get CORS headers, and answers to their
   preflight requests, so a web page on an allowed origin can call the HTTP
   transport; before, every preflight got 405.
+- `SECURITY.md`: which releases get security fixes, how to report a
+  vulnerability privately, what is in scope, and the server's defaults.
 
 ### Changed
 
