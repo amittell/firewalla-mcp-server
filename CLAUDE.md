@@ -26,14 +26,15 @@ A Model Context Protocol (MCP) server that provides Claude with access to Firewa
 - **CRUD Operations**: Create, Read, Update, Delete operations for all resources
 
 ### Tool Categories (28 total)
+The groups are each handler's `category`, which `ToolRegistry.getToolsByCategory()` filters on.
 - **Security (2 tools)**: get_active_alarms, get_specific_alarm
-- **Network (2 tools)**: get_flow_data, get_recent_flow_activity
+- **Network (3 tools)**: get_flow_data, get_bandwidth_usage, get_offline_devices
 - **Device (1 tool)**: get_device_status
-- **Rules (8 tools)**: get_network_rules, pause_rule, resume_rule, get_target_lists, get_specific_target_list, create_target_list, update_target_list, delete_target_list
-- **Search (3 tools)**: search_flows, search_alarms, search_rules
-- **Analytics (7 tools)**: get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_insights, get_alarm_trends, get_rule_trends
-- **Convenience Wrappers (5 tools)**: get_bandwidth_usage, get_offline_devices, search_devices, search_target_lists, get_network_rules_summary
-- **Write tools (5, opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)**: create_rule, delete_rule, rename_device, archive_alarm, mute_alarm. Not counted in the 28.
+- **Rules (9 tools)**: get_network_rules, get_network_rules_summary, pause_rule, resume_rule, get_target_lists, get_specific_target_list, create_target_list, update_target_list, delete_target_list
+- **Search (5 tools)**: search_flows, search_alarms, search_rules, search_devices, search_target_lists
+- **Analytics (8 tools)**: get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_recent_flow_activity, get_flow_insights, get_alarm_trends, get_rule_trends
+- **Convenience wrappers** (client-side processing; counted in the groups above): get_bandwidth_usage, get_offline_devices, search_devices, search_target_lists, get_network_rules_summary
+- **Write tools (5, opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)**: create_rule and delete_rule (rules), rename_device (device), archive_alarm and mute_alarm (security). Not counted in the 28.
 
 ## Development Commands
 
