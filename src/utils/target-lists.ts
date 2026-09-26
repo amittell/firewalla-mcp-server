@@ -3,7 +3,11 @@
  * and the client-side evaluation of target list search queries
  */
 
-import { matchesQuery, unquoteQueryValue } from '../search/client-filter.js';
+import {
+  commaListValues,
+  matchesQuery,
+  unquoteQueryValue,
+} from '../search/client-filter.js';
 
 /**
  * The number of entries in a target list: the length of its `targets` when
@@ -132,10 +136,12 @@ function matchesTime(value: unknown, condition: string): boolean {
  * does not search target lists (GET /v2/target-lists takes only `owner`), so
  * the query is evaluated here, case-insensitively: `name:` and `notes:`
  * match text they contain, `owner:` and `category:` the whole value,
- * `targets:` any one entry, each with `*` wildcards, `target_count:` the
+ * `targets:` any one entry, each with `*` wildcards and a comma list for
+ * any of several values (`category:social,games`), `target_count:` the
  * entry count (`>n`, `<=n`, `a-b` or `n`) and `last_updated:` the last update
- * time (Unix seconds or a date, with the same comparisons). A term without a field
- * matches the name, the notes or an entry.
+ * time (Unix seconds or a date, with the same comparisons). A term without a
+ * field (free text, a word or a quoted phrase) matches text in the name, the
+ * notes or an entry.
  *
  * @param list - A target list as the API returned it
  * @param query - Query such as `owner:global AND name:*Block*`
@@ -170,17 +176,22 @@ export function targetListMatchesQuery(list: unknown, query: string): boolean {
     }
     const [, field, rawValue] = fieldTerm;
     const value = unquoteQueryValue(rawValue);
+    // A comma list matches any of its values, as in the MSP API grammar
+    // (category:social,games); it used to be compared as one value
+    const values = commaListValues(rawValue);
     switch (field) {
       case 'name':
-        return contains(name, value);
+        return values.some(entry => contains(name, entry));
       case 'notes':
-        return contains(notes, value);
+        return values.some(entry => contains(notes, entry));
       case 'owner':
-        return matchesPattern(owner, value);
+        return values.some(entry => matchesPattern(owner, entry));
       case 'category':
-        return matchesPattern(category, value);
+        return values.some(entry => matchesPattern(category, entry));
       case 'targets':
-        return targets.some(target => matchesPattern(target, value));
+        return targets.some(target =>
+          values.some(entry => matchesPattern(target, entry))
+        );
       case 'target_count':
         // The entry count: targets when sent, else the API's `count`
         return matchesNumber(targetListEntryCount(list), value);
