@@ -688,6 +688,9 @@ export class EnhancedQueryValidator {
         case 'group':
           validateNode(node.query);
           break;
+        case 'text':
+          // Free text has no field to check
+          break;
       }
     };
 
@@ -936,6 +939,10 @@ export class EnhancedQueryValidator {
         break;
       case 'group':
         return `(${this.astToQueryString(ast.query)})`;
+      case 'text':
+        return /^[^\s"'():]+$/.test(ast.value)
+          ? ast.value
+          : JSON.stringify(ast.value);
     }
     return '';
   }
