@@ -82,7 +82,7 @@ Restart Claude Desktop and try:
 
 ## Features
 
-- **29 tools** for comprehensive network analysis
+- **24 read-only tools** for comprehensive network analysis, plus 11 write tools with `FIREWALLA_ENABLE_WRITE_TOOLS=true`
 - **Advanced search syntax** with logical operators and filters
 - **Geographic threat analysis** with country-level insights
 - **Real-time monitoring** with intelligent caching

@@ -127,7 +127,7 @@ Then set environment variables in your shell.
 ## Advanced Features
 
 - **Real-time security insights** integrated with your development workflow
-- **29 specialized tools** for comprehensive network analysis
+- **24 read-only tools** for comprehensive network analysis, plus 11 write tools with `FIREWALLA_ENABLE_WRITE_TOOLS=true`
 - **Advanced search syntax** with complex filtering capabilities
 - **Geographic threat analysis** for international development teams
 

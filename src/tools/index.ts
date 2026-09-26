@@ -1,8 +1,9 @@
 /**
  * @fileoverview MCP Tool Setup and Registry Management
  *
- * Implements a clean, modular registry pattern for managing 35 distinct MCP tools
- * that provide comprehensive Firewalla firewall management capabilities. Replaces
+ * Implements a clean, modular registry pattern for managing the MCP tools (24
+ * read-only, plus 11 write tools with FIREWALLA_ENABLE_WRITE_TOOLS=true) that
+ * provide Firewalla firewall monitoring and management capabilities. Replaces
  * the original 1000+ line switch statement with maintainable, testable handler classes.
  *
  * Tool Categories:
@@ -39,7 +40,7 @@ import { metrics } from '../monitoring/metrics.js';
 /**
  * Registers and configures all Firewalla MCP tools on the server using a modular registry pattern
  *
- * Sets up the complete toolkit of 35 distinct firewall management tools, each encapsulated
+ * Sets up the registered firewall tools (see ToolRegistry), each encapsulated
  * in its own handler class and organized by functional category. The registry pattern provides
  * clean separation of concerns and enables easy testing and maintenance.
  *
@@ -67,7 +68,7 @@ import { metrics } from '../monitoring/metrics.js';
  * @public
  */
 export function setupTools(server: Server, firewalla: FirewallaClient): void {
-  // Initialize the tool registry with all 35 handlers
+  // The registry holds the read-only tools, and the write tools when enabled
   const toolRegistry = new ToolRegistry();
 
   // Set up the main request handler using the registry

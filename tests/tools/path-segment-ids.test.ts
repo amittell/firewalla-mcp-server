@@ -31,6 +31,7 @@ import { RenameDeviceHandler } from '../../src/tools/handlers/device.js';
 import { GetSpecificAlarmHandler } from '../../src/tools/handlers/security.js';
 import {
   ArchiveAlarmHandler,
+  DeleteAlarmHandler,
   MuteAlarmHandler,
 } from '../../src/tools/handlers/alarm-actions.js';
 import type { ToolHandler } from '../../src/tools/handlers/base.js';
@@ -155,6 +156,12 @@ describe('an ID that would change the request path', () => {
       'gid',
     ],
     [
+      'delete_alarm (gid)',
+      new DeleteAlarmHandler(),
+      { alarm_id: '12', gid: `x/../../rules/${RULE}` },
+      'gid',
+    ],
+    [
       'pause_rule',
       new PauseRuleHandler(),
       { rule_id: `r1/../../target-lists/${LIST}` },
@@ -269,12 +276,12 @@ describe('valid IDs are sent as before', () => {
       { alarm_id: '12', gid: BOX },
       client
     );
-    await new ArchiveAlarmHandler().execute({ alarm_id: 12, gid: BOX }, client);
+    await new DeleteAlarmHandler().execute({ alarm_id: 12, gid: BOX }, client);
     expect(sent).toEqual([
       `DELETE /v2/target-lists/${LIST}`,
       `GET /v2/alarms/${BOX}/12`,
       `GET /v2/alarms/${BOX}/12`,
-      `POST /v2/alarms/${BOX}/12/archive`,
+      `DELETE /v2/alarms/${BOX}/12`,
     ]);
   });
 });

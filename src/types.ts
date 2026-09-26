@@ -30,7 +30,7 @@ export interface FirewallaConfig {
   /**
    * FIREWALLA_DEFAULT_BOX_ID: the default box for single-box operations
    * (create_rule, rename_device, get_specific_alarm, archive_alarm,
-   * mute_alarm) without scoping queries
+   * mute_alarm, delete_alarm) without scoping queries
    */
   defaultBoxId?: string;
   /** API request timeout in milliseconds (default: 30000) */

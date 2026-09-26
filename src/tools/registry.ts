@@ -1,32 +1,36 @@
 /**
  * @fileoverview Tool Registry
  *
- * Implements a registry pattern for managing 29 MCP tool handlers with clean
+ * Implements a registry pattern for managing the MCP tool handlers with clean
  * organization and easy discovery. Each tool maps to Firewalla API endpoints
  * with parameter validation.
  *
  * Registry Features:
- * - **Automatic Registration**: All 29 handlers are auto-registered during construction
+ * - **Automatic Registration**: The 24 read-only handlers are registered during
+ *   construction, and the 11 write tools too with FIREWALLA_ENABLE_WRITE_TOOLS=true
  * - **API Mapping**: Direct mapping to verified Firewalla API endpoints
  * - **Type Safety**: Full TypeScript support with proper handler interfaces
  * - **Easy Discovery**: Methods to find tools by name, category, or list all tools
  * - **Proper Schemas**: All limits set to API maximum (500), required parameters added
  * - **CRUD Operations**: Create, Read, Update, Delete operations for all resources
  *
- * 27-Tool Distribution:
- * - Direct API Endpoints (22 tools):
+ * 24 read-only tools, always registered:
+ * - Direct API Endpoints (19 tools):
  *   * Security: 2 handlers (get_active_alarms, get_specific_alarm)
  *   * Network: 1 handler (get_flow_data)
  *   * Device: 1 handler (get_device_status)
- *   * Rules: 8 handlers (get_network_rules, pause_rule, resume_rule, get_target_lists,
- *     get_specific_target_list, create_target_list, update_target_list, delete_target_list)
+ *   * Rules: 3 handlers (get_network_rules, get_target_lists, get_specific_target_list)
  *   * Search: 3 handlers (search_flows, search_alarms, search_rules)
- *   * Analytics: 7 handlers (get_boxes, get_simple_statistics, get_statistics_by_region,
- *     get_statistics_by_box, get_flow_trends, get_alarm_trends, get_rule_trends)
+ *   * Analytics: 9 handlers (get_boxes, get_simple_statistics, get_statistics_by_region,
+ *     get_statistics_by_box, get_recent_flow_activity, get_flow_insights,
+ *     get_flow_trends, get_alarm_trends, get_rule_trends)
  * - Convenience Wrappers (5 tools):
  *   * get_bandwidth_usage, get_offline_devices, search_devices, search_target_lists, get_network_rules_summary
- * - Write tools (5, opt-in with FIREWALLA_ENABLE_WRITE_TOOLS=true):
- *   * create_rule, delete_rule, rename_device, archive_alarm, mute_alarm
+ * - Write tools (11, opt-in with FIREWALLA_ENABLE_WRITE_TOOLS=true; the names
+ *   are WRITE_TOOL_NAMES in src/config/write-tools.ts):
+ *   * create_rule, delete_rule, pause_rule, resume_rule, create_target_list,
+ *     update_target_list, delete_target_list, rename_device, archive_alarm,
+ *     mute_alarm, delete_alarm
  *
  * @version 1.0.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
@@ -34,14 +38,14 @@
  */
 
 import type { ToolHandler } from './handlers/base.js';
-import { writeToolsEnabled } from '../config/write-tools.js';
+import { isWriteTool, writeToolsEnabled } from '../config/write-tools.js';
 import {
   GetActiveAlarmsHandler,
   GetSpecificAlarmHandler,
-  // DeleteAlarmHandler, // Disabled - API returns false success
 } from './handlers/security.js';
 import {
   ArchiveAlarmHandler,
+  DeleteAlarmHandler,
   MuteAlarmHandler,
 } from './handlers/alarm-actions.js';
 import {
@@ -86,14 +90,15 @@ import {
 } from './handlers/search.js';
 
 /**
- * Central registry for managing 27 MCP tool handlers with complete API coverage
+ * Central registry for managing the MCP tool handlers
  *
- * Provides a clean, organized approach to tool registration and discovery for
- * the 27-tool architecture. Each tool handler maps to actual Firewalla API endpoints
- * with corrected schemas and proper parameter validation for API coverage.
+ * Provides a clean, organized approach to tool registration and discovery.
+ * Each tool handler maps to actual Firewalla API endpoints with corrected
+ * schemas and proper parameter validation for API coverage.
  *
  * The registry pattern enables:
- * - 27 complete tools (22 direct API + 5 convenience wrappers)
+ * - 24 read-only tools (19 direct API + 5 convenience wrappers), plus 11
+ *   opt-in write tools
  * - Comprehensive Firewalla API coverage including CRUD operations
  * - Clean separation between tool implementation and registration
  * - Type-safe tool discovery and execution
@@ -109,7 +114,7 @@ import {
  * // Get tools by category
  * const searchTools = registry.getToolsByCategory('search');
  *
- * // List all available tools (29, or 34 with write tools enabled)
+ * // List all available tools (24, or 35 with write tools enabled)
  * const allTools = registry.getToolNames();
  * ```
  *
@@ -123,9 +128,8 @@ export class ToolRegistry {
   /**
    * Creates a new tool registry and automatically registers all available handlers
    *
-   * @param options.enableWriteTools - Register create_rule, delete_rule,
-   *   rename_device, archive_alarm and mute_alarm. Defaults to
-   *   FIREWALLA_ENABLE_WRITE_TOOLS=true.
+   * @param options.enableWriteTools - Also register the write tools named in
+   *   WRITE_TOOL_NAMES. Defaults to FIREWALLA_ENABLE_WRITE_TOOLS=true.
    * @constructor
    */
   constructor(options: { enableWriteTools?: boolean } = {}) {
@@ -133,74 +137,75 @@ export class ToolRegistry {
   }
 
   /**
-   * Automatically registers 29 tool handlers for complete API coverage
-   *
-   * Registers handlers for the 29-tool architecture: 24 direct API endpoints
-   * and 5 convenience wrappers. Each handler implements the ToolHandler interface
-   * and maps to actual Firewalla API endpoints.
+   * Registers the tool handlers: the 24 read-only tools (19 direct API
+   * endpoints and 5 convenience wrappers), and with `enableWriteTools` the 11
+   * write tools. A tool counts as a write tool when WRITE_TOOL_NAMES in
+   * src/config/write-tools.ts names it, the same list that decides whether
+   * the server lists it, so registering and listing cannot disagree.
    *
    * @private
    * @returns {void}
    */
   private registerHandlers(enableWriteTools: boolean): void {
-    // Direct API Endpoints (24 handlers)
+    const handlers: ToolHandler[] = [
+      // Security (2 handlers)
+      new GetActiveAlarmsHandler(),
+      new GetSpecificAlarmHandler(),
 
-    // Security tools (2 handlers - delete_alarm disabled)
-    this.register(new GetActiveAlarmsHandler());
-    this.register(new GetSpecificAlarmHandler());
-    // Disabled: DeleteAlarmHandler commented out because the Firewalla MSP API
-    // returns false success responses but doesn't actually delete alarms
-    // this.register(new DeleteAlarmHandler());
-    // archive_alarm (a write tool, below) is the documented alternative
+      // Network (1 handler)
+      new GetFlowDataHandler(),
 
-    // Network tools (1 handler - get_flow_data)
-    this.register(new GetFlowDataHandler());
+      // Device (1 handler)
+      new GetDeviceStatusHandler(),
 
-    // Device tools (1 handler)
-    this.register(new GetDeviceStatusHandler());
+      // Rules and target lists (3 handlers)
+      new GetNetworkRulesHandler(),
+      new GetTargetListsHandler(),
+      new GetSpecificTargetListHandler(),
 
-    // Rule tools (8 handlers)
-    this.register(new GetNetworkRulesHandler());
-    this.register(new PauseRuleHandler());
-    this.register(new ResumeRuleHandler());
-    this.register(new GetTargetListsHandler());
-    this.register(new GetSpecificTargetListHandler());
-    this.register(new CreateTargetListHandler());
-    this.register(new UpdateTargetListHandler());
-    this.register(new DeleteTargetListHandler());
+      // Search (3 handlers)
+      new SearchFlowsHandler(),
+      new SearchAlarmsHandler(),
+      new SearchRulesHandler(),
 
-    // Write tools (5 handlers): change rules, device names and alarm state
-    // on the box, so they are opt-in
-    if (enableWriteTools) {
-      this.register(new CreateRuleHandler());
-      this.register(new DeleteRuleHandler());
-      this.register(new RenameDeviceHandler());
-      this.register(new ArchiveAlarmHandler());
-      this.register(new MuteAlarmHandler());
+      // Analytics (9 handlers)
+      new GetBoxesHandler(),
+      new GetSimpleStatisticsHandler(),
+      new GetStatisticsByRegionHandler(),
+      new GetStatisticsByBoxHandler(),
+      new GetRecentFlowActivityHandler(),
+      new GetFlowInsightsHandler(),
+      new GetFlowTrendsHandler(),
+      new GetAlarmTrendsHandler(),
+      new GetRuleTrendsHandler(),
+
+      // Convenience Wrappers (5 handlers)
+      new GetBandwidthUsageHandler(), // wrapper around get_device_status
+      new GetOfflineDevicesHandler(), // wrapper around get_device_status
+      new SearchDevicesHandler(), // wrapper with client-side filtering
+      new SearchTargetListsHandler(), // wrapper with client-side filtering
+      new GetNetworkRulesSummaryHandler(), // wrapper around get_network_rules
+
+      // Write tools (11 handlers): they change rules, target lists, device
+      // names and alarms, so they are opt-in
+      new CreateRuleHandler(),
+      new DeleteRuleHandler(),
+      new PauseRuleHandler(),
+      new ResumeRuleHandler(),
+      new CreateTargetListHandler(),
+      new UpdateTargetListHandler(),
+      new DeleteTargetListHandler(),
+      new RenameDeviceHandler(),
+      new ArchiveAlarmHandler(),
+      new MuteAlarmHandler(),
+      new DeleteAlarmHandler(),
+    ];
+
+    for (const handler of handlers) {
+      if (enableWriteTools || !isWriteTool(handler.name)) {
+        this.register(handler);
+      }
     }
-
-    // Search tools (5 handlers)
-    this.register(new SearchFlowsHandler());
-    this.register(new SearchAlarmsHandler());
-    this.register(new SearchRulesHandler());
-
-    // Analytics tools (9 handlers)
-    this.register(new GetBoxesHandler());
-    this.register(new GetSimpleStatisticsHandler());
-    this.register(new GetStatisticsByRegionHandler());
-    this.register(new GetStatisticsByBoxHandler());
-    this.register(new GetRecentFlowActivityHandler());
-    this.register(new GetFlowInsightsHandler());
-    this.register(new GetFlowTrendsHandler());
-    this.register(new GetAlarmTrendsHandler());
-    this.register(new GetRuleTrendsHandler());
-
-    // Convenience Wrappers (5 handlers)
-    this.register(new GetBandwidthUsageHandler()); // wrapper around get_device_status
-    this.register(new GetOfflineDevicesHandler()); // wrapper around get_device_status
-    this.register(new SearchDevicesHandler()); // wrapper with client-side filtering
-    this.register(new SearchTargetListsHandler()); // wrapper with client-side filtering
-    this.register(new GetNetworkRulesSummaryHandler()); // wrapper around get_network_rules
   }
 
   /**

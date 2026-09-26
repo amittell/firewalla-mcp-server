@@ -5,10 +5,14 @@
  * Phase 1 (stdio): connect an MCP client over stdio, list tools/resources/
  * prompts, then exercise EVERY tool:
  *   - read tools: live happy-path calls (IDs seeded from earlier responses)
- *   - target-list CRUD: full create -> get -> update -> delete cycle on a
- *     disposable list this script creates (no production objects touched)
- *   - pause_rule / resume_rule: error-path only (invalid ID) -- we do not
- *     pause real firewall rules
+ *   - without FIREWALLA_ENABLE_WRITE_TOOLS=true: exactly 24 tools, all
+ *     read-only, and no write tool listed
+ *   - with it (35 tools): target-list CRUD, a full create -> get -> update ->
+ *     delete cycle on a disposable list this script creates (no production
+ *     objects touched), and pause_rule / resume_rule on the error path only
+ *     (invalid ID) -- we do not pause real firewall rules. The other write
+ *     tools (create_rule, delete_rule, rename_device, archive_alarm,
+ *     mute_alarm, delete_alarm) are never called live.
  * Phase 2 (http): two CONCURRENT Streamable HTTP sessions (validates PR #31's
  * per-session Server instances), each lists tools and makes a live call, then
  * a third session connects after one closes.
@@ -28,6 +32,11 @@ for (const k of CREDS) {
   if (!process.env[k]) { console.error(`missing env ${k}`); process.exit(2); }
 }
 const HTTP_PORT = 3111;
+// The server lists 24 read-only tools, and 11 write tools as well when
+// FIREWALLA_ENABLE_WRITE_TOOLS=true
+const WRITE_TOOLS_ON =
+  (process.env.FIREWALLA_ENABLE_WRITE_TOOLS ?? '').trim().toLowerCase() === 'true';
+const EXPECTED_TOOLS = WRITE_TOOLS_ON ? 35 : 24;
 const results = [];   // {phase, name, status: 'OK'|'ERR'|'THREW', note}
 const record = (phase, name, status, note = '') => {
   results.push({ phase, name, status, note });
@@ -89,7 +98,11 @@ async function stdioPhase() {
   await client.connect(transport);
 
   const { tools } = await client.listTools();
-  record('stdio', 'listTools', tools.length >= 28 ? 'OK' : 'ERR', `${tools.length} tools`);
+  record('stdio', 'listTools', tools.length === EXPECTED_TOOLS ? 'OK' : 'ERR',
+         `${tools.length} tools (expected ${EXPECTED_TOOLS})`);
+  const writeTools = tools.filter(t => t.annotations?.readOnlyHint === false).map(t => t.name);
+  record('stdio', 'writeToolsListed', writeTools.length === (WRITE_TOOLS_ON ? 11 : 0) ? 'OK' : 'ERR',
+         writeTools.length ? writeTools.join(',') : 'none');
   try {
     const r = await client.listResources();
     record('stdio', 'listResources', r.resources.length === 5 ? 'OK' : 'ERR', `${r.resources.length} resources`);
@@ -139,7 +152,7 @@ async function stdioPhase() {
   // ---- target-list CRUD on a disposable object ----
   const MUTATING = new Set(['create_target_list', 'update_target_list', 'delete_target_list',
                             'pause_rule', 'resume_rule']);
-  try {
+  if (WRITE_TOOLS_ON) try {
     const { res, payload } = await call('create_target_list', {
       name: 'mcp-refresh-functional-test', targets: ['example.com'], category: 'edu',
       owner: 'global',
@@ -163,7 +176,7 @@ async function stdioPhase() {
   } catch (e) { record('stdio', 'target_list_crud', 'THREW', e.message); }
 
   // ---- pause/resume: error-path only (never touch real rules) ----
-  for (const name of ['pause_rule', 'resume_rule']) {
+  for (const name of WRITE_TOOLS_ON ? ['pause_rule', 'resume_rule'] : []) {
     try {
       const { res, payload } = await call(name, { id: '00000000-0000-0000-0000-000000000000', rule_id: '00000000-0000-0000-0000-000000000000' });
       // a graceful structured error is the EXPECTED outcome here
@@ -175,6 +188,10 @@ async function stdioPhase() {
   // ---- every remaining tool, live ----
   for (const tool of tools) {
     if (MUTATING.has(tool.name)) continue;                     // handled above
+    if (tool.annotations?.readOnlyHint === false) {            // never write live
+      record('stdio', tool.name, 'OK', 'write tool: not called live');
+      continue;
+    }
     if (['get_boxes', 'get_active_alarms', 'get_network_rules', 'get_device_status'].includes(tool.name)) {
       record('stdio', tool.name, 'OK', 'seeded earlier');
       continue;
@@ -223,7 +240,7 @@ async function httpPhase() {
     const [c1, c2] = await Promise.all([mkClient('s1'), mkClient('s2')]);
     record('http', 'concurrent_connect', 'OK', 'two sessions initialized');
     const [t1, t2] = await Promise.all([c1.listTools(), c2.listTools()]);
-    record('http', 'listTools_x2', (t1.tools.length >= 28 && t2.tools.length >= 28) ? 'OK' : 'ERR',
+    record('http', 'listTools_x2', (t1.tools.length === EXPECTED_TOOLS && t2.tools.length === EXPECTED_TOOLS) ? 'OK' : 'ERR',
            `${t1.tools.length}/${t2.tools.length}`);
     const [r1, r2] = await Promise.all([
       c1.callTool({ name: 'get_boxes', arguments: {} }),
@@ -236,7 +253,7 @@ async function httpPhase() {
     // session 3 connects AFTER a close -- exercises cleanup handlers
     const c3 = await mkClient('s3');
     const t3 = await c3.listTools();
-    record('http', 'connect_after_close', t3.tools.length >= 28 ? 'OK' : 'ERR', `${t3.tools.length} tools`);
+    record('http', 'connect_after_close', t3.tools.length === EXPECTED_TOOLS ? 'OK' : 'ERR', `${t3.tools.length} tools`);
     await c2.close(); await c3.close();
   } finally {
     server.kill('SIGTERM');

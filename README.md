@@ -5,13 +5,13 @@
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@amittell/firewalla-mcp-server/badge" alt="Glama MCP Server" />
 </a>
 
-A Model Context Protocol (MCP) server that provides real-time access to Firewalla firewall data through 29 specialized tools, compatible with any MCP client.
+A Model Context Protocol (MCP) server that provides real-time access to Firewalla firewall data through 24 read-only tools, plus 11 opt-in write tools, compatible with any MCP client.
 
 ## Why Firewalla MCP Server?
 
 ### Simple Network Security Integration
-- **29 Tools** for network monitoring and analysis
-- **24 Direct API Endpoints** + **5 Convenience Wrappers**
+- **24 read-only tools** for network monitoring and analysis: **19 Direct API Endpoints** + **5 Convenience Wrappers**
+- **11 write tools**, off unless `FIREWALLA_ENABLE_WRITE_TOOLS=true`, so by default nothing can change your box
 - **Advanced Search** with query syntax and filters
 - **Clean, Verified Architecture** with corrected API schemas
 
@@ -20,8 +20,8 @@ A Model Context Protocol (MCP) server that provides real-time access to Firewall
 - **Real-time Firewall Data**: Query security alerts, network flows, and device status  
 - **Security Analysis**: Get insights on threats, blocked attacks, and network anomalies  
 - **Bandwidth Monitoring**: Track top bandwidth consumers and usage patterns  
-- **Rule Management**: View and temporarily pause firewall rules  
-- **Target Lists**: Manage custom security target lists and categories
+- **Rule Management**: View firewall rules; with the write tools, create, pause, resume and delete them  
+- **Target Lists**: View target lists; with the write tools, create, update and delete them
 - **Search Tools**: Query syntax with filters and logical operators
 
 ## Client Setup Guides
@@ -172,6 +172,9 @@ FIREWALLA_MSP_ID=yourdomain.firewalla.net
 
 # Optional - default box for single-box operations, without filtering queries
 # FIREWALLA_DEFAULT_BOX_ID=your_box_gid_here
+
+# Optional - register the 11 write tools (default: off, read-only)
+# FIREWALLA_ENABLE_WRITE_TOOLS=true
 ```
 
 **Getting Your Credentials:**
@@ -180,7 +183,7 @@ FIREWALLA_MSP_ID=yourdomain.firewalla.net
 3. Generate an access token in API settings
 4. (Optional) Find your Box GID in device settings to filter queries to a specific box, or retrieve available boxes using the `get_boxes` tool
 
-**Box ID is optional.** Without `FIREWALLA_BOX_ID`, queries cover every box on the account. The few operations that act on one box (`get_specific_alarm`, `archive_alarm`, `mute_alarm`, `create_rule`, `rename_device`) take a `gid` argument, and without one they use `FIREWALLA_BOX_ID`, then `FIREWALLA_DEFAULT_BOX_ID`, then the account's only box. On an account with several boxes and none of those set, `get_specific_alarm`, `archive_alarm` and `mute_alarm` check each box, and `create_rule` and `rename_device` refuse and list the boxes.
+**Box ID is optional.** Without `FIREWALLA_BOX_ID`, queries cover every box on the account. The few operations that act on one box (`get_specific_alarm`, `archive_alarm`, `mute_alarm`, `delete_alarm`, `create_rule`, `rename_device`) take a `gid` argument, and without one they use `FIREWALLA_BOX_ID`, then `FIREWALLA_DEFAULT_BOX_ID`, then the account's only box. On an account with several boxes and none of those set, `get_specific_alarm`, `archive_alarm`, `mute_alarm` and `delete_alarm` check each box, and `create_rule` and `rename_device` refuse and list the boxes.
 
 #### Transport Configuration
 
@@ -405,53 +408,56 @@ If responses are slow:
 2. Use more specific time ranges
 3. Check your network connection to the MSP API
 
-## Available Tools (29 total)
+## Available Tools (24 read-only, 11 opt-in write tools)
 
 ### Core Tools
 - **Security**: Get alarms, analyze threats
 - **Network**: Monitor traffic flows, track bandwidth usage
 - **Devices**: Check device status, find offline devices
-- **Rules**: Manage firewall rules, pause/resume rules
+- **Rules**: View firewall rules and their summary
 - **Search**: Advanced search across all data types
 - **Analytics**: Statistics, trends, and geographic analysis
-- **Target Management**: Create, update, and delete security target lists
+- **Target Lists**: View security target lists
 
 ### Quick Reference
 ```
 Security: get_active_alarms, get_specific_alarm
 Network: get_flow_data, get_recent_flow_activity, get_bandwidth_usage
 Devices: get_device_status, get_offline_devices, get_boxes
-Rules: get_network_rules, get_network_rules_summary, pause_rule, resume_rule
-Target lists: get_target_lists, get_specific_target_list, create_target_list, update_target_list, delete_target_list
+Rules: get_network_rules, get_network_rules_summary
+Target lists: get_target_lists, get_specific_target_list
 Search: search_flows, search_alarms, search_rules, search_devices, search_target_lists
 Analytics: get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_insights, get_flow_trends, get_alarm_trends, get_rule_trends
-Write (opt-in): create_rule, delete_rule, rename_device, archive_alarm, mute_alarm
+Write (opt-in): create_rule, delete_rule, pause_rule, resume_rule, create_target_list, update_target_list, delete_target_list, rename_device, archive_alarm, mute_alarm, delete_alarm
 ```
 
 ### Write tools (opt-in)
 
-`create_rule`, `delete_rule`, `rename_device`, `archive_alarm` and `mute_alarm` change rules, device names and alarms on your box, so they are off by default. Set `FIREWALLA_ENABLE_WRITE_TOOLS=true` to register them. MCP clients that honor tool annotations can ask before calling them; see [Tool annotations](#tool-annotations).
+Every tool that changes something is off by default, so the server is read-only unless you turn them on. Set `FIREWALLA_ENABLE_WRITE_TOOLS=true` to register the 11 write tools: `create_rule`, `delete_rule`, `pause_rule` and `resume_rule` (rules), `create_target_list`, `update_target_list` and `delete_target_list` (target lists), `rename_device` (devices), and `archive_alarm`, `mute_alarm` and `delete_alarm` (alarms). Without it, calling one answers "Unknown tool" and sends nothing. MCP clients that honor tool annotations can ask before calling them; see [Tool annotations](#tool-annotations).
+
+Up to 1.5.0, `pause_rule`, `resume_rule` and the three target-list tools were always registered. If you use them, set `FIREWALLA_ENABLE_WRITE_TOOLS=true`.
 
 IDs that go into a request path (`id`, `rule_id`, `alarm_id`, `gid`, `device_id`) are checked before anything is sent. One holding `/`, a backslash, `?`, `#`, `%`, whitespace or a control character, or that is `.` or `..`, is refused as a validation error naming the argument. Rule IDs such as `<box gid>:<n>`, MAC device IDs and `ovpn:` device IDs are accepted.
 
 `create_rule` and `rename_device` act on one box: `gid`, else `FIREWALLA_BOX_ID` or `FIREWALLA_DEFAULT_BOX_ID`, else the account's only box. On a multi-box account with none of those, they refuse without writing anything, because the MSP API applies a rule with no `gid` to every box in the account, including boxes added later. `delete_rule` needs MSP 2.11.0 or later.
 
-`archive_alarm` and `mute_alarm` need MSP 2.11.0 or later. `archive_alarm` takes an alarm out of the active alarms and does nothing else: future matching traffic can still raise new alarms. `mute_alarm` archives the alarm and has the box create a lasting silence exception. Its `target_type` says what is silenced: `alarmType` every future alarm of that alarm's type, whatever the destination; `domain` a domain and its subdomains; `ip` one address. Its `scope_type` says for which devices: `all` of them, or the one device, group, user or network named by `scope_value`. The mute is checked against the documented request model before anything is sent, and this server has no tool to remove the exception afterwards. Alarm IDs are per box, and the same ID can name different alarms on different boxes: both tools use the alarm's `gid`, else `FIREWALLA_BOX_ID`, else check each box, and they refuse when several boxes have that alarm ID and none of them is `FIREWALLA_DEFAULT_BOX_ID`. Both read the alarm before writing, so a wrong ID fails without changing anything.
+`archive_alarm` and `mute_alarm` need MSP 2.11.0 or later. `archive_alarm` takes an alarm out of the active alarms and does nothing else: future matching traffic can still raise new alarms. `mute_alarm` archives the alarm and has the box create a lasting silence exception. Its `target_type` says what is silenced: `alarmType` every future alarm of that alarm's type, whatever the destination; `domain` a domain and its subdomains; `ip` one address. Its `scope_type` says for which devices: `all` of them, or the one device, group, user or network named by `scope_value`. The mute is checked against the documented request model before anything is sent, and this server has no tool to remove the exception afterwards. `delete_alarm` deletes the alarm for good (measured on 2026-09-26: the alarm was gone afterwards); use `archive_alarm` to keep it among the archived alarms. Alarm IDs are per box, and the same ID can name different alarms on different boxes: all three tools use the alarm's `gid`, else `FIREWALLA_BOX_ID`, else check each box, and they refuse when several boxes have that alarm ID and none of them is `FIREWALLA_DEFAULT_BOX_ID`. All three read the alarm before writing, so a wrong ID fails without changing anything.
 
 ### Tool annotations
 
-Every tool carries MCP tool annotations: a `title`, `readOnlyHint`, and `openWorldHint: true`, since each one calls the Firewalla MSP API. All `get_*` and `search_*` tools are read-only. The tools that change state have `readOnlyHint: false`:
+Every tool carries MCP tool annotations: a `title`, `readOnlyHint`, and `openWorldHint: true`, since each one calls the Firewalla MSP API. All `get_*` and `search_*` tools are read-only. The tools that change state have `readOnlyHint: false`, and all of them need `FIREWALLA_ENABLE_WRITE_TOOLS=true`:
 
-| Tool | `destructiveHint` | `idempotentHint` | Needs `FIREWALLA_ENABLE_WRITE_TOOLS` |
-|---|---|---|---|
-| `pause_rule`, `resume_rule` | false | true | no |
-| `create_target_list` | false | false | no |
-| `update_target_list`, `delete_target_list` | true | true | no |
-| `create_rule` | true | false | yes |
-| `delete_rule` | true | true | yes |
-| `rename_device` | false | true | yes |
-| `archive_alarm` | false | true | yes |
-| `mute_alarm` | true | false | yes |
+| Tool | `destructiveHint` | `idempotentHint` |
+|---|---|---|
+| `pause_rule`, `resume_rule` | false | true |
+| `create_target_list` | false | false |
+| `update_target_list`, `delete_target_list` | true | true |
+| `create_rule` | true | false |
+| `delete_rule` | true | true |
+| `rename_device` | false | true |
+| `archive_alarm` | false | true |
+| `mute_alarm` | true | false |
+| `delete_alarm` | true | true |
 
 `pause_rule` and `resume_rule` check the rule's status first and change nothing when it is already paused or active. Clients that honor annotations can ask before calling any tool that is not read-only.
 
@@ -554,7 +560,7 @@ See [SECURITY.md](SECURITY.md) to report a vulnerability. For the HTTP transport
 - **Geographic Data**: IP geolocation is enriched by the MCP server and includes country, city, and risk scores when available.
 
 ### API Limitations
-- **Alarm Deletion**: The `delete_alarm` tool may not actually delete alarms even though the Firewalla API returns a success response. This appears to be a limitation of the MSP API where delete operations return `{"message": "success", "success": true}` but the alarm remains in the system. This may be due to permission restrictions or API design.
+- **Alarm Deletion**: In July 2025 the MSP API answered `DELETE /v2/alarms/{gid}/{aid}` with `{"message": "success", "success": true}` and kept the alarm, so `delete_alarm` was withdrawn. Measured again on 2026-09-26, the same request deleted the alarm (a GET of it then answered 404, and the archived alarm count fell by one), and `delete_alarm` is back as an opt-in write tool.
 
 ## Troubleshooting
 

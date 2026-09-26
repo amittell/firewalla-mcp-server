@@ -135,7 +135,7 @@ In Cursor, activate Claude Code and test:
 
 ## Key Benefits
 
-- **29 specialized security tools** integrated into your IDE
+- **24 read-only security tools** integrated into your IDE, plus 11 write tools with `FIREWALLA_ENABLE_WRITE_TOOLS=true`
 - **Real-time threat monitoring** while developing
 - **Geographic security analysis** for global deployments
 - **Advanced search capabilities** with natural language queries

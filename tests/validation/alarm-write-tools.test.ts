@@ -1,8 +1,15 @@
 /**
- * archive_alarm and mute_alarm: the requests they send, how they pick the box
- * (alarm IDs are per box), the mute body checks that refuse before anything is
- * sent, their schemas, and the FIREWALLA_ENABLE_WRITE_TOOLS opt-in. The HTTP
- * layer is stubbed; nothing leaves the process.
+ * archive_alarm, mute_alarm and delete_alarm: the requests they send, how
+ * they pick the box (alarm IDs are per box), the mute body checks that refuse
+ * before anything is sent, their schemas, and the FIREWALLA_ENABLE_WRITE_TOOLS
+ * opt-in. The HTTP layer is stubbed; nothing leaves the process.
+ *
+ * Measured on a live MSP account on 2026-09-26, on the oldest archived alarm:
+ * GET /v2/alarms/{gid}/{aid} answered 200, DELETE of the same path 200
+ * {"message":"success","success":true}, and a GET afterwards 404 (still 404
+ * 65 s later); the account's archived alarms (groupBy=box on status:2) went
+ * from 861 to 860. In July 2025 the same DELETE answered success without
+ * deleting.
  *
  * Measured on a live MSP account on 2026-09-25 (error paths only, no real
  * alarm touched): POST /v2/alarms/{gid}/999999999/mute with
@@ -21,6 +28,7 @@ import {
 } from '../../src/firewalla/client.js';
 import {
   ArchiveAlarmHandler,
+  DeleteAlarmHandler,
   MuteAlarmHandler,
 } from '../../src/tools/handlers/alarm-actions.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
@@ -57,6 +65,7 @@ function makeClient({
   alarms = {},
   failingBoxes = [],
   post,
+  del,
 }: {
   boxId?: string;
   defaultBoxId?: string;
@@ -66,6 +75,8 @@ function makeClient({
   failingBoxes?: string[];
   /** replaces the POST answer */
   post?: () => Promise<unknown>;
+  /** replaces the DELETE answer */
+  del?: () => Promise<unknown>;
 } = {}) {
   const client = new FirewallaClient({
     mspToken: 'test-token',
@@ -107,6 +118,10 @@ function makeClient({
       if (method === 'POST') {
         return post ? post() : {};
       }
+      if (method === 'DELETE') {
+        // The answer measured on 2026-09-26
+        return del ? del() : { message: 'success', success: true };
+      }
       throw new Error(`unexpected ${method} ${endpoint}`);
     }
   );
@@ -120,6 +135,18 @@ const calls = (request: jest.Mock) =>
 const posts = (request: jest.Mock) =>
   request.mock.calls
     .filter(([method]) => method === 'POST')
+    .map(([method, endpoint, params, body, cacheable]) => ({
+      method,
+      endpoint,
+      params,
+      body,
+      cacheable,
+    }));
+
+/** Every request that is not a GET */
+const writes = (request: jest.Mock) =>
+  request.mock.calls
+    .filter(([method]) => method !== 'GET')
     .map(([method, endpoint, params, body, cacheable]) => ({
       method,
       endpoint,
@@ -580,6 +607,184 @@ describe('mute_alarm tool', () => {
   });
 });
 
+describe('deleteAlarm', () => {
+  it('reads the alarm, then sends DELETE /v2/alarms/{gid}/{aid} once, uncached', async () => {
+    const { client, request } = makeClient({ alarms: { [BOX_A]: ['42'] } });
+    const result = await client.deleteAlarm('42', BOX_A);
+    expect(calls(request)).toEqual([
+      `GET /v2/alarms/${BOX_A}/42`,
+      `DELETE /v2/alarms/${BOX_A}/42`,
+    ]);
+    expect(writes(request)).toEqual([
+      {
+        method: 'DELETE',
+        endpoint: `/v2/alarms/${BOX_A}/42`,
+        params: undefined,
+        body: undefined,
+        cacheable: false,
+      },
+    ]);
+    expect(result).toMatchObject({
+      gid: BOX_A,
+      aid: '42',
+      response: { message: 'success', success: true },
+    });
+  });
+
+  it('sends no DELETE for an alarm that is not there, so a second delete changes nothing', async () => {
+    const { client, request } = makeClient();
+    const error = await client.deleteAlarm('42', BOX_A).catch(e => e);
+    expect(error).toBeInstanceOf(AlarmNotFoundError);
+    expect(writes(request)).toEqual([]);
+  });
+
+  it('finds the box the same way archiveAlarm does', async () => {
+    const { client, request } = makeClient({
+      alarms: { [BOX_A]: ['42'], [BOX_B]: ['42'] },
+    });
+    await expect(client.deleteAlarm('42')).rejects.toBeInstanceOf(
+      BoxSelectionError
+    );
+    expect(writes(request)).toEqual([]);
+
+    const single = makeClient({ alarms: { [BOX_B]: ['42'] } });
+    await single.client.deleteAlarm(42);
+    expect(calls(single.request)).toEqual([
+      'GET /v2/boxes',
+      `GET /v2/alarms/${BOX_A}/42`,
+      `GET /v2/alarms/${BOX_B}/42`,
+      `DELETE /v2/alarms/${BOX_B}/42`,
+    ]);
+
+    const preferred = makeClient({
+      defaultBoxId: BOX_B,
+      alarms: { [BOX_A]: ['42'], [BOX_B]: ['42'] },
+    });
+    await preferred.client.deleteAlarm('42');
+    expect(writes(preferred.request).map(call => call.endpoint)).toEqual([
+      `/v2/alarms/${BOX_B}/42`,
+    ]);
+
+    const configured = makeClient({
+      boxId: BOX_A,
+      alarms: { [BOX_A]: ['42'] },
+    });
+    await configured.client.deleteAlarm('42');
+    expect(calls(configured.request)).toEqual([
+      `GET /v2/alarms/${BOX_A}/42`,
+      `DELETE /v2/alarms/${BOX_A}/42`,
+    ]);
+  });
+
+  it.each([['abc'], ['0'], [''], ['1/../2']])(
+    'refuses the aid %j without sending anything',
+    async aid => {
+      const { client, request } = makeClient({ alarms: { [BOX_A]: ['42'] } });
+      await expect(client.deleteAlarm(aid, BOX_A)).rejects.toThrow(
+        /Invalid alarm ID/
+      );
+      expect(request).not.toHaveBeenCalled();
+    }
+  );
+
+  it('says the outcome is unknown when the DELETE gets no HTTP status, and does not retry', async () => {
+    const { client, request } = makeClient({
+      alarms: { [BOX_A]: ['42'] },
+      del: async () => {
+        throw new Error('API Error (unknown): timeout of 30000ms exceeded');
+      },
+    });
+    await expect(client.deleteAlarm('42', BOX_A)).rejects.toThrow(
+      /may or may not have been deleted/
+    );
+    expect(writes(request)).toHaveLength(1);
+  });
+
+  it('explains a 404 on the DELETE after the alarm was read', async () => {
+    const { client } = makeClient({
+      alarms: { [BOX_A]: ['42'] },
+      del: async () => {
+        throw new Error('Resource not found: /v2/alarms/x/42 does not exist');
+      },
+    });
+    await expect(client.deleteAlarm('42', BOX_A)).rejects.toThrow(
+      /DELETE .* returned 404 although GET returned the alarm just before/
+    );
+  });
+
+  it('drops cached alarm reads after deleting', async () => {
+    const { client } = makeClient({ alarms: { [BOX_A]: ['42'] } });
+    const cache: Map<string, unknown> = (client as any).cache;
+    const expires = Date.now() + 60000;
+    cache.set('fw:all-boxes:GET:_v2_alarms:abc', { data: {}, expires });
+    cache.set('fw:all-boxes:GET:_v2_rules:ghi', { data: {}, expires });
+    await client.deleteAlarm('42', BOX_A);
+    expect([...cache.keys()]).toEqual(['fw:all-boxes:GET:_v2_rules:ghi']);
+  });
+});
+
+describe('delete_alarm tool', () => {
+  it('deletes and reports which alarm it deleted', async () => {
+    const { client, request } = makeClient({ alarms: { [BOX_B]: ['42'] } });
+    const res = await new DeleteAlarmHandler().execute(
+      { alarm_id: 42, gid: BOX_B },
+      client
+    );
+    expect(res.isError).toBeFalsy();
+    const { data } = parse(res);
+    expect(data).toMatchObject({
+      deleted: true,
+      alarm_id: '42',
+      gid: BOX_B,
+      alarm: { aid: 42, type: 8, status_before: 1 },
+      api_response: { message: 'success', success: true },
+    });
+    expect(writes(request).map(call => `${call.method} ${call.endpoint}`)).toEqual([
+      `DELETE /v2/alarms/${BOX_B}/42`,
+    ]);
+  });
+
+  it('refuses on an ambiguous aid and deletes nothing', async () => {
+    const { client, request } = makeClient({
+      alarms: { [BOX_A]: ['42'], [BOX_B]: ['42'] },
+    });
+    const res = await new DeleteAlarmHandler().execute({ alarm_id: '42' }, client);
+    expect(res.isError).toBe(true);
+    const body = parse(res);
+    expect(body.message).toBe('No single box to delete the alarm on');
+    expect(body.errorType).toBe('validation_error');
+    expect(writes(request)).toEqual([]);
+  });
+
+  it('reports a missing alarm and deletes nothing', async () => {
+    const { client, request } = makeClient();
+    const res = await new DeleteAlarmHandler().execute(
+      { alarm_id: '42', gid: BOX_A },
+      client
+    );
+    expect(res.isError).toBe(true);
+    expect(parse(res).message).toBe(`Alarm 42 not found on box ${BOX_A}`);
+    expect(writes(request)).toEqual([]);
+  });
+
+  it.each([
+    [{}],
+    [{ alarm_id: 'abc' }],
+    [{ alarm_id: -3 }],
+    [{ alarm_id: '42', gid: 'not a gid' }],
+    [{ alarm_id: '42', gid: `x/../../rules/${BOX_A}:1` }],
+    [{ alarm_id: '42', gid: '..' }],
+  ])('rejects %j locally without any request', async args => {
+    const { client, request } = makeClient({ alarms: { [BOX_A]: ['42'] } });
+    const res = await new DeleteAlarmHandler().execute(args as any, client);
+    expect(res.isError).toBe(true);
+    const body = parse(res);
+    expect(body.message).toBe('Parameter validation failed');
+    expect(body.errorType).toBe('validation_error');
+    expect(request).not.toHaveBeenCalled();
+  });
+});
+
 /** The ListTools entry for a tool in src/server.ts, as plain data */
 function toolSchema(tool: string): any {
   const file = path.join(process.cwd(), 'src', 'server.ts');
@@ -622,7 +827,23 @@ function toolSchema(tool: string): any {
   return found;
 }
 
-describe('archive_alarm and mute_alarm schemas', () => {
+describe('alarm write tool schemas', () => {
+  it('delete_alarm is a destructive, idempotent write that points to archive_alarm', () => {
+    const schema = toolSchema('delete_alarm');
+    expect(schema.annotations).toEqual({
+      title: 'Delete Alarm',
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    });
+    expect(schema.description).toContain('cannot be undone');
+    expect(schema.description).toContain('archive_alarm is the reversible option');
+    expect(schema.description).toBe(new DeleteAlarmHandler().description);
+    expect(schema.inputSchema.properties.alarm_id.type).toEqual(['string', 'number']);
+    expect(schema.inputSchema.required).toEqual(['alarm_id']);
+  });
+
   it('archive_alarm is a non-destructive, idempotent write', () => {
     const schema = toolSchema('archive_alarm');
     expect(schema.annotations).toEqual({
@@ -660,18 +881,21 @@ describe('archive_alarm and mute_alarm schemas', () => {
   });
 });
 
-describe('FIREWALLA_ENABLE_WRITE_TOOLS gates archive_alarm and mute_alarm', () => {
+describe('FIREWALLA_ENABLE_WRITE_TOOLS gates the alarm write tools', () => {
+  const ALARM_WRITES = ['archive_alarm', 'mute_alarm', 'delete_alarm'];
+
   it('lists them as write tools, so ListTools hides them when disabled', () => {
-    expect(isWriteTool('archive_alarm')).toBe(true);
-    expect(isWriteTool('mute_alarm')).toBe(true);
+    for (const name of ALARM_WRITES) {
+      expect([name, isWriteTool(name)]).toEqual([name, true]);
+    }
   });
 
   it('registers them only when enabled', () => {
     const off = new ToolRegistry({ enableWriteTools: false }).getToolNames();
     const on = new ToolRegistry({ enableWriteTools: true }).getToolNames();
-    expect(off).not.toContain('archive_alarm');
-    expect(off).not.toContain('mute_alarm');
-    expect(on).toContain('archive_alarm');
-    expect(on).toContain('mute_alarm');
+    for (const name of ALARM_WRITES) {
+      expect(off).not.toContain(name);
+      expect(on).toContain(name);
+    }
   });
 });

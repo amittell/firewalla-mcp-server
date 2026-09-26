@@ -16,25 +16,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Model Context Protocol (MCP) server that provides Claude with access to Firewalla firewall data. Features a **29-tool architecture** with advanced search capabilities.
+A Model Context Protocol (MCP) server that provides Claude with access to Firewalla firewall data: **24 read-only tools** by default, plus **11 opt-in write tools**, with advanced search capabilities. By default no tool changes anything.
 
 ## Architecture Overview
 
-### 29-Tool Architecture
-- **24 Direct API Tools**: Mapping to Firewalla MSP API endpoints
-- **5 Convenience Wrapper Tools**: Client-side enhanced functionality for common operations
-- **CRUD Operations**: Create, Read, Update, Delete operations for all resources
+### 24 Read-Only Tools, 11 Opt-In Write Tools
+- **19 Direct API Tools**: Mapping to Firewalla MSP API endpoints (read-only)
+- **5 Convenience Wrapper Tools**: Client-side enhanced functionality for common operations (read-only)
+- **11 Write Tools**: Create, update, pause and delete operations, registered only with `FIREWALLA_ENABLE_WRITE_TOOLS=true`
 
-### Tool Categories (29 total)
+### Tool Categories (24 read-only)
 The groups are each handler's `category`, which `ToolRegistry.getToolsByCategory()` filters on.
 - **Security (2 tools)**: get_active_alarms, get_specific_alarm
 - **Network (3 tools)**: get_flow_data, get_bandwidth_usage, get_offline_devices
 - **Device (1 tool)**: get_device_status
-- **Rules (9 tools)**: get_network_rules, get_network_rules_summary, pause_rule, resume_rule, get_target_lists, get_specific_target_list, create_target_list, update_target_list, delete_target_list
+- **Rules (4 tools)**: get_network_rules, get_network_rules_summary, get_target_lists, get_specific_target_list
 - **Search (5 tools)**: search_flows, search_alarms, search_rules, search_devices, search_target_lists
 - **Analytics (9 tools)**: get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_recent_flow_activity, get_flow_insights, get_flow_trends, get_alarm_trends, get_rule_trends
 - **Convenience wrappers** (client-side processing; counted in the groups above): get_bandwidth_usage, get_offline_devices, search_devices, search_target_lists, get_network_rules_summary
-- **Write tools (5, opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)**: create_rule and delete_rule (rules), rename_device (device), archive_alarm and mute_alarm (security). Not counted in the 29.
+- **Write tools (11, opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)**: create_rule, delete_rule, pause_rule, resume_rule, create_target_list, update_target_list and delete_target_list (rules), rename_device (device), archive_alarm, mute_alarm and delete_alarm (security). Not counted in the 24.
 
 ## Development Commands
 
@@ -156,9 +156,11 @@ DEBUG=firewalla:*                         # Debug logging; see Debugging below (
 ```
 
 ### Tool Configuration
-- The 29 tools are always registered. There is no switch to disable one.
+- The 24 read-only tools are always registered. There is no switch to disable one.
 - `FIREWALLA_ENABLE_WRITE_TOOLS=true` (any case) also registers and lists the
-  write tools named in `WRITE_TOOL_NAMES` in `src/config/write-tools.ts`.
+  11 write tools named in `WRITE_TOOL_NAMES` in `src/config/write-tools.ts`.
+  The registry and ListTools both filter on that list. Without the setting, a
+  call to a write tool answers "Unknown tool" and sends nothing.
 - There is no read-only mode, safe mode or cache switch: `MCP_WAVE0_ENABLED`,
   `MCP_READ_ONLY_MODE`, `MCP_DISABLED_TOOLS`, `MCP_CACHE_ENABLED` and
   `MCP_DEBUG_MODE` are not read by the code. `API_RATE_LIMIT` (1-1000, default
@@ -317,17 +319,18 @@ This file contains the complete, official Firewalla MSP API v2 documentation inc
 
 ## Architecture Notes
 
-### Clean 29-Tool Design
-- **Direct Implementation**: All 29 tools defined directly in TOOL_SCHEMAS
+### Tool Design
+- **Direct Implementation**: All 35 tools (24 read-only, 11 write) defined directly in TOOL_SCHEMAS
 - **API Mapping**: Mapping to all Firewalla MSP API endpoints
 - **Type Safety**: Full TypeScript implementation with strict validation
 - **Registry Pattern**: Clean tool registration with handler-based architecture
 
 ### Key Files
-- `src/server.ts`: Main MCP server with 29-tool TOOL_SCHEMAS architecture
-- `src/tools/registry.ts`: Tool registry with 29 handler definitions
-- `src/firewalla/client.ts`: Firewalla API client with caching
+- `src/server.ts`: Main MCP server with the TOOL_SCHEMAS list (35 tools; the 11 write tools listed only when enabled)
+- `src/tools/registry.ts`: Tool registry with 35 handler definitions (24 registered by default)
+- `src/config/write-tools.ts`: `WRITE_TOOL_NAMES`, the tools gated by `FIREWALLA_ENABLE_WRITE_TOOLS`
 - `src/validation/path-segment.ts`: the check every ID goes through before it is put into a request path
+- `src/firewalla/client.ts`: Firewalla API client with caching
 - `src/validation/`: Parameter validation and error handling
 
 ### Data Flow
@@ -406,14 +409,14 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
 
 ### Tool Architecture Requirements
 - All tools must be defined in TOOL_SCHEMAS with proper schema
-- New tools that change state go in `WRITE_TOOL_NAMES`, so they stay off by default
-  (`pause_rule`, `resume_rule` and the target-list create/update/delete tools
-  predate the switch and are always registered)
+- Every tool that changes state goes in `WRITE_TOOL_NAMES`, so it stays off by
+  default; `tests/server/tool-annotations.test.ts` fails when a tool with
+  `readOnlyHint: false` is missing from the list
 - An ID that goes into a request path goes through `pathSegment()` in
   `src/validation/path-segment.ts` (and the handler checks it with
   `ParameterValidator.validatePathSegment`), never straight into a template string
 - Include proper input validation and error handling
-- Follow the 29-tool architecture constraints
+- Keep the default server read-only: 24 tools, none with `readOnlyHint: false`
 - Implement direct API execution in the server
 
 ## Performance Considerations
@@ -462,7 +465,7 @@ DEBUG=cache npm run mcp:start
 ## Version Information
 
 - **Version**: see `package.json`; `CHANGELOG.md` has the history
-- **Architecture**: 29-tool design (24 direct API + 5 convenience), plus 5 opt-in write tools
+- **Architecture**: 24 read-only tools (19 direct API + 5 convenience), plus 11 opt-in write tools
 - **API Support**: Firewalla MSP API v2 with CRUD operations
 - **Node.js**: Requires 18+
 - **TypeScript**: ES2020 target with strict mode
