@@ -299,6 +299,28 @@ function selectTrendDays(
 }
 
 /**
+ * How many of `times` fall on each day that starts at `starts` (ascending). A
+ * day runs to the next day's start, and the last one to `now` but for no more
+ * than a day; times outside the days are not counted.
+ */
+function countPerDay(times: number[], starts: number[], now: number): Trend[] {
+  const counts: number[] = new Array(starts.length).fill(0);
+  const last = starts.length - 1;
+  const end = Math.min(now, starts[last] + DAY_SECONDS - 1);
+  for (const ts of times) {
+    if (ts < starts[0] || ts > end) {
+      continue;
+    }
+    let day = last;
+    while (starts[day] > ts) {
+      day--;
+    }
+    counts[day]++;
+  }
+  return starts.map((ts, i) => ({ ts, value: counts[i] }));
+}
+
+/**
  * Query parameters the official docs define for a /v2 GET endpoint; a GET to
  * one of these paths sends no others. Measured 2026-09-25: /v2/devices and
  * /v2/target-lists answer `query`, `limit` and `sortBy` with 200 and ignore
@@ -3429,46 +3451,66 @@ export class FirewallaClient {
   }
 
   /**
-   * Rules created per day from GET /v2/trends/rules. Measured 2026-09-25,
-   * that endpoint answered 400 with an empty body, with and without `group`,
-   * while the alarm and flow trends answered 200. On a 400 the days are
-   * counted from the creation times (`ts`) of the rules GET /v2/rules
-   * returns, per UTC day, and the series says so.
+   * Rules created per day. Without a box in scope, from GET /v2/trends/rules
+   * for every box or the box group. Measured 2026-09-25, that endpoint
+   * answered 400 with an empty body, with and without `group`, while the
+   * alarm and flow trends answered 200; on a 400 each day counts the rules
+   * GET /v2/rules returns whose creation time (`ts`) falls in it
+   * (ruleCreationTrend), and the series says so. The endpoint takes no box,
+   * so with a box in scope (`box`, else FIREWALLA_BOX_ID unless `group` is
+   * given, as in getAlarmTrends) the box's rules are counted that way
+   * without asking it.
+   * @throws {BoxSelectionError} Both box and group are given, or the box is
+   * not a box gid; nothing is requested
    */
   async getRuleTrends(
     period: TrendPeriod = '30d',
-    group?: string
+    group?: string,
+    box?: string
   ): Promise<TrendSeries> {
+    // Checked before any request
+    const gid = this.trendBox(group, box);
     const validated = validTrendPeriod(period);
     const now = Math.floor(Date.now() / 1000);
     const groupId = group?.trim() || undefined;
+    const precedence =
+      groupId && this.config.boxId?.trim()
+        ? ' FIREWALLA_BOX_ID is not applied: an explicit group takes precedence over it.'
+        : '';
     try {
-      let points: Trend[];
-      let source = 'GET /v2/trends/rules';
-      let scope = groupId ? `box group ${groupId}` : 'all boxes';
-      let note: string | undefined;
+      if (gid) {
+        const counted = await this.ruleCreationTrend(now, { box: gid });
+        return selectTrendDays(counted.points, validated, now, {
+          source: 'GET /v2/rules',
+          scope: `box ${gid}`,
+          note: `GET /v2/trends/rules takes no box, so each day counts the rules in GET /v2/rules?query=box.id:${gid} whose creation time (ts) falls in it, ${counted.days} Rules deleted since are not counted.`,
+        });
+      }
+      const scope = groupId ? `box group ${groupId}` : 'all boxes';
       try {
-        points = await this.fetchTrend('rules', groupId);
+        const points = await this.fetchTrend('rules', groupId);
+        return selectTrendDays(points, validated, now, {
+          source: 'GET /v2/trends/rules',
+          scope,
+          note: precedence.trim() || undefined,
+        });
       } catch (error) {
         if (!(
           error instanceof Error && error.message.startsWith('Bad Request')
         )) {
           throw error;
         }
-        points = await this.ruleCreationsPerDay(now, groupId);
-        source = 'GET /v2/rules';
-        if (!groupId && this.config.boxId) {
-          scope = `box ${this.config.boxId}`;
-        }
-        note =
-          'GET /v2/trends/rules answered 400, so each day counts the rules in GET /v2/rules whose creation time (ts) falls in it, by UTC day. Rules deleted since are not counted.';
-        if (groupId && this.config.boxId) {
-          note +=
-            ' FIREWALLA_BOX_ID is not applied: an explicit group takes precedence over it.';
-        }
       }
-      return selectTrendDays(points, validated, now, { source, scope, note });
+      const counted = await this.ruleCreationTrend(now, { group: groupId });
+      return selectTrendDays(counted.points, validated, now, {
+        source: 'GET /v2/rules',
+        scope,
+        note: `GET /v2/trends/rules answered 400, so each day counts the rules in GET /v2/rules whose creation time (ts) falls in it, ${counted.days} Rules deleted since are not counted.${precedence}`,
+      });
     } catch (error) {
+      if (error instanceof BoxSelectionError) {
+        throw error;
+      }
       logger.error(
         'Error in getRuleTrends:',
         error instanceof Error ? error : new Error(String(error))
@@ -3480,47 +3522,74 @@ export class FirewallaClient {
   }
 
   /**
-   * Rules created on each of the last 30 UTC days (today last), from the
-   * creation times of the rules GET /v2/rules returns. With `group`, only
-   * rules for that box group or for a box in it; without, scoped to
-   * FIREWALLA_BOX_ID. An explicit group takes precedence over
-   * FIREWALLA_BOX_ID, as in getAlarmTrends: filtering the group's rules to
-   * one box as well counted only that box while the scope said the group.
+   * Rules created on each day of the account's 30-day series, from the
+   * creation times of the rules GET /v2/rules returns. The days are those of
+   * GET /v2/trends/alarms (read unscoped, as boxDailyTrend reads them), so
+   * they start at the account's local midnight like the alarm and flow
+   * trends' days; only if that read fails are they the last 30 UTC days.
+   * With `box`, the read is scoped with box.id. With `group`, only rules for
+   * that box group or for a box in it are counted; FIREWALLA_BOX_ID is not
+   * applied (getRuleTrends resolves the box, and an explicit group takes
+   * precedence over it). `days` says, as a sentence tail, which days these
+   * are.
    */
-  private async ruleCreationsPerDay(
+  private async ruleCreationTrend(
     now: number,
-    group?: string
-  ): Promise<Trend[]> {
-    const query = group ? undefined : this.addBoxFilter(undefined);
-    const [rules, boxes] = await Promise.all([
+    scope: { box?: string; group?: string }
+  ): Promise<{ points: Trend[]; days: string }> {
+    const query = scope.box
+      ? this.addBoxFilter(undefined, scope.box)
+      : undefined;
+    const [rules, boxes, accountDays] = await Promise.all([
       this.request<{ results?: Array<Record<string, unknown>> }>(
         'GET',
         '/v2/rules',
         query ? { query } : {}
       ),
-      group ? this.getBoxes(group) : Promise.resolve(undefined),
+      scope.group ? this.getBoxes(scope.group) : Promise.resolve(undefined),
+      // The account's day starts, or why they could not be read: a failed
+      // read falls back to UTC days rather than failing the series
+      this.fetchTrend('alarms').then(
+        (points): number[] | string =>
+          points.length > 0
+            ? points.map(point => point.ts)
+            : 'it returned no points',
+        (error: unknown): string =>
+          error instanceof Error ? error.message : String(error)
+      ),
     ]);
     const groupGids = boxes
       ? new Set(boxes.results.map(box => box.gid))
       : undefined;
-    const first =
-      Math.floor(now / DAY_SECONDS) * DAY_SECONDS -
-      (TREND_DAYS - 1) * DAY_SECONDS;
-    const counts: number[] = new Array(TREND_DAYS).fill(0);
+    const times: number[] = [];
     for (const rule of Array.isArray(rules?.results) ? rules.results : []) {
       if (
         groupGids &&
-        rule.group !== group &&
+        rule.group !== scope.group &&
         !groupGids.has(String(rule.gid))
       ) {
         continue;
       }
       const ts = Number(rule.ts);
-      if (Number.isFinite(ts) && ts >= first && ts <= now) {
-        counts[Math.floor((ts - first) / DAY_SECONDS)]++;
+      if (Number.isFinite(ts)) {
+        times.push(ts);
       }
     }
-    return counts.map((value, i) => ({ ts: first + i * DAY_SECONDS, value }));
+    if (typeof accountDays !== 'string') {
+      return {
+        points: countPerDay(times, accountDays, now),
+        days: "on the account's days as GET /v2/trends/alarms gives them (1 more request).",
+      };
+    }
+    const utcToday = Math.floor(now / DAY_SECONDS) * DAY_SECONDS;
+    const starts = Array.from(
+      { length: TREND_DAYS },
+      (_, i) => utcToday - (TREND_DAYS - 1 - i) * DAY_SECONDS
+    );
+    return {
+      points: countPerDay(times, starts, now),
+      days: `by UTC day: GET /v2/trends/alarms, read for the account's days, failed (${accountDays}).`,
+    };
   }
 
   /**

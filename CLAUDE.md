@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ALWAYS use box-specific routing: `/v2/boxes/{box_gid}/{resource}`
 - NEVER use paths without the `/v2/` prefix (`/stats/simple`, `/trends/flows` do not exist); the documented forms are `/v2/stats/simple` and `/v2/trends/{flows,alarms,rules}`
 - `/v2/alarms` and `/v2/flows` refuse `limit` over 500 (HTTP 400); page with `next_cursor`
-- Trends come from `/v2/trends/{alarms,flows}` (daily points; `/v2/trends/rules` answers 400, so rule trends count rule creation times); bandwidth is aggregated on the client from flows
+- Trends come from `/v2/trends/{alarms,flows}` (daily points; `/v2/trends/rules` answers 400, so rule trends count rule creation times on the days of `/v2/trends/alarms`); bandwidth is aggregated on the client from flows
 
 ## Project Overview
 

@@ -1236,7 +1236,7 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
 export class GetRuleTrendsHandler extends BaseToolHandler {
   name = 'get_rule_trends';
   description =
-    'Rules created per day for the last 30 days, from GET /v2/trends/rules; period and group work as in get_alarm_trends. When that endpoint answers 400 (it did when measured), each UTC day counts the rules in GET /v2/rules created on it, scoped to FIREWALLA_BOX_ID when set and no group is given (rules deleted since are not counted), and the response says so.';
+    'Rules created per day for the last 30 days, one point per day, the last being today so far; period (default 30d) returns the days that overlap it. Without a box it is GET /v2/trends/rules covering every box, or the box group. When that endpoint answers 400 (it did when measured), each day counts the rules in GET /v2/rules created on it, on the days of GET /v2/trends/alarms (UTC days if that read fails): 3 requests, 4 with group. That endpoint takes no box, so with box (else FIREWALLA_BOX_ID, unless group is given) the rules of the box are counted that way: 2 requests. Rules deleted since are not counted, and the response says how the days were counted. box and group cannot be combined.';
   category = 'analytics' as const;
 
   constructor() {
@@ -1259,6 +1259,8 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
   ): Promise<ToolResponse> {
     try {
       const { errors, period, group } = validateTrendArgs(_args);
+      const boxCheck = validateTrendBox(_args, group);
+      errors.push(...boxCheck.errors);
       if (errors.length > 0) {
         return this.createErrorResponse(
           'Parameter validation failed',
@@ -1270,7 +1272,7 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
 
       const startTime = Date.now();
       const series = await withToolTimeout(
-        async () => firewalla.getRuleTrends(period, group),
+        async () => firewalla.getRuleTrends(period, group, boxCheck.box),
         this.name
       );
       const points = Array.isArray(series?.results) ? series.results : [];
@@ -1297,6 +1299,16 @@ export class GetRuleTrendsHandler extends BaseToolHandler {
         executionTimeMs: Date.now() - startTime,
       });
     } catch (error: unknown) {
+      // A malformed FIREWALLA_BOX_ID, refused before any request
+      const selectionError = boxSelectionError(error);
+      if (selectionError) {
+        return this.createErrorResponse(
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          [selectionError.message]
+        );
+      }
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       return this.createErrorResponse(

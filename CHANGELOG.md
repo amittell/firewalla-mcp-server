@@ -104,6 +104,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of one. An explicit `group` takes precedence over
   `FIREWALLA_BOX_ID`: the tool then reads the group's `GET /v2/trends/alarms`
   as before, and its note says `FIREWALLA_BOX_ID` was not applied.
+- With a box in scope (`box`, else `FIREWALLA_BOX_ID` unless `group` is
+  given), `get_rule_trends` no longer asks `GET /v2/trends/rules`, which
+  takes no box: had it answered, the tool would have reported its points for
+  every box as `all boxes` although `FIREWALLA_BOX_ID` was set. It counts
+  the box's rules from `GET /v2/rules`, as it did when that endpoint
+  answered 400, in 2 requests as before.
 
 ### Added
 
@@ -132,6 +138,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   1 request plus 1 per day, 31 for `30d`, of the 100 requests the API allows
   per 5 minutes. It is read-only, so the server lists 29 tools by default and
   34 with the write tools.
+- `get_rule_trends` takes an optional `box` (a box gid), else
+  `FIREWALLA_BOX_ID` unless `group` is given, as `get_alarm_trends` does, and
+  counts that box's rules from `GET /v2/rules?query=box.id:<gid>`. A `box`
+  that is not a box gid, and `box` with `group`, are refused before any
+  request.
 
 ### Changed
 
@@ -148,6 +159,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   group. When `GET /v2/trends/rules` answers 400 and the tool counts the
   rules in `GET /v2/rules`, an explicit `group` now takes precedence over
   `FIREWALLA_BOX_ID`, as in `get_alarm_trends`, and the note says so.
+- When `GET /v2/trends/rules` answers 400, `get_rule_trends` counted rule
+  creation times per UTC day, while the alarm and flow trends' days start at
+  the account's local midnight. Its points did not line up with theirs, and
+  a rule and an alarm of the same local day could land on different days.
+  It now takes the days from `GET /v2/trends/alarms` (one more request) and
+  counts each rule on the day its creation time falls in, and the note says
+  so. Only if that read fails or returns no points are the days UTC days,
+  and the note says why.
+
 ## [1.5.0] - 2026-09-25
 
 ### Added
