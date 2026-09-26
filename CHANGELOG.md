@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `pause_rule`, `resume_rule` and `delete_rule` read the rule once, by id,
+  before acting. They also listed every rule first, through a 30-second
+  existence cache that writes never cleared, so each call cost an extra
+  request.
+
 ## [1.5.0] - 2026-09-25
 
 ### Added

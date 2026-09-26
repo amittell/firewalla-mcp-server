@@ -200,6 +200,14 @@ describe('pause_rule', () => {
     expect(res.isError).toBe(true);
     expect(posts()).toEqual([]);
   });
+
+  it('reads the rule once, by id, before pausing', async () => {
+    const { client } = makeClient(BOX);
+    await new PauseRuleHandler().execute({ rule_id: RULE }, client);
+    expect(mockApi.get).toHaveBeenCalledTimes(1);
+    expect(mockApi.get.mock.calls[0][1].params.query).toContain(`id:${RULE}`);
+    expect(posts()).toHaveLength(1);
+  });
 });
 
 describe('resume_rule', () => {

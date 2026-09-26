@@ -27,7 +27,7 @@ import {
   createTimeoutErrorResponse,
   TimeoutError,
 } from '../../utils/timeout-manager.js';
-import { validateRuleExists } from '../../validation/resource-validator.js';
+import { ResourceValidator } from '../../validation/resource-validator.js';
 import { logger } from '../../monitoring/logger.js';
 import {
   targetListEntries,
@@ -55,25 +55,11 @@ async function checkRuleStatus(
   firewalla: FirewallaClient
 ): Promise<RuleStatusInfo> {
   try {
-    // First check if the rule exists
-    const existenceCheck = await validateRuleExists(
-      ruleId,
-      toolName,
-      firewalla
-    );
-    if (!existenceCheck.exists) {
-      return {
-        exists: false,
-        status: 'not_found',
-        isPaused: false,
-        isActive: false,
-        errorResponse: existenceCheck.errorResponse,
-      };
-    }
-
-    // Get the specific rule details to check its status. `id:` is not a
-    // documented rule qualifier; on 2026-09-25 the API answered it with just
-    // that rule, but match on id rather than trusting the first result.
+    // One request answers both whether the rule exists and its status. `id:`
+    // is not a documented rule qualifier; on 2026-09-25 the API answered it
+    // with just that rule, but match on id rather than trusting the first
+    // result. The client drops its cached rules after any write, so a rule
+    // deleted or paused a moment ago reads as it is now.
     const rulesResponse = await firewalla.getNetworkRules(`id:${ruleId}`, 1);
     const rules = (
       SafeAccess.getNestedValue(rulesResponse, 'results', []) as any[]
@@ -85,11 +71,10 @@ async function checkRuleStatus(
         status: 'not_found',
         isPaused: false,
         isActive: false,
-        errorResponse: createErrorResponse(
+        errorResponse: ResourceValidator.createResourceNotFoundResponse(
           toolName,
-          'Rule not found in current rule set',
-          ErrorType.API_ERROR,
-          { rule_id: ruleId }
+          'rule',
+          ruleId
         ),
       };
     }
