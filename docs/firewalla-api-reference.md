@@ -1295,7 +1295,7 @@ The official docs do not cover the points below. Each was measured against a liv
 - `AND`, or no operator, becomes a space: `type:1 AND status:1` is sent as `type:1 status:1`.
 - `OR` between values of one field becomes a comma list, also inside parentheses: `region:US OR region:CN` is sent as `region:US,CN`, and `status:blocked AND (region:US OR region:CN)` as `status:blocked region:US,CN`.
 - `NOT` becomes the `-` prefix: `region:US AND NOT protocol:tcp` is sent as `region:US -protocol:tcp`. `NOT` of an `OR` excludes each term: `NOT (region:US OR region:CN)` is sent as `-region:US -region:CN` (this repeated exclusion is not yet measured). The grammar has no exclusion of numeric terms, so `NOT total:>1MB` is sent as `total:<=1MB`.
-- A lower and an upper bound on one field become one range: `ts:>=a AND ts:<=b` is sent as `ts:a-b` (a range includes its ends).
+- A lower and an upper bound on one field become one range: `ts:>=a AND ts:<=b` is sent as `ts:a-b` (measured equal: 197 alarms either way). A range includes its ends, so a pair with a strict bound (`ts:>a AND ts:<b`) is refused, with the inclusive range as the suggestion.
 - A query that has no form in this grammar is refused with a validation error before anything is sent, naming the part and, where there are some, the searches to run instead: an `OR` between different fields (`region:US OR category:social`), `NOT` over an `AND`, the exclusion of free text, a wildcard or a range, two other conditions on one field (the API would read them as either), and a `box.id` other than the box the request is scoped to (the API would read the two as either box).
 - Lowercase `and`, `or` and `not` stay words, as the API reads them. A query already in this form (spaces, commas, `-`) is sent unchanged.
 
