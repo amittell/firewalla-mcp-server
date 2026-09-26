@@ -108,7 +108,7 @@ export function exitWhenStdioCloses(
   for (const output of outputs) {
     // `on`, not `once`: logging during the shutdown can hit the same closed
     // pipe again, and that error must not crash the process either
-    output.on('error', (error: NodeJS.ErrnoException) => {
+    output.on('error', (error: Error & { code?: string }) => {
       shutdown(
         error?.code === 'EPIPE' || error?.code === 'ERR_STREAM_DESTROYED'
           ? 'output closed'
