@@ -207,9 +207,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   comma lists the same way (`name:nas,laptop`, `ip:192.168.1.0/24,10.0.0.0/8`);
   it compared them as one value too.
 - A comma list may hold wildcards (`name:*Block*,Ads`,
-  `domain:*.a.example,*.b.example`). The shared query validator refused one
+  `domain:*apple*,*google*`). The shared query validator refused one
   as an invalid wildcard pattern, although an `OR` of wildcard values is sent
   as that list.
+- The `search_flows` query description, the flow example in validation
+  errors and the refusal of an excluded wildcard gave `domain:*.example.com`
+  and `-domain:ads.example.com` as forms to use. A flow's `domain` is its root
+  domain (measured 2026-09-26: `domain:*.apple.com` matched 0 flows where
+  `domain:apple.com` matched 1,283 in the same hour), so those found nothing.
+  They give `domain:example.com`, which covers a site's subdomains, and
+  `domain:*word*` for any domain containing a word.
 - `search_devices` matches `ip:` against an IPv4 CIDR block
   (`ip:192.168.1.0/24`); it compared the block as text and found no device.
   An `ip:` value with a `/` that is not an IPv4 block (`ip:fe80::/64`, a

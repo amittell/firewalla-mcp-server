@@ -764,7 +764,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes. Supported fields: protocol:tcp/udp, direction:inbound/outbound/local, status:blocked/ok, total:>1MB (download + upload in B/KB/MB/GB/TB), download:>10MB, upload:>10MB, domain:*.example.com, region:US (country code), category:social/games/porn/etc, box.id:box_gid, device.ip:192.168.*, source.ip:*, destination.ip:*, ts:>1h. Examples: "region:US AND protocol:tcp", "status:blocked AND region:CN", "category:social OR category:games"',
+                    'Search query using Firewalla syntax. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes. Supported fields: protocol:tcp/udp, direction:inbound/outbound/local, status:blocked/ok, total:>1MB (download + upload in B/KB/MB/GB/TB), download:>10MB, upload:>10MB, domain:example.com (the root domain: *.example.com matches nothing and *word* matches any domain containing word), region:US (country code), category:social/games/porn/etc, box.id:box_gid, device.ip:192.168.*, source.ip:*, destination.ip:*, ts:>1h. Examples: "region:US AND protocol:tcp", "status:blocked AND region:CN", "category:social OR category:games"',
                 },
                 groupBy: {
                   type: 'string',

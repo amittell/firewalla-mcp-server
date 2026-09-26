@@ -43,8 +43,8 @@ describe('toMspQuery', () => {
     ['category:social OR category:games', 'category:social,games'],
     ['region:US,CN OR region:GB', 'region:US,CN,GB'],
     [
-      'domain:*.facebook.com OR domain:*.instagram.com',
-      'domain:*.facebook.com,*.instagram.com',
+      'domain:*facebook* OR domain:*instagram*',
+      'domain:*facebook*,*instagram*',
     ],
     // Parentheses group; AND distributes over a same-field OR
     [

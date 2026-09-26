@@ -48,7 +48,7 @@ const body = (res: any) => JSON.parse(res.content[0].text);
 describe('the query validator', () => {
   it.each([
     'name:*Block*,Ads',
-    'domain:*.a.example,*.b.example',
+    'domain:*apple*,*google*',
     'ip:192.168.1.*,10.*',
   ])('accepts the wildcard comma list %s', query => {
     expect(validateFirewallaQuerySyntax(query).errors).toEqual([]);
@@ -121,15 +121,15 @@ describe('search_devices comma lists', () => {
 });
 
 describe('search_flows wildcard comma lists', () => {
-  it('sends domain:*.a.example,*.b.example as it is', async () => {
+  it('sends domain:*apple*,*google* as it is', async () => {
     const { client, get } = makeClient({ count: 0, results: [] });
     const res = await new SearchFlowsHandler().execute(
-      { query: 'domain:*.a.example,*.b.example', limit: 10 },
+      { query: 'domain:*apple*,*google*', limit: 10 },
       client
     );
     expect(res.isError).toBeFalsy();
     expect(get.mock.calls[0][1].params.query).toBe(
-      'domain:*.a.example,*.b.example'
+      'domain:*apple*,*google*'
     );
   });
 });

@@ -229,7 +229,7 @@ region:US AND NOT protocol:tcp     # -> region:US -protocol:tcp
 # Wildcards and patterns
 device.ip:192.168.*
 name:*laptop*                 # search_devices
-domain:*.facebook.com         # flows
+domain:facebook.com           # flows: the root domain, so *.facebook.com matches nothing
 
 # Geographic filtering (flows and alarms)
 region:US                     # United States
