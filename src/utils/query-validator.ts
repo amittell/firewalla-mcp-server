@@ -187,6 +187,37 @@ function tokenizeQuery(query: string): QueryToken[] {
   return tokens;
 }
 
+// A quoted value, whose commas and spaces are its own
+const QUOTED = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/;
+
+/**
+ * A comma list broken by a space, such as `online:true, false` or
+ * `region:US ,CN`, as the query with the spaces around its commas removed;
+ * undefined when there is none. A space ends a term, so `online:true, false`
+ * is `online:true,` and then the word `false`: search_devices and
+ * search_target_lists read that word as free text and found nothing
+ * (`category:social, games`), and the check on online: reported 'true,'.
+ */
+function withoutSpacedCommas(query: string): string | undefined {
+  const parts = query.split(QUOTED);
+  // Even parts are outside quotes; a quoted value stands in as `q`, so
+  // `notes:a,"b c"` keeps its comma next to a value
+  const unquoted = parts
+    .map((part, index) => (index % 2 === 0 ? part : 'q'))
+    .join('');
+  const trailing = /(?:^|[\s(])-?[A-Za-z_][\w.]*:\S*,(?=\s|$)/.test(unquoted);
+  const leading = /(?:^|\s),/.test(unquoted);
+  if (!trailing && !leading) {
+    return undefined;
+  }
+  return parts
+    .map((part, index) =>
+      index % 2 === 0 ? part.replace(/\s*,\s*/g, ',') : part
+    )
+    .join('')
+    .trim();
+}
+
 /**
  * Validate Firewalla query syntax
  */
@@ -217,6 +248,13 @@ export function validateFirewallaQuerySyntax(query: string): ValidationResult {
   if (bracketRange) {
     errors.push(
       `Range syntax '${bracketRange.part}' is not supported: write field:low-high${bracketRange.replacement ? ` (${bracketRange.replacement})` : ''}; a range includes both ends`
+    );
+  }
+
+  const spaced = withoutSpacedCommas(trimmedQuery);
+  if (spaced !== undefined) {
+    errors.push(
+      `A comma list takes no spaces around its commas: a space ends the term, so the rest would be read as another term. Write "${spaced}".`
     );
   }
 

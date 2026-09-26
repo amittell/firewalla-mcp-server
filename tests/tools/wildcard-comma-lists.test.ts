@@ -190,6 +190,64 @@ describe('search_devices online:', () => {
   });
 });
 
+describe('a comma list with a space in it', () => {
+  // A space ends a term, so online:true, false was online:true, and the
+  // word false: the check on online: reported 'true,', and in
+  // search_devices and search_target_lists the word was free text, so
+  // name:nas, laptop and category:social, games found nothing
+  const DEVICES = [
+    { id: 'aa:bb:cc:dd:ee:01', gid: 'box-a', name: 'nas', ip: '192.168.1.20', online: true },
+    { id: 'aa:bb:cc:dd:ee:02', gid: 'box-a', name: 'laptop', ip: '192.168.2.30', online: false },
+  ];
+
+  async function refusal(handler: any, query: string, data: unknown) {
+    const { client, get } = makeClient(data);
+    const res = await handler.execute({ query, limit: 10 }, client);
+    return { res, error: body(res), get };
+  }
+
+  it.each([
+    ['online:true, false', 'online:true,false'],
+    ['online:true ,false', 'online:true,false'],
+    ['name:nas, laptop', 'name:nas,laptop'],
+    ['name:nas AND online:true , false', 'name:nas AND online:true,false'],
+  ])('search_devices refuses %s, suggesting %s', async (query, suggested) => {
+    const { res, error, get } = await refusal(new SearchDevicesHandler(), query, DEVICES);
+    expect(res.isError).toBe(true);
+    expect(error.errorType).toBe('validation_error');
+    expect(error.validation_errors.join(' ')).toContain(
+      `A comma list takes no spaces around its commas`
+    );
+    expect(error.validation_errors.join(' ')).toContain(`Write "${suggested}"`);
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('search_target_lists refuses category:social, games', async () => {
+    const { res, error, get } = await refusal(new SearchTargetListsHandler(), 'category:social, games', []);
+    expect(res.isError).toBe(true);
+    expect(error.errorType).toBe('validation_error');
+    expect(error.validation_errors.join(' ')).toContain('Write "category:social,games"');
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('search_flows refuses region:US, CN before a request', async () => {
+    const { res, error, get } = await refusal(new SearchFlowsHandler(), 'region:US, CN', { count: 0, results: [] });
+    expect(res.isError).toBe(true);
+    expect(error.errorType).toBe('validation_error');
+    expect(error.validation_errors.join(' ')).toContain('Write "region:US,CN"');
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'name:"nas, laptop"',
+    'notes:consoles,"ad servers"',
+    'online:true,false',
+    'nas, laptop',
+  ])('accepts %s', query => {
+    expect(validateFirewallaQuerySyntax(query).errors).toEqual([]);
+  });
+});
+
 describe('an unclosed quote in a comma list', () => {
   // The parser's tokenizer throws on an unclosed quote; parse() catches it
   // and returns it in errors[], and search_devices refuses the query
