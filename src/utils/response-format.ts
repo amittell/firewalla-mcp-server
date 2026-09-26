@@ -248,9 +248,14 @@ function cellText(value: unknown, state: RenderState): string {
   return escapeCell(text);
 }
 
-/** Table-cell text with pipes escaped and newlines as <br> */
+/**
+ * Table-cell text with backslashes and pipes escaped and newlines as <br>.
+ * Backslashes go first: a value holding `\|` would otherwise become `\\|`,
+ * which some renderers split into two cells and others show without the
+ * backslash
+ */
 export function escapeCell(text: string): string {
-  return oneLine(text.replace(/\|/g, '\\|'));
+  return oneLine(text.replace(/\\/g, '\\\\').replace(/\|/g, '\\|'));
 }
 
 /**

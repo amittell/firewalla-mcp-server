@@ -76,6 +76,11 @@ describe('escapeCell', () => {
   it('escapes pipes and puts newlines on one line', () => {
     expect(escapeCell('a|b\nc\r\nd\re')).toBe('a\\|b<br>c<br>d<br>e');
   });
+
+  it('escapes backslashes before pipes, so a backslash-pipe stays in one cell', () => {
+    expect(escapeCell('a\\|b')).toBe('a\\\\\\|b');
+    expect(escapeCell('C:\\Users')).toBe('C:\\\\Users');
+  });
 });
 
 describe('renderMarkdown', () => {
