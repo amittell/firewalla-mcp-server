@@ -189,7 +189,7 @@ const TREND_DAYS = 30;
 
 /**
  * Per-day count requests a box-scoped trend has in flight at once. A 30-day
- * series is 31 requests, and the account allows about 100 a minute.
+ * series is 31 requests, and the API allows 100 per 5-minute window.
  */
 const BOX_TREND_CONCURRENCY = 4;
 
