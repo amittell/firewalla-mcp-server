@@ -19,6 +19,34 @@
 import { validateCountryCodes } from './geographic.js';
 import { MspQueryError, mspTerms, mspTermText } from './msp-query.js';
 
+/**
+ * search_flows' `geographic_filters`, as its schema in src/server.ts lists
+ * them and geographicFiltersToMspQuery takes them. `countries` and
+ * `regions` (ISO 3166-1 alpha-2 codes) are sent together as one `region:`
+ * comma list. The yes-or-no filters have no API equivalent and are taken
+ * only as false, which asks for nothing; true is refused. The other names
+ * the tools once took (continents, cities, asns, hosting_providers,
+ * min_risk_score) are refused, and are read only from the unchecked
+ * argument at the validation edge (geographicFiltersToMspQuery takes
+ * `unknown`).
+ */
+export interface FlowGeographicFilters {
+  /** ISO 3166-1 alpha-2 country codes, any of which may match */
+  countries?: string[];
+  /** Country codes too, merged with countries */
+  regions?: string[];
+  /** Only false: there is no VPN qualifier */
+  exclude_vpn?: false;
+  /** Only false: there is no cloud-provider qualifier */
+  exclude_cloud?: false;
+  /** Only false: there is no country-risk qualifier */
+  high_risk_countries?: false;
+  /** Only false: there is no hosting-provider qualifier */
+  exclude_known_providers?: false;
+  /** Only false: the flow search has no threat analysis */
+  threat_analysis?: false;
+}
+
 /** The filters that map to the documented `region` qualifier */
 const REGION_FILTERS = new Set(['countries', 'regions']);
 

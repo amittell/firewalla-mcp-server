@@ -806,26 +806,31 @@ export class FirewallaMCPServer {
                     },
                     exclude_vpn: {
                       type: 'boolean',
+                      enum: [false],
                       description:
                         'Only false, which asks for nothing: the MSP API has no qualifier for VPN traffic, so true is refused',
                     },
                     exclude_cloud: {
                       type: 'boolean',
+                      enum: [false],
                       description:
                         'Only false, which asks for nothing: the MSP API has no qualifier for cloud providers, so true is refused',
                     },
                     high_risk_countries: {
                       type: 'boolean',
+                      enum: [false],
                       description:
                         'Only false, which asks for nothing: the MSP API has no qualifier for country risk, so true is refused',
                     },
                     exclude_known_providers: {
                       type: 'boolean',
+                      enum: [false],
                       description:
                         'Only false, which asks for nothing: the MSP API has no qualifier for hosting providers, so true is refused',
                     },
                     threat_analysis: {
                       type: 'boolean',
+                      enum: [false],
                       description:
                         'Only false, which asks for nothing: the flow search has no threat analysis, so true is refused',
                     },

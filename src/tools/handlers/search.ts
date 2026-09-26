@@ -46,6 +46,7 @@ import type { ScoringCorrelationParams } from '../../validation/field-mapper.js'
 import {
   GeographicFilterError,
   geographicFiltersToMspQuery,
+  type FlowGeographicFilters,
 } from '../../utils/geographic-filters.js';
 import { targetListEntryCount } from '../../utils/target-lists.js';
 import { bracketRangeError, findBracketRange } from '../../utils/msp-query.js';
@@ -71,17 +72,7 @@ export interface SearchFlowsArgs extends BaseSearchArgs {
     start?: string;
     end?: string;
   };
-  geographic_filters?: {
-    countries?: string[];
-    continents?: string[];
-    regions?: string[];
-    cities?: string[];
-    asns?: string[];
-    hosting_providers?: string[];
-    exclude_vpn?: boolean;
-    exclude_cloud?: boolean;
-    min_risk_score?: number;
-  };
+  geographic_filters?: FlowGeographicFilters;
   include_analytics?: boolean;
 }
 
@@ -125,7 +116,12 @@ export interface GetCorrelationSuggestionsArgs extends ToolArgs {
   secondary_queries: string[];
 }
 
-export interface SearchAlarmsByGeographyArgs extends ToolArgs {
+// search_alarms_by_geography (not a registered tool) filters alarms on the
+// client, by the names filterByGeography reads, not search_flows' filters
+export interface SearchAlarmsByGeographyArgs extends Omit<
+  ToolArgs,
+  'geographic_filters'
+> {
   query?: string;
   geographic_filters?: {
     countries?: string[];

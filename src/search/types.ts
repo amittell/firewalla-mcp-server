@@ -5,6 +5,7 @@
 
 import type { AlarmGroup, FlowGroup, RulesTextCoverage } from '../types.js';
 import type { PagingCoverage } from '../utils/paging-coverage.js';
+import type { FlowGeographicFilters } from '../utils/geographic-filters.js';
 
 /**
  * Query AST node types for complex search parsing
@@ -104,17 +105,7 @@ export interface SearchParams {
     end?: string;
   };
   force_refresh?: boolean; // Bypass cache for real-time data
-  geographic_filters?: {
-    countries?: string[];
-    continents?: string[];
-    regions?: string[];
-    cities?: string[];
-    asns?: string[];
-    hosting_providers?: string[];
-    exclude_cloud?: boolean;
-    exclude_vpn?: boolean;
-    min_risk_score?: number;
-  };
+  geographic_filters?: FlowGeographicFilters; // Flows: search_flows' geographic filters
   include_analytics?: boolean; // Include geographic analysis in response
   box?: string; // Devices only: box gid to search (default FIREWALLA_BOX_ID)
   owner?: string; // Target lists only: the API's owner filter (global, a box gid, or several)

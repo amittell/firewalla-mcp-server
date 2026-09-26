@@ -83,7 +83,11 @@ describe('search_flows lists geographic_filters', () => {
       'exclude_known_providers',
       'threat_analysis',
     ]) {
-      expect(geographic.properties[flag].type).toBe('boolean');
+      // false is the one value the handler takes
+      expect(geographic.properties[flag]).toMatchObject({
+        type: 'boolean',
+        enum: [false],
+      });
     }
     expect(geographic.description).toContain('region:US,CN');
     expect(geographic.description).toContain('refused');
