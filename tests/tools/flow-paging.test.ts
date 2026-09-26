@@ -15,10 +15,14 @@
  */
 
 import { Buffer } from 'node:buffer';
+import { setTimeout as delay } from 'node:timers/promises';
 import { FirewallaClient } from '../../src/firewalla/client.js';
 import { GetFlowDataHandler } from '../../src/tools/handlers/network.js';
 import { SearchFlowsHandler } from '../../src/tools/handlers/search.js';
-import { StreamingManager } from '../../src/utils/streaming-manager.js';
+import {
+  StreamingManager,
+  StreamingSessionError,
+} from '../../src/utils/streaming-manager.js';
 import { pagingCoverage } from '../../src/utils/paging-coverage.js';
 
 jest.mock('axios', () => {
@@ -53,9 +57,10 @@ interface Call {
 /**
  * A client over the stubbed endpoint. With `repeatCursor`, every page after
  * the first is `pageSize` flows and carries the cursor it was asked with.
+ * With `delayMs`, each answer takes that long, so overlapping calls overlap.
  */
 function makeClient(
-  options: { pageSize?: number; repeatCursor?: boolean } = {}
+  options: { pageSize?: number; repeatCursor?: boolean; delayMs?: number } = {}
 ) {
   const client = new FirewallaClient({
     mspToken: 'test-token',
@@ -71,6 +76,9 @@ function makeClient(
   get.mockReset();
   get.mockImplementation(async (endpoint: string, config: any) => {
     const params = config?.params ?? {};
+    if (options.delayMs) {
+      await delay(options.delayMs);
+    }
     calls.push({
       limit: Number(params.limit),
       cursor: params.cursor,
@@ -217,7 +225,7 @@ describe('get_flow_data streaming sessions', () => {
     const after = page(
       await run({ streaming_session_id: first.sessionId }, client)
     );
-    expect(after.error).toMatch(/is complete/);
+    expect(after.error).toMatch(/is already complete/);
     expect(calls).toHaveLength(2);
   });
 
@@ -231,6 +239,64 @@ describe('get_flow_data streaming sessions', () => {
     expect(page(response).error).toMatch(/not found or expired/);
     expect(response.content[0].text).toContain('nextContinuationToken');
     expect(calls).toHaveLength(0);
+  });
+
+  it('two overlapping continuations get consecutive chunks', async () => {
+    const { client, calls } = makeClient({ delayMs: 5 });
+    const first = page(await run({ limit: 200 }, client));
+    const both = await Promise.all([
+      run({ streaming_session_id: first.sessionId }, client),
+      run({ streaming_session_id: first.sessionId }, client),
+    ]);
+    const chunks = both.map(response => page(response));
+    expect(chunks.map(chunk => chunk.error)).toEqual([undefined, undefined]);
+    // In the order they were asked for
+    expect(chunks.map(chunk => chunk.ids)).toEqual([
+      ids(200, 400),
+      ids(400, 600),
+    ]);
+    expect(calls.map(call => call.cursor)).toEqual([
+      undefined,
+      cursorAt(200),
+      cursorAt(400),
+    ]);
+  });
+
+  it('refuses a streaming_session_id with stream: false, and keeps the session', async () => {
+    const { client, calls } = makeClient();
+    const first = page(await run({ limit: 200 }, client));
+    const refused = await run(
+      { streaming_session_id: first.sessionId, stream: false },
+      client
+    );
+    expect(refused.isError).toBe(true);
+    expect(page(refused).error).toMatch(
+      /streaming_session_id and stream: false conflict/
+    );
+    expect(calls).toHaveLength(1);
+
+    const next = page(
+      await run({ streaming_session_id: first.sessionId }, client)
+    );
+    expect(next.ids).toEqual(ids(200, 400));
+  });
+
+  it('reads a cursor given with a streaming_session_id', async () => {
+    const { client } = makeClient();
+    const first = page(await run({ limit: 200 }, client));
+    const byCursor = page(
+      await run(
+        {
+          limit: 200,
+          streaming_session_id: first.sessionId,
+          cursor: cursorAt(600),
+          stream: false,
+        },
+        client
+      )
+    );
+    expect(byCursor.streaming).toBe(false);
+    expect(byCursor.ids).toEqual(ids(600, 800));
   });
 
   it('a session belongs to the client that started it', async () => {
@@ -430,6 +496,36 @@ describe('StreamingManager', () => {
     expect(operation.mock.calls.map(([params]) => params)).toEqual([
       { query: 'protocol:tcp', limit: 50, cursor: undefined },
       { query: 'protocol:tcp', limit: 50, cursor: 'after-start' },
+    ]);
+    manager.shutdown();
+  });
+
+  it('reads overlapping chunks of a session one after the other', async () => {
+    const manager = new StreamingManager({ chunkSize: 10 });
+    const operation = jest.fn(async (params: any) => {
+      await delay(5);
+      const at = Number(params.cursor ?? 0);
+      return { data: [at], hasMore: at < 20, nextCursor: String(at + 10) };
+    });
+    const { sessionId } = await manager.startStreaming('t', operation, {});
+    const [second, third, fourth] = await Promise.allSettled([
+      manager.continueStreaming(sessionId, operation),
+      manager.continueStreaming(sessionId, operation),
+      manager.continueStreaming(sessionId, operation),
+    ]);
+    expect(second).toMatchObject({ value: { data: [10], chunkId: 2 } });
+    expect(third).toMatchObject({
+      value: { data: [20], chunkId: 3, isFinalChunk: true },
+    });
+    // Queued behind the final chunk
+    expect(fourth.status).toBe('rejected');
+    const reason = (fourth as PromiseRejectedResult).reason;
+    expect(reason).toBeInstanceOf(StreamingSessionError);
+    expect(reason.reason).toBe('complete');
+    expect(operation.mock.calls.map(([params]) => params.cursor)).toEqual([
+      undefined,
+      '10',
+      '20',
     ]);
     manager.shutdown();
   });
