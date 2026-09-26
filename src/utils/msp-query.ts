@@ -326,7 +326,9 @@ function hasWildcard(value: string): boolean {
   return /(^|[^\\])\*/.test(value);
 }
 
-function renderLiteral(literal: Literal): string {
+// Reads only what a Literal and an MspTerm share, so mspTermText passes an
+// MspTerm without a cast
+function renderLiteral(literal: MspTerm): string {
   if (literal.kind === 'text') {
     return literal.values[0];
   }
@@ -1048,7 +1050,7 @@ export function mspTerms(query: string): MspTerm[] {
  * One term as toMspQuery sends it: `-region:US,CN`, `total:>1MB`, a word
  */
 export function mspTermText(term: MspTerm): string {
-  return renderLiteral(term as Literal);
+  return renderLiteral(term);
 }
 
 /**
