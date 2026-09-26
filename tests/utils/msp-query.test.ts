@@ -198,6 +198,13 @@ describe('toMspQuery', () => {
         expect(error.message).toContain('strict bound');
         expect(error.suggestions).toEqual(['ts:1-2']);
       }
+      // The suggestion keeps the query's other terms
+      expect(refusal('ts:>1 AND ts:<2 AND status:blocked').suggestions).toEqual(
+        ['ts:1-2 status:blocked']
+      );
+      expect(
+        refusal('region:US AND total:<50MB AND total:>1MB').suggestions
+      ).toEqual(['region:US total:1MB-50MB']);
     });
 
     it.each([
@@ -261,7 +268,10 @@ describe('suggestions for an OR the API cannot run', () => {
         'region:US device.name:tv',
       ],
     ],
-    ['NOT (action:block AND status:paused)', ['-action:block', '-status:paused']],
+    [
+      'NOT (action:block AND status:paused)',
+      ['-action:block', '-status:paused'],
+    ],
     [
       'type:8 AND NOT (status:1 AND region:US)',
       ['type:8 -status:1', 'type:8 -region:US'],

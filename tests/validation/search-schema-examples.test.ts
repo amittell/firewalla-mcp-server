@@ -241,6 +241,20 @@ describe('search schema fields and examples (#42)', () => {
     }
   );
 
+  it.each(['search_flows', 'search_alarms', 'search_rules'] as const)(
+    '%s refuses a box.id list that adds another box to the one it is scoped to',
+    async tool => {
+      const { request, error } = await runSearch(
+        tool,
+        'box.id:test-box-id OR box.id:other-box'
+      );
+
+      expect(request).not.toHaveBeenCalled();
+      expect(error.errorType).toBe('validation_error');
+      expect(error.message).toContain('scoped to box.id:test-box-id');
+    }
+  );
+
   it('sends an unqualified alarm search term unchanged', async () => {
     const { request, error } = await runSearch('search_alarms', 'porn');
 
