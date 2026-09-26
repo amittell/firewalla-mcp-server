@@ -287,8 +287,10 @@ export function validateFirewallaQuerySyntax(query: string): ValidationResult {
           );
         }
 
-        // Check for common syntax errors
-        if (token.value.includes('*') && !token.value.match(/^[*\w.:-]+$/)) {
+        // Check for common syntax errors. A comma list may hold wildcards
+        // (domain:*.a.example,*.b.example), as toMspQuery sends an OR of
+        // them, and the client-side searches read it as any of its values
+        if (token.value.includes('*') && !token.value.match(/^[*\w.:,-]+$/)) {
           errors.push(
             `Invalid wildcard pattern '${token.value}' at position ${token.position}`
           );
