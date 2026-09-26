@@ -420,6 +420,12 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
 - Include proper input validation and error handling
 - Keep the default server read-only: 24 tools, none with `readOnlyHint: false`
 - Implement direct API execution in the server
+- Do not add `response_format` to a schema or a handler: `src/server.ts`
+  adds it to every listed tool with `readOnlyHint: true`, and the CallTool
+  dispatcher in `src/tools/index.ts` removes it from the arguments before
+  the handler runs and, for `markdown`, renders the handler's JSON success
+  response with `src/utils/response-format.ts`. Handlers return JSON; errors
+  stay JSON
 
 ## Performance Considerations
 
