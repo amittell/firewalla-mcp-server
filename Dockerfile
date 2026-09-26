@@ -57,6 +57,13 @@ USER nodejs
 # Set environment variables
 ENV NODE_ENV=production
 
+# With MCP_TRANSPORT=http the server listens on 127.0.0.1 unless told
+# otherwise, which inside a container no published port (-p 3000:3000)
+# reaches. Listen on every interface of the container instead, and set
+# MCP_HTTP_BEARER_TOKEN whenever the port is reachable from other machines.
+# The default stdio transport ignores this.
+ENV MCP_HTTP_HOST=0.0.0.0
+
 # Note: MCP servers use stdio, not HTTP ports
 # Health check for stdio-based service
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

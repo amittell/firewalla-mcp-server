@@ -105,6 +105,7 @@ docker run -d --name firewalla-mcp \
   -p 3000:3000 \
   -e MCP_TRANSPORT=http \
   -e MCP_HTTP_PORT=3000 \
+  -e MCP_HTTP_BEARER_TOKEN=a_long_random_secret \
   -e FIREWALLA_MSP_TOKEN=your_token \
   -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
   amittell/firewalla-mcp-server
@@ -112,7 +113,8 @@ docker run -d --name firewalla-mcp \
 # Add FIREWALLA_BOX_ID if you want to filter to a specific box
 # -e FIREWALLA_BOX_ID=your_box_gid \
 
-# The server will be accessible at http://localhost:3000/mcp
+# The server will be accessible at http://localhost:3000/mcp, and clients
+# send the header: Authorization: Bearer a_long_random_secret
 
 # Using env file (recommended)
 docker run -d --name firewalla-mcp \
@@ -131,6 +133,11 @@ services:
     environment:
       - MCP_TRANSPORT=http
       - MCP_HTTP_PORT=3000
+      # The image already listens on every interface of the container
+      - MCP_HTTP_HOST=0.0.0.0
+      - MCP_HTTP_BEARER_TOKEN=\${MCP_HTTP_BEARER_TOKEN}
+      # Other containers reach it as http://firewalla-mcp:3000/mcp
+      - MCP_HTTP_ALLOWED_HOSTS=firewalla-mcp
       - FIREWALLA_MSP_TOKEN=\${FIREWALLA_MSP_TOKEN}
       - FIREWALLA_MSP_ID=\${FIREWALLA_MSP_ID}
       # Optional: filter to specific box
@@ -140,6 +147,8 @@ EOF
 
 docker-compose up -d
 ```
+
+The image sets `MCP_HTTP_HOST=0.0.0.0` so that a published port reaches the server. `-p 3000:3000` publishes it on every interface of the Docker host, so anyone on your network can reach it: set `MCP_HTTP_BEARER_TOKEN` (for example `openssl rand -hex 32`) whenever you publish the port, or publish it on this machine only with `-p 127.0.0.1:3000:3000`. The server answers only requests whose `Host` header is `localhost`, `127.0.0.1` or `[::1]`, so a client that connects by another name, such as the host's LAN address or a compose service name, needs that name in `MCP_HTTP_ALLOWED_HOSTS`. See [HTTP transport security](#http-transport-security).
 
 ### Option C: Install from source
 ```bash
@@ -187,7 +196,20 @@ MCP_TRANSPORT=stdio
 MCP_TRANSPORT=http
 MCP_HTTP_PORT=3000          # Default: 3000
 MCP_HTTP_PATH=/mcp          # Default: /mcp
+MCP_HTTP_HOST=127.0.0.1     # Address to listen on. Default: 127.0.0.1 (0.0.0.0 in the Docker image)
+MCP_HTTP_BEARER_TOKEN=      # When set, clients must send Authorization: Bearer <token>
+MCP_HTTP_ALLOWED_HOSTS=     # More Host header names to accept, comma-separated
+MCP_HTTP_ALLOWED_ORIGINS=   # Browser origins to accept, comma-separated, e.g. http://localhost:6274
 ```
+
+<a id="http-transport-security"></a>
+**HTTP transport security**: every request can spend your MSP token, so the HTTP server follows the security rules of the [MCP transport specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports):
+
+- It listens on `127.0.0.1`, this machine only. Set `MCP_HTTP_HOST=0.0.0.0` (or one address) to accept other machines, and set `MCP_HTTP_BEARER_TOKEN` with it: the server logs a warning when it listens beyond loopback without a token.
+- With `MCP_HTTP_BEARER_TOKEN` set, a request without `Authorization: Bearer <token>` gets 401.
+- A request whose `Host` header is not `localhost`, `127.0.0.1`, `[::1]`, the `MCP_HTTP_HOST` address or a name in `MCP_HTTP_ALLOWED_HOSTS` gets 403. This stops DNS rebinding, where a web page points its own domain name at your machine.
+- A request with an `Origin` header, which browsers send, gets 403 unless the origin is in `MCP_HTTP_ALLOWED_ORIGINS`. Non-browser MCP clients send no `Origin` and are not affected. An allowed origin gets CORS headers, so a web page on it can call the server.
+- A request body may be at most 1 MB, and a client has 10 seconds to send the headers and 30 seconds for the whole request.
 
 **When to use HTTP transport:**
 - Running in Docker containers independently

@@ -131,6 +131,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   answer to `initialize`. It goes to stderr through the logger, and stdout
   carries only JSON-RPC. Nothing else in `src/` calls `console.log`,
   `console.info`, `console.debug` or `process.stdout.write`.
+- The HTTP transport answers a request body over 1 MB with 413, and a body
+  that is not JSON with 400 and a JSON-RPC parse error (-32700). Over 1 MB
+  it closed the connection without an answer, and a body that is not JSON
+  got a 500 "Internal server error".
 
 ### Changed
 
@@ -152,6 +156,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every box as `all boxes` although `FIREWALLA_BOX_ID` was set. It counts
   the box's rules from `GET /v2/rules`, as it did when that endpoint
   answered 400, in 2 requests as before.
+- The HTTP transport (`MCP_TRANSPORT=http`) follows the security rules of
+  the MCP transport specification, which says a server MUST validate the
+  Origin header and SHOULD listen only on localhost when it runs locally.
+  It listened on every interface and checked neither, so any web page the
+  user opened could send it requests, directly or by pointing its own DNS
+  name at the user's machine, and spend the MSP token. It now:
+  - listens on 127.0.0.1 unless `MCP_HTTP_HOST` names another address
+    (`0.0.0.0` for every interface);
+  - answers 403 to a request whose `Host` header is not `localhost`,
+    `127.0.0.1`, `[::1]`, the `MCP_HTTP_HOST` address or a name in
+    `MCP_HTTP_ALLOWED_HOSTS`;
+  - answers 403 to a request with an `Origin` header that is not in
+    `MCP_HTTP_ALLOWED_ORIGINS`. A request without `Origin`, which is what
+    non-browser MCP clients send, is served as before;
+  - gives a client 10 s to send the request headers and 30 s for the whole
+    request (Node's defaults are 60 s and 300 s).
+
+  Migration: the Docker image sets `MCP_HTTP_HOST=0.0.0.0`, so
+  `docker run -p 3000:3000 -e MCP_TRANSPORT=http ...` serves
+  http://localhost:3000/mcp as before; set `MCP_HTTP_BEARER_TOKEN` too
+  whenever that port is reachable from other machines. A client that
+  connects by another name, such as a docker-compose service name or the
+  host's LAN address, needs that name in `MCP_HTTP_ALLOWED_HOSTS`. Outside
+  Docker, set `MCP_HTTP_HOST=0.0.0.0` to accept other machines again. To
+  let a web page call the server, add its origin, for example
+  `MCP_HTTP_ALLOWED_ORIGINS=http://localhost:6274`. The idea came from the
+  HTTP hardening in the fork github.com/matesecurityzach/firewalla-mcp-server;
+  this is a separate implementation.
 
 ### Added
 
@@ -196,6 +228,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   counts that box's rules from `GET /v2/rules?query=box.id:<gid>`. A `box`
   that is not a box gid, and `box` with `group`, are refused before any
   request.
+- `MCP_HTTP_BEARER_TOKEN`: when set, the HTTP transport answers 401, with
+  `WWW-Authenticate: Bearer`, to a request without
+  `Authorization: Bearer <token>`. The token is compared in constant time.
+  The server logs a warning when it listens beyond loopback without one.
+- `MCP_HTTP_ALLOWED_ORIGINS` origins get CORS headers, and answers to their
+  preflight requests, so a web page on an allowed origin can call the HTTP
+  transport; before, every preflight got 405.
 
 ### Changed
 

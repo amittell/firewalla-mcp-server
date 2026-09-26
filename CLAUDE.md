@@ -68,6 +68,9 @@ MCP_TRANSPORT=stdio npm run mcp:start
 MCP_TRANSPORT=http MCP_HTTP_PORT=3000 npm run mcp:start
 # Server will be accessible at http://localhost:3000/mcp
 ```
+The HTTP server listens on 127.0.0.1 and checks each request's Host, Origin
+and bearer token before anything else (`src/http-security.ts`, wired in
+`src/http-transport.ts`); see the variables below.
 
 ### Testing
 ```bash
@@ -139,6 +142,10 @@ FIREWALLA_ENABLE_WRITE_TOOLS=false        # "true" registers the write tools (de
 MCP_TRANSPORT=stdio                       # stdio or http (default: stdio)
 MCP_HTTP_PORT=3000                        # HTTP transport port (default: 3000)
 MCP_HTTP_PATH=/mcp                        # HTTP transport path (default: /mcp)
+MCP_HTTP_HOST=127.0.0.1                   # HTTP listen address (default: 127.0.0.1; the Docker image sets 0.0.0.0)
+MCP_HTTP_BEARER_TOKEN=                    # When set, HTTP requests need Authorization: Bearer <token> (else 401)
+MCP_HTTP_ALLOWED_HOSTS=                   # Host header names accepted besides localhost, 127.0.0.1, [::1] and MCP_HTTP_HOST (else 403)
+MCP_HTTP_ALLOWED_ORIGINS=                 # Browser origins accepted; a request with any other Origin gets 403 (default: none)
 MCP_SESSION_IDLE_TIMEOUT_MS=1800000       # HTTP sessions idle this long are closed (default: 30 min)
 API_TIMEOUT=30000                         # API request timeout in ms (default: 30000, 1000-300000)
 CACHE_TTL=300                             # Response cache TTL in seconds (default: 300, 0-3600)
