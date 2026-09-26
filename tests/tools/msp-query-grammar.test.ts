@@ -13,6 +13,8 @@ import {
   SearchFlowsHandler,
   SearchAlarmsHandler,
   SearchRulesHandler,
+  SearchDevicesHandler,
+  SearchTargetListsHandler,
 } from '../../src/tools/handlers/search.js';
 import { GetFlowDataHandler } from '../../src/tools/handlers/network.js';
 import { GetActiveAlarmsHandler } from '../../src/tools/handlers/security.js';
@@ -408,5 +410,49 @@ describe('suggestions name every disjunct', () => {
       'category:social status:blocked',
     ]);
     expect(get).not.toHaveBeenCalled();
+  });
+});
+
+describe('qualifiers and forms the search tools accept', () => {
+  it.each([
+    ['sport:443', 'sport:443'],
+    ['dport:53 AND protocol:udp', 'dport:53 protocol:udp'],
+    ['block:true', 'status:blocked'],
+    ['porn', 'porn'],
+    ['NOT status:blocked', '-status:blocked'],
+  ])('search_flows sends %s as %s', async (query, expected) => {
+    const { client, get } = makeClient();
+    const res = await new SearchFlowsHandler().execute(
+      { query, limit: 10 },
+      client
+    );
+    expect(res.isError).toBeFalsy();
+    expect(sent(get)).toEqual([['/v2/flows', expected]]);
+  });
+
+  it.each([
+    ['device.id:"AA:BB:CC:DD:EE:FF"', 'device.id:"AA:BB:CC:DD:EE:FF"'],
+    ['box.group.id:1 action:block', 'box.group.id:1 action:block'],
+    ['NOT status:paused', '-status:paused'],
+  ])('search_rules sends %s as %s', async (query, expected) => {
+    const { client, get } = makeClient();
+    const res = await new SearchRulesHandler().execute(
+      { query, limit: 10 },
+      client
+    );
+    expect(res.isError).toBeFalsy();
+    expect(sent(get)).toEqual([['/v2/rules', expected]]);
+  });
+
+  it.each([
+    ['search_devices', () => new SearchDevicesHandler(), 'online:true -name:tv'],
+    ['search_devices', () => new SearchDevicesHandler(), 'NOT online:true'],
+    ['search_target_lists', () => new SearchTargetListsHandler(), 'owner:global -category:ad'],
+    ['search_target_lists', () => new SearchTargetListsHandler(), 'NOT category:ad'],
+  ])('%s accepts %s', async (_tool, handler, query) => {
+    const { client, get } = makeClient();
+    get.mockResolvedValue({ status: 200, data: [] });
+    const res = await handler().execute({ query, limit: 10 }, client);
+    expect(res.isError).toBeFalsy();
   });
 });
