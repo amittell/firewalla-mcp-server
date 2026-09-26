@@ -162,7 +162,7 @@ Free text is not sent: `/v2/rules` matched none (measured 2026-09-26: of 98 rule
 | `mac:` | the MAC address, a plain-MAC device id, exactly or with `*` |
 | `id:` | the device id (a MAC address, or `ovpn:` / `wg_peer:` for VPN clients), exactly or with `*` |
 | `mac_vendor:` | vendors containing the value |
-| `online:` | `true` or `false` |
+| `online:` | `true` or `false` (also `yes`/`no` and `1`/`0`), or a comma list of them; any other value is refused |
 | `gid:` | the box gid, exactly or with `*` |
 | `network.name:`, `group.name:` | names containing the value |
 
