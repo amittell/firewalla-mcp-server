@@ -35,7 +35,7 @@ export interface FirewallaConfig {
   defaultBoxId?: string;
   /** API request timeout in milliseconds (default: 30000) */
   apiTimeout: number;
-  /** Maximum number of API requests per minute (default: 100) */
+  /** API_RATE_LIMIT: most API requests the client starts in any 5 minutes (default: 100) */
   rateLimit: number;
   /** Cache time-to-live in seconds (default: 300) */
   cacheTtl: number;

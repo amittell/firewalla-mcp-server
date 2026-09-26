@@ -15,7 +15,7 @@
  * - FIREWALLA_DEFAULT_BOX_ID: Box GID used as the default for single-box operations
  *   only; queries still cover every box
  * - API_TIMEOUT: Request timeout in milliseconds (default: 30000)
- * - API_RATE_LIMIT: Requests per minute limit (default: 100)
+ * - API_RATE_LIMIT: API requests the client starts in any 5 minutes (default: 100)
  * - CACHE_TTL: Cache time-to-live in seconds (default: 300)
  * - DEFAULT_PAGE_SIZE: Default pagination page size (default: 100)
  * - MAX_PAGE_SIZE: Maximum allowed pagination page size (default: 10000)
@@ -77,7 +77,7 @@ export function getConfig(): FirewallaConfig {
     boxId: process.env.FIREWALLA_BOX_ID || undefined,
     defaultBoxId: process.env.FIREWALLA_DEFAULT_BOX_ID || undefined,
     apiTimeout: getOptionalEnvInt('API_TIMEOUT', 30000, 1000, 300000), // 1s to 5min
-    rateLimit: getOptionalEnvInt('API_RATE_LIMIT', 100, 1, 1000), // 1 to 1000 requests per minute
+    rateLimit: getOptionalEnvInt('API_RATE_LIMIT', 100, 1, 1000), // 1 to 1000 requests per 5 minutes
     cacheTtl: getOptionalEnvInt('CACHE_TTL', 300, 0, 3600), // 0s to 1 hour
     defaultPageSize: getOptionalEnvInt('DEFAULT_PAGE_SIZE', 100, 1, 10000), // 1 to 10000 items per page
     maxPageSize: getOptionalEnvInt('MAX_PAGE_SIZE', 10000, 100, 100000), // 100 to 100000 items per page

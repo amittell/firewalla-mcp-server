@@ -165,8 +165,8 @@ enum ErrorType {
   "tool": "search_alarms",
   "errorType": "rate_limit_error",
   "details": {
-    "retryAfter": 60,
-    "rateLimit": "100 requests per minute"
+    "retryAfter": 190,
+    "rateLimit": "100 requests per 5 minutes"
   },
   "timestamp": "2024-01-15T10:30:45Z"
 }

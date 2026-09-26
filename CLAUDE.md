@@ -154,9 +154,10 @@ DEBUG=firewalla:*                         # Debug logging; see Debugging below (
   write tools named in `WRITE_TOOL_NAMES` in `src/config/write-tools.ts`.
 - There is no read-only mode, safe mode or cache switch: `MCP_WAVE0_ENABLED`,
   `MCP_READ_ONLY_MODE`, `MCP_DISABLED_TOOLS`, `MCP_CACHE_ENABLED` and
-  `MCP_DEBUG_MODE` are not read by the code. `API_RATE_LIMIT` is range-checked
-  (1-1000) at startup but not applied. Check that `src/` reads a variable before
-  documenting it.
+  `MCP_DEBUG_MODE` are not read by the code. `API_RATE_LIMIT` (1-1000, default
+  100) is applied: it is how many API requests the client starts in any rolling
+  5 minutes (see Rate Limiting below). Check that `src/` reads a variable
+  before documenting it.
 
 ## Testing Procedures
 
@@ -387,9 +388,30 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
 - Automatic cleanup of expired entries
 
 ### Rate Limiting
-- Built-in protection against Firewalla API limits
-- Intelligent request throttling
-- Retry logic with exponential backoff
+- The MSP API accepts 100 requests per token in each fixed 5-minute window
+  (measured 2026-09-26) and answers 429 over that. `retry-after` (seconds) and
+  `x-ratelimit-reset` (epoch seconds) both give the window's end, up to about
+  300 s away. Successful responses carry no rate-limit headers, so the client
+  counts its own requests.
+- Limiter (`src/firewalla/rate-limit.ts`): at most `API_RATE_LIMIT` requests
+  start in any rolling 300 s, over every request of the one client instance.
+  Cache hits are not counted.
+- A request waits at most 20 s for the rate limit (`RATE_LIMIT_MAX_WAIT_MS`;
+  tool timeouts default to 30 s), in the queue and on 429 pauses together,
+  from when it was first made. Within that it queues first come first served;
+  otherwise it fails at once with a `RateLimitError` saying when capacity
+  returns, in seconds and as a UTC time.
+- On a 429 the client pauses all its requests until `x-ratelimit-reset` when
+  it is epoch seconds within 10 minutes, else for `retry-after` (seconds or an
+  HTTP date), else for 300 s; at least 1 s, at most 10 minutes.
+- Only GETs are retried: at most 2 retries, and only when the pause ends
+  within the request's 20 s, with one stderr line. A POST, PATCH, PUT or
+  DELETE that gets a 429 is not sent again.
+- The error text starts `Rate limit exceeded` (`Rate limit exceeded (HTTP
+  429)` when the API refused the request). `ErrorClassifier` in
+  `src/validation/error-classification.ts` classifies that as a rate-limit
+  error, though nothing in `src/` calls it.
+- Details: "Rate Limiting" in `docs/firewalla-api-reference.md`
 
 ### Monitoring
 ```bash
