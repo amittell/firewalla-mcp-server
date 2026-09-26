@@ -258,7 +258,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   country codes the suggestion is the query with `region:` in their place
   (`status:blocked AND country:CN` suggests `status:blocked region:CN`). The
   field lists accepted these names and the query was sent, and the API
-  answers a qualifier it does not know with no results.
+  answers a qualifier it does not know with no results. A dotted name whose
+  last part is one of them (`remote.country:CN`, `destination.continent:`)
+  is refused too, since dotted names reach the API unchecked, and so is a
+  dotted `region` the API does not document (`destination.region:` on
+  flows); `remote.region:`, the alarm qualifier, is sent as before.
 - `search_devices`, `search_target_lists` and `search_rules` accept free
   text: a query that is only a word or quoted phrase (`nas`, `"living
   room"`), or free text ANDed with other terms (`tiktok AND action:block`).
