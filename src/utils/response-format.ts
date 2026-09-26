@@ -106,7 +106,10 @@ export const MAX_COLUMNS = 8;
 export const MAX_CELL_CHARS = 120;
 /** Items of a list shown in one table cell */
 export const MAX_CELL_ITEMS = 3;
-/** A list of scalars this short, of short items, stays on one bullet line */
+/**
+ * A list of scalars this short (and within maxRows), of short items, stays
+ * on one bullet line
+ */
 const INLINE_LIST_ITEMS = 10;
 const INLINE_ITEM_CHARS = 40;
 
@@ -250,7 +253,10 @@ export function escapeCell(text: string): string {
   return oneLine(text.replace(/\|/g, '\\|'));
 }
 
-/** A record's fields, nested objects flattened to dotted names */
+/**
+ * A record's fields, nested objects flattened to dotted names. An empty
+ * object is a value, like an empty list, so its field is not lost.
+ */
 function flatten(
   record: JsonObject,
   prefix = '',
@@ -258,7 +264,7 @@ function flatten(
 ): Map<string, unknown> {
   for (const [key, value] of Object.entries(record)) {
     const name = prefix ? `${prefix}.${key}` : key;
-    if (isPlainObject(value)) {
+    if (isPlainObject(value) && Object.keys(value).length > 0) {
       flatten(value, name, out);
     } else {
       out.set(name, value);
@@ -272,7 +278,8 @@ function isBlank(value: unknown): boolean {
     value === null ||
     value === undefined ||
     value === '' ||
-    (Array.isArray(value) && value.length === 0)
+    (Array.isArray(value) && value.length === 0) ||
+    (isPlainObject(value) && Object.keys(value).length === 0)
   );
 }
 
@@ -328,7 +335,7 @@ function listLines(
 ): string[] {
   const texts = items.map(bulletText);
   if (
-    texts.length <= INLINE_LIST_ITEMS &&
+    texts.length <= Math.min(INLINE_LIST_ITEMS, state.maxRows) &&
     texts.every(text => text.length <= INLINE_ITEM_CHARS)
   ) {
     return [`${label} ${texts.join(', ')}`];
@@ -373,7 +380,11 @@ function sectionLines(section: Section, state: RenderState): string[] {
     const values = rows.map(row => row.get(column));
     const first = JSON.stringify(values[0]);
     if (values.every(isBlank)) {
-      empty.push(column);
+      // An object empty in some records and not in others is already the
+      // (blank) cells of the fields the others have
+      if (!columns.some(other => other.startsWith(`${column}.`))) {
+        empty.push(column);
+      }
     } else if (
       values.every(value => !isBlank(value) && JSON.stringify(value) === first)
     ) {
