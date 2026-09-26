@@ -41,6 +41,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refused before any request. The client's `getFlowTrends` takes the same
   `box` and counts `status:blocked` flows per day the same way.
 
+### Changed
+
+- With `FIREWALLA_BOX_ID` set, `get_alarm_trends` covers that box instead of
+  every box, and makes 1 request plus 1 per day (31 for the default `30d`)
+  instead of one. An explicit `group` takes precedence over
+  `FIREWALLA_BOX_ID`: the tool then reads the group's `GET /v2/trends/alarms`
+  as before, and its note says `FIREWALLA_BOX_ID` was not applied.
+
+### Fixed
+
+- `get_rule_trends` with a `group` and `FIREWALLA_BOX_ID` set counted only
+  the `FIREWALLA_BOX_ID` box's rules while its `scope` said the whole box
+  group. When `GET /v2/trends/rules` answers 400 and the tool counts the
+  rules in `GET /v2/rules`, an explicit `group` now takes precedence over
+  `FIREWALLA_BOX_ID`, as in `get_alarm_trends`, and the note says so.
 ## [1.5.0] - 2026-09-25
 
 ### Added
