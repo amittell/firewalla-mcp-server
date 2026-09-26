@@ -71,7 +71,9 @@ describe('toMspQuery', () => {
       'status:blocked -region:US -category:ad',
     ],
     ['-(region:US OR region:CN)', '-region:US -region:CN'],
-    // The API cannot exclude a numeric term: the comparison flips
+    // NOT of a comparison is sent as the opposite comparison. The API also
+    // excludes one: measured 2026-09-26, -total:>1MB and total:<=1MB matched
+    // the same 735,778 flows
     ['NOT total:>1MB', 'total:<=1MB'],
     ['-ts:>=1700000000', 'ts:<1700000000'],
     // A lower and an upper bound on one field are one range
