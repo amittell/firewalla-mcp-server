@@ -43,10 +43,14 @@ import { unixToISOStringOrNow } from '../../utils/timestamp.js';
 import { SEARCH_FIELDS, type SearchParams } from '../../search/types.js';
 import type { ScoringCorrelationParams } from '../../validation/field-mapper.js';
 // ResponseStandardizer import removed - using direct response creation
-import { validateCountryCodes } from '../../utils/geographic.js';
+import {
+  GeographicFilterError,
+  geographicFiltersToMspQuery,
+} from '../../utils/geographic-filters.js';
 import { targetListEntryCount } from '../../utils/target-lists.js';
 import { bracketRangeError, findBracketRange } from '../../utils/msp-query.js';
 import { translateToMspQualifiers } from '../../utils/msp-qualifiers.js';
+import { ipv4InCidr, unquoteQueryValue } from '../../search/client-filter.js';
 
 // Base search interface to reduce duplication
 export interface BaseSearchArgs extends ToolArgs {
@@ -443,48 +447,37 @@ export class SearchFlowsHandler extends BaseToolHandler {
       const finalQuery = searchArgs.query;
 
       // ------------------------------------------------------------
-      // Validate geographic_filters if provided
+      // geographic_filters: countries go to the API as region:, the one
+      // geographic flow qualifier it documents; any other filter is refused
+      // here, before a request, as the API would match nothing
       // ------------------------------------------------------------
-      if (searchArgs.geographic_filters !== undefined) {
-        // Validate it's an object
-        if (
-          typeof searchArgs.geographic_filters !== 'object' ||
-          searchArgs.geographic_filters === null
-        ) {
-          return createErrorResponse(
-            this.name,
-            'Invalid geographic_filters parameter',
-            ErrorType.VALIDATION_ERROR,
-            {
-              provided_value: searchArgs.geographic_filters,
-              expected:
-                'object with optional fields: countries, continents, regions, cities, etc.',
-            }
-          );
+      try {
+        geographicFiltersToMspQuery(searchArgs.geographic_filters);
+      } catch (error) {
+        if (!(error instanceof GeographicFilterError)) {
+          throw error;
         }
-
-        // Validate country codes if provided
-        if (
-          searchArgs.geographic_filters.countries &&
-          searchArgs.geographic_filters.countries.length > 0
-        ) {
-          const countryValidation = validateCountryCodes(
-            searchArgs.geographic_filters.countries
-          );
-          if (!countryValidation.valid) {
-            return createErrorResponse(
-              this.name,
-              `Country code validation failed: Invalid country codes: ${countryValidation.invalid.join(', ')}`,
-              ErrorType.VALIDATION_ERROR,
-              {
-                invalid_codes: countryValidation.invalid,
-                valid_codes: countryValidation.valid,
-                documentation:
-                  'Country codes must be ISO 3166-1 alpha-2 format (e.g., US, CN, GB)',
-              }
-            );
-          }
-        }
+        return createErrorResponse(
+          this.name,
+          error.message,
+          ErrorType.VALIDATION_ERROR,
+          {
+            geographic_filters: searchArgs.geographic_filters,
+            ...(error.unsupported.length > 0 && {
+              unsupported_filters: error.unsupported,
+            }),
+            ...(Object.keys(error.invalid).length > 0 && {
+              invalid_values: error.invalid,
+            }),
+            supported_filters: {
+              countries:
+                'ISO 3166-1 alpha-2 country codes, sent as region:US,CN (any of them)',
+              regions:
+                "country codes too, merged with countries (the API's region is a country)",
+            },
+          },
+          error.problems
+        );
       }
 
       // ------------------------------------------------------------
@@ -1145,6 +1138,19 @@ export class SearchRulesHandler extends BaseToolHandler {
   }
 }
 
+/**
+ * The `ip:` values of a search_devices query that have a `/` but are not an
+ * IPv4 CIDR block (an IPv6 block, a prefix past 32, a typo)
+ */
+function invalidIpBlocks(query: string): string[] {
+  const values = [
+    ...query.matchAll(/(?:^|[\s(])-?ip:("(?:[^"\\]|\\.)*"|[^\s()]+)/gi),
+  ].map(match => unquoteQueryValue(match[1]));
+  return values.filter(
+    value => value.includes('/') && ipv4InCidr('0.0.0.0', value) === undefined
+  );
+}
+
 export class SearchDevicesHandler extends BaseToolHandler {
   name = 'search_devices';
   description =
@@ -1167,6 +1173,23 @@ export class SearchDevicesHandler extends BaseToolHandler {
 
       if (!validation.isValid) {
         return validation.response;
+      }
+
+      // ip: takes an IPv4 CIDR block (192.168.1.0/24); any other value with
+      // a / would match no device
+      const badBlocks = invalidIpBlocks(searchArgs.query);
+      if (badBlocks.length > 0) {
+        const problems = badBlocks.map(
+          block =>
+            `ip:${block} is not an IPv4 CIDR block; ip: takes an address, a * wildcard (192.168.1.*) or an IPv4 block such as 192.168.1.0/24.`
+        );
+        return createErrorResponse(
+          this.name,
+          problems.join(' '),
+          ErrorType.VALIDATION_ERROR,
+          { query: searchArgs.query, invalid_ip_blocks: badBlocks },
+          problems
+        );
       }
 
       // Validate that both cursor and offset are not provided simultaneously

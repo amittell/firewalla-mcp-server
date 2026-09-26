@@ -15,7 +15,18 @@ export type QueryNode =
   | GroupQuery
   | WildcardQuery
   | RangeQuery
-  | ComparisonQuery;
+  | ComparisonQuery
+  | TextQuery;
+
+/**
+ * Free text: a word, number or quoted phrase with no field. Which fields it
+ * searches is up to the entity's matcher (or, for queries sent to the MSP
+ * API, the API).
+ */
+export interface TextQuery {
+  type: 'text';
+  value: string;
+}
 
 /**
  * Basic field-value query node

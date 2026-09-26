@@ -48,7 +48,8 @@ export class TimeRangeFilter extends BaseFilter {
       }
       case 'logical':
       case 'group':
-      case 'wildcard': {
+      case 'wildcard':
+      case 'text': {
         // These node types are not handled by time filter
         return { apiParams: {} };
       }
@@ -286,6 +287,7 @@ export class TimeRangeFilter extends BaseFilter {
       case 'group':
       case 'logical':
       case 'wildcard':
+      case 'text':
         // These node types are not applicable for time-based filtering
         return false;
 

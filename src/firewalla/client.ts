@@ -54,7 +54,11 @@ import type {
   GeographicData,
 } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
-import { matchesQuery, unquoteQueryValue } from '../search/client-filter.js';
+import {
+  ipv4InCidr,
+  matchesQuery,
+  unquoteQueryValue,
+} from '../search/client-filter.js';
 import {
   translateSortBy,
   translateToMspQualifiers,
@@ -4564,7 +4568,7 @@ export class FirewallaClient {
             );
 
             // `id:`, `ip:`, `mac:` and `gid:` take an exact value or a `*`
-            // wildcard (172.16.2.*, AA:BB:*)
+            // wildcard (172.16.2.*, AA:BB:*); `ip:` also takes a CIDR block
             const matchesPattern = (
               value: string,
               pattern: string
@@ -4577,12 +4581,12 @@ export class FirewallaClient {
                 .replace(/\*/g, '.*');
               return new RegExp(`^${escaped}$`).test(value);
             };
+            // Free text: a word or quoted phrase with no field, found in
+            // the name, IP, MAC or id, vendor, or network or group name
             const matchesText = (text: string): boolean =>
-              name.includes(text) ||
-              mac.includes(text) ||
-              ip.includes(text) ||
-              macVendor.includes(text) ||
-              id.includes(text);
+              [name, ip, mac, id, macVendor, networkName, groupName].some(
+                value => value.includes(text)
+              );
 
             // Match one `field:value` term; matchesQuery evaluates AND, OR,
             // NOT and parentheses between terms
@@ -4598,7 +4602,10 @@ export class FirewallaClient {
                 case 'id':
                   return matchesPattern(id, value);
                 case 'ip':
-                  return matchesPattern(ip, value);
+                  // An IPv4 CIDR block (192.168.1.0/24), else a pattern
+                  return value.includes('/')
+                    ? ipv4InCidr(ip, value) === true
+                    : matchesPattern(ip, value);
                 case 'mac':
                   return matchesPattern(mac, value);
                 case 'gid':
@@ -5660,27 +5667,6 @@ export class FirewallaClient {
   }
 
   /**
-   * Helper method to build the query for an array-based geographic filter:
-   * one comma list, the MSP API's OR within a field (it has no OR keyword
-   * and no parentheses)
-   *
-   * @param fieldName - The field name for the query (e.g., 'country', 'region')
-   * @param values - Array of values any of which may match
-   * @returns Query string or null if values array is empty
-   * @private
-   */
-  private buildArrayFilterQuery(
-    fieldName: string,
-    values?: string[]
-  ): string | null {
-    if (!values || values.length === 0) {
-      return null;
-    }
-
-    return `${fieldName}:${values.map(mspValue).join(',')}`;
-  }
-
-  /**
    * Helper method to add box.id qualifier to search queries
    *
    * @param query - Existing query string (optional)
@@ -5723,92 +5709,6 @@ export class FirewallaClient {
       params.group = group.trim();
     }
     return params;
-  }
-
-  /**
-   * Build geographic query string from filters for Firewalla API
-   *
-   * Converts geographic filter objects into API-compatible query syntax.
-   * Supports countries, continents, regions, cities, ASNs, hosting providers,
-   * and boolean exclusion filters.
-   *
-   * @param filters - Geographic filter configuration
-   * @returns Query string compatible with Firewalla API
-   */
-  buildGeoQuery(filters: {
-    countries?: string[];
-    continents?: string[];
-    regions?: string[];
-    cities?: string[];
-    asns?: string[];
-    hosting_providers?: string[];
-    exclude_cloud?: boolean;
-    exclude_vpn?: boolean;
-    min_risk_score?: number;
-    high_risk_countries?: boolean;
-    exclude_known_providers?: boolean;
-    threat_analysis?: boolean;
-  }): string {
-    const queryParts: string[] = [];
-
-    // Define filter configurations in a data-driven approach
-    const filterConfigs = {
-      // Array filters
-      arrayFilters: [
-        { field: 'country', values: filters.countries },
-        { field: 'continent', values: filters.continents },
-        { field: 'region', values: filters.regions },
-        { field: 'city', values: filters.cities },
-        { field: 'asn', values: filters.asns },
-        { field: 'hosting_provider', values: filters.hosting_providers },
-      ],
-      // Boolean filters
-      booleanFilters: [
-        {
-          condition: filters.exclude_cloud === true,
-          query: '-is_cloud_provider:true',
-        },
-        { condition: filters.exclude_vpn === true, query: '-is_vpn:true' },
-        {
-          condition: filters.high_risk_countries === true,
-          query: 'geographic_risk_score:>=7',
-        },
-        {
-          // The official grammar has no exclusion of a wildcard (-hosting_provider:*)
-          condition: filters.exclude_known_providers === true,
-          query: '-is_cloud_provider:true',
-        },
-      ],
-    };
-
-    // Process array filters
-    filterConfigs.arrayFilters.forEach(({ field, values }) => {
-      const query = this.buildArrayFilterQuery(field, values);
-      if (query) {
-        queryParts.push(query);
-      }
-    });
-
-    // Process boolean filters
-    filterConfigs.booleanFilters.forEach(({ condition, query }) => {
-      if (condition) {
-        queryParts.push(query);
-      }
-    });
-
-    // Process numeric filters
-    if (
-      filters.min_risk_score !== undefined &&
-      typeof filters.min_risk_score === 'number' &&
-      filters.min_risk_score >= 0
-    ) {
-      queryParts.push(`geographic_risk_score:>=${filters.min_risk_score}`);
-    }
-
-    // Note: threat_analysis is handled by the API server, not as a query filter
-
-    // A space ANDs terms: the API has no AND keyword
-    return mspAnd(...queryParts);
   }
 
   /**

@@ -164,6 +164,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that is not JSON with 400 and a JSON-RPC parse error (-32700). Over 1 MB
   it closed the connection without an answer, and a body that is not JSON
   got a 500 "Internal server error".
+- `search_flows` sends its `geographic_filters` only as a qualifier the API
+  documents: `countries`, and `regions` holding country codes, as one
+  `region:` comma list (`{countries: ["US", "CN"]}` is sent as
+  `region:US,CN`). They were sent as `country:`, `continent:`, `city:`,
+  `asn:` and `hosting_provider:` terms, with `-is_cloud_provider:true`,
+  `-is_vpn:true` and `geographic_risk_score:>=n`, none of them documented; the
+  API answers a qualifier it does not know with no results, so such a search
+  found nothing. `continents`, `cities`, `asns`, `hosting_providers`,
+  `exclude_vpn`, `exclude_cloud`, `min_risk_score` and unknown filter names
+  are refused as a validation error that names them, before any request. An
+  unknown country code is a validation error too; it was reported as a search
+  error, after a retry two seconds later.
+- `search_devices`, `search_target_lists` and `search_rules` accept free
+  text: a query that is only a word or quoted phrase (`nas`, `"living
+  room"`), and free text beside other terms (`name:nas OR laptop`). The
+  search engine's query parser refused a term without a field ("Expected ':'
+  after field"). `search_devices` matches free text case-insensitively in the
+  name, IP, MAC or id, vendor, and network or group name (the network and
+  group names are new), and `search_target_lists` in the name, notes and
+  entries. `search_rules` sends it to `GET /v2/rules` and leaves it to the
+  API: the official docs do not say which rule fields free text searches, so
+  a check on the client could only drop rules the API matched.
+- `search_target_lists` reads a comma list as any of its values, as the API
+  grammar does. It compared the list as one value, so `category:social,games`
+  found no list. A quoted value keeps its commas (`name:"Block, Social"`), and
+  a list may hold quoted values (`notes:consoles,"ad servers"`), which the
+  search engine's parser refused as an unclosed quote.
+- `search_devices` matches `ip:` against an IPv4 CIDR block
+  (`ip:192.168.1.0/24`); it compared the block as text and found no device.
+  An `ip:` value with a `/` that is not an IPv4 block (`ip:fe80::/64`, a
+  prefix past 32) is refused as a validation error. `ip:0.0.0.0/0` covers
+  every address; the search engine's IP filter read `/0` as `/32`.
 
 ### Changed
 

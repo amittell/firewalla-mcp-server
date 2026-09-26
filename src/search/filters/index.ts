@@ -6,6 +6,7 @@
 import type { QueryNode, FieldQuery, WildcardQuery } from '../types.js';
 import type { Filter, FilterContext, FilterResult } from './base.js';
 import { TimeRangeFilter } from './time.js';
+import { ipv4InCidr } from '../client-filter.js';
 
 /**
  * Determines whether a query node is a field query.
@@ -144,41 +145,10 @@ class IpAddressFilter implements Filter {
   }
 
   /**
-   * CIDR subnet matching
+   * CIDR subnet matching: IPv4 blocks only (192.168.1.0/24)
    */
   private matchCidr(ip: string, cidr: string): boolean {
-    if (!this.isValidIpAddress(ip)) {
-      return false;
-    }
-
-    const [network, prefixStr] = cidr.split('/');
-    const prefix = parseInt(prefixStr, 10);
-
-    if (
-      !this.isValidIpAddress(network) ||
-      isNaN(prefix) ||
-      prefix < 0 ||
-      prefix > 32
-    ) {
-      return false;
-    }
-
-    // Convert IPs to 32-bit integers for comparison
-    const ipInt = this.ipToInt(ip);
-    const networkInt = this.ipToInt(network);
-    const mask = (0xffffffff << (32 - prefix)) >>> 0;
-
-    return (ipInt & mask) === (networkInt & mask);
-  }
-
-  /**
-   * Convert IPv4 address to 32-bit integer
-   */
-  private ipToInt(ip: string): number {
-    const parts = ip.split('.').map(part => parseInt(part, 10));
-    return (
-      ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0
-    );
+    return ipv4InCidr(ip, cidr) === true;
   }
 }
 

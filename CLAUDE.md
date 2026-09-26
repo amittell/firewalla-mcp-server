@@ -209,8 +209,9 @@ The MSP API's query grammar has no `AND`, `OR`, `NOT` or parentheses: it searche
 - Ranges are `field:low-high` and include both ends; `[low TO high]` is refused with the `field:low-high` form as the suggestion. Relative times (`ts:>1h`, `ts:>=7d`) are sent as Unix seconds.
 - Parentheses may group a same-field `OR` (`status:blocked AND (region:US OR region:CN)` becomes `status:blocked region:US,CN`) or follow `NOT` (`NOT (region:US OR region:CN)` becomes `-region:US -region:CN`); a group that needs an `OR` across fields is refused.
 - Operators are uppercase; lowercase `and`, `or` and `not` are free-text words, as the API reads them.
-- search_devices and search_target_lists filter on the client and evaluate `AND`, `OR`, `NOT` and parentheses themselves, across fields too.
-- Free text on its own (`porn`) works in search_flows and search_alarms; search_rules, search_devices and search_target_lists refuse a query that is only free text.
+- search_devices and search_target_lists filter on the client and evaluate `AND`, `OR`, `NOT` and parentheses themselves, across fields too. search_target_lists reads a comma list as any of its values (`category:social,games`), and search_devices' `ip:` takes an IPv4 CIDR block (`ip:192.168.1.0/24`) as well as `*` wildcards.
+- Free text (a word or quoted phrase with no field) works in every search tool. search_flows, search_alarms and search_rules send it to the API, which picks the fields it matches; search_devices matches it case-insensitively in the name, IP, MAC or id, vendor, and network or group name, and search_target_lists in the name, notes and entries.
+- search_flows' `geographic_filters` takes `countries` (ISO 3166 codes, sent as `region:US,CN`), the one geographic flow qualifier the API documents. Continents, cities, ASNs, hosting providers, the VPN and cloud exclusions and the risk score have no API equivalent and are refused with a validation error naming them: the API answers a qualifier it does not know with no results.
 
 ```text
 # Basic field queries
