@@ -21,13 +21,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every `streaming_session_id` was "not found or expired"; the saved request
   parameters replaced each chunk's size; and `stream: false` still streamed.
   A request with a `cursor` now returns the page at that cursor, not
-  streamed. Streaming sessions last as long as the client, so
-  `streaming_session_id` returns the session's next chunk, of the size of the
-  first and with the query the session started with. `stream: false` returns
-  plain pages at any limit. The schema lists `stream` and
-  `streaming_session_id`. Each streamed call also left its manager's
-  one-minute cleanup timer running for the life of the process; the timer now
-  runs only while a session exists.
+  streamed. The streaming manager now lasts as long as the API client (one
+  per client), so `streaming_session_id` returns the session's next chunk, of
+  the size of the first and with the query the session started with. A
+  session itself still expires 10 minutes after its latest chunk, and one
+  that has returned its final chunk is refused as complete and removed a
+  minute later. Overlapping calls for one session are read one after the
+  other and get consecutive chunks, not the same chunk twice.
+  `streaming_session_id` with `stream: false` is refused, and with a `cursor`
+  the cursor is read. `stream: false` returns plain pages at any limit. The
+  schema lists `stream` and `streaming_session_id`. Each streamed call also
+  left its manager's one-minute cleanup timer running for the life of the
+  process; the timer now runs only while a session exists.
 - The client stops paging when the API returns a `next_cursor` it has
   already sent in the same read, and returns no cursor. It followed such a
   cursor, reading the same page again until it had `limit` items. The repeat

@@ -34,6 +34,7 @@ import {
 } from '../../utils/timeout-manager.js';
 import {
   StreamingManager,
+  StreamingSessionError,
   shouldUseStreaming,
   createStreamingResponse,
   type StreamingOperation,
@@ -164,14 +165,31 @@ export class GetFlowDataHandler extends BaseToolHandler {
       // limit over 50 is streamed. A request with a cursor returns the page
       // at that cursor and is not streamed: a stream started a new session
       // from the first page, so a client that passed nextContinuationToken
-      // back as cursor got the first page again. A grouped request is not
-      // streamed: it returns groups, not flows.
+      // back as cursor got the first page again. A cursor is read even with
+      // a streaming_session_id. A grouped request is not streamed: it
+      // returns groups, not flows.
       const stream = streamArgument(args?.stream);
       const streamingSessionId =
         typeof args?.streaming_session_id === 'string' &&
         args.streaming_session_id.trim() !== ''
           ? args.streaming_session_id.trim()
           : undefined;
+      // A session's next chunk is streamed, which stream: false forbids
+      if (
+        streamingSessionId !== undefined &&
+        cursor === undefined &&
+        stream === false
+      ) {
+        return this.createErrorResponse(
+          'streaming_session_id and stream: false conflict: a session returns streamed chunks',
+          ErrorType.VALIDATION_ERROR,
+          { streaming_session_id: streamingSessionId, stream: false },
+          [
+            'To continue the session, leave out stream',
+            'For plain pages, pass the nextContinuationToken of the last chunk as cursor, with stream: false or without it',
+          ]
+        );
+      }
       const continueSession =
         streamingSessionId !== undefined && cursor === undefined;
       const enableStreaming =
@@ -327,25 +345,33 @@ export class GetFlowDataHandler extends BaseToolHandler {
         };
 
         if (continueSession) {
-          // Continue existing streaming session
-          const session = streamingManager.getSessionInfo(streamingSessionId);
-          if (!session || session.isComplete) {
+          // Continue existing streaming session. Overlapping calls for one
+          // session are read one after the other (see getNextChunk).
+          let chunk;
+          try {
+            chunk = await streamingManager.continueStreaming(
+              streamingSessionId,
+              streamingOperation
+            );
+          } catch (error: unknown) {
+            if (!(error instanceof StreamingSessionError)) {
+              throw error;
+            }
             return this.createErrorResponse(
-              session
-                ? `Streaming session ${streamingSessionId} is complete: its last chunk had isFinalChunk true`
-                : `Streaming session ${streamingSessionId} not found or expired`,
+              error.reason === 'complete'
+                ? `${error.message}: its final chunk (isFinalChunk true) was returned`
+                : error.message,
               ErrorType.VALIDATION_ERROR,
-              { streaming_session_id: streamingSessionId },
+              {
+                streaming_session_id: streamingSessionId,
+                reason: error.reason,
+              },
               [
-                'A session lasts 10 minutes after its last chunk, in the server process that started it',
+                'A session expires 10 minutes after its latest chunk and is removed a minute after its final one; it lives in the server process that started it',
                 'To read on without a session, pass the nextContinuationToken of the last response as cursor',
               ]
             );
           }
-          const chunk = await streamingManager.continueStreaming(
-            streamingSessionId,
-            streamingOperation
-          );
 
           if (!chunk) {
             return this.createErrorResponse(

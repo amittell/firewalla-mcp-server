@@ -108,6 +108,21 @@ export type StreamingOperation<T = any> = (
   total?: number;
 }>;
 
+/**
+ * A session that cannot give another chunk: not found (never started, or
+ * removed), complete (its final chunk was returned), expired (idle longer than
+ * its sessionTimeoutMs) or at its maxChunks
+ */
+export class StreamingSessionError extends Error {
+  constructor(
+    message: string,
+    readonly reason: 'not_found' | 'complete' | 'expired' | 'chunk_limit'
+  ) {
+    super(message);
+    this.name = 'StreamingSessionError';
+  }
+}
+
 /** forTool's managers, by tool name, for callers that give no owner */
 const sharedManagers = new Map<string, StreamingManager>();
 
@@ -120,6 +135,8 @@ const managersByOwner = new WeakMap<object, Map<string, StreamingManager>>();
 export class StreamingManager {
   private config: StreamingConfig;
   private activeSessions: Map<string, StreamingSession> = new Map();
+  /** Per session, the chunk read in progress or queued last */
+  private chunkQueues: Map<string, Promise<unknown>> = new Map();
   private cleanupTimer?: ReturnType<typeof setInterval>;
 
   constructor(config: Partial<StreamingConfig> = {}) {
@@ -156,19 +173,53 @@ export class StreamingManager {
   }
 
   /**
-   * Get the next chunk of data for a streaming session
+   * Get the next chunk of data for a streaming session. Reads of one session
+   * run one at a time, in the order they were asked for: each reads the
+   * cursor the one before it left, so two overlapping calls get consecutive
+   * chunks, not the same chunk twice. A read queued behind the final chunk
+   * fails as complete.
    */
   async getNextChunk<T = any>(
     sessionId: string,
     operation: StreamingOperation<T>
   ): Promise<StreamingChunk | null> {
+    const previous = this.chunkQueues.get(sessionId) ?? Promise.resolve();
+    const read = previous.then(async () =>
+      this.readNextChunk(sessionId, operation)
+    );
+    // The next read waits for this one, whether it succeeds or fails
+    const settled = read.then(
+      () => undefined,
+      () => undefined
+    );
+    this.chunkQueues.set(sessionId, settled);
+    try {
+      return await read;
+    } finally {
+      if (this.chunkQueues.get(sessionId) === settled) {
+        this.chunkQueues.delete(sessionId);
+      }
+    }
+  }
+
+  /** One chunk of a session, read with the session's current cursor */
+  private async readNextChunk<T = any>(
+    sessionId: string,
+    operation: StreamingOperation<T>
+  ): Promise<StreamingChunk | null> {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
-      throw new Error(`Streaming session ${sessionId} not found or expired`);
+      throw new StreamingSessionError(
+        `Streaming session ${sessionId} not found or expired`,
+        'not_found'
+      );
     }
 
     if (session.isComplete) {
-      throw new Error(`Streaming session ${sessionId} is already complete`);
+      throw new StreamingSessionError(
+        `Streaming session ${sessionId} is already complete`,
+        'complete'
+      );
     }
 
     // Check session timeout
@@ -177,8 +228,9 @@ export class StreamingManager {
       now.getTime() - session.lastActivity.getTime();
     if (timeSinceLastActivity > session.config.sessionTimeoutMs) {
       this.expireSession(sessionId);
-      throw new Error(
-        `Streaming session ${sessionId} has expired due to inactivity`
+      throw new StreamingSessionError(
+        `Streaming session ${sessionId} has expired due to inactivity`,
+        'expired'
       );
     }
 
@@ -188,8 +240,9 @@ export class StreamingManager {
       session.chunksStreamed >= session.config.maxChunks
     ) {
       this.completeSession(sessionId);
-      throw new Error(
-        `Streaming session ${sessionId} has reached maximum chunk limit`
+      throw new StreamingSessionError(
+        `Streaming session ${sessionId} has reached maximum chunk limit`,
+        'chunk_limit'
       );
     }
 

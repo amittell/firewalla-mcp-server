@@ -322,7 +322,7 @@ export class FirewallaMCPServer {
                 streaming_session_id: {
                   type: 'string',
                   description:
-                    'The sessionId of a streamed response: returns its next chunk, of the same size. A session lasts 10 minutes after its last chunk.',
+                    'The sessionId of a streamed response: returns its next chunk, of the same size. A session expires 10 minutes after its latest chunk. Refused with stream: false; with a cursor, the cursor is read instead.',
                 },
               },
               required: [],
