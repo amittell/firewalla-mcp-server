@@ -42,13 +42,13 @@ jest.mock('axios', () => {
   };
 });
 
-const FLUME = '11111111-2222-3333-4444-555555555555';
-const PINEWOOD = '66666666-7777-8888-9999-000000000000';
+const BOX_A = '11111111-2222-3333-4444-555555555555';
+const BOX_B = '66666666-7777-8888-9999-000000000000';
 const MAC = 'AA:BB:CC:DD:EE:FF';
 
 const BOXES = [
-  { gid: FLUME, name: 'Flume', online: true },
-  { gid: PINEWOOD, name: 'Pinewood', online: false },
+  { gid: BOX_A, name: 'Office', online: true },
+  { gid: BOX_B, name: 'Cabin', online: false },
 ];
 
 function makeClient({
@@ -96,7 +96,7 @@ function makeClient({
             type: 8,
             status: 1,
             message: `video on ${gid.slice(0, 4)}`,
-            device: { id: MAC, name: 'Living Room', ip: '192.168.1.20' },
+            device: { id: MAC, name: 'Media Player', ip: '192.168.1.20' },
             remote: { domain: 'twitch.tv', ip: '151.101.2.167' },
           };
         }
@@ -145,7 +145,7 @@ describe('checkMuteRequest', () => {
     [
       {
         target: { type: 'alarmType' },
-        scope: { type: 'network', value: 'd13619f4-164d-4430-8796-c086448df9e9' },
+        scope: { type: 'network', value: '00000000-1111-1111-1111-000000000000' },
       },
     ],
   ])('accepts the documented body %j', body => {
@@ -205,18 +205,18 @@ describe('checkMuteRequest', () => {
 
 describe('archiveAlarm', () => {
   it('reads the alarm on the given box, then posts archive with no body', async () => {
-    const { client, request } = makeClient({ alarms: { [PINEWOOD]: ['42'] } });
-    const result = await client.archiveAlarm('42', PINEWOOD);
-    expect(result.gid).toBe(PINEWOOD);
+    const { client, request } = makeClient({ alarms: { [BOX_B]: ['42'] } });
+    const result = await client.archiveAlarm('42', BOX_B);
+    expect(result.gid).toBe(BOX_B);
     expect(result.aid).toBe('42');
     expect(calls(request)).toEqual([
-      `GET /v2/alarms/${PINEWOOD}/42`,
-      `POST /v2/alarms/${PINEWOOD}/42/archive`,
+      `GET /v2/alarms/${BOX_B}/42`,
+      `POST /v2/alarms/${BOX_B}/42/archive`,
     ]);
     expect(posts(request)).toEqual([
       {
         method: 'POST',
-        endpoint: `/v2/alarms/${PINEWOOD}/42/archive`,
+        endpoint: `/v2/alarms/${BOX_B}/42/archive`,
         params: undefined,
         body: undefined,
         cacheable: false,
@@ -227,84 +227,84 @@ describe('archiveAlarm', () => {
   });
 
   it('accepts the numeric aid that get_active_alarms returns', async () => {
-    const { client, request } = makeClient({ alarms: { [FLUME]: ['65257'] } });
-    await client.archiveAlarm(65257, FLUME);
+    const { client, request } = makeClient({ alarms: { [BOX_A]: ['12345'] } });
+    await client.archiveAlarm(12345, BOX_A);
     expect(calls(request)).toEqual([
-      `GET /v2/alarms/${FLUME}/65257`,
-      `POST /v2/alarms/${FLUME}/65257/archive`,
+      `GET /v2/alarms/${BOX_A}/12345`,
+      `POST /v2/alarms/${BOX_A}/12345/archive`,
     ]);
   });
 
   it('uses FIREWALLA_BOX_ID without listing boxes', async () => {
     const { client, request } = makeClient({
-      boxId: FLUME,
-      alarms: { [FLUME]: ['42'] },
+      boxId: BOX_A,
+      alarms: { [BOX_A]: ['42'] },
     });
     await client.archiveAlarm('42');
     expect(calls(request)).toEqual([
-      `GET /v2/alarms/${FLUME}/42`,
-      `POST /v2/alarms/${FLUME}/42/archive`,
+      `GET /v2/alarms/${BOX_A}/42`,
+      `POST /v2/alarms/${BOX_A}/42/archive`,
     ]);
   });
 
   it('prefers the explicit gid over FIREWALLA_BOX_ID', async () => {
     const { client, request } = makeClient({
-      boxId: FLUME,
-      alarms: { [PINEWOOD]: ['42'] },
+      boxId: BOX_A,
+      alarms: { [BOX_B]: ['42'] },
     });
-    await client.archiveAlarm('42', PINEWOOD);
-    expect(posts(request)[0].endpoint).toBe(`/v2/alarms/${PINEWOOD}/42/archive`);
+    await client.archiveAlarm('42', BOX_B);
+    expect(posts(request)[0].endpoint).toBe(`/v2/alarms/${BOX_B}/42/archive`);
   });
 
   it('without a box configured, archives on the one box that has the alarm', async () => {
-    const { client, request } = makeClient({ alarms: { [PINEWOOD]: ['42'] } });
+    const { client, request } = makeClient({ alarms: { [BOX_B]: ['42'] } });
     const result = await client.archiveAlarm('42');
-    expect(result.gid).toBe(PINEWOOD);
+    expect(result.gid).toBe(BOX_B);
     expect(calls(request)).toEqual([
       'GET /v2/boxes',
-      `GET /v2/alarms/${FLUME}/42`,
-      `GET /v2/alarms/${PINEWOOD}/42`,
-      `POST /v2/alarms/${PINEWOOD}/42/archive`,
+      `GET /v2/alarms/${BOX_A}/42`,
+      `GET /v2/alarms/${BOX_B}/42`,
+      `POST /v2/alarms/${BOX_B}/42/archive`,
     ]);
   });
 
   it('refuses when several boxes have the aid and none is the default box', async () => {
     const { client, request } = makeClient({
-      alarms: { [FLUME]: ['42'], [PINEWOOD]: ['42'] },
+      alarms: { [BOX_A]: ['42'], [BOX_B]: ['42'] },
     });
     const error = await client.archiveAlarm('42').catch(e => e);
     expect(error).toBeInstanceOf(BoxSelectionError);
-    expect(error.message).toContain(`Flume (${FLUME})`);
-    expect(error.message).toContain(`Pinewood (${PINEWOOD})`);
+    expect(error.message).toContain(`Office (${BOX_A})`);
+    expect(error.message).toContain(`Cabin (${BOX_B})`);
     expect(posts(request)).toEqual([]);
   });
 
   it('uses FIREWALLA_DEFAULT_BOX_ID when it has the alarm, without checking other boxes', async () => {
     const { client, request } = makeClient({
-      defaultBoxId: PINEWOOD,
-      alarms: { [FLUME]: ['42'], [PINEWOOD]: ['42'] },
+      defaultBoxId: BOX_B,
+      alarms: { [BOX_A]: ['42'], [BOX_B]: ['42'] },
     });
     await client.archiveAlarm('42');
     expect(calls(request)).toEqual([
       'GET /v2/boxes',
-      `GET /v2/alarms/${PINEWOOD}/42`,
-      `POST /v2/alarms/${PINEWOOD}/42/archive`,
+      `GET /v2/alarms/${BOX_B}/42`,
+      `POST /v2/alarms/${BOX_B}/42/archive`,
     ]);
   });
 
   it('checks the other boxes when the default box lacks the alarm', async () => {
     const { client, request } = makeClient({
-      defaultBoxId: PINEWOOD,
-      alarms: { [FLUME]: ['42'] },
+      defaultBoxId: BOX_B,
+      alarms: { [BOX_A]: ['42'] },
     });
     await client.archiveAlarm('42');
-    expect(posts(request)[0].endpoint).toBe(`/v2/alarms/${FLUME}/42/archive`);
+    expect(posts(request)[0].endpoint).toBe(`/v2/alarms/${BOX_A}/42/archive`);
   });
 
   it('refuses when a box could not be checked, since it may hold the same aid', async () => {
     const { client, request } = makeClient({
-      alarms: { [FLUME]: ['42'] },
-      failingBoxes: [PINEWOOD],
+      alarms: { [BOX_A]: ['42'] },
+      failingBoxes: [BOX_B],
     });
     const error = await client.archiveAlarm('42').catch(e => e);
     expect(error).toBeInstanceOf(BoxSelectionError);
@@ -315,7 +315,7 @@ describe('archiveAlarm', () => {
 
   it('reports a missing alarm without posting', async () => {
     const { client, request } = makeClient();
-    await expect(client.archiveAlarm('42', FLUME)).rejects.toBeInstanceOf(
+    await expect(client.archiveAlarm('42', BOX_A)).rejects.toBeInstanceOf(
       AlarmNotFoundError
     );
     const error = await client.archiveAlarm('42').catch(e => e);
@@ -325,8 +325,8 @@ describe('archiveAlarm', () => {
   });
 
   it('passes on errors other than 404 from the existence check', async () => {
-    const { client, request } = makeClient({ failingBoxes: [FLUME] });
-    await expect(client.archiveAlarm('42', FLUME)).rejects.toThrow(
+    const { client, request } = makeClient({ failingBoxes: [BOX_A] });
+    await expect(client.archiveAlarm('42', BOX_A)).rejects.toThrow(
       'Server error'
     );
     expect(posts(request)).toEqual([]);
@@ -335,8 +335,8 @@ describe('archiveAlarm', () => {
   it.each([['abc'], ['alarm_1'], ['0'], [''], ['1 OR 2']])(
     'refuses the aid %j without sending anything',
     async aid => {
-      const { client, request } = makeClient({ alarms: { [FLUME]: ['42'] } });
-      await expect(client.archiveAlarm(aid, FLUME)).rejects.toThrow(
+      const { client, request } = makeClient({ alarms: { [BOX_A]: ['42'] } });
+      await expect(client.archiveAlarm(aid, BOX_A)).rejects.toThrow(
         /Invalid alarm ID/
       );
       expect(request).not.toHaveBeenCalled();
@@ -345,57 +345,57 @@ describe('archiveAlarm', () => {
 
   it('explains a 404 on the POST when the alarm exists', async () => {
     const { client } = makeClient({
-      alarms: { [FLUME]: ['42'] },
+      alarms: { [BOX_A]: ['42'] },
       post: async () => {
         throw new Error('Resource not found: /v2/alarms/x/42/archive does not exist');
       },
     });
-    await expect(client.archiveAlarm('42', FLUME)).rejects.toThrow(
+    await expect(client.archiveAlarm('42', BOX_A)).rejects.toThrow(
       /404 although the alarm exists.*MSP 2\.11\.0/
     );
   });
 
   it('says the outcome is unknown when the POST gets no HTTP status, and does not retry', async () => {
     const { client, request } = makeClient({
-      alarms: { [FLUME]: ['42'] },
+      alarms: { [BOX_A]: ['42'] },
       post: async () => {
         throw new Error('API Error (unknown): timeout of 30000ms exceeded');
       },
     });
-    await expect(client.archiveAlarm('42', FLUME)).rejects.toThrow(
+    await expect(client.archiveAlarm('42', BOX_A)).rejects.toThrow(
       /may or may not have been archived/
     );
     expect(posts(request)).toHaveLength(1);
   });
 
   it('drops cached alarm reads after archiving, and nothing else', async () => {
-    const { client } = makeClient({ alarms: { [FLUME]: ['42'] } });
+    const { client } = makeClient({ alarms: { [BOX_A]: ['42'] } });
     const cache: Map<string, unknown> = (client as any).cache;
     const expires = Date.now() + 60000;
     cache.set('fw:all-boxes:GET:_v2_alarms:abc', { data: {}, expires });
-    cache.set(`fw:all-boxes:GET:_v2_alarms_${FLUME}_42:def`, { data: {}, expires });
+    cache.set(`fw:all-boxes:GET:_v2_alarms_${BOX_A}_42:def`, { data: {}, expires });
     cache.set('fw:all-boxes:GET:_v2_rules:ghi', { data: {}, expires });
-    await client.archiveAlarm('42', FLUME);
+    await client.archiveAlarm('42', BOX_A);
     expect([...cache.keys()]).toEqual(['fw:all-boxes:GET:_v2_rules:ghi']);
   });
 });
 
 describe('muteAlarm', () => {
   it('posts exactly the documented body', async () => {
-    const { client, request } = makeClient({ alarms: { [FLUME]: ['42'] } });
+    const { client, request } = makeClient({ alarms: { [BOX_A]: ['42'] } });
     const result = await client.muteAlarm(
       '42',
       {
         target: { type: 'domain', value: 'example.com' },
         scope: { type: 'device', value: MAC },
       },
-      FLUME
+      BOX_A
     );
-    expect(result.gid).toBe(FLUME);
+    expect(result.gid).toBe(BOX_A);
     expect(posts(request)).toEqual([
       {
         method: 'POST',
-        endpoint: `/v2/alarms/${FLUME}/42/mute`,
+        endpoint: `/v2/alarms/${BOX_A}/42/mute`,
         params: undefined,
         body: {
           target: { type: 'domain', value: 'example.com' },
@@ -407,7 +407,7 @@ describe('muteAlarm', () => {
   });
 
   it('refuses an invalid body before any request, even the box lookup', async () => {
-    const { client, request } = makeClient({ alarms: { [FLUME]: ['42'] } });
+    const { client, request } = makeClient({ alarms: { [BOX_A]: ['42'] } });
     await expect(
       client.muteAlarm('42', {
         target: { type: 'domain' },
@@ -419,7 +419,7 @@ describe('muteAlarm', () => {
 
   it('finds the box the same way archiveAlarm does', async () => {
     const { client, request } = makeClient({
-      alarms: { [FLUME]: ['42'], [PINEWOOD]: ['42'] },
+      alarms: { [BOX_A]: ['42'], [BOX_B]: ['42'] },
     });
     await expect(
       client.muteAlarm('42', {
@@ -433,9 +433,9 @@ describe('muteAlarm', () => {
 
 describe('archive_alarm tool', () => {
   it('archives and reports which alarm it acted on', async () => {
-    const { client, request } = makeClient({ alarms: { [PINEWOOD]: ['42'] } });
+    const { client, request } = makeClient({ alarms: { [BOX_B]: ['42'] } });
     const res = await new ArchiveAlarmHandler().execute(
-      { alarm_id: 42, gid: PINEWOOD },
+      { alarm_id: 42, gid: BOX_B },
       client
     );
     expect(res.isError).toBeFalsy();
@@ -443,23 +443,23 @@ describe('archive_alarm tool', () => {
     expect(data).toMatchObject({
       archived: true,
       alarm_id: '42',
-      gid: PINEWOOD,
+      gid: BOX_B,
       alarm: {
         aid: 42,
         type: 8,
         status_before: 1,
-        device: { id: MAC, name: 'Living Room' },
+        device: { id: MAC, name: 'Media Player' },
         remote: { domain: 'twitch.tv' },
       },
     });
     expect(posts(request).map(call => call.endpoint)).toEqual([
-      `/v2/alarms/${PINEWOOD}/42/archive`,
+      `/v2/alarms/${BOX_B}/42/archive`,
     ]);
   });
 
   it('refuses on an ambiguous aid and writes nothing', async () => {
     const { client, request } = makeClient({
-      alarms: { [FLUME]: ['42'], [PINEWOOD]: ['42'] },
+      alarms: { [BOX_A]: ['42'], [BOX_B]: ['42'] },
     });
     const res = await new ArchiveAlarmHandler().execute({ alarm_id: '42' }, client);
     expect(res.isError).toBe(true);
@@ -473,11 +473,11 @@ describe('archive_alarm tool', () => {
   it('reports a missing alarm and writes nothing', async () => {
     const { client, request } = makeClient();
     const res = await new ArchiveAlarmHandler().execute(
-      { alarm_id: '42', gid: FLUME },
+      { alarm_id: '42', gid: BOX_A },
       client
     );
     expect(res.isError).toBe(true);
-    expect(parse(res).message).toBe(`Alarm 42 not found on box ${FLUME}`);
+    expect(parse(res).message).toBe(`Alarm 42 not found on box ${BOX_A}`);
     expect(posts(request)).toEqual([]);
   });
 
@@ -489,7 +489,7 @@ describe('archive_alarm tool', () => {
     [{ alarm_id: '42', gid: 'not a gid' }],
     [{ alarm_id: '42', gid: 7 }],
   ])('rejects %j locally without any request', async args => {
-    const { client, request } = makeClient({ alarms: { [FLUME]: ['42'] } });
+    const { client, request } = makeClient({ alarms: { [BOX_A]: ['42'] } });
     const res = await new ArchiveAlarmHandler().execute(args as any, client);
     expect(res.isError).toBe(true);
     expect(parse(res).message).toBe('Parameter validation failed');
@@ -499,11 +499,11 @@ describe('archive_alarm tool', () => {
 
 describe('mute_alarm tool', () => {
   it('mutes a domain for one device', async () => {
-    const { client, request } = makeClient({ alarms: { [FLUME]: ['42'] } });
+    const { client, request } = makeClient({ alarms: { [BOX_A]: ['42'] } });
     const res = await new MuteAlarmHandler().execute(
       {
         alarm_id: '42',
-        gid: FLUME,
+        gid: BOX_A,
         target_type: 'domain',
         target_value: 'twitch.tv',
         scope_type: 'device',
@@ -514,7 +514,7 @@ describe('mute_alarm tool', () => {
     expect(res.isError).toBeFalsy();
     expect(posts(request).map(({ endpoint, body }) => ({ endpoint, body }))).toEqual([
       {
-        endpoint: `/v2/alarms/${FLUME}/42/mute`,
+        endpoint: `/v2/alarms/${BOX_A}/42/mute`,
         body: {
           target: { type: 'domain', value: 'twitch.tv' },
           scope: { type: 'device', value: MAC },
@@ -529,9 +529,9 @@ describe('mute_alarm tool', () => {
   });
 
   it("says an alarmType mute silences the alarm's type on every device", async () => {
-    const { client, request } = makeClient({ alarms: { [FLUME]: ['42'] } });
+    const { client, request } = makeClient({ alarms: { [BOX_A]: ['42'] } });
     const res = await new MuteAlarmHandler().execute(
-      { alarm_id: 42, target_type: 'alarmType', scope_type: 'all', gid: FLUME },
+      { alarm_id: 42, target_type: 'alarmType', scope_type: 'all', gid: BOX_A },
       client
     );
     expect(posts(request)[0].body).toEqual({
@@ -557,7 +557,7 @@ describe('mute_alarm tool', () => {
     [{ scope_type: 'all' }, 'Parameter validation failed'],
     [{ target_type: 'domain', target_value: 5, scope_type: 'all' }, 'Parameter validation failed'],
   ])('refuses %j without any request', async (args, message) => {
-    const { client, request } = makeClient({ alarms: { [FLUME]: ['42'] } });
+    const { client, request } = makeClient({ alarms: { [BOX_A]: ['42'] } });
     const res = await new MuteAlarmHandler().execute(
       { alarm_id: '42', ...args } as any,
       client

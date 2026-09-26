@@ -24,8 +24,8 @@ jest.mock('axios', () => {
   };
 });
 
-const FLUME = '11111111-2222-3333-4444-555555555555';
-const PINEWOOD = '66666666-7777-8888-9999-000000000000';
+const BOX_A = '11111111-2222-3333-4444-555555555555';
+const BOX_B = '66666666-7777-8888-9999-000000000000';
 
 interface FakeBox {
   gid: string;
@@ -34,8 +34,8 @@ interface FakeBox {
 }
 
 const TWO_BOXES: FakeBox[] = [
-  { gid: FLUME, name: 'Flume', online: true },
-  { gid: PINEWOOD, name: 'Pinewood', online: false },
+  { gid: BOX_A, name: 'Office', online: true },
+  { gid: BOX_B, name: 'Cabin', online: false },
 ];
 
 function makeClient({
@@ -96,31 +96,31 @@ const calls = (request: jest.Mock) =>
 
 describe('resolveBoxGid', () => {
   it('prefers the explicit gid, then FIREWALLA_BOX_ID, then FIREWALLA_DEFAULT_BOX_ID', async () => {
-    expect(
-      await makeClient({ boxId: FLUME }).client.resolveBoxGid(PINEWOOD)
-    ).toBe(PINEWOOD);
+    expect(await makeClient({ boxId: BOX_A }).client.resolveBoxGid(BOX_B)).toBe(
+      BOX_B
+    );
     expect(
       await makeClient({
-        boxId: FLUME,
-        defaultBoxId: PINEWOOD,
+        boxId: BOX_A,
+        defaultBoxId: BOX_B,
       }).client.resolveBoxGid()
-    ).toBe(FLUME);
-    const { client, request } = makeClient({ defaultBoxId: PINEWOOD });
-    expect(await client.resolveBoxGid()).toBe(PINEWOOD);
+    ).toBe(BOX_A);
+    const { client, request } = makeClient({ defaultBoxId: BOX_B });
+    expect(await client.resolveBoxGid()).toBe(BOX_B);
     expect(request).not.toHaveBeenCalled();
   });
 
   it("uses the account's only box", async () => {
     const { client } = makeClient({ boxes: [TWO_BOXES[0]] });
-    expect(await client.resolveBoxGid()).toBe(FLUME);
+    expect(await client.resolveBoxGid()).toBe(BOX_A);
   });
 
   it('refuses on a multi-box account, naming the boxes', async () => {
     const { client } = makeClient();
     const error = await client.resolveBoxGid().catch(e => e);
     expect(error).toBeInstanceOf(BoxSelectionError);
-    expect(error.message).toContain(`Flume (${FLUME})`);
-    expect(error.message).toContain(`Pinewood (${PINEWOOD})`);
+    expect(error.message).toContain(`Office (${BOX_A})`);
+    expect(error.message).toContain(`Cabin (${BOX_B})`);
   });
 
   it('refuses when the token sees no boxes', async () => {
@@ -133,41 +133,41 @@ describe('resolveBoxGid', () => {
 
 describe('getSpecificAlarm', () => {
   it('asks only the gid it is given', async () => {
-    const { client, request } = makeClient({ alarms: { [PINEWOOD]: ['42'] } });
-    const res = await client.getSpecificAlarm('42', PINEWOOD);
-    expect(res.results[0].gid).toBe(PINEWOOD);
-    expect(calls(request)).toEqual([`GET /v2/alarms/${PINEWOOD}/42`]);
+    const { client, request } = makeClient({ alarms: { [BOX_B]: ['42'] } });
+    const res = await client.getSpecificAlarm('42', BOX_B);
+    expect(res.results[0].gid).toBe(BOX_B);
+    expect(calls(request)).toEqual([`GET /v2/alarms/${BOX_B}/42`]);
   });
 
   it('asks only the FIREWALLA_BOX_ID box when set', async () => {
     const { client, request } = makeClient({
-      boxId: FLUME,
-      alarms: { [PINEWOOD]: ['42'] },
+      boxId: BOX_A,
+      alarms: { [BOX_B]: ['42'] },
     });
     await expect(client.getSpecificAlarm('42')).rejects.toThrow(/not found/);
-    expect(calls(request)).toEqual([`GET /v2/alarms/${FLUME}/42`]);
+    expect(calls(request)).toEqual([`GET /v2/alarms/${BOX_A}/42`]);
   });
 
   it('without a box configured, checks each box until one has the alarm', async () => {
-    const { client, request } = makeClient({ alarms: { [PINEWOOD]: ['42'] } });
+    const { client, request } = makeClient({ alarms: { [BOX_B]: ['42'] } });
     const res = await client.getSpecificAlarm('42');
-    expect(res.results[0].gid).toBe(PINEWOOD);
+    expect(res.results[0].gid).toBe(BOX_B);
     expect(calls(request)).toEqual([
       'GET /v2/boxes',
-      `GET /v2/alarms/${FLUME}/42`,
-      `GET /v2/alarms/${PINEWOOD}/42`,
+      `GET /v2/alarms/${BOX_A}/42`,
+      `GET /v2/alarms/${BOX_B}/42`,
     ]);
   });
 
   it('checks FIREWALLA_DEFAULT_BOX_ID first', async () => {
     const { client, request } = makeClient({
-      defaultBoxId: PINEWOOD,
-      alarms: { [PINEWOOD]: ['42'] },
+      defaultBoxId: BOX_B,
+      alarms: { [BOX_B]: ['42'] },
     });
     await client.getSpecificAlarm('42');
     expect(calls(request)).toEqual([
       'GET /v2/boxes',
-      `GET /v2/alarms/${PINEWOOD}/42`,
+      `GET /v2/alarms/${BOX_B}/42`,
     ]);
   });
 
@@ -201,23 +201,23 @@ describe('get_specific_alarm tool', () => {
   });
 
   it('accepts the numeric aid that get_active_alarms returns', async () => {
-    const { client, request } = makeClient({ alarms: { [PINEWOOD]: ['42'] } });
+    const { client, request } = makeClient({ alarms: { [BOX_B]: ['42'] } });
     const res = await new GetSpecificAlarmHandler().execute(
-      { alarm_id: 42, gid: PINEWOOD },
+      { alarm_id: 42, gid: BOX_B },
       client
     );
     expect(res.isError).toBeFalsy();
-    expect(calls(request)).toEqual([`GET /v2/alarms/${PINEWOOD}/42`]);
+    expect(calls(request)).toEqual([`GET /v2/alarms/${BOX_B}/42`]);
   });
 
   it('passes gid through to the client', async () => {
-    const { client, request } = makeClient({ alarms: { [PINEWOOD]: ['42'] } });
+    const { client, request } = makeClient({ alarms: { [BOX_B]: ['42'] } });
     const res = await new GetSpecificAlarmHandler().execute(
-      { alarm_id: '42', gid: PINEWOOD },
+      { alarm_id: '42', gid: BOX_B },
       client
     );
     expect(res.isError).toBeFalsy();
-    expect(calls(request)).toEqual([`GET /v2/alarms/${PINEWOOD}/42`]);
+    expect(calls(request)).toEqual([`GET /v2/alarms/${BOX_B}/42`]);
   });
 });
 
@@ -228,9 +228,9 @@ describe('getFirewallSummary', () => {
     expect(summary.status).toBe('partial');
     expect(summary.boxes_online).toBe(1);
     expect(summary.boxes_total).toBe(2);
-    expect(summary.boxes.map(box => box.name)).toEqual(['Flume', 'Pinewood']);
+    expect(summary.boxes.map(box => box.name)).toEqual(['Office', 'Cabin']);
     expect(summary.boxes[0]).toMatchObject({
-      gid: FLUME,
+      gid: BOX_A,
       device_count: 10,
       alarm_count: 2,
       rule_count: 5,
@@ -243,10 +243,10 @@ describe('getFirewallSummary', () => {
   });
 
   it('covers only the FIREWALLA_BOX_ID box when set', async () => {
-    const { client } = makeClient({ boxId: PINEWOOD });
+    const { client } = makeClient({ boxId: BOX_B });
     const summary = await client.getFirewallSummary();
     expect(summary.status).toBe('offline');
-    expect(summary.boxes.map(box => box.gid)).toEqual([PINEWOOD]);
+    expect(summary.boxes.map(box => box.gid)).toEqual([BOX_B]);
   });
 
   it('is online when every box is, and unknown with no boxes', async () => {
@@ -292,10 +292,8 @@ describe('security_report prompt', () => {
     expect(text).toContain(
       '**Firewall Status:** partial (1 of 2 boxes online)'
     );
-    expect(text).toContain(`- Flume (goldpro, ${FLUME}): online;`);
-    expect(text).toContain(
-      `- Pinewood (goldpro, ${PINEWOOD}): offline, last seen`
-    );
+    expect(text).toContain(`- Office (goldpro, ${BOX_A}): online;`);
+    expect(text).toContain(`- Cabin (goldpro, ${BOX_B}): offline, last seen`);
     expect(text).toContain('- Blocked in the 3 most recent flows: 2');
     expect(text).not.toContain('CPU Usage');
     expect(text).not.toContain('\\n');
