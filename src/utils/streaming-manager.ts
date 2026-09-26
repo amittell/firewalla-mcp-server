@@ -108,6 +108,12 @@ export type StreamingOperation<T = any> = (
   total?: number;
 }>;
 
+/** forTool's managers, by tool name, for callers that give no owner */
+const sharedManagers = new Map<string, StreamingManager>();
+
+/** forTool's managers per owner; they go when the owner does */
+const managersByOwner = new WeakMap<object, Map<string, StreamingManager>>();
+
 /**
  * Manager class for handling result streaming
  */
@@ -118,9 +124,6 @@ export class StreamingManager {
 
   constructor(config: Partial<StreamingConfig> = {}) {
     this.config = { ...DEFAULT_STREAMING_CONFIG, ...config };
-
-    // Start cleanup timer for expired sessions
-    this.startSessionCleanup();
   }
 
   /**
@@ -147,6 +150,8 @@ export class StreamingManager {
     };
 
     this.activeSessions.set(sessionId, session);
+    // Expired sessions are swept while any session exists
+    this.startSessionCleanup();
     return session;
   }
 
@@ -191,11 +196,13 @@ export class StreamingManager {
     const chunkStartTime = Date.now();
 
     try {
-      // Prepare parameters for this chunk
+      // The chunk size and the session's cursor win over the saved request
+      // parameters: spread after them, a saved limit replaced the chunk size
+      // and a saved cursor would restart every chunk from the same page
       const chunkParams: PaginationParams = {
+        ...session.originalParams,
         limit: session.config.chunkSize,
         cursor: session.continuationToken,
-        ...session.originalParams,
       };
 
       // Execute the operation to get data
@@ -304,9 +311,10 @@ export class StreamingManager {
       session.lastActivity = new Date();
 
       // Clean up completed session after a short delay
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         this.activeSessions.delete(sessionId);
       }, 60000); // Keep for 1 minute for reference
+      timer.unref?.();
     }
   }
 
@@ -330,9 +338,14 @@ export class StreamingManager {
   }
 
   /**
-   * Clean up expired sessions
+   * Clean up expired sessions, every minute while any session exists. The
+   * timer does not keep the process alive, and stops when no session is
+   * left, so an idle manager holds no timer.
    */
   private startSessionCleanup(): void {
+    if (this.cleanupTimer) {
+      return;
+    }
     this.cleanupTimer = setInterval(() => {
       const now = Date.now();
       const expiredSessions: string[] = [];
@@ -347,7 +360,13 @@ export class StreamingManager {
       expiredSessions.forEach(sessionId => {
         this.expireSession(sessionId);
       });
+
+      if (this.activeSessions.size === 0 && this.cleanupTimer) {
+        clearInterval(this.cleanupTimer);
+        this.cleanupTimer = undefined;
+      }
     }, 60000); // Check every minute
+    this.cleanupTimer.unref?.();
   }
 
   /**
@@ -472,11 +491,26 @@ export class StreamingManager {
   }
 
   /**
-   * Create a streaming manager optimized for specific tool
+   * The streaming manager for a tool, configured for it. The same manager is
+   * returned on every call for the same tool and `owner` (for example the
+   * API client), so a session started by one call can be continued by the
+   * next; a new manager per call had no sessions, and every
+   * streaming_session_id was "not found or expired".
    */
-  static forTool(toolName: string): StreamingManager {
-    const toolConfig = StreamingManager.getConfigForTool(toolName);
-    return new StreamingManager(toolConfig);
+  static forTool(toolName: string, owner?: object): StreamingManager {
+    let managers = sharedManagers;
+    if (owner) {
+      managers = managersByOwner.get(owner) ?? new Map();
+      managersByOwner.set(owner, managers);
+    }
+    let manager = managers.get(toolName);
+    if (!manager) {
+      manager = new StreamingManager(
+        StreamingManager.getConfigForTool(toolName)
+      );
+      managers.set(toolName, manager);
+    }
+    return manager;
   }
 }
 
@@ -535,7 +569,8 @@ export function shouldUseStreaming(
  */
 export function createStreamingResponse(
   chunk: StreamingChunk,
-  includeMetadata = true
+  includeMetadata = true,
+  extra: Record<string, unknown> = {}
 ) {
   const response: any = {
     streaming: true,
@@ -546,6 +581,7 @@ export function createStreamingResponse(
     isFinalChunk: chunk.isFinalChunk,
     nextContinuationToken: chunk.nextContinuationToken,
     timestamp: chunk.timestamp,
+    ...extra,
   };
 
   if (includeMetadata) {

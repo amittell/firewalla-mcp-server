@@ -66,6 +66,11 @@ import {
   toMspQuery,
 } from '../utils/msp-query.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
+import {
+  pagingCoverage,
+  type PagingCoverage,
+  type PagingStopReason,
+} from '../utils/paging-coverage.js';
 import { logger } from '../monitoring/logger.js';
 import {
   GeographicCache,
@@ -905,7 +910,10 @@ export class FirewallaClient {
    * GET up to `limit` results from a /v2 list endpoint, at most
    * MAX_API_PAGE_SIZE per request, following next_cursor. The MSP API answers
    * 400 "limit exceeds max allowed value of 500" to a larger limit on
-   * /v2/alarms and /v2/flows.
+   * /v2/alarms and /v2/flows. Reports the requests made and why paging
+   * stopped (see PagingStopReason). A next_cursor this read already sent
+   * stops it, with no cursor returned: following it would fetch the same page
+   * again, and the loop would repeat until `limit` with duplicates.
    */
   private async requestPages<T>(
     endpoint: string,
@@ -916,37 +924,69 @@ export class FirewallaClient {
     count: number;
     results: T[];
     next_cursor?: string;
+    api_requests: number;
+    stopped_reason: PagingStopReason;
     [key: string]: any;
   }> {
     // The API's own default when no usable limit is given
     const wanted = Number.isFinite(limit) && limit >= 1 ? limit : 200;
     const results: T[] = [];
     let cursor = params.cursor as string | undefined;
+    const sentCursors = new Set<string>();
     let first: Record<string, unknown> | undefined;
-    do {
+    let apiRequests = 0;
+    let stoppedReason: PagingStopReason;
+    for (;;) {
       const pageParams: Record<string, unknown> = {
         ...params,
         limit: Math.min(MAX_API_PAGE_SIZE, wanted - results.length),
       };
       if (cursor) {
         pageParams.cursor = cursor;
+        sentCursors.add(cursor);
       }
       const page = await this.request<{
         results?: T[];
         next_cursor?: string;
       }>('GET', endpoint, pageParams, undefined, cacheable);
+      apiRequests++;
       if (!first && page && !Array.isArray(page)) {
         first = page;
       }
       const pageResults = Array.isArray(page) ? page : page?.results || [];
       results.push(...pageResults);
       cursor = Array.isArray(page) ? undefined : page?.next_cursor;
-      if (pageResults.length === 0) {
+      if (!cursor) {
+        stoppedReason = 'no_more_pages';
         break;
       }
-    } while (cursor && results.length < wanted);
+      if (sentCursors.has(cursor)) {
+        logger.warn('The API repeated a cursor; paging stopped', {
+          endpoint,
+          requests: apiRequests,
+        });
+        stoppedReason = 'repeated_cursor';
+        cursor = undefined;
+        break;
+      }
+      if (pageResults.length === 0) {
+        stoppedReason = 'empty_page';
+        break;
+      }
+      if (results.length >= wanted) {
+        stoppedReason = 'limit_reached';
+        break;
+      }
+    }
 
-    return { ...first, count: results.length, results, next_cursor: cursor };
+    return {
+      ...first,
+      count: results.length,
+      results,
+      next_cursor: cursor,
+      api_requests: apiRequests,
+      stopped_reason: stoppedReason,
+    };
   }
 
   private async request<T>(
@@ -1287,6 +1327,8 @@ export class FirewallaClient {
    * @param groupBy - Optional fields to group by (e.g., 'category',
    *   'device', 'category,domain'). The API then returns groups, not flows:
    *   the result has `groups` and `group_by`, and empty `results`.
+   * @returns flows with `coverage`: the oldest and newest `ts` returned, the
+   *   requests made and why paging stopped (no coverage for groups)
    */
   async getFlowData(
     query?: string,
@@ -1300,6 +1342,7 @@ export class FirewallaClient {
     next_cursor?: string;
     groups?: FlowGroup[];
     group_by?: string;
+    coverage?: PagingCoverage;
   }> {
     const params: Record<string, unknown> = {
       // timestamp: and bytes: are rejected by /v2/flows; sent as ts: and total:
@@ -1444,6 +1487,10 @@ export class FirewallaClient {
         this.enrichWithGeographicData(flow, ['destination.ip', 'source.ip'])
       ),
       next_cursor: response.next_cursor,
+      coverage: pagingCoverage(
+        Array.isArray(response.results) ? response.results : [],
+        response
+      ),
     };
   }
 

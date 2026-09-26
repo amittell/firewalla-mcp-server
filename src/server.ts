@@ -278,7 +278,7 @@ export class FirewallaMCPServer {
           {
             name: 'get_flow_data',
             description:
-              'Query network traffic flows from the Firewalla MSP API (GET /v2/flows). Without a ts: qualifier the API covers the last 24 hours. Returns up to limit flows and a cursor for the next page, or groups with groupBy. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
+              'Query network traffic flows from the Firewalla MSP API (GET /v2/flows). Without a ts: qualifier the API covers the last 24 hours. Returns up to limit flows and a cursor for the next page, or groups with groupBy; coverage gives the oldest and newest ts returned and why paging stopped. A limit over 50 is streamed: pass nextContinuationToken back as cursor, or sessionId as streaming_session_id. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
             annotations: {
               title: 'Get Flow Data',
               readOnlyHint: true,
@@ -311,7 +311,18 @@ export class FirewallaMCPServer {
                 },
                 cursor: {
                   type: 'string',
-                  description: 'Pagination cursor from previous response',
+                  description:
+                    'Pagination cursor from a previous response: pagination.cursor, or the nextContinuationToken of a streamed one. Returns the page at that cursor, not streamed.',
+                },
+                stream: {
+                  type: 'boolean',
+                  description:
+                    'true streams any limit, false returns a plain page with pagination.cursor (default: a limit over 50 is streamed)',
+                },
+                streaming_session_id: {
+                  type: 'string',
+                  description:
+                    'The sessionId of a streamed response: returns its next chunk, of the same size. A session lasts 10 minutes after its last chunk.',
                 },
               },
               required: [],
@@ -746,7 +757,7 @@ export class FirewallaMCPServer {
           {
             name: 'search_flows',
             description:
-              'Search network flows with advanced query filters. Use this for: historical analysis, specific time ranges, complex filtering, or when you need more than 50 flows. Supports pagination, time-based queries (e.g., "ts:>1h" for the last hour, or Unix seconds such as "ts:1735689600-1735693200"), and all flow fields including geographic filtering. For quick "what\'s happening now" snapshots, use get_recent_flow_activity instead. Reads GET /v2/flows, 500 per request, following the cursor up to limit. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
+              'Search network flows with advanced query filters. Use this for: historical analysis, specific time ranges, complex filtering, or when you need more than 50 flows. Supports pagination, time-based queries (e.g., "ts:>1h" for the last hour, or Unix seconds such as "ts:1735689600-1735693200"), and all flow fields including geographic filtering. For quick "what\'s happening now" snapshots, use get_recent_flow_activity instead. Reads GET /v2/flows, 500 per request, following the cursor up to limit; coverage gives the oldest and newest ts returned and why paging stopped. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.',
             annotations: {
               title: 'Search Flows',
               readOnlyHint: true,

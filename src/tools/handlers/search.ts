@@ -380,7 +380,7 @@ function validateCommonSearchParameters(
 export class SearchFlowsHandler extends BaseToolHandler {
   name = 'search_flows';
   description =
-    'Search network flows with advanced query filters. Use this for: historical analysis, specific time ranges, complex filtering, or when you need more than 50 flows. Supports pagination, time-based queries (e.g., "ts:>1h" for the last hour, or Unix seconds such as "ts:1735689600-1735693200"), and all flow fields including geographic filtering. For quick "what\'s happening now" snapshots, use get_recent_flow_activity instead. Reads GET /v2/flows, 500 per request, following the cursor up to limit. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
+    'Search network flows with advanced query filters. Use this for: historical analysis, specific time ranges, complex filtering, or when you need more than 50 flows. Supports pagination, time-based queries (e.g., "ts:>1h" for the last hour, or Unix seconds such as "ts:1735689600-1735693200"), and all flow fields including geographic filtering. For quick "what\'s happening now" snapshots, use get_recent_flow_activity instead. Reads GET /v2/flows, 500 per request, following the cursor up to limit; coverage gives the oldest and newest ts returned and why paging stopped. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
   category = 'search' as const;
 
   constructor() {
@@ -651,10 +651,12 @@ export class SearchFlowsHandler extends BaseToolHandler {
         ) as Record<string, any> | undefined,
       };
 
-      // Create unified response with standardized metadata
+      // Create unified response with standardized metadata. coverage: the
+      // oldest and newest ts the API returned, and why paging stopped
       const unifiedResponseData = {
         flows: processedFlows,
         metadata,
+        coverage: result.coverage,
         query_info: {
           original_query: searchArgs.query,
           final_query: finalQuery,

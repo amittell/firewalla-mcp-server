@@ -368,6 +368,19 @@ export abstract class BaseToolHandler implements ToolHandler {
   }
 
   /**
+   * The field normalization createUnifiedResponse applies, when the handler
+   * enables it: snake_case keys, with the FIELD_ALIAS_MAP renames (timestamp
+   * becomes ts). For data a handler returns without createUnifiedResponse.
+   *
+   * @param data - The data to normalize
+   * @returns The data with normalized field names
+   * @protected
+   */
+  protected normalizeFields<T>(data: T): T {
+    return this.options.enableFieldNormalization ? toSnakeCaseDeep(data) : data;
+  }
+
+  /**
    * Create a unified success response with consistent formatting and enrichment
    *
    * @param data - The data to include in the response
@@ -403,7 +416,7 @@ export abstract class BaseToolHandler implements ToolHandler {
     // Apply field normalization if enabled
     if (this.options.enableFieldNormalization) {
       try {
-        processedData = toSnakeCaseDeep(processedData);
+        processedData = this.normalizeFields(processedData);
         meta.field_normalized = true;
       } catch (error) {
         // Field normalization failure shouldn't break the response
