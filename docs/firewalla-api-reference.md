@@ -1544,27 +1544,34 @@ Wait until `x-ratelimit-reset` (or for `retry-after`) before retrying.
 
 ### Best Practices
 
-1. **Always handle errors gracefully**
+1. **Always handle errors gracefully** (for your own client; this server's client already does the 429 part, see above)
    ```javascript
    try {
-     const response = await apiClient.get('/alarms');
+     const response = await apiClient.get('/v2/alarms');
      return response.data;
    } catch (error) {
      if (error.response?.status === 401) {
-       // Handle authentication error
        throw new Error('Authentication failed');
-     } else if (error.response?.status === 429) {
-       // Handle rate limiting: wait for the time the server asks for (up to
-       // the end of a 5-minute window)
-       const retryAfter = Number(error.response.headers['retry-after']) || 300;
-       await delay(retryAfter * 1000);
-       return retryRequest();
+     }
+     if (error.response?.status === 429) {
+       // The quota is back when the 5-minute window ends: x-ratelimit-reset
+       // (epoch seconds), else retry-after (seconds). Retry a GET once, and
+       // only if the wait is short enough for the caller; never replay a write.
+       const reset = Number(error.response.headers['x-ratelimit-reset']);
+       const waitMs = Number.isFinite(reset)
+         ? Math.max(0, reset * 1000 - Date.now())
+         : (Number(error.response.headers['retry-after']) || 300) * 1000;
+       if (error.config?.method === 'get' && !error.config.retried && waitMs <= 20_000) {
+         await delay(waitMs);
+         return apiClient.request({ ...error.config, retried: true });
+       }
+       throw new Error(`Rate limited; the quota returns in ${Math.ceil(waitMs / 1000)} s`);
      }
      throw error;
    }
    ```
 
-2. **Implement exponential backoff for retries**
+2. **Implement exponential backoff for retries** of transient failures such as timeouts and 5xx; a 429 needs a wait until the window ends instead (above)
    ```javascript
    async function retryWithBackoff(fn, maxRetries = 3) {
      for (let i = 0; i < maxRetries; i++) {

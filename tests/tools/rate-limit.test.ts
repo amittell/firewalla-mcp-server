@@ -29,8 +29,6 @@ import {
   rateLimitPauseMs,
   type Clock,
 } from '../../src/firewalla/rate-limit.js';
-import { ErrorClassifier } from '../../src/validation/error-classification.js';
-import { ErrorType } from '../../src/validation/error-handler.js';
 
 const BOX = '00000000-0000-0000-0000-000000000000';
 const START = Date.UTC(2026, 0, 1);
@@ -186,9 +184,6 @@ describe('client-side rate limit', () => {
     expect(message).toContain(
       'Rate limit exceeded: the Firewalla API allows 3 requests per 5 minutes (API_RATE_LIMIT); capacity returns in 300 s, at 2026-01-01T00:05:00Z. Not sent: this client started 3 requests in the last 5 minutes, and a request waits at most 20 s for the rate limit.'
     );
-    expect(ErrorClassifier.classifyError(message!)).toBe(
-      ErrorType.RATE_LIMIT_ERROR
-    );
     expect(stderr).toContain(
       'API Request refused for the rate limit: GET /v2/boxes; capacity returns in 300 s\n'
     );
@@ -251,6 +246,17 @@ describe('client-side rate limit', () => {
     await clock.advance(100_000);
     expect(patient.settled).toBe(true);
     expect(patient.error).toBeUndefined();
+  });
+
+  it('keeps the RateLimitError through request(), the path every public method uses', async () => {
+    const { client } = makeClient(1, () => boxes);
+    await (client as any).request('GET', '/v2/boxes', { group: 'a' });
+    const error = await (client as any)
+      .request('GET', '/v2/boxes', { group: 'b' })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect((error as RateLimitError).message).toMatch(/^Rate limit exceeded: /);
+    expect((error as RateLimitError).availableAt).toBe(START + 300_000);
   });
 });
 
@@ -324,9 +330,6 @@ describe('HTTP 429', () => {
     await settle();
     expect(first.error?.message).toContain(
       'Rate limit exceeded (HTTP 429): the Firewalla API allows 100 requests per 5 minutes (API_RATE_LIMIT); capacity returns in 190 s, at 2026-01-01T00:03:10Z. Not retried, as a request waits at most 20 s for the rate limit.'
-    );
-    expect(ErrorClassifier.classifyError(first.error!)).toBe(
-      ErrorType.RATE_LIMIT_ERROR
     );
 
     const during = track(client.getBoxes('group-2'));
