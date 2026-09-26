@@ -1062,7 +1062,7 @@ function summarizeValues(points: Array<{ value: number }>) {
 export class GetAlarmTrendsHandler extends BaseToolHandler {
   name = 'get_alarm_trends';
   description =
-    'Alarms generated per day for the last 30 days, one point per day, the last being today so far; period (default 30d) returns the days that overlap it. Without a box it is one GET /v2/trends/alarms covering every box, or the box group. That endpoint takes no box, so with box (else FIREWALLA_BOX_ID, unless group is given) each day is counted with one GET /v2/alarms groupBy=box scoped to the box: 1 request plus 1 per day, ~31 for 30d (the account allows ~100 a minute). box and group cannot be combined.';
+    'Alarms generated per day for the last 30 days, one point per day, the last being today so far; period (default 30d) returns the days that overlap it. Without a box it is one GET /v2/trends/alarms covering every box, or the box group. That endpoint takes no box, so with box (else FIREWALLA_BOX_ID, unless group is given) each day is counted with one GET /v2/alarms groupBy=box scoped to the box: 1 request plus 1 per day, ~31 for 30d, of the 100 requests the API allows per 5 minutes. box and group cannot be combined.';
   category = 'analytics' as const;
 
   constructor() {
