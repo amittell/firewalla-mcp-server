@@ -131,6 +131,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   answer to `initialize`. It goes to stderr through the logger, and stdout
   carries only JSON-RPC. Nothing else in `src/` calls `console.log`,
   `console.info`, `console.debug` or `process.stdout.write`.
+- A numeric variable that is not a number, such as `API_TIMEOUT=abc`,
+  `CACHE_TTL=abc` or `MCP_HTTP_PORT=abc`, stopped the server at startup with
+  "ReferenceError: Cannot access 'logger' before initialization" instead of
+  falling back to its default with a warning. The logger took `LOG_LEVEL`
+  from `src/production/config.ts`, which parsed those numbers when it
+  loaded, and the warning about one ran before the logger existed. The
+  logger reads `LOG_LEVEL` itself, and the server starts with the default
+  and logs "Invalid numeric value for environment variable" to stderr.
+  `MAX_CONCURRENT_REQUESTS` and `GRACEFUL_SHUTDOWN_TIMEOUT`, which only that
+  module read and nothing used, are no longer read, so a value out of their
+  range no longer stops the server either.
 - The HTTP transport answers a request body over 1 MB with 413, and a body
   that is not JSON with 400 and a JSON-RPC parse error (-32700). Over 1 MB
   it closed the connection without an answer, and a body that is not JSON

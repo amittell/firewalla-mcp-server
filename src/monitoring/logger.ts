@@ -1,6 +1,13 @@
-import { productionConfig } from '../production/config.js';
+// Import nothing that logs, directly or not: utils/env warns about a malformed
+// number through this logger, so a module here that parsed its numbers at load
+// time would run that warning before `logger` exists, and startup would fail
+// with a ReferenceError instead of falling back to the default.
+import * as dotenv from 'dotenv';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
 import { PACKAGE_VERSION } from '../utils/package-version.js';
+
+// Before DEBUG and LOG_LEVEL are read, so a .env file can set them
+dotenv.config();
 
 // DEBUG environment variable support
 const DEBUG_ENABLED =
@@ -61,7 +68,8 @@ export class StructuredLogger {
     if (DEBUG_ENABLED) {
       this.logLevel = 'debug';
     } else {
-      this.logLevel = logLevel || productionConfig.logLevel || 'info';
+      this.logLevel =
+        logLevel || (process.env.LOG_LEVEL as LogEntry['level']) || 'info';
     }
   }
 
