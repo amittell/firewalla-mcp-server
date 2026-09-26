@@ -16,6 +16,7 @@
 
 import type { FirewallaClient } from '../../firewalla/client.js';
 import type { ToolResponseUnified } from '../../types.js';
+import type { FlowGeographicFilters } from '../../utils/geographic-filters.js';
 import {
   createErrorResponse,
   ErrorType,
@@ -140,18 +141,8 @@ export interface DeviceArgs {
  * Geographic filtering parameters
  */
 export interface GeographicArgs {
-  /** @description Geographic filters object */
-  geographic_filters?: {
-    countries?: string[];
-    continents?: string[];
-    regions?: string[];
-    cities?: string[];
-    asns?: string[];
-    hosting_providers?: string[];
-    exclude_cloud?: boolean;
-    exclude_vpn?: boolean;
-    min_risk_score?: number;
-  };
+  /** @description search_flows' geographic filters, as its schema lists them */
+  geographic_filters?: FlowGeographicFilters;
 }
 
 /**

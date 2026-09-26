@@ -254,7 +254,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The `search_flows` schema lists `geographic_filters`, with `countries`,
   `regions` and the yes-or-no filters that ask for nothing when false; it
   listed no such argument, so a client that builds calls from the schema
-  could not send one.
+  could not send one. The yes-or-no filters are listed as `false` only, and
+  the exported `SearchFlowsArgs`, `SearchParams` and `ToolArgs` types take
+  the same filters (`FlowGeographicFilters`): they had the old shape, with
+  `continents`, `cities`, `asns`, `hosting_providers` and `min_risk_score`,
+  which are refused, and without `high_risk_countries`,
+  `exclude_known_providers` and `threat_analysis`.
 - `search_flows`, `search_alarms`, `get_flow_data` and `get_active_alarms`
   refuse a geographic name typed in the query that is not an API qualifier
   (`country:`, `continent:`, `city:`, `asn:`, `isp:`, `is_vpn:` and the
