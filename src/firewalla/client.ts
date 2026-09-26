@@ -1954,36 +1954,11 @@ export class FirewallaClient {
     query?: string,
     limit?: number
   ): Promise<{ count: number; results: NetworkRule[]; next_cursor?: string }> {
-    const params: Record<string, unknown> = {};
-
-    const { fields, text } = query
-      ? mspSplitText(query)
-      : { fields: '', text: [] };
-    const words = text.map(word => unquoteQueryValue(word).toLowerCase());
-    if (fields) {
-      params.query = fields;
-    }
-
-    if (limit !== undefined) {
-      params.limit = limit;
-    }
-
-    // Apply box filter through the query parameter
-    params.query = this.addBoxFilter(params.query as string | undefined);
-
-    const response = await this.request<{
-      count: number;
-      results: any[];
-      next_cursor?: string;
-    }>('GET', `/v2/rules`, params);
-
-    // API returns {count, results[]} format
-    const items = Array.isArray(response.results) ? response.results : [];
-    const matching =
-      words.length > 0
-        ? items.filter(item => ruleMatchesWords(item, words))
-        : items;
-    const rules = matching.map((item: any): NetworkRule => ({
+    const { response, items, matchedWords } = await this.requestRules(
+      query,
+      limit !== undefined ? { limit } : {}
+    );
+    const rules = items.map((item: any): NetworkRule => ({
       id: item.id || 'unknown',
       action: item.action || 'block',
       target: {
@@ -2031,9 +2006,66 @@ export class FirewallaClient {
 
     return {
       // The API's count does not know the words matched here
-      count: words.length > 0 ? rules.length : response.count || rules.length,
+      count: matchedWords ? rules.length : response.count || rules.length,
       results: rules,
       next_cursor: response.next_cursor,
+    };
+  }
+
+  /**
+   * GET /v2/rules for a rule search, which getNetworkRules and searchRules
+   * both read rules through. Free-text words are not sent: the API matched
+   * none (measured 2026-09-26: a word in one of 98 rules' target value
+   * returned 0 rules), so the other terms are sent, in the API's grammar
+   * and with the box scope, and the rules that come back are kept when they
+   * have every word (ruleMatchesWords).
+   *
+   * @param query - Rule search terms, in the tools' language or the API's
+   * @param params - Other GET parameters
+   * @param extraTerm - A term ANDed to the query the API is sent
+   * @returns The API's response, the rules that have every word, and
+   *   whether there were words (the API's count then does not apply)
+   * @throws {MspQueryError} When the query has no form the API can run
+   */
+  private async requestRules(
+    query: string | undefined,
+    params: Record<string, unknown>,
+    extraTerm?: string
+  ): Promise<{
+    response: {
+      count: number;
+      results: any[];
+      next_cursor?: string;
+      aggregations?: any;
+    };
+    items: any[];
+    matchedWords: boolean;
+  }> {
+    const { fields, text } = query
+      ? mspSplitText(query)
+      : { fields: '', text: [] };
+    const words = text.map(word => unquoteQueryValue(word).toLowerCase());
+    const sent = mspAnd(fields, extraTerm);
+    const request: Record<string, unknown> = { ...params };
+    // Apply box filter through the query parameter
+    request.query = this.addBoxFilter(sent || undefined);
+
+    const response = await this.request<{
+      count: number;
+      results: any[];
+      next_cursor?: string;
+      aggregations?: any;
+    }>('GET', `/v2/rules`, request);
+
+    // API returns {count, results[]} format
+    const results = Array.isArray(response?.results) ? response.results : [];
+    return {
+      response,
+      items:
+        words.length > 0
+          ? results.filter(item => ruleMatchesWords(item, words))
+          : results,
+      matchedWords: words.length > 0,
     };
   }
 
@@ -4253,12 +4285,12 @@ export class FirewallaClient {
 
       const startTime = Date.now();
 
-      // Enhanced query parsing with error handling
+      // Enhanced query parsing with error handling; formatQueryForAPI throws
+      // on invalid syntax
       let parsed;
-      let optimizedQuery;
       try {
         parsed = parseSearchQuery(trimmedQuery);
-        optimizedQuery = formatQueryForAPI(trimmedQuery);
+        formatQueryForAPI(trimmedQuery);
       } catch (parseError) {
         throw new Error(
           `Invalid search query syntax: ${parseError instanceof Error ? parseError.message : 'Parse error'}`
@@ -4274,8 +4306,9 @@ export class FirewallaClient {
           ? searchQuery.sort_by
           : 'timestamp:desc';
 
+      // The query goes to requestRules, which sends its terms and matches
+      // its free text, as getNetworkRules does
       const params: Record<string, unknown> = {
-        query: optimizedQuery,
         limit,
         sortBy,
       };
@@ -4291,27 +4324,25 @@ export class FirewallaClient {
       }
 
       // Enhanced filter application with validation
+      let minHitsTerm: string | undefined;
       if (
         options.min_hits &&
         typeof options.min_hits === 'number' &&
         options.min_hits > 0
       ) {
-        const minHits = Math.max(1, Math.floor(options.min_hits));
-        params.query = mspAnd(params.query as string, `hit.count:>=${minHits}`);
+        minHitsTerm = `hit.count:>=${Math.max(1, Math.floor(options.min_hits))}`;
       }
-
-      // Apply box filter through the query parameter
-      params.query = this.addBoxFilter(params.query as string | undefined);
 
       // Enhanced API request with better error handling
       let response;
+      let rawResults: any[];
+      let matchedWords: boolean;
       try {
-        response = await this.request<{
-          count: number;
-          results: any[];
-          next_cursor?: string;
-          aggregations?: any;
-        }>('GET', `/v2/rules`, params);
+        ({
+          response,
+          items: rawResults,
+          matchedWords,
+        } = await this.requestRules(trimmedQuery, params, minHitsTerm));
       } catch (apiError) {
         if (apiError instanceof Error) {
           if (apiError.message.includes('timeout')) {
@@ -4331,26 +4362,6 @@ export class FirewallaClient {
       // Enhanced response validation
       if (!response || typeof response !== 'object') {
         throw new Error('Invalid response format from search rules API');
-      }
-
-      const rawResults = response.results || [];
-      if (!Array.isArray(rawResults)) {
-        logger.debugNamespace(
-          'validation',
-          'Invalid results format in search response'
-        );
-        return {
-          count: 0,
-          results: [],
-          next_cursor: undefined,
-          aggregations: undefined,
-          metadata: {
-            execution_time: Date.now() - startTime,
-            cached: false,
-            filters_applied:
-              parsed?.filters?.map(f => `${f.field}:${f.operator}`) || [],
-          },
-        };
       }
 
       // Enhanced rule transformation with comprehensive validation
@@ -4492,7 +4503,8 @@ export class FirewallaClient {
         ); // Filter out invalid rules
 
       return {
-        count: response.count || rules.length,
+        // The API's count does not know the words matched on the client
+        count: matchedWords ? rules.length : response.count || rules.length,
         results: rules,
         next_cursor: response.next_cursor,
         aggregations: response.aggregations,
