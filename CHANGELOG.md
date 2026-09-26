@@ -320,9 +320,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fields as bullet lists, and each list of records as a table of at most 8
   columns and `DEFAULT_PAGE_SIZE` rows (default 100), with fields that have
   one value in every record stated once and the fields that are not columns
-  named; its last line says what it leaves out. Error responses stay JSON,
-  and a value other than `json` or `markdown` is refused before any
-  request. The property is added to each tool the server lists with
+  named; its last line says what it leaves out. Values and field names are
+  escaped (a backslash before each character that could start markdown or
+  HTML), so a device name such as `[a](https://...)` or `<img ...>` shows as
+  text instead of a link or an image. Error responses stay JSON; `null`, as
+  for every optional argument, means `json`, and any value other than
+  `json` or `markdown` is refused before any request. The property is added
+  to each tool the server lists with
   `readOnlyHint: true`, and the call dispatcher takes it out of the
   arguments before the tool runs, so a read tool added later takes it too;
   the tools that change state do not take it.

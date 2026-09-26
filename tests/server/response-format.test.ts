@@ -158,8 +158,9 @@ describe('tools/list', () => {
         [
           tool.name,
           expect.objectContaining({
-            type: 'string',
-            enum: ['json', 'markdown'],
+            // null is accepted as not given, and the schema says so
+            type: ['string', 'null'],
+            enum: ['json', 'markdown', null],
             default: 'json',
           }),
         ]
@@ -335,6 +336,25 @@ describe('markdown', () => {
     expect(lines[lines.length - 1]).toContain(
       'records past the first 100 in data'
     );
+  });
+
+  it('shows a device name as text, not markdown or HTML', async () => {
+    bodies['/v2/devices'] = [
+      device(0, '<img src=x onerror=alert(1)>'),
+      device(1, '[update](https://evil.example)'),
+    ];
+    const result = await call('get_device_status', {
+      response_format: 'markdown',
+    });
+    const lines = result.content[0].text.split('\n');
+    const rows = lines.filter(line => /^\| [^n-]/.test(line));
+    expect(rows.map(row => row.split(' | ')[0])).toEqual(
+      expect.arrayContaining([
+        '| \\<img src=x onerror=alert(1)>',
+        '| \\[update\\](https\\://evil.example)',
+      ])
+    );
+    expect(result.content[0].text).not.toMatch(/(?<!\\)<img|(?<!\\)\[update/);
   });
 
   it('accepts the value in any case', async () => {

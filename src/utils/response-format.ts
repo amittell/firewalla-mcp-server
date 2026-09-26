@@ -17,6 +17,14 @@
  * that are not columns named below it. A list with one record is shown as a
  * bullet list of its fields instead. A closing line says what the view
  * leaves out; `response_format: json` returns all of it.
+ *
+ * Every value and field name is data from the API, and device names,
+ * domains and alarm messages come from the network, so each is escaped
+ * before it is placed: the characters that can open markdown or HTML get a
+ * backslash (escapeMarkdown), which every CommonMark renderer shows as the
+ * character itself. IP addresses, MACs, gids and timestamps have none of
+ * them and read as they are. The one HTML the view writes is the <br> it
+ * puts in place of a newline, after the value is escaped.
  */
 
 /** The values response_format takes */
@@ -26,11 +34,12 @@ export type ResponseFormat = (typeof RESPONSE_FORMATS)[number];
 
 /** The schema property the read tools advertise */
 export const RESPONSE_FORMAT_PROPERTY = {
-  type: 'string',
-  enum: [...RESPONSE_FORMATS],
+  // null is accepted as not given, as every optional argument of the tools is
+  type: ['string', 'null'],
+  enum: [...RESPONSE_FORMATS, null],
   default: 'json',
   description:
-    "Response format. 'json' (default): the compact JSON response. 'markdown': the same response as readable markdown, its fields as bullet lists and each list of records as a table of up to 8 columns and DEFAULT_PAGE_SIZE rows (default 100), ending with a line that says what the view leaves out. Errors are JSON either way.",
+    "Response format. 'json' (default): the compact JSON response. 'markdown': the same response as readable markdown, its fields as bullet lists and each list of records as a table of up to 8 columns and DEFAULT_PAGE_SIZE rows (default 100), ending with a line that says what the view leaves out. Omitted or null: 'json'. Errors are JSON either way.",
 };
 
 /** The fields of a listed tool this module reads */
@@ -68,8 +77,9 @@ export function withResponseFormatProperty<T extends ListedTool>(tool: T): T {
 /**
  * The format a call asks for, and its arguments without response_format.
  * Arguments without the property come back as the same object. A value
- * other than json or markdown (in any case) is an error; null is the
- * default.
+ * other than json or markdown (in any case) is an error; null is not given,
+ * as the tools' validators treat null for every optional argument, so it is
+ * json.
  */
 export function takeResponseFormat(
   args: Record<string, unknown> | undefined
@@ -181,7 +191,7 @@ interface Section {
 interface RenderState {
   maxRows: number;
   sections: Section[];
-  /** "<path>: <n>" for each list of records, and each empty top-level list */
+  /** "<path>: <n>" for each list of records, and each empty list */
   counts: string[];
   /** Sections that show fewer rows than they have */
   cutRows: string[];
@@ -197,19 +207,66 @@ function oneLine(text: string): string {
   return text.replace(/\r\n|\r|\n/g, '<br>');
 }
 
+/**
+ * Characters that can open inline markdown or HTML: a backslash escape,
+ * code, emphasis, strikethrough, a link or image, raw HTML or an autolink
+ * (`<`), an entity (`&` that begins one), an underscore that is not inside
+ * a word (one inside a word opens no emphasis, so `mac_vendor` is left
+ * alone), and the parts of a bare URL, `www.` host or email address that
+ * GFM renderers turn into links (`://`, `www.`, `@`)
+ */
+const MARKDOWN_SYNTAX =
+  /[\\`*[\]<~@]|_(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])_|&(?=#[0-9]+;|#x[0-9a-f]+;|[a-z][a-z0-9]*;)|:(?=\/\/)|(?<=www)\./giu;
+
+/**
+ * Text with a backslash before each character that could open markdown or
+ * HTML. All are ASCII punctuation, which CommonMark lets a backslash escape,
+ * so a renderer shows the text as it is: `<img src=x>` stays text and
+ * `[a](b)` is not a link. Newlines are left for oneLine.
+ */
+export function escapeMarkdown(text: string): string {
+  return text.replace(MARKDOWN_SYNTAX, match => `\\${match}`);
+}
+
+/** Escaped text on one line, for a bullet, a heading or a note */
+function inline(text: string): string {
+  return oneLine(escapeMarkdown(text));
+}
+
+/**
+ * Escaped text that starts a list item, with a backslash before a mark
+ * that would start a heading, a quote, a list or a rule there
+ */
+function lineStart(text: string): string {
+  return text.replace(
+    /^(\s*)(?:([#>])|([+-])(?=[\s+-]|$)|(\d{1,9})([.)])(?=\s|$))/,
+    (
+      _match,
+      space: string,
+      mark?: string,
+      bullet?: string,
+      digits?: string,
+      dot?: string
+    ) =>
+      mark || bullet
+        ? `${space}\\${mark ?? bullet}`
+        : `${space}${digits}\\${dot}`
+  );
+}
+
 /** A value as bullet text */
 function bulletText(value: unknown): string {
   if (value === '') {
     return '""';
   }
   if (typeof value === 'string') {
-    return oneLine(value);
+    return inline(value);
   }
   if (value === undefined) {
     return 'null';
   }
   if (typeof value === 'object' && value !== null) {
-    return oneLine(JSON.stringify(value));
+    return inline(JSON.stringify(value));
   }
   return String(value);
 }
@@ -249,13 +306,13 @@ function cellText(value: unknown, state: RenderState): string {
 }
 
 /**
- * Table-cell text with backslashes and pipes escaped and newlines as <br>.
- * Backslashes go first: a value holding `\|` would otherwise become `\\|`,
- * which some renderers split into two cells and others show without the
- * backslash
+ * Table-cell text: escaped as escapeMarkdown does, pipes escaped, and
+ * newlines as <br>. Backslashes are escaped before pipes: a value holding
+ * `\|` would otherwise become `\\|`, which some renderers split into two
+ * cells and others show without the backslash
  */
 export function escapeCell(text: string): string {
-  return oneLine(text.replace(/\\/g, '\\\\').replace(/\|/g, '\\|'));
+  return oneLine(escapeMarkdown(text).replace(/\|/g, '\\|'));
 }
 
 /**
@@ -302,20 +359,18 @@ function objectLines(
   const indent = '  '.repeat(depth);
   const lines: string[] = [];
   for (const [key, value] of Object.entries(object)) {
-    const label = `${indent}- **${oneLine(key)}:**`;
+    const label = `${indent}- **${inline(key)}:**`;
     const here = [...path, key];
     if (isRecordList(value)) {
       const sectionPath = here.join('.');
       state.sections.push({ path: sectionPath, records: value });
       state.counts.push(`${sectionPath}: ${value.length}`);
       lines.push(
-        `${label} ${plural(value.length, 'record', 'records')}, under ${sectionPath} below`
+        `${label} ${plural(value.length, 'record', 'records')}, under ${inline(sectionPath)} below`
       );
     } else if (Array.isArray(value)) {
       if (value.length === 0) {
-        if (path.length === 0) {
-          state.counts.push(`${key}: 0`);
-        }
+        state.counts.push(`${here.join('.')}: 0`);
         lines.push(`${label} none`);
       } else {
         lines.push(...listLines(label, value, depth, here.join('.'), state));
@@ -346,7 +401,9 @@ function listLines(
     return [`${label} ${texts.join(', ')}`];
   }
   const indent = '  '.repeat(depth + 1);
-  const shown = texts.slice(0, state.maxRows).map(text => `${indent}- ${text}`);
+  const shown = texts
+    .slice(0, state.maxRows)
+    .map(text => `${indent}- ${lineStart(text)}`);
   const more = texts.length - state.maxRows;
   if (more > 0) {
     shown.push(`${indent}- … and ${more} more`);
@@ -360,7 +417,7 @@ function sectionLines(section: Section, state: RenderState): string[] {
   const { path, records } = section;
   if (records.length === 1) {
     return [
-      `### ${path} (1 record)`,
+      `### ${inline(path)} (1 record)`,
       '',
       ...objectLines(records[0], 0, [path], state),
     ];
@@ -416,8 +473,8 @@ function sectionLines(section: Section, state: RenderState): string[] {
   const count = plural(records.length, 'record', 'records');
   const lines = [
     shownRows.length < rows.length
-      ? `### ${path} (${count}, first ${shownRows.length} shown)`
-      : `### ${path} (${count})`,
+      ? `### ${inline(path)} (${count}, first ${shownRows.length} shown)`
+      : `### ${inline(path)} (${count})`,
     '',
   ];
   if (shownRows.length < rows.length) {
@@ -425,7 +482,7 @@ function sectionLines(section: Section, state: RenderState): string[] {
   }
   if (same.length > 0) {
     const values = same.map(
-      column => `${column} = ${bulletText(rows[0].get(column))}`
+      column => `${inline(column)} = ${bulletText(rows[0].get(column))}`
     );
     lines.push(`Same in every record: ${values.join('; ')}.`, '');
   }
@@ -442,10 +499,13 @@ function sectionLines(section: Section, state: RenderState): string[] {
   }
   if (hiddenColumns.length > 0) {
     state.hiddenColumns = true;
-    lines.push(`Fields not in the table: ${hiddenColumns.join(', ')}.`, '');
+    lines.push(
+      `Fields not in the table: ${hiddenColumns.map(inline).join(', ')}.`,
+      ''
+    );
   }
   if (empty.length > 0) {
-    lines.push(`Empty in every record: ${empty.join(', ')}.`, '');
+    lines.push(`Empty in every record: ${empty.map(inline).join(', ')}.`, '');
   }
   while (lines[lines.length - 1] === '') {
     lines.pop();
@@ -459,18 +519,18 @@ function closingLine(state: RenderState, meta: JsonObject | undefined): string {
   if (meta) {
     const requestId =
       typeof meta.request_id === 'string'
-        ? ` (request_id ${meta.request_id})`
+        ? ` (request_id ${inline(meta.request_id)})`
         : '';
     left.push(`the meta block${requestId}`);
   }
   if (state.cutRows.length > 0) {
     left.push(
-      `records past the first ${state.maxRows} in ${state.cutRows.join(', ')}`
+      `records past the first ${state.maxRows} in ${state.cutRows.map(inline).join(', ')}`
     );
   }
   if (state.cutLists.length > 0) {
     left.push(
-      `items past the first ${state.maxRows} in ${state.cutLists.join(', ')}`
+      `items past the first ${state.maxRows} in ${state.cutLists.map(inline).join(', ')}`
     );
   }
   if (state.hiddenColumns) {
@@ -549,7 +609,7 @@ export function renderMarkdown(
   } else if (isPlainObject(body)) {
     lines.push(...objectLines(body, 0, [], state));
   } else {
-    lines.push(bulletText(body));
+    lines.push(lineStart(bulletText(body)));
   }
 
   // Sections can add sections: a record shown as bullets may hold lists
@@ -560,8 +620,8 @@ export function renderMarkdown(
 
   const heading =
     state.counts.length > 0
-      ? `## ${toolName} (${state.counts.join(', ')})`
-      : `## ${toolName}`;
+      ? `## ${inline(toolName)} (${state.counts.map(inline).join(', ')})`
+      : `## ${inline(toolName)}`;
   return [
     heading,
     ...(lines.length > 0 ? [lines.join('\n')] : []),
