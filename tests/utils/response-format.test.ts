@@ -7,6 +7,7 @@
 import {
   RESPONSE_FORMAT_PROPERTY,
   escapeCell,
+  escapeMarkdown,
   renderMarkdown,
   takeResponseFormat,
   toMarkdownResponse,
@@ -70,6 +71,42 @@ describe('withResponseFormatProperty', () => {
       expect(withResponseFormatProperty(tool)).toBe(tool);
     }
   );
+});
+
+describe('escapeMarkdown', () => {
+  it.each([
+    ['192.168.1.10'],
+    ['fe80::1'],
+    ['2001:db8::8a2e:370:7334'],
+    ['2026-09-26T10:00:00.000Z'],
+    ['AA:BB:CC:DD:EE:FF'],
+    [BOX],
+    ['mac_vendor'],
+    ['AT&T'],
+    ['example.com'],
+    ['Den TV (upstairs)'],
+  ])('leaves %j as it is', value => {
+    expect(escapeMarkdown(value)).toBe(value);
+  });
+
+  it.each([
+    ['[click](https://evil.example)', '\\[click\\](https\\://evil.example)'],
+    [
+      '![p](https://evil.example/p.png)',
+      '!\\[p\\](https\\://evil.example/p.png)',
+    ],
+    ['<img src=x onerror=alert(1)>', '\\<img src=x onerror=alert(1)>'],
+    ['<https://evil.example>', '\\<https\\://evil.example>'],
+    ['www.evil.example', 'www\\.evil.example'],
+    ['user@evil.example', 'user\\@evil.example'],
+    ['&lt;b&gt; &#60;', '\\&lt;b\\&gt; \\&#60;'],
+    ['*bold* ~~strike~~ `code`', '\\*bold\\* \\~\\~strike\\~\\~ \\`code\\`'],
+    ['_id and _it_', '\\_id and \\_it\\_'],
+    ['C:\\Users', 'C:\\\\Users'],
+    ['*.example.com', '\\*.example.com'],
+  ])('escapes %j', (value, escaped) => {
+    expect(escapeMarkdown(value)).toBe(escaped);
+  });
 });
 
 describe('escapeCell', () => {
@@ -231,6 +268,75 @@ describe('renderMarkdown', () => {
       )
     );
     expect(text).not.toContain('Empty in every record');
+  });
+
+  it('escapes field names, values, list items and cells', () => {
+    const text = renderMarkdown('t', {
+      '<b>k</b>': '[a](https://evil.example)',
+      names: [
+        '# h',
+        '1. x',
+        '- y',
+        '> q',
+        '<img src=x>',
+        'n5',
+        'n6',
+        'n7',
+        'n8',
+        'n9',
+        'n10',
+      ],
+      rows: [
+        { name: '![p](https://evil.example/p.png)', n: 1 },
+        { name: 'Den | TV\nupstairs', n: 2 },
+      ],
+    });
+    expect(text).toBe(
+      [
+        '## t (rows: 2)',
+        '',
+        '- **\\<b>k\\</b>:** \\[a\\](https\\://evil.example)',
+        '- **names:** 11 items',
+        '  - \\# h',
+        '  - 1\\. x',
+        '  - \\- y',
+        '  - \\> q',
+        '  - \\<img src=x>',
+        '  - n5',
+        '  - n6',
+        '  - n7',
+        '  - n8',
+        '  - n9',
+        '  - n10',
+        '- **rows:** 2 records, under rows below',
+        '',
+        '### rows (2 records)',
+        '',
+        '| name | n |',
+        '| --- | --- |',
+        '| !\\[p\\](https\\://evil.example/p.png) | 1 |',
+        '| Den \\| TV<br>upstairs | 2 |',
+        '',
+        '_This view has every field of the response. Call again with `response_format: json` for the full JSON response._',
+      ].join('\n')
+    );
+  });
+
+  it('escapes a scalar response that would start a heading', () => {
+    expect(renderMarkdown('t', '# not a heading').split('\n')[2]).toBe(
+      '\\# not a heading'
+    );
+  });
+
+  it('counts empty lists at any depth in the heading', () => {
+    const text = renderMarkdown('t', {
+      summary: { top_protocols: [], total: 0 },
+      flows: [],
+    });
+    expect(text.split('\n')[0]).toBe(
+      '## t (summary.top_protocols: 0, flows: 0)'
+    );
+    expect(text).toContain('  - **top_protocols:** none');
   });
 
   it('lists the fields of a single record, with its lists as sections', () => {
