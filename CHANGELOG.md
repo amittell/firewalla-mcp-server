@@ -291,6 +291,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already did; any other value is refused (`online:maybe`, `online:tr*`) and
   matches no device. `online:yes` and `online:true,true` matched every
   device, offline ones included, and `online:true,false` was refused.
+- The search tools refuse a comma list with a space around a comma
+  (`online:true, false`, `region:US ,CN`), suggesting the list without the
+  spaces. A space ends the term, so `online:true, false` was `online:true,`
+  and then the word `false`: `search_devices` and `search_target_lists`
+  read the word as free text, so `name:nas, laptop` and
+  `category:social, games` found nothing, and the check on `online:`
+  reported `true,` as not a boolean.
 - A comma list may hold wildcards (`name:*Block*,Ads`,
   `domain:*apple*,*google*`). The shared query validator refused one
   as an invalid wildcard pattern, although an `OR` of wildcard values is sent
