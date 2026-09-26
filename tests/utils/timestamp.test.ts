@@ -241,7 +241,9 @@ describe('Timestamp Utilities - Edge Cases', () => {
       timestamps.forEach(ts => safeUnixToISOString(ts));
       
       const duration = Date.now() - start;
-      expect(duration).toBeLessThan(100); // Should complete in less than 100ms
+      // A few milliseconds normally; the bound leaves room for a loaded CI
+      // runner (209 ms was measured with the load average near 70)
+      expect(duration).toBeLessThan(1000);
     });
 
     test('should handle concurrent timestamp conversions', async () => {

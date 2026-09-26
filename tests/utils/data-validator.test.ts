@@ -390,7 +390,8 @@ describe('Data Validator', () => {
       const endTime = Date.now();
 
       expect(result.isValid).toBe(true);
-      expect(endTime - startTime).toBeLessThan(100); // Should be fast
+      // A few milliseconds normally; the bound leaves room for a loaded runner
+      expect(endTime - startTime).toBeLessThan(1000);
     });
 
     it('should handle deeply nested structures', () => {
