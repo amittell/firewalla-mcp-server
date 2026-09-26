@@ -15,7 +15,18 @@ export type QueryNode =
   | GroupQuery
   | WildcardQuery
   | RangeQuery
-  | ComparisonQuery;
+  | ComparisonQuery
+  | TextQuery;
+
+/**
+ * Free text: a word, number or quoted phrase with no field. Which fields it
+ * searches is up to the entity's matcher (or, for queries sent to the MSP
+ * API, the API).
+ */
+export interface TextQuery {
+  type: 'text';
+  value: string;
+}
 
 /**
  * Basic field-value query node
@@ -208,7 +219,7 @@ export const SEARCH_FIELDS = {
     'device_id',
     'region',
     'category',
-    'domain', // MSP flow qualifier: domain:*.example.com
+    'domain', // MSP flow qualifier: the root domain, domain:example.com (*.example.com matches nothing)
     'status', // MSP flow qualifier: status:blocked, status:ok
     'total', // MSP flow qualifier: total:>1MB (download + upload)
     'sport', // MSP flow qualifiers: source and destination port

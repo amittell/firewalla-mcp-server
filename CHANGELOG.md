@@ -164,6 +164,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that is not JSON with 400 and a JSON-RPC parse error (-32700). Over 1 MB
   it closed the connection without an answer, and a body that is not JSON
   got a 500 "Internal server error".
+- `search_flows` sends its `geographic_filters` only as a qualifier the API
+  documents: `countries`, and `regions` holding country codes, as one
+  `region:` comma list (`{countries: ["US", "CN"]}` is sent as
+  `region:US,CN`). They were sent as `country:`, `continent:`, `city:`,
+  `asn:` and `hosting_provider:` terms, with `-is_cloud_provider:true`,
+  `-is_vpn:true` and `geographic_risk_score:>=n`, none of them documented; the
+  API answers a qualifier it does not know with no results, so such a search
+  found nothing. `continents`, `cities`, `asns`, `hosting_providers`,
+  `exclude_vpn`, `exclude_cloud`, `min_risk_score` and unknown filter names
+  are refused as a validation error that names them, before any request. An
+  unknown country code is a validation error too; it was reported as a search
+  error, after a retry two seconds later. Country codes are checked against
+  the 249 assigned ISO 3166-1 alpha-2 codes; the table used before had 187,
+  and refused real codes such as CY, MT, MC, LI and AD. Only a yes-or-no
+  filter set to `false`, a known filter that is `null`, or an empty list asks
+  for nothing; a name the server does not know (`contintents`) and a list
+  filter set to anything but a list (`countries: false`) are refused, and the
+  response says geographic filters were applied only when they added a term.
+- `search_flows`, `search_alarms`, `get_flow_data` and `get_active_alarms`
+  refuse a geographic name typed in the query that is not an API qualifier
+  (`country:`, `continent:`, `city:`, `asn:`, `isp:`, `is_vpn:` and the
+  others in the tools' field lists), naming it, before any request; for
+  country codes the suggestion is the query with `region:` in their place
+  (`status:blocked AND country:CN` suggests `status:blocked region:CN`). The
+  field lists accepted these names and the query was sent, and the API
+  answers a qualifier it does not know with no results.
+- `search_devices`, `search_target_lists` and `search_rules` accept free
+  text: a query that is only a word or quoted phrase (`nas`, `"living
+  room"`), and free text beside other terms (`name:nas OR laptop`). The
+  search engine's query parser refused a term without a field ("Expected ':'
+  after field"). `search_devices` matches free text case-insensitively in the
+  name, IP, MAC or id, vendor, and network or group name (the network and
+  group names are new), and `search_target_lists` in the name, notes and
+  entries. `search_rules` and `get_network_rules` keep free text out of the
+  query sent to `GET /v2/rules`, which matched none (measured 2026-09-26: of
+  98 rules, one had a given word in its target value, and `query=<that
+  word>` returned 0), and keep the rules that have every word,
+  case-insensitively, in their name, notes, action, target type or value, or
+  scope type or value.
+- `search_devices`, `search_target_lists` and `search_rules` check every
+  term of a query whose terms are side by side with no operator
+  (`name:nas online:maybe`, `nas online:maybe`). The search engine's query
+  parser read such terms as AND only with an explicit `AND`, stopped after
+  the first term and reported the rest of the query as nothing, so
+  `online:maybe` passed its checks. It also refuses a token it cannot read,
+  such as a stray `)`, instead of dropping it, and the error for a refused
+  query no longer says a free-text word lacks a colon.
+- `search_target_lists` reads a comma list as any of its values, as the API
+  grammar does. It compared the list as one value, so `category:social,games`
+  found no list. A quoted value keeps its commas (`name:"Block, Social"`), and
+  a list may hold quoted values (`notes:consoles,"ad servers"`), which the
+  search engine's parser refused as an unclosed quote. `search_devices` reads
+  comma lists the same way (`name:nas,laptop`, `ip:192.168.1.0/24,10.0.0.0/8`);
+  it compared them as one value too. `online:` takes a list of booleans
+  (`online:true,false`), and `yes`, `no`, `1` and `0` as the query check
+  already did; any other value is refused (`online:maybe`, `online:tr*`) and
+  matches no device. `online:yes` and `online:true,true` matched every
+  device, offline ones included, and `online:true,false` was refused.
+- A comma list may hold wildcards (`name:*Block*,Ads`,
+  `domain:*apple*,*google*`). The shared query validator refused one
+  as an invalid wildcard pattern, although an `OR` of wildcard values is sent
+  as that list.
+- The `search_flows` query description, the flow example in validation
+  errors and the refusal of an excluded wildcard gave `domain:*.example.com`
+  and `-domain:ads.example.com` as forms to use. A flow's `domain` is its root
+  domain (measured 2026-09-26: `domain:*.apple.com` matched 0 flows where
+  `domain:apple.com` matched 1,283 in the same hour), so those found nothing.
+  They give `domain:example.com`, which covers a site's subdomains, and
+  `domain:*word*` for any domain containing a word.
+- `search_devices` matches `ip:` against an IPv4 CIDR block
+  (`ip:192.168.1.0/24`); it compared the block as text and found no device.
+  An `ip:` value with a `/` that is not an IPv4 block (`ip:fe80::/64`, a
+  prefix past 32) is refused as a validation error. `ip:0.0.0.0/0` covers
+  every address; the search engine's IP filter read `/0` as `/32`.
 
 ### Changed
 

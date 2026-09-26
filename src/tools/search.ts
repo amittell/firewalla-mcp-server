@@ -39,11 +39,16 @@ import {
   type MspTerm,
 } from '../utils/msp-query.js';
 import { unquoteQueryValue } from '../search/client-filter.js';
+import {
+  GeographicFilterError,
+  geographicFiltersToMspQuery,
+} from '../utils/geographic-filters.js';
 
 /**
  * Rule fields search_rules re-checks on the client, by the names its schema
- * uses. Terms on other fields (box.id, device.id, scope, notes, free text)
- * are left to the API.
+ * uses. Terms on other fields (box.id, device.id, scope, notes) are left to
+ * the API. Free text is not sent to the API, which matched none; the
+ * client's getNetworkRules matches it against the rules' text instead.
  */
 const RULE_FIELDS: Record<string, (rule: any) => unknown> = {
   action: rule => rule.action,
@@ -1048,16 +1053,11 @@ export class SearchEngine {
         timeQuery = `ts:${startTs}-${endTs}`;
       }
 
-      // Add geographic filters if provided
-      let geographicQuery: string | undefined;
-      if (params.geographic_filters) {
-        // Validate and obtain a sanitized copy
-        const sanitizedGeoFilters = this.validateGeographicFilters(
-          params.geographic_filters
-        );
-
-        geographicQuery = this.buildGeographicQuery(sanitizedGeoFilters);
-      }
+      // Geographic filters: countries as the documented region: qualifier;
+      // a filter with no documented equivalent throws GeographicFilterError
+      const geographicQuery = geographicFiltersToMspQuery(
+        params.geographic_filters
+      );
 
       const queryString = mspAnd(timeQuery, translatedQuery, geographicQuery);
 
@@ -1131,14 +1131,19 @@ export class SearchEngine {
       if (geographicAnalysis) {
         (result as any).geographic_analysis = geographicAnalysis;
       }
-      if (params.geographic_filters) {
+      // Applied only when they restricted the query: filters that ask for
+      // nothing ({ countries: [] }) add no term
+      if (geographicQuery) {
         (result as any).geographic_filters_applied = true;
       }
 
       return result;
     } catch (error) {
-      // A query the API cannot run is reported as it is
-      if (error instanceof MspQueryError) {
+      // A query or filter the API cannot run is reported as it is
+      if (
+        error instanceof MspQueryError ||
+        error instanceof GeographicFilterError
+      ) {
         throw error;
       }
       throw new Error(
@@ -2321,24 +2326,6 @@ export class SearchEngine {
     }
 
     return stats;
-  }
-
-  /**
-   * Build geographic query string from filters using FirewallaClient
-   */
-  private buildGeographicQuery(filters: {
-    countries?: string[];
-    continents?: string[];
-    regions?: string[];
-    cities?: string[];
-    asns?: string[];
-    hosting_providers?: string[];
-    exclude_cloud?: boolean;
-    exclude_vpn?: boolean;
-    min_risk_score?: number;
-  }): string {
-    // Use FirewallaClient's buildGeoQuery method for proper API syntax
-    return this.firewalla.buildGeoQuery(filters);
   }
 
   /**

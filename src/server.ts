@@ -376,7 +376,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search conditions for filtering rules, e.g. action:block status:active. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes.',
+                    'Search conditions for filtering rules, e.g. action:block status:active. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes. A word or quoted phrase with no field is free text, matched case-insensitively in the name, notes, action, target type or value, or scope of each rule (GET /v2/rules matches no free text, so the words are not sent).',
                 },
               },
               required: ['limit'],
@@ -764,7 +764,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes. Supported fields: protocol:tcp/udp, direction:inbound/outbound/local, status:blocked/ok, total:>1MB (download + upload in B/KB/MB/GB/TB), download:>10MB, upload:>10MB, domain:*.example.com, region:US (country code), category:social/games/porn/etc, box.id:box_gid, device.ip:192.168.*, source.ip:*, destination.ip:*, ts:>1h. Examples: "region:US AND protocol:tcp", "status:blocked AND region:CN", "category:social OR category:games"',
+                    'Search query using Firewalla syntax. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes. Supported fields: protocol:tcp/udp, direction:inbound/outbound/local, status:blocked/ok, total:>1MB (download + upload in B/KB/MB/GB/TB), download:>10MB, upload:>10MB, domain:example.com (the root domain: *.example.com matches nothing and *word* matches any domain containing word), region:US (country code), category:social/games/porn/etc, box.id:box_gid, device.ip:192.168.*, source.ip:*, destination.ip:*, ts:>1h. Examples: "region:US AND protocol:tcp", "status:blocked AND region:CN", "category:social OR category:games"',
                 },
                 groupBy: {
                   type: 'string',
@@ -850,7 +850,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes. Supported fields: action:allow/block/timelimit, target.type:domain/ip/device, target.value:*.facebook.com, status:active/paused, direction:bidirection/inbound/outbound, protocol:tcp/udp, box.id:box_gid, scope.type:device/network, notes:"description text". Examples: "action:block AND target.value:*.social.com", "status:paused", "target.type:domain AND action:block"',
+                    'Search query using Firewalla syntax. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes. A word or quoted phrase with no field is free text, matched case-insensitively in the name, notes, action, target type or value, or scope of each rule (GET /v2/rules matches no free text, so the words are not sent). Supported fields: action:allow/block/timelimit, target.type:domain/ip/device, target.value:*.facebook.com, status:active/paused, direction:bidirection/inbound/outbound, protocol:tcp/udp, box.id:box_gid, scope.type:device/network, notes:"description text". Examples: "action:block AND target.value:*.social.com", "status:paused", "target.type:domain AND action:block"',
                 },
                 limit: {
                   type: 'number',
@@ -1208,7 +1208,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Supported fields: mac:AA:BB:CC:DD:EE:FF, ip:192.168.1.*, name:*iPhone*, online:true/false, mac_vendor:Apple, gid:box_gid, network.name:*, group.name:*. Examples: "online:false AND mac_vendor:Apple", "ip:192.168.1.* AND name:*laptop*", "mac:AA:* OR name:*phone*"',
+                    'Search query using Firewalla syntax. A word or quoted phrase with no field is free text, found case-insensitively in the name, IP, MAC or id, vendor, or network or group name. ip: also takes an IPv4 CIDR block, and a comma list matches any of its values (name:tv,nas). Supported fields: mac:AA:BB:CC:DD:EE:FF, ip:192.168.1.*, name:*iPhone*, online:true/false, mac_vendor:Apple, gid:box_gid, network.name:*, group.name:*. Examples: "online:false AND mac_vendor:Apple", "ip:192.168.1.* AND name:*laptop*", "mac:AA:* OR name:*phone*", "ip:192.168.1.0/24", "nas", "kids AND online:true"',
                 },
                 limit: {
                   type: 'number',
@@ -1241,7 +1241,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query for target lists. Supported fields: name:*Social*, owner:global/box_gid, category:social/games/ad/porn/etc, targets:*.facebook.com, notes:"description text", target_count:>100 (entries: n, >n, >=n, <n, <=n or a range 10-50), last_updated:>2026-09-01 (a date or Unix seconds, with the same comparisons). Examples: "category:social", "owner:global AND name:*Block*", "targets:*.gaming.com", "target_count:>1000", "last_updated:<2026-01-01"',
+                    'Search query for target lists. A word or quoted phrase with no field is free text, found case-insensitively in the name, the notes or an entry; a comma list matches any of its values (category:social,games). Supported fields: name:*Social*, owner:global/box_gid, category:social/games/ad/porn/etc, targets:*.facebook.com, notes:"description text", target_count:>100 (entries: n, >n, >=n, <n, <=n or a range 10-50), last_updated:>2026-09-01 (a date or Unix seconds, with the same comparisons). Examples: "category:social", "category:social,games", "owner:global AND name:*Block*", "targets:*.gaming.com", "target_count:>1000", "last_updated:<2026-01-01", "facebook"',
                 },
                 owner: {
                   type: 'string',

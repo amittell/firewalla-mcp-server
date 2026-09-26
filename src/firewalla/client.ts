@@ -54,7 +54,12 @@ import type {
   GeographicData,
 } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
-import { matchesQuery, unquoteQueryValue } from '../search/client-filter.js';
+import {
+  commaListValues,
+  ipv4InCidr,
+  matchesQuery,
+  unquoteQueryValue,
+} from '../search/client-filter.js';
 import {
   translateSortBy,
   translateToMspQualifiers,
@@ -62,6 +67,7 @@ import {
 import {
   mspAnd,
   mspBoxScope,
+  mspSplitText,
   mspValue,
   toMspQuery,
 } from '../utils/msp-query.js';
@@ -71,6 +77,7 @@ import {
   type PagingCoverage,
   type PagingStopReason,
 } from '../utils/paging-coverage.js';
+import { refuseUndocumentedGeoQualifiers } from '../utils/geographic-filters.js';
 import { logger } from '../monitoring/logger.js';
 import {
   GeographicCache,
@@ -372,7 +379,40 @@ function withMspQuery(
   }
   const { query, ...rest } = params;
   const translated = toMspQuery(query);
+  if (endpoint !== '/v2/rules') {
+    refuseUndocumentedGeoQualifiers(query);
+  }
   return translated ? { ...rest, query: translated } : rest;
+}
+
+/** The values search_devices reads for `online:`, lowercase */
+const ONLINE_VALUES: ReadonlyMap<string, boolean> = new Map([
+  ['true', true],
+  ['1', true],
+  ['yes', true],
+  ['false', false],
+  ['0', false],
+  ['no', false],
+]);
+
+/**
+ * Whether a rule, as GET /v2/rules returns it, has every free-text word
+ * (lowercase) in its name, notes, action, target type or value, or scope
+ * type or value, case-insensitively
+ */
+function ruleMatchesWords(rule: any, words: string[]): boolean {
+  const text = [
+    rule?.name,
+    rule?.notes,
+    rule?.action,
+    rule?.target?.type,
+    rule?.target?.value,
+    rule?.scope?.type,
+    rule?.scope?.value,
+  ]
+    .filter((value): value is string => typeof value === 'string')
+    .map(value => value.toLowerCase());
+  return words.every(word => text.some(value => value.includes(word)));
 }
 
 /**
@@ -1909,82 +1949,133 @@ export class FirewallaClient {
     }
   }
 
+  /**
+   * Rules from GET /v2/rules, the box scope applied
+   *
+   * @param query - Rule search terms. Free-text words are not sent: the
+   *   API matched none (measured 2026-09-26: a word in one of 98 rules'
+   *   target value returned 0 rules), so every word must be found here,
+   *   case-insensitively, in the rule's name, notes, action, target type or
+   *   value, or scope type or value.
+   * @param limit - Sent as `limit`
+   * @throws {MspQueryError} When the query has no form the API can run
+   */
   async getNetworkRules(
     query?: string,
     limit?: number
   ): Promise<{ count: number; results: NetworkRule[]; next_cursor?: string }> {
-    const params: Record<string, unknown> = {};
+    const { response, items, matchedWords } = await this.requestRules(
+      query,
+      limit !== undefined ? { limit } : {}
+    );
+    const rules = items.map((item: any): NetworkRule => ({
+      id: item.id || 'unknown',
+      action: item.action || 'block',
+      target: {
+        type: item.target?.type || 'ip',
+        value: item.target?.value || 'unknown',
+        dnsOnly: item.target?.dnsOnly,
+        port: item.target?.port,
+      },
+      direction: item.direction || 'bidirection',
+      gid: item.gid || this.config.boxId,
+      group: item.group,
+      scope: item.scope
+        ? {
+            type: item.scope.type || 'ip',
+            value: item.scope.value || 'unknown',
+            port: item.scope.port,
+          }
+        : undefined,
+      notes: item.notes,
+      status: item.status,
+      hit: item.hit
+        ? {
+            count: item.hit.count || 0,
+            lastHitTs: item.hit.lastHitTs || 0,
+            statsResetTs: item.hit.statsResetTs,
+          }
+        : undefined,
+      schedule: item.schedule
+        ? {
+            duration: item.schedule.duration || 0,
+            cronTime: item.schedule.cronTime,
+          }
+        : undefined,
+      timeUsage: item.timeUsage
+        ? {
+            quota: item.timeUsage.quota || 0,
+            used: item.timeUsage.used || 0,
+          }
+        : undefined,
+      protocol: item.protocol,
+      ts: item.ts || Math.floor(Date.now() / 1000),
+      updateTs: item.updateTs || Math.floor(Date.now() / 1000),
+      resumeTs: item.resumeTs,
+    }));
 
-    if (query) {
-      params.query = query;
-    }
+    return {
+      // The API's count does not know the words matched here
+      count: matchedWords ? rules.length : response.count || rules.length,
+      results: rules,
+      next_cursor: response.next_cursor,
+    };
+  }
 
-    if (limit !== undefined) {
-      params.limit = limit;
-    }
-
+  /**
+   * GET /v2/rules for a rule search, which getNetworkRules and searchRules
+   * both read rules through. Free-text words are not sent: the API matched
+   * none (measured 2026-09-26: a word in one of 98 rules' target value
+   * returned 0 rules), so the other terms are sent, in the API's grammar
+   * and with the box scope, and the rules that come back are kept when they
+   * have every word (ruleMatchesWords).
+   *
+   * @param query - Rule search terms, in the tools' language or the API's
+   * @param params - Other GET parameters
+   * @param extraTerm - A term ANDed to the query the API is sent
+   * @returns The API's response, the rules that have every word, and
+   *   whether there were words (the API's count then does not apply)
+   * @throws {MspQueryError} When the query has no form the API can run
+   */
+  private async requestRules(
+    query: string | undefined,
+    params: Record<string, unknown>,
+    extraTerm?: string
+  ): Promise<{
+    response: {
+      count: number;
+      results: any[];
+      next_cursor?: string;
+      aggregations?: any;
+    };
+    items: any[];
+    matchedWords: boolean;
+  }> {
+    const { fields, text } = query
+      ? mspSplitText(query)
+      : { fields: '', text: [] };
+    const words = text.map(word => unquoteQueryValue(word).toLowerCase());
+    const sent = mspAnd(fields, extraTerm);
+    const request: Record<string, unknown> = { ...params };
     // Apply box filter through the query parameter
-    params.query = this.addBoxFilter(params.query as string | undefined);
+    request.query = this.addBoxFilter(sent || undefined);
 
     const response = await this.request<{
       count: number;
       results: any[];
       next_cursor?: string;
-    }>('GET', `/v2/rules`, params);
+      aggregations?: any;
+    }>('GET', `/v2/rules`, request);
 
     // API returns {count, results[]} format
-    const rules = (Array.isArray(response.results) ? response.results : []).map(
-      (item: any): NetworkRule => ({
-        id: item.id || 'unknown',
-        action: item.action || 'block',
-        target: {
-          type: item.target?.type || 'ip',
-          value: item.target?.value || 'unknown',
-          dnsOnly: item.target?.dnsOnly,
-          port: item.target?.port,
-        },
-        direction: item.direction || 'bidirection',
-        gid: item.gid || this.config.boxId,
-        group: item.group,
-        scope: item.scope
-          ? {
-              type: item.scope.type || 'ip',
-              value: item.scope.value || 'unknown',
-              port: item.scope.port,
-            }
-          : undefined,
-        notes: item.notes,
-        status: item.status,
-        hit: item.hit
-          ? {
-              count: item.hit.count || 0,
-              lastHitTs: item.hit.lastHitTs || 0,
-              statsResetTs: item.hit.statsResetTs,
-            }
-          : undefined,
-        schedule: item.schedule
-          ? {
-              duration: item.schedule.duration || 0,
-              cronTime: item.schedule.cronTime,
-            }
-          : undefined,
-        timeUsage: item.timeUsage
-          ? {
-              quota: item.timeUsage.quota || 0,
-              used: item.timeUsage.used || 0,
-            }
-          : undefined,
-        protocol: item.protocol,
-        ts: item.ts || Math.floor(Date.now() / 1000),
-        updateTs: item.updateTs || Math.floor(Date.now() / 1000),
-        resumeTs: item.resumeTs,
-      })
-    );
-
+    const results = Array.isArray(response?.results) ? response.results : [];
     return {
-      count: response.count || rules.length,
-      results: rules,
-      next_cursor: response.next_cursor,
+      response,
+      items:
+        words.length > 0
+          ? results.filter(item => ruleMatchesWords(item, words))
+          : results,
+      matchedWords: words.length > 0,
     };
   }
 
@@ -4204,12 +4295,12 @@ export class FirewallaClient {
 
       const startTime = Date.now();
 
-      // Enhanced query parsing with error handling
+      // Enhanced query parsing with error handling; formatQueryForAPI throws
+      // on invalid syntax
       let parsed;
-      let optimizedQuery;
       try {
         parsed = parseSearchQuery(trimmedQuery);
-        optimizedQuery = formatQueryForAPI(trimmedQuery);
+        formatQueryForAPI(trimmedQuery);
       } catch (parseError) {
         throw new Error(
           `Invalid search query syntax: ${parseError instanceof Error ? parseError.message : 'Parse error'}`
@@ -4225,8 +4316,9 @@ export class FirewallaClient {
           ? searchQuery.sort_by
           : 'timestamp:desc';
 
+      // The query goes to requestRules, which sends its terms and matches
+      // its free text, as getNetworkRules does
       const params: Record<string, unknown> = {
-        query: optimizedQuery,
         limit,
         sortBy,
       };
@@ -4242,27 +4334,25 @@ export class FirewallaClient {
       }
 
       // Enhanced filter application with validation
+      let minHitsTerm: string | undefined;
       if (
         options.min_hits &&
         typeof options.min_hits === 'number' &&
         options.min_hits > 0
       ) {
-        const minHits = Math.max(1, Math.floor(options.min_hits));
-        params.query = mspAnd(params.query as string, `hit.count:>=${minHits}`);
+        minHitsTerm = `hit.count:>=${Math.max(1, Math.floor(options.min_hits))}`;
       }
-
-      // Apply box filter through the query parameter
-      params.query = this.addBoxFilter(params.query as string | undefined);
 
       // Enhanced API request with better error handling
       let response;
+      let rawResults: any[];
+      let matchedWords: boolean;
       try {
-        response = await this.request<{
-          count: number;
-          results: any[];
-          next_cursor?: string;
-          aggregations?: any;
-        }>('GET', `/v2/rules`, params);
+        ({
+          response,
+          items: rawResults,
+          matchedWords,
+        } = await this.requestRules(trimmedQuery, params, minHitsTerm));
       } catch (apiError) {
         if (apiError instanceof Error) {
           if (apiError.message.includes('timeout')) {
@@ -4282,26 +4372,6 @@ export class FirewallaClient {
       // Enhanced response validation
       if (!response || typeof response !== 'object') {
         throw new Error('Invalid response format from search rules API');
-      }
-
-      const rawResults = response.results || [];
-      if (!Array.isArray(rawResults)) {
-        logger.debugNamespace(
-          'validation',
-          'Invalid results format in search response'
-        );
-        return {
-          count: 0,
-          results: [],
-          next_cursor: undefined,
-          aggregations: undefined,
-          metadata: {
-            execution_time: Date.now() - startTime,
-            cached: false,
-            filters_applied:
-              parsed?.filters?.map(f => `${f.field}:${f.operator}`) || [],
-          },
-        };
       }
 
       // Enhanced rule transformation with comprehensive validation
@@ -4443,7 +4513,8 @@ export class FirewallaClient {
         ); // Filter out invalid rules
 
       return {
-        count: response.count || rules.length,
+        // The API's count does not know the words matched on the client
+        count: matchedWords ? rules.length : response.count || rules.length,
         results: rules,
         next_cursor: response.next_cursor,
         aggregations: response.aggregations,
@@ -4564,7 +4635,7 @@ export class FirewallaClient {
             );
 
             // `id:`, `ip:`, `mac:` and `gid:` take an exact value or a `*`
-            // wildcard (172.16.2.*, AA:BB:*)
+            // wildcard (172.16.2.*, AA:BB:*); `ip:` also takes a CIDR block
             const matchesPattern = (
               value: string,
               pattern: string
@@ -4577,12 +4648,12 @@ export class FirewallaClient {
                 .replace(/\*/g, '.*');
               return new RegExp(`^${escaped}$`).test(value);
             };
+            // Free text: a word or quoted phrase with no field, found in
+            // the name, IP, MAC or id, vendor, or network or group name
             const matchesText = (text: string): boolean =>
-              name.includes(text) ||
-              mac.includes(text) ||
-              ip.includes(text) ||
-              macVendor.includes(text) ||
-              id.includes(text);
+              [name, ip, mac, id, macVendor, networkName, groupName].some(
+                value => value.includes(text)
+              );
 
             // Match one `field:value` term; matchesQuery evaluates AND, OR,
             // NOT and parentheses between terms
@@ -4592,32 +4663,51 @@ export class FirewallaClient {
                 return matchesText(unquoteQueryValue(term));
               }
               const [, field, rawValue] = fieldTerm;
-              const value = unquoteQueryValue(rawValue);
+              // A comma list matches any of its values, as in the MSP API
+              // grammar (name:nas,laptop); it was compared as one value
+              const values = commaListValues(rawValue);
+              const anyValue = (test: (entry: string) => boolean): boolean =>
+                values.some(test);
 
               switch (field) {
                 case 'id':
-                  return matchesPattern(id, value);
+                  return anyValue(entry => matchesPattern(id, entry));
                 case 'ip':
-                  return matchesPattern(ip, value);
+                  // An IPv4 CIDR block (192.168.1.0/24), else a pattern
+                  return anyValue(entry =>
+                    entry.includes('/')
+                      ? ipv4InCidr(ip, entry) === true
+                      : matchesPattern(ip, entry)
+                  );
                 case 'mac':
-                  return matchesPattern(mac, value);
+                  return anyValue(entry => matchesPattern(mac, entry));
                 case 'gid':
-                  return matchesPattern(gid, value);
+                  return anyValue(entry => matchesPattern(gid, entry));
                 case 'mac_vendor':
-                  return macVendor.includes(value);
+                  return anyValue(entry => macVendor.includes(entry));
                 case 'name':
-                  return name.includes(value.replace(/\*/g, ''));
+                  return anyValue(entry =>
+                    name.includes(entry.replace(/\*/g, ''))
+                  );
                 case 'network.name':
-                  return networkName.includes(value.replace(/\*/g, ''));
+                  return anyValue(entry =>
+                    networkName.includes(entry.replace(/\*/g, ''))
+                  );
                 case 'group.name':
-                  return groupName.includes(value.replace(/\*/g, ''));
-                case 'online':
-                  if (value === 'true') {
-                    return isOnline;
-                  } else if (value === 'false') {
-                    return !isOnline;
-                  }
-                  return true; // Unknown online value, let it pass
+                  return anyValue(entry =>
+                    groupName.includes(entry.replace(/\*/g, ''))
+                  );
+                case 'online': {
+                  // true or false, or 1/0 and yes/no as the query validator
+                  // accepts; a comma list is any of its values. A value
+                  // that is none of these matches no device: it matched
+                  // every one (online:yes and online:true,true did)
+                  const wanted = values.map(entry => ONLINE_VALUES.get(entry));
+                  return (
+                    wanted.every(entry => entry !== undefined) &&
+                    wanted.includes(isOnline)
+                  );
+                }
                 default:
                   // Fallback: search the whole term in all text fields
                   return matchesText(term);
@@ -5660,27 +5750,6 @@ export class FirewallaClient {
   }
 
   /**
-   * Helper method to build the query for an array-based geographic filter:
-   * one comma list, the MSP API's OR within a field (it has no OR keyword
-   * and no parentheses)
-   *
-   * @param fieldName - The field name for the query (e.g., 'country', 'region')
-   * @param values - Array of values any of which may match
-   * @returns Query string or null if values array is empty
-   * @private
-   */
-  private buildArrayFilterQuery(
-    fieldName: string,
-    values?: string[]
-  ): string | null {
-    if (!values || values.length === 0) {
-      return null;
-    }
-
-    return `${fieldName}:${values.map(mspValue).join(',')}`;
-  }
-
-  /**
    * Helper method to add box.id qualifier to search queries
    *
    * @param query - Existing query string (optional)
@@ -5723,92 +5792,6 @@ export class FirewallaClient {
       params.group = group.trim();
     }
     return params;
-  }
-
-  /**
-   * Build geographic query string from filters for Firewalla API
-   *
-   * Converts geographic filter objects into API-compatible query syntax.
-   * Supports countries, continents, regions, cities, ASNs, hosting providers,
-   * and boolean exclusion filters.
-   *
-   * @param filters - Geographic filter configuration
-   * @returns Query string compatible with Firewalla API
-   */
-  buildGeoQuery(filters: {
-    countries?: string[];
-    continents?: string[];
-    regions?: string[];
-    cities?: string[];
-    asns?: string[];
-    hosting_providers?: string[];
-    exclude_cloud?: boolean;
-    exclude_vpn?: boolean;
-    min_risk_score?: number;
-    high_risk_countries?: boolean;
-    exclude_known_providers?: boolean;
-    threat_analysis?: boolean;
-  }): string {
-    const queryParts: string[] = [];
-
-    // Define filter configurations in a data-driven approach
-    const filterConfigs = {
-      // Array filters
-      arrayFilters: [
-        { field: 'country', values: filters.countries },
-        { field: 'continent', values: filters.continents },
-        { field: 'region', values: filters.regions },
-        { field: 'city', values: filters.cities },
-        { field: 'asn', values: filters.asns },
-        { field: 'hosting_provider', values: filters.hosting_providers },
-      ],
-      // Boolean filters
-      booleanFilters: [
-        {
-          condition: filters.exclude_cloud === true,
-          query: '-is_cloud_provider:true',
-        },
-        { condition: filters.exclude_vpn === true, query: '-is_vpn:true' },
-        {
-          condition: filters.high_risk_countries === true,
-          query: 'geographic_risk_score:>=7',
-        },
-        {
-          // The official grammar has no exclusion of a wildcard (-hosting_provider:*)
-          condition: filters.exclude_known_providers === true,
-          query: '-is_cloud_provider:true',
-        },
-      ],
-    };
-
-    // Process array filters
-    filterConfigs.arrayFilters.forEach(({ field, values }) => {
-      const query = this.buildArrayFilterQuery(field, values);
-      if (query) {
-        queryParts.push(query);
-      }
-    });
-
-    // Process boolean filters
-    filterConfigs.booleanFilters.forEach(({ condition, query }) => {
-      if (condition) {
-        queryParts.push(query);
-      }
-    });
-
-    // Process numeric filters
-    if (
-      filters.min_risk_score !== undefined &&
-      typeof filters.min_risk_score === 'number' &&
-      filters.min_risk_score >= 0
-    ) {
-      queryParts.push(`geographic_risk_score:>=${filters.min_risk_score}`);
-    }
-
-    // Note: threat_analysis is handled by the API server, not as a query filter
-
-    // A space ANDs terms: the API has no AND keyword
-    return mspAnd(...queryParts);
   }
 
   /**
@@ -5863,6 +5846,9 @@ export class FirewallaClient {
       return endpoint;
     }
     const translated = toMspQuery(query);
+    if (path !== '/v2/rules') {
+      refuseUndocumentedGeoQualifiers(query);
+    }
     if (translated === query) {
       return endpoint;
     }

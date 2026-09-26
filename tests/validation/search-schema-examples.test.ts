@@ -172,7 +172,7 @@ describe('search schema fields and examples (#42)', () => {
     }
     expect(cases.map(([, query]) => query)).toEqual(
       expect.arrayContaining([
-        'domain:*.example.com',
+        'domain:example.com',
         'region:US',
         'scope.type:device',
         'notes:"description text"',

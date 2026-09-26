@@ -43,6 +43,14 @@ export class QueryParser {
       this.tokens = this.tokenize(query);
       const ast = this.parseExpression();
 
+      // The whole query must be read: a token left over (a stray `)`, or a
+      // term after an error) would otherwise be dropped without a word
+      if (this.errors.length === 0 && !this.isAtEnd()) {
+        this.errors.push(
+          `Unexpected token '${this.peek().value}' at position ${this.peek().position}`
+        );
+      }
+
       // Validate fields if entity type is provided
       if (entityType && ast) {
         this.validateFields(ast, entityType);
@@ -95,6 +103,32 @@ export class QueryParser {
     // Set right after `field:` or `field:>=`, where a bare value starts
     let expectValue = false;
 
+    // The index just past a quoted segment starting at `from`
+    const closingQuote = (from: number): number => {
+      let end = from + 1;
+      while (end < safeInput.length && safeInput[end] !== safeInput[from]) {
+        end += safeInput[end] === '\\' ? 2 : 1;
+      }
+      if (end >= safeInput.length) {
+        throw new Error(`Unclosed quoted string starting at position ${from}`);
+      }
+      return end + 1;
+    };
+
+    // The index just past a bare value starting at `from`: it runs to the
+    // next space or ')', and a quoted value after a comma keeps its spaces
+    // (a comma list such as consoles,"ad servers")
+    const valueEnd = (from: number): number => {
+      let end = from;
+      while (end < safeInput.length && !/[\s)]/.test(safeInput[end])) {
+        end =
+          /["']/.test(safeInput[end]) && safeInput[end - 1] === ','
+            ? closingQuote(end)
+            : end + 1;
+      }
+      return end;
+    };
+
     while (i < safeInput.length) {
       const char = safeInput[i];
       const valueExpected = expectValue;
@@ -108,13 +142,9 @@ export class QueryParser {
         !/[\s()[\]"'<>]/.test(char) &&
         !(char === '!' && safeInput[i + 1] === '=')
       ) {
-        let value = '';
         const start = i;
-
-        while (i < safeInput.length && !/[\s)]/.test(safeInput[i])) {
-          value += safeInput[i];
-          i++;
-        }
+        i = valueEnd(i);
+        const value = safeInput.slice(start, i);
 
         tokens.push({
           type: /[*?]/.test(value) ? TokenType.WILDCARD : TokenType.VALUE,
@@ -215,6 +245,21 @@ export class QueryParser {
         }
 
         i++; // Skip closing quote
+
+        // A quoted value that starts a comma list ("Gold Plus",Purple) is
+        // one value token with the rest of the list
+        if (safeInput[i] === ',' && valueExpected) {
+          i = valueEnd(i);
+          const list = safeInput.slice(start, i);
+          tokens.push({
+            type: /[*?]/.test(list) ? TokenType.WILDCARD : TokenType.VALUE,
+            value: list,
+            position: start,
+            length: list.length,
+          });
+          continue;
+        }
+
         tokens.push({
           type: TokenType.QUOTED_VALUE,
           value,
@@ -359,7 +404,10 @@ export class QueryParser {
   private parseAndExpression(): QueryNode | undefined {
     let left = this.parseNotExpression();
 
-    while (this.matchLogical('AND')) {
+    // Terms with no operator between them are ANDed, as in the MSP
+    // grammar (nas online:true). Without this, the parse ended at the first
+    // term and reported the rest of the query as nothing.
+    while (this.matchLogical('AND') || this.startsImplicitAnd()) {
       const right = this.parseNotExpression();
       if (!right) {
         break;
@@ -412,8 +460,18 @@ export class QueryParser {
     }
 
     // Field query
-    if (this.check(TokenType.FIELD)) {
+    if (
+      this.check(TokenType.FIELD) &&
+      this.tokens[this.current + 1]?.type === TokenType.COLON
+    ) {
       return this.parseFieldQuery();
+    }
+
+    // Free text: a word, number or quoted phrase with no field. It used to
+    // be refused ("Expected ':' after field"), so search_devices,
+    // search_target_lists and search_rules could not take `nas` alone.
+    if (this.match(TokenType.FIELD, TokenType.VALUE, TokenType.QUOTED_VALUE)) {
+      return { type: 'text', value: this.previous().value };
     }
 
     // Wildcard query (standalone *) - treat as match-all
@@ -597,6 +655,9 @@ export class QueryParser {
         case 'group':
           validateNode(n.query);
           break;
+        case 'text':
+          // Free text has no field to check
+          break;
       }
     };
 
@@ -631,6 +692,18 @@ export class QueryParser {
     }
 
     return suggestions;
+  }
+
+  /**
+   * Whether the next token starts another term ANDed without an operator:
+   * anything but the end, OR, or a closing parenthesis
+   */
+  private startsImplicitAnd(): boolean {
+    return (
+      !this.isAtEnd() &&
+      !this.check(TokenType.RPAREN) &&
+      !(this.check(TokenType.LOGICAL) && this.peek().value === 'OR')
+    );
   }
 
   // Utility methods for token management

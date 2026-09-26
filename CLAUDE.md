@@ -209,8 +209,10 @@ The MSP API's query grammar has no `AND`, `OR`, `NOT` or parentheses: it searche
 - Ranges are `field:low-high` and include both ends; `[low TO high]` is refused with the `field:low-high` form as the suggestion. Relative times (`ts:>1h`, `ts:>=7d`) are sent as Unix seconds.
 - Parentheses may group a same-field `OR` (`status:blocked AND (region:US OR region:CN)` becomes `status:blocked region:US,CN`) or follow `NOT` (`NOT (region:US OR region:CN)` becomes `-region:US -region:CN`); a group that needs an `OR` across fields is refused.
 - Operators are uppercase; lowercase `and`, `or` and `not` are free-text words, as the API reads them.
-- search_devices and search_target_lists filter on the client and evaluate `AND`, `OR`, `NOT` and parentheses themselves, across fields too.
-- Free text on its own (`porn`) works in search_flows and search_alarms; search_rules, search_devices and search_target_lists refuse a query that is only free text.
+- search_devices and search_target_lists filter on the client and evaluate `AND`, `OR`, `NOT` and parentheses themselves, across fields too. Both read a comma list as any of its values (`category:social,games`, `name:nas,laptop`), and search_devices' `ip:` takes an IPv4 CIDR block (`ip:192.168.1.0/24`) as well as `*` wildcards.
+- Free text (a word or quoted phrase with no field) works in every search tool. search_flows and search_alarms send it to the API. `/v2/rules` matches no free text (measured 2026-09-26), so search_rules and get_network_rules do not send it and match it case-insensitively in each rule's name, notes, action, target and scope; search_devices matches it in the name, IP, MAC or id, vendor, and network or group name, and search_target_lists in the name, notes and entries.
+- On flows and alarms, geographic names that are not API qualifiers (`country:`, `continent:`, `city:`, `asn:`, `is_vpn:` and the like) are refused before a request, with `region:<ISO code>` suggested for country codes.
+- search_flows' `geographic_filters` takes `countries` (ISO 3166 codes, sent as `region:US,CN`), the one geographic flow qualifier the API documents. Continents, cities, ASNs, hosting providers, the VPN and cloud exclusions and the risk score have no API equivalent and are refused with a validation error naming them: the API answers a qualifier it does not know with no results.
 
 ```text
 # Basic field queries
@@ -227,7 +229,7 @@ region:US AND NOT protocol:tcp     # -> region:US -protocol:tcp
 # Wildcards and patterns
 device.ip:192.168.*
 name:*laptop*                 # search_devices
-domain:*.facebook.com         # flows
+domain:facebook.com           # flows: the root domain, so *.facebook.com matches nothing
 
 # Geographic filtering (flows and alarms)
 region:US                     # United States

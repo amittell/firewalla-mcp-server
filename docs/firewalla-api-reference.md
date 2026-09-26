@@ -957,7 +957,8 @@ interface Flow {
 // Measured 2026-09-25 on 200 live flows: every flow had a string `domain`,
 // empty on the 118 whose destination.type was "ip" and set on the 82 whose
 // destination.type was "dns". There it is the destination.name or a suffix
-// of it (e.g. "example.com" for "www.example.com").
+// of it (e.g. "example.com" for "www.example.com"): the root domain, which is
+// what domain: searches (see Measured Query Behavior).
 // Measured 2026-09-25 on another 200 live flows: every flow had numeric
 // `download`, `upload` and `total`, and `total` equaled download + upload
 // on all 200 (0 on the 4 blocked flows). Every flow had a top-level
@@ -1163,9 +1164,11 @@ box.name:FirewallaGold
 ```bash
 # Use * for fuzzy matching
 device.name:*iphone*     # Matches "iphone-12", "joe-iphone", etc.
-domain:*.facebook.com    # Matches any Facebook subdomain
+domain:*.facebook.com    # Matches any Facebook subdomain (official example; on flows it matches nothing, use domain:facebook.com, see below)
 device.ip:192.168.*      # Matches any IP in 192.168.x.x range (measured on alarms, 2026-09-25)
 ```
+
+Measured on flows (2026-09-26), `domain:*.facebook.com` matches nothing: a flow's `domain` is the root domain (`apple.com` for `www.apple.com`), so `domain:*.apple.com` matched 0 flows where `domain:apple.com` matched 1,283. Use `domain:facebook.com` for the site and its subdomains, or `domain:*facebook*` for any domain containing the word. Alarms, which carry both a domain and a root domain, were not measured; see [Measured Query Behavior](#measured-query-behavior).
 
 Wildcard search does not support unqualified search or exclusive search.
 
@@ -1307,8 +1310,11 @@ The official docs do not cover the points below. Each was measured against a liv
 - **Rules take the same grammar** (2026-09-26): on `/v2/rules`, `action:block` returned 91 rules, `action:allow` 7, and both `action:block,allow` and `action:block action:allow` 98.
 - **Unknown property paths return no results, not an error.** A qualifier the API does not know returns HTTP 200 with an empty result set. On flows, `block:true` returned 0 results, while `status:blocked` returned the blocked flows. An empty result is therefore not proof that nothing matched.
 - **`total:>1MB` works on flows.**
+- **A comma list of wildcards is OR** (2026-09-26, flows in the last hour, counted with `groupBy=box`): `domain:*apple*` matched 2,518, `domain:*google*` 1,809, and `domain:*apple*,*google*` and `domain:*apple* domain:*google*` 4,327 each, the sum; the mixed list `domain:apple.com,*google*` matched 3,060.
+- **A flow's `domain` is its root domain** (2026-09-26, same hour): the 500 flows returned for `domain:apple.com` had the domains `apple.com` (491) and `cdn-apple.com` (9). `domain:*.apple.com` matched 0 flows, `domain:apple.com` 1,283, `domain:*apple.com` 1,269, and `domain:apple`, `domain:apple*` and `domain:*apple*` 2,539 each. So `domain:*.example.com` finds nothing; `domain:example.com` covers a site and its subdomains, and `domain:*word*` any domain containing a word. Measured on flows only: alarms have both `remote.domain` and `remote.root_domain`.
 - **`device.ip:192.168.*` works on alarms**, and so does unqualified free text such as `porn`.
 - **`message:porn` on alarms returns an error.** `message` is not a searchable alarm qualifier.
+- **Free text matches nothing on rules** (2026-09-26): of 98 rules, one had a given word in its target value, and `/v2/rules?query=<that word>` returned 0 rules.
 - **`id:<rule id>` works on rules**, though it is not a documented rule qualifier. On `/v2/rules`, `id:<box gid>:<n>` alone or with `box.id:<box gid>`, with or without `limit=1`, returned just that rule (count 1; the box had 61 other rules). The status check in `pause_rule`, `resume_rule` and `delete_rule` uses it, and it matches the returned rule's `id` instead of taking the first result.
 - **`groupBy` returns one row per group with the group's total.** On `/v2/alarms`, `groupBy=status` returned `{status, count}` rows, `type` returned `{type, count}` and `box` returned `{gid, count}`; on `/v2/flows`, `box` rows also carried `device`, `download`, `upload` and `total`. The rows have no `ts`, and `count` is the number of matching items in the query window, not limited by `limit`: with `limit=10`, a box's row counted tens of thousands of blocked flows. The row totals agreed across `status`, `type` and `box`. A plain alarm item also carries `count: 1`.
 - **Parentheses match nothing**: `(type:1 OR type:10) box.id:<gid>` and `(type:1 OR type:10) AND box.id:<gid>` returned no alarms, where `type:1,10 box.id:<gid>` did; on 2026-09-26, `(region:US OR region:CN)` with other terms returned 0 flows. `type:1 OR type:10 box.id:<gid>` returned the same alarms as `type:1,10 box.id:<gid>` only because the repeated `type` is OR and every one of those alarms has "or" in its text (see above).
@@ -1324,6 +1330,9 @@ The official docs do not cover the points below. Each was measured against a liv
 - A query that has no form in this grammar is refused with a validation error before anything is sent: an `OR` between different fields (`region:US OR category:social`), `NOT` over an `AND`, the exclusion of free text, a wildcard or a range, two other conditions on one field (the API would read them as either), `[low TO high]` range syntax (the API's ranges are `field:low-high`, which is what the error suggests), and a `box.id` other than the box the request is scoped to (the API would read the two as either box).
 - The error for an `OR` or `NOT` the API cannot run lists one query per disjunct of the query's disjunctive normal form, in API form, whose results together are the query's: `region:US OR (category:social AND status:blocked)` suggests `region:US` and `category:social status:blocked`, and `NOT (action:block AND status:paused)` suggests `-action:block` and `-status:paused`. Disjuncts that differ only in one field's value are merged into a comma list. There are no suggestions when a disjunct has no API form of its own, or past 64 disjuncts.
 - Lowercase `and`, `or` and `not` stay words, as the API reads them. A query already in this form (spaces, commas, `-`) is sent unchanged.
+- search_flows' `geographic_filters` become flow qualifiers only where one is documented: `countries`, and `regions` holding country codes, are sent as one `region:` comma list (`{countries: ["US", "CN"]}` as `region:US,CN`). Continents, cities, ASNs, hosting providers, the VPN and cloud exclusions and risk scores have no flow qualifier and are refused with a validation error naming them; they used to be sent as `continent:`, `city:`, `asn:` and the like, which the API answers with no results.
+- Free text is not sent to `/v2/rules`, which matches none (see above): `search_rules` and `get_network_rules` send the other terms and keep the rules that have every word, case-insensitively, in their name, notes, action, target type or value, or scope type or value.
+- On `/v2/alarms` and `/v2/flows`, a geographic name that is not a qualifier (`country`, `continent`, `city`, `asn`, `isp`, `is_vpn` and the like) is refused before a request, with `region:<codes>` as the suggestion for country codes.
 
 ### Pagination Support
 

@@ -371,7 +371,7 @@ function negateLiteral(literal: Literal, part: string, query: string): Literal {
       throw new MspQueryError(
         cannotSend(
           query,
-          `"${part}" excludes a wildcard match, and the API's grammar has no exclusion of a wildcard: it excludes exact values (for example -domain:ads.example.com). Exclude exact values, or search without the exclusion.`
+          `"${part}" excludes a wildcard match, and the API's grammar has no exclusion of a wildcard: it excludes exact values (for example -domain:example.com). Exclude exact values, or search without the exclusion.`
         ),
         query,
         part
@@ -1042,6 +1042,42 @@ export function toMspQuery(query: string): string {
  */
 export function mspTerms(query: string): MspTerm[] {
   return typeof query === 'string' ? translate(query) : [];
+}
+
+/**
+ * One term as toMspQuery sends it: `-region:US,CN`, `total:>1MB`, a word
+ */
+export function mspTermText(term: MspTerm): string {
+  return renderLiteral(term as Literal);
+}
+
+/**
+ * A query split into its free-text words and its other terms, for an
+ * endpoint whose free-text search the client does itself: GET /v2/rules
+ * matched no free text (measured 2026-09-26: a word in one of 98 rules'
+ * target value returned no rules)
+ *
+ * @param query - Query in the tools' language or already in API form
+ * @returns fields: the other terms in API form, as toMspQuery sends them
+ *   (empty when there are none); text: the free-text words as written,
+ *   every one of which must match
+ * @throws {MspQueryError} When the query has no API form, such as an OR
+ *   with free text or the exclusion of free text
+ */
+export function mspSplitText(query: string): {
+  fields: string;
+  text: string[];
+} {
+  const terms = typeof query === 'string' ? translate(query) : [];
+  return {
+    fields: terms
+      .filter(term => term.kind !== 'text')
+      .map(renderLiteral)
+      .join(' '),
+    text: terms
+      .filter(term => term.kind === 'text')
+      .map(term => term.values[0]),
+  };
 }
 
 /**
