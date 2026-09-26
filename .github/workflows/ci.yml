@@ -33,6 +33,12 @@ jobs:
     
     - name: Install dependencies
       run: npm ci
+
+    # Fails on a high or critical advisory in a dependency the package ships;
+    # dev dependencies (jest, eslint, ...) are not installed by users
+    - name: Audit production dependencies
+      if: matrix.node == '24'
+      run: npm audit --audit-level=high --omit=dev
     
     - name: Lint
       if: matrix.node == '24'
