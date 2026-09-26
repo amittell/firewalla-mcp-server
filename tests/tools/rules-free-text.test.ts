@@ -192,3 +192,108 @@ describe('FirewallaClient.searchRules free text', () => {
     expect(result.results.map(rule => rule.id)).toEqual(['r2']);
   });
 });
+
+describe('free text reads every rule the other terms match', () => {
+  // 300 rules, of which only the 251st has the word in its target. The
+  // stub honors a limit the way a capped API would: search_rules sent
+  // limit*2 (at most 2,000) and get_network_rules its limit, so the match
+  // past them was never checked and both tools answered with no rules.
+  const MANY = Array.from({ length: 300 }, (_, i) => ({
+    id: `r${i + 1}`,
+    action: 'block',
+    status: 'active',
+    direction: 'bidirection',
+    target: {
+      type: 'domain',
+      value: i === 250 ? 'needle.example' : `site${i + 1}.example`,
+    },
+  }));
+
+  function cappedClient(extra: Record<string, unknown> = {}) {
+    const client = new FirewallaClient({
+      mspToken: 'test-token',
+      mspId: 'test.firewalla.net',
+      apiTimeout: 30000,
+      rateLimit: 100,
+      cacheTtl: 300,
+      defaultPageSize: 100,
+      maxPageSize: 10000,
+    } as any);
+    const get = (client as any).api.get as jest.Mock;
+    get.mockReset();
+    get.mockImplementation(async (_endpoint: string, config: any) => {
+      const limit = config?.params?.limit;
+      const results = typeof limit === 'number' ? MANY.slice(0, limit) : MANY;
+      return {
+        status: 200,
+        data: { count: results.length, results, ...extra },
+      };
+    });
+    return { client, get };
+  }
+
+  it('search_rules finds the match past the first page, and says it checked every rule', async () => {
+    const { client, get } = cappedClient();
+    const res = await new SearchRulesHandler().execute(
+      { query: 'needle', limit: 10 },
+      client
+    );
+    expect(body(res).message).toBeUndefined();
+    expect(get.mock.calls[0][1].params.limit).toBeUndefined();
+    const data = body(res).data;
+    expect(data.rules.map((rule: any) => rule.id)).toEqual(['r251']);
+    expect(data.coverage).toEqual({
+      rules_checked: 300,
+      rules_matched: 1,
+      complete: true,
+    });
+  });
+
+  it('get_network_rules finds it too', async () => {
+    const { client, get } = cappedClient();
+    const res = await new GetNetworkRulesHandler().execute(
+      { query: 'needle', limit: 5 },
+      client
+    );
+    expect(get.mock.calls[0][1].params.limit).toBeUndefined();
+    const data = body(res).data;
+    expect(data.rules.map((rule: any) => rule.id)).toEqual(['r251']);
+    expect(data.coverage.complete).toBe(true);
+  });
+
+  it('says when the API answered as if it had more rules than it sent', async () => {
+    const { client } = cappedClient({ next_cursor: 'more' });
+    const res = await new SearchRulesHandler().execute(
+      { query: 'needle', limit: 10 },
+      client
+    );
+    const { coverage } = body(res).data;
+    expect(coverage.complete).toBe(false);
+    expect(coverage.note).toContain('next_cursor');
+  });
+
+  it('says so for a count above the rules returned', async () => {
+    const { client } = cappedClient({ count: 5000 });
+    const res = await new GetNetworkRulesHandler().execute(
+      { query: 'needle' },
+      client
+    );
+    const { coverage } = body(res).data;
+    expect(coverage).toMatchObject({
+      rules_checked: 300,
+      rules_matched: 1,
+      complete: false,
+    });
+    expect(coverage.note).toContain('counted 5000 rules');
+  });
+
+  it('sends the limit, and reports no coverage, without free text', async () => {
+    const { client, get } = cappedClient();
+    const res = await new GetNetworkRulesHandler().execute(
+      { query: 'action:block', limit: 5 },
+      client
+    );
+    expect(get.mock.calls[0][1].params.limit).toBe(5);
+    expect(body(res).data.coverage).toBeUndefined();
+  });
+});

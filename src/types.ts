@@ -798,6 +798,27 @@ export interface SearchOptions {
  * Search result wrapper with metadata
  * @interface SearchResult
  */
+/**
+ * What a rule search with free text looked at. GET /v2/rules matches no
+ * free text, so the client reads the rules the query's other terms match
+ * and checks each for the words. The API documents no limit or cursor for
+ * rules and "returns all matched rules for now", so such a read sends
+ * neither, and it is complete unless the API answered as if it had more.
+ */
+export interface RulesTextCoverage {
+  /** Rules the API returned for the other terms, each checked for the words */
+  rules_checked: number;
+  /** Of those, the rules that have every word */
+  rules_matched: number;
+  /**
+   * Whether every rule the other terms match was checked: false when the
+   * response had a next_cursor, or a count above the rules it returned
+   */
+  complete: boolean;
+  /** Why it is not complete, when it is not */
+  note?: string;
+}
+
 export interface SearchResult<T> {
   /** Total count of matching items */
   count: number;
@@ -805,6 +826,8 @@ export interface SearchResult<T> {
   results: T[];
   /** Pagination cursor for next page */
   next_cursor?: string;
+  /** Rules searched with free text: what the client checked */
+  coverage?: RulesTextCoverage;
   /** Aggregation results if requested */
   aggregations?: Record<
     string,

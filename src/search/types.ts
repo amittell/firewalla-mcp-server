@@ -3,7 +3,7 @@
  * Defines query AST nodes, search parameters, and result structures
  */
 
-import type { AlarmGroup, FlowGroup } from '../types.js';
+import type { AlarmGroup, FlowGroup, RulesTextCoverage } from '../types.js';
 import type { PagingCoverage } from '../utils/paging-coverage.js';
 
 /**
@@ -131,6 +131,7 @@ export interface SearchResult<T = any> {
   offset: number; // Deprecated: use next_cursor for new implementations
   next_cursor?: string; // Cursor-based pagination (preferred)
   coverage?: PagingCoverage; // Flows: oldest and newest ts returned, and why paging stopped
+  rules_coverage?: RulesTextCoverage; // Rules searched with free text: how many were checked
   groups?: FlowGroup[] | AlarmGroup[]; // Grouped flows or alarms; results is empty then
   group_by?: string; // The groupBy the groups were requested with
   query: string;

@@ -36,6 +36,7 @@ import type {
   Device,
   BandwidthUsage,
   NetworkRule,
+  RulesTextCoverage,
   TargetList,
   Box,
   BoxSummary,
@@ -1968,14 +1969,20 @@ export class FirewallaClient {
    *   target value returned 0 rules), so every word must be found here,
    *   case-insensitively, in the rule's name, notes, action, target type or
    *   value, or scope type or value.
-   * @param limit - Sent as `limit`
+   * @param limit - Sent as `limit`, except with words: then every rule the
+   *   other terms match is read, and `coverage` says how many were checked
    * @throws {MspQueryError} When the query has no form the API can run
    */
   async getNetworkRules(
     query?: string,
     limit?: number
-  ): Promise<{ count: number; results: NetworkRule[]; next_cursor?: string }> {
-    const { response, items, matchedWords } = await this.requestRules(
+  ): Promise<{
+    count: number;
+    results: NetworkRule[];
+    next_cursor?: string;
+    coverage?: RulesTextCoverage;
+  }> {
+    const { response, items, matchedWords, coverage } = await this.requestRules(
       query,
       limit !== undefined ? { limit } : {}
     );
@@ -2029,7 +2036,9 @@ export class FirewallaClient {
       // The API's count does not know the words matched here
       count: matchedWords ? rules.length : response.count || rules.length,
       results: rules,
-      next_cursor: response.next_cursor,
+      // A read for words sends no cursor, so it has none to pass on
+      next_cursor: matchedWords ? undefined : response.next_cursor,
+      ...(coverage && { coverage }),
     };
   }
 
@@ -2061,13 +2070,20 @@ export class FirewallaClient {
     };
     items: any[];
     matchedWords: boolean;
+    coverage?: RulesTextCoverage;
   }> {
     const { fields, text } = query
       ? mspSplitText(query)
       : { fields: '', text: [] };
     const words = text.map(word => unquoteQueryValue(word).toLowerCase());
     const sent = mspAnd(fields, extraTerm);
-    const request: Record<string, unknown> = { ...params };
+    // With words, every rule the other terms match must be checked, so no
+    // limit or cursor is sent: a limit would cap the rules read below what
+    // the account holds (search_rules asked for up to 2,000), and a match
+    // past it would never be seen. The API documents neither for rules.
+    const { limit: _limit, cursor: _cursor, ...unbounded } = params;
+    const request: Record<string, unknown> =
+      words.length > 0 ? unbounded : { ...params };
     // Apply box filter through the query parameter
     request.query = this.addBoxFilter(sent || undefined);
 
@@ -2080,13 +2096,31 @@ export class FirewallaClient {
 
     // API returns {count, results[]} format
     const results = Array.isArray(response?.results) ? response.results : [];
+    if (words.length === 0) {
+      return { response, items: results, matchedWords: false };
+    }
+    const items = results.filter(item => ruleMatchesWords(item, words));
+    // Complete unless the API answered as if it held more rules than it sent
+    const more = Boolean(response?.next_cursor);
+    const counted =
+      typeof response?.count === 'number' && response.count > results.length
+        ? response.count
+        : undefined;
+    const complete = !more && counted === undefined;
     return {
       response,
-      items:
-        words.length > 0
-          ? results.filter(item => ruleMatchesWords(item, words))
-          : results,
-      matchedWords: words.length > 0,
+      items,
+      matchedWords: true,
+      coverage: {
+        rules_checked: results.length,
+        rules_matched: items.length,
+        complete,
+        ...(!complete && {
+          note: more
+            ? `GET /v2/rules returned ${results.length} rules and a next_cursor, so rules after them were not checked for the words`
+            : `GET /v2/rules counted ${counted} rules for the other terms but returned ${results.length}, so the rest were not checked for the words`,
+        }),
+      },
     };
   }
 
@@ -4362,11 +4396,13 @@ export class FirewallaClient {
       let response;
       let rawResults: any[];
       let matchedWords: boolean;
+      let coverage: RulesTextCoverage | undefined;
       try {
         ({
           response,
           items: rawResults,
           matchedWords,
+          coverage,
         } = await this.requestRules(trimmedQuery, params, minHitsTerm));
       } catch (apiError) {
         if (apiError instanceof Error) {
@@ -4531,7 +4567,8 @@ export class FirewallaClient {
         // The API's count does not know the words matched on the client
         count: matchedWords ? rules.length : response.count || rules.length,
         results: rules,
-        next_cursor: response.next_cursor,
+        next_cursor: matchedWords ? undefined : response.next_cursor,
+        ...(coverage && { coverage }),
         aggregations: response.aggregations,
         metadata: {
           execution_time: Date.now() - startTime,
