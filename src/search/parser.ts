@@ -13,6 +13,15 @@ import {
   type QueryValidation,
 } from './types.js';
 
+/** Tokens that can begin a term, besides NOT */
+const TERM_STARTS: ReadonlySet<TokenTypeValue> = new Set<TokenTypeValue>([
+  TokenType.FIELD,
+  TokenType.VALUE,
+  TokenType.QUOTED_VALUE,
+  TokenType.WILDCARD,
+  TokenType.LPAREN,
+]);
+
 export class QueryParser {
   private tokens: Token[] = [];
   private current = 0;
@@ -129,7 +138,13 @@ export class QueryParser {
       return end;
     };
 
+    // Every pass must consume input; one that does not would loop forever
+    let lastIndex = -1;
     while (i < safeInput.length) {
+      if (i === lastIndex) {
+        throw new Error(`Query tokenizer made no progress at position ${i}`);
+      }
+      lastIndex = i;
       const char = safeInput[i];
       const valueExpected = expectValue;
       expectValue = false;
@@ -382,8 +397,9 @@ export class QueryParser {
     let left = this.parseAndExpression();
 
     while (this.matchLogical('OR')) {
+      const before = this.current;
       const right = this.parseAndExpression();
-      if (!right) {
+      if (!right || !this.madeProgress(before)) {
         break;
       }
 
@@ -408,8 +424,9 @@ export class QueryParser {
     // grammar (nas online:true). Without this, the parse ended at the first
     // term and reported the rest of the query as nothing.
     while (this.matchLogical('AND') || this.startsImplicitAnd()) {
+      const before = this.current;
       const right = this.parseNotExpression();
-      if (!right) {
+      if (!right || !this.madeProgress(before)) {
         break;
       }
 
@@ -696,14 +713,33 @@ export class QueryParser {
 
   /**
    * Whether the next token starts another term ANDed without an operator:
-   * anything but the end, OR, or a closing parenthesis
+   * one that can begin a term (a word, value, quoted value, wildcard, `(`
+   * or NOT). Anything else (`:`, an operator, a bracket, TO, AND, OR, `)`)
+   * ends the AND, and parse() reports a token it did not read.
    */
   private startsImplicitAnd(): boolean {
+    if (this.isAtEnd()) {
+      return false;
+    }
+    const { type, value } = this.peek();
     return (
-      !this.isAtEnd() &&
-      !this.check(TokenType.RPAREN) &&
-      !(this.check(TokenType.LOGICAL) && this.peek().value === 'OR')
+      TERM_STARTS.has(type) || (type === TokenType.LOGICAL && value === 'NOT')
     );
+  }
+
+  /**
+   * Whether parsing moved past `before`. A parse loop that read a term
+   * without consuming a token would read it again forever, so it stops
+   * and the query is refused.
+   */
+  private madeProgress(before: number): boolean {
+    if (this.current > before) {
+      return true;
+    }
+    this.errors.push(
+      `Query parser made no progress at position ${this.peek().position}`
+    );
+    return false;
   }
 
   // Utility methods for token management
