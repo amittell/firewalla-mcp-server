@@ -472,3 +472,28 @@ describe('every listed tool, with the write tools on', () => {
     }
   });
 });
+
+describe('the tool list', () => {
+  it('reads FIREWALLA_ENABLE_WRITE_TOOLS once, as the callable tools do', async () => {
+    process.env.FIREWALLA_ENABLE_WRITE_TOOLS = 'false';
+    const client = await connect();
+    try {
+      const before = (await client.listTools()).tools.map(tool => tool.name);
+      expect(before).not.toContain('pause_rule');
+      // Turned on after the server was set up: the list stays as the tools
+      // it can call, and pause_rule is neither listed nor callable
+      process.env.FIREWALLA_ENABLE_WRITE_TOOLS = 'true';
+      const after = (await client.listTools()).tools.map(tool => tool.name);
+      expect(after).toEqual(before);
+      const result = (await client.callTool({
+        name: 'pause_rule',
+        arguments: { rule_id: 'rule-0001' },
+      })) as { content: Array<{ text: string }>; isError?: boolean };
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Unknown tool: pause_rule');
+    } finally {
+      process.env.FIREWALLA_ENABLE_WRITE_TOOLS = 'true';
+      await client.close();
+    }
+  });
+});
