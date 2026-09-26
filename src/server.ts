@@ -23,7 +23,7 @@
  * @since 2025-06-21
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { realpathSync } from 'node:fs';
@@ -33,6 +33,7 @@ import { FirewallaClient } from './firewalla/client.js';
 import { setupTools } from './tools/index.js';
 import { setupResources } from './resources/index.js';
 import { setupPrompts } from './prompts/index.js';
+import { UntrustedTextServer } from './untrusted-text-server.js';
 import { logger } from './monitoring/logger.js';
 import {
   createHttpTransportServer,
@@ -69,7 +70,8 @@ export class FirewallaMCPServer {
    * "Already connected to a transport" errors).
    */
   private createServerInstance(): Server {
-    const server = new Server(
+    // Every result it returns has its invisible characters marked
+    const server = new UntrustedTextServer(
       {
         name: 'firewalla-mcp-server',
         version: PACKAGE_VERSION,
