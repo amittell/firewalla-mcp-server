@@ -5,6 +5,7 @@
 
 import { TimeoutError } from './timeout-manager.js';
 import { logger } from '../monitoring/logger.js';
+import { findMspQueryError } from './msp-query.js';
 
 /**
  * Enhanced error with retry context information
@@ -55,6 +56,11 @@ const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
   backoffMultiplier: 2,
   addJitter: true,
   shouldRetry: (error: unknown, _attempt: number) => {
+    // A query the MSP API cannot run fails the same way every time, and its
+    // message can name a field such as network.name
+    if (findMspQueryError(error)) {
+      return false;
+    }
     // Retry on timeout errors and network-related errors
     if (error instanceof TimeoutError) {
       return true;

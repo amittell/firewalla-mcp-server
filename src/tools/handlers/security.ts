@@ -2,7 +2,12 @@
  * Security monitoring tool handlers
  */
 
-import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
+import {
+  BaseToolHandler,
+  mspQueryErrorResponse,
+  type ToolArgs,
+  type ToolResponse,
+} from './base.js';
 import {
   BoxSelectionError,
   type FirewallaClient,
@@ -33,6 +38,7 @@ import {
   TimeoutError,
 } from '../../utils/timeout-manager.js';
 import { validateAlarmId } from '../../utils/alarm-id-validation.js';
+import { mspAnd } from '../../utils/msp-query.js';
 
 /**
  * Map alarm types to severity levels
@@ -247,9 +253,9 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
       // archived alarms too (status 2) when no status is given.
       let sanitizedQuery = queryValidation.sanitizedValue as string | undefined;
       if (!/(^|[\s(,])-?status[:=]/i.test(sanitizedQuery ?? '')) {
-        sanitizedQuery = sanitizedQuery?.trim()
-          ? `status:1 ${sanitizedQuery.trim()}`
-          : 'status:1';
+        // ANDed in the API's grammar: prepended as text, status:1 would
+        // bind to the first branch of an OR
+        sanitizedQuery = mspAnd('status:1', sanitizedQuery);
       }
 
       // Validate cursor format if provided
@@ -465,6 +471,11 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
+      // A query the MSP API cannot run was refused before any request
+      const queryError = mspQueryErrorResponse(this.name, error);
+      if (queryError) {
+        return queryError;
+      }
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(
           'get_active_alarms',

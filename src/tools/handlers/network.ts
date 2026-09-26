@@ -2,7 +2,12 @@
  * Network monitoring and analysis tool handlers
  */
 
-import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
+import {
+  BaseToolHandler,
+  mspQueryErrorResponse,
+  type ToolArgs,
+  type ToolResponse,
+} from './base.js';
 import { isValidBoxGid, type FirewallaClient } from '../../firewalla/client.js';
 import {
   ParameterValidator,
@@ -33,6 +38,7 @@ import {
   createStreamingResponse,
   type StreamingOperation,
 } from '../../utils/streaming-manager.js';
+import { mspAnd } from '../../utils/msp-query.js';
 
 export class GetFlowDataHandler extends BaseToolHandler {
   name = 'get_flow_data';
@@ -208,8 +214,9 @@ export class GetFlowDataHandler extends BaseToolHandler {
 
         const startTs = Math.floor(startDate.getTime() / 1000);
         const endTs = Math.floor(endDate.getTime() / 1000);
-        const timeQuery = `ts:${startTs}-${endTs}`;
-        finalQuery = query ? `(${query}) AND ${timeQuery}` : timeQuery;
+        // ANDed in the API's grammar: a space, no parentheses (the API has
+        // neither AND nor parentheses)
+        finalQuery = mspAnd(query, `ts:${startTs}-${endTs}`);
       }
 
       // Handle streaming mode if enabled
@@ -404,6 +411,11 @@ export class GetFlowDataHandler extends BaseToolHandler {
         executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
+      // A query the MSP API cannot run was refused before any request
+      const queryError = mspQueryErrorResponse(this.name, error);
+      if (queryError) {
+        return queryError;
+      }
       // Handle timeout errors specifically
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(

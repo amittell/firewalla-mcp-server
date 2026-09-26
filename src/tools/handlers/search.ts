@@ -2,7 +2,12 @@
  * Advanced search tool handlers
  */
 
-import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
+import {
+  BaseToolHandler,
+  mspQueryErrorResponse,
+  type ToolArgs,
+  type ToolResponse,
+} from './base.js';
 import type { FirewallaClient } from '../../firewalla/client.js';
 import type {
   Flow,
@@ -221,7 +226,7 @@ function validateCommonSearchParameters(
           query: args.query,
           syntax_errors: querySyntaxValidation.errors,
           examples: examples.slice(0, 3),
-          hint: 'Use field:value syntax with logical operators (AND, OR, NOT)',
+          hint: 'Use field:value terms joined by spaces or AND; OR works between values of one field (type:1 OR type:10); NOT or a leading - excludes',
         },
         querySyntaxValidation.errors
       ),
@@ -636,6 +641,11 @@ export class SearchFlowsHandler extends BaseToolHandler {
         executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
+      // A query the MSP API cannot run was refused before any request
+      const queryError = mspQueryErrorResponse(this.name, error);
+      if (queryError) {
+        return queryError;
+      }
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(
           this.name,
@@ -936,6 +946,11 @@ export class SearchAlarmsHandler extends BaseToolHandler {
         executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
+      // A query the MSP API cannot run was refused before any request
+      const queryError = mspQueryErrorResponse(this.name, error);
+      if (queryError) {
+        return queryError;
+      }
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(this.name, error.duration, 10000);
       }
@@ -1078,6 +1093,11 @@ export class SearchRulesHandler extends BaseToolHandler {
         executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
+      // A query the MSP API cannot run was refused before any request
+      const queryError = mspQueryErrorResponse(this.name, error);
+      if (queryError) {
+        return queryError;
+      }
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(this.name, error.duration, 10000);
       }
@@ -1462,6 +1482,11 @@ export class SearchCrossReferenceHandler extends BaseToolHandler {
       // Return unified response
       return this.createUnifiedResponse(unifiedResponseData);
     } catch (error: unknown) {
+      // A query the MSP API cannot run was refused before any request
+      const queryError = mspQueryErrorResponse(this.name, error);
+      if (queryError) {
+        return queryError;
+      }
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(this.name, error.duration, 10000);
       }
@@ -1651,6 +1676,11 @@ export class SearchEnhancedCrossReferenceHandler extends BaseToolHandler {
       // Return unified response with enhanced correlation data
       return this.createUnifiedResponse(simplifiedResponse);
     } catch (error: unknown) {
+      // A query the MSP API cannot run was refused before any request
+      const queryError = mspQueryErrorResponse(this.name, error);
+      if (queryError) {
+        return queryError;
+      }
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(this.name, error.duration, 10000);
       }
@@ -1887,6 +1917,11 @@ export class GetCorrelationSuggestionsHandler extends BaseToolHandler {
       // Return unified response
       return this.createUnifiedResponse(unifiedResponseData);
     } catch (error: unknown) {
+      // A query the MSP API cannot run was refused before any request
+      const queryError = mspQueryErrorResponse(this.name, error);
+      if (queryError) {
+        return queryError;
+      }
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(this.name, error.duration, 10000);
       }
@@ -2043,6 +2078,11 @@ export class SearchAlarmsByGeographyHandler extends BaseToolHandler {
         ),
       });
     } catch (error: unknown) {
+      // A query the MSP API cannot run was refused before any request
+      const queryError = mspQueryErrorResponse(this.name, error);
+      if (queryError) {
+        return queryError;
+      }
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(this.name, error.duration, 10000);
       }

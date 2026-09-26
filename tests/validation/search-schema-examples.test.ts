@@ -182,7 +182,10 @@ describe('search schema fields and examples (#42)', () => {
     );
   });
 
-  it.each(cases)('%s accepts %s', async (tool, query) => {
+  it.each(cases)('%s accepts %s', async (tool, advertised) => {
+    // The client is scoped to test-box-id, and a box.id naming another box
+    // is refused (see below): the API would read the two as either box
+    const query = advertised.replace('box.id:box_gid', 'box.id:test-box-id');
     const { request, error } = await runSearch(tool, query);
 
     expect(error).toBeUndefined();
@@ -207,17 +210,18 @@ describe('search schema fields and examples (#42)', () => {
     }
   });
 
-  // Older forms keep working: they reach the API as the documented qualifier
+  // Older forms keep working: they reach the API as the documented
+  // qualifier, and AND as a space (the API has no AND)
   it.each([
     ['search_flows', 'blocked:true', 'status:blocked'],
     ['search_flows', 'blocked:false', '-status:blocked'],
     ['search_flows', 'bytes:>1MB', 'total:>1MB'],
-    ['search_flows', 'blocked:true AND bytes:>1MB', 'status:blocked AND total:>1MB'],
+    ['search_flows', 'blocked:true AND bytes:>1MB', 'status:blocked total:>1MB'],
     ['search_alarms', 'source_ip:192.168.*', 'device.ip:192.168.*'],
     [
       'search_alarms',
       'source_ip:192.168.* AND status:1',
-      'device.ip:192.168.* AND status:1',
+      'device.ip:192.168.* status:1',
     ],
   ] as const)('%s sends %s to the API as %s', async (tool, query, expected) => {
     const { request, error } = await runSearch(tool, query);
@@ -225,6 +229,17 @@ describe('search schema fields and examples (#42)', () => {
     expect(error).toBeUndefined();
     expect(sentQuery(request)).toBe(`${expected} box.id:test-box-id`);
   });
+
+  it.each(['search_flows', 'search_alarms', 'search_rules'] as const)(
+    '%s refuses a box.id other than the one it is scoped to',
+    async tool => {
+      const { request, error } = await runSearch(tool, 'box.id:other-box');
+
+      expect(request).not.toHaveBeenCalled();
+      expect(error.errorType).toBe('validation_error');
+      expect(error.message).toContain('scoped to box.id:test-box-id');
+    }
+  );
 
   it('sends an unqualified alarm search term unchanged', async () => {
     const { request, error } = await runSearch('search_alarms', 'porn');

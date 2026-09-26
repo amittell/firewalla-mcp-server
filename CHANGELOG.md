@@ -36,6 +36,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   client does. It gave per-endpoint quotas and rate-limit headers that were
   never measured, and request spacing, concurrency caps, priority queues and
   backoff settings that the code does not have.
+- Combined searches, and several queries the server builds itself, returned
+  wrong results or none: the MSP API's query grammar has no `AND`, `OR`,
+  `NOT` or parentheses. It searches those as words and matches nothing in
+  parentheses, and a field that appears twice is OR. Measured 2026-09-26:
+  `status:blocked AND region:US` matched 0 flows where
+  `status:blocked region:US` matched 6,318; `type:10 AND status:1` matched 5
+  alarms where `type:10 status:1` matched 12; and `region:US NOT
+  protocol:tcp` matched 285 flows where `region:US -protocol:tcp` matched
+  272,581. The search tools passed such queries through, and the client
+  built them: the `time_range` of `search_flows` and the
+  `start_time`/`end_time` of `get_flow_data` as `ts:a-b AND (query)` (which
+  the API answered with HTTP 400), the categories and blocked summary of
+  `get_flow_insights`, the blocked flows of the recent-threats summary, and
+  the `status:1` of `get_active_alarms` and the box scope, which bound to
+  one branch of an `OR`. Every GET to `/v2/alarms`, `/v2/flows` and
+  `/v2/rules` now sends its query through `toMspQuery`
+  (`src/utils/msp-query.ts`): `AND` becomes a space, an `OR` between values
+  of one field a comma list (`status:blocked AND (region:US OR region:CN)`
+  is sent as `status:blocked region:US,CN`), and `NOT` the `-` prefix. A
+  query that needs an `OR` between different fields, `NOT` over an `AND`,
+  or two conditions on one field has no API form and is refused as a
+  validation error before anything is sent, naming the searches to run
+  instead. The client's own queries are built in the API's form, and the
+  query descriptions of the search tools state the rule.
+- The search tools accept the API's own forms: terms separated by spaces,
+  the `-` prefix (`region:US -protocol:tcp`), free-text words, and a query
+  that starts with `NOT`. They refused all of these.
+- `search_alarms` applies `time_range`, which it ignored, and can no longer
+  add a `severity:` term: alarms have no severity.
+- `search_rules` checks the rules the API returns against every term of the
+  query it can read (`action`, `status`, `target.value`), with comma lists
+  as OR and `-` as exclusion. It checked only the first `action:` and
+  `status:` values, so `action:block OR action:allow` returned block rules
+  only and `action:block AND NOT status:paused` returned paused ones only.
+- A query that names a `box.id` other than the box a request is scoped to
+  (the `box` argument, else `FIREWALLA_BOX_ID`) is refused. The API reads
+  two `box.id` terms as either box, so the query widened the scope.
 
 ### Changed
 

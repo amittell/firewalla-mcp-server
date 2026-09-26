@@ -25,6 +25,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 import { createHash } from 'crypto';
+import { URLSearchParams } from 'url';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
 import type {
   FirewallaConfig,
@@ -58,6 +59,12 @@ import {
   translateSortBy,
   translateToMspQualifiers,
 } from '../utils/msp-qualifiers.js';
+import {
+  mspAnd,
+  mspBoxScope,
+  mspValue,
+  toMspQuery,
+} from '../utils/msp-query.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
 import { logger } from '../monitoring/logger.js';
 import {
@@ -304,6 +311,41 @@ const DOCUMENTED_GET_PARAMS = new Map<string, readonly string[]>([
   ['/v2/boxes', ['group']],
   ['/v2/target-lists', ['owner']],
 ]);
+
+/**
+ * The endpoints whose `query` parameter the MSP API searches with its own
+ * grammar, which has no AND, OR, NOT or parentheses (see
+ * src/utils/msp-query.ts). Every GET to one of them sends its query through
+ * toMspQuery.
+ */
+const MSP_QUERY_ENDPOINTS: ReadonlySet<string> = new Set([
+  '/v2/alarms',
+  '/v2/flows',
+  '/v2/rules',
+]);
+
+/**
+ * GET parameters with the query in the MSP API's grammar, for a search
+ * endpoint; other requests are returned unchanged
+ *
+ * @throws {MspQueryError} When the query has no form the API can run
+ */
+function withMspQuery(
+  method: string,
+  endpoint: string,
+  params: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined {
+  if (
+    method !== 'GET' ||
+    !MSP_QUERY_ENDPOINTS.has(endpoint) ||
+    typeof params?.query !== 'string'
+  ) {
+    return params;
+  }
+  const { query, ...rest } = params;
+  const translated = toMspQuery(query);
+  return translated ? { ...rest, query: translated } : rest;
+}
 
 /**
  * A box gid as the MSP API issues them (a UUID). Anything else is refused
@@ -892,11 +934,13 @@ export class FirewallaClient {
     body?: Record<string, unknown> | boolean,
     cacheable = true
   ): Promise<T> {
-    // Filter parameters for raw /v2/* data endpoints to prevent "Bad Request" errors
-    const filteredParams = this.filterParametersForDataEndpoints(
+    // Filter parameters for raw /v2/* data endpoints to prevent "Bad Request"
+    // errors, and send a search query in the API's grammar (AND, OR, NOT and
+    // parentheses are words to the API)
+    const filteredParams = withMspQuery(
       method,
       endpoint,
-      params
+      this.filterParametersForDataEndpoints(method, endpoint, params)
     );
     const cacheKey = this.getCacheKey(endpoint, filteredParams, method);
 
@@ -2298,7 +2342,7 @@ export class FirewallaClient {
         1000
       ),
       this.getFlowData(
-        `status:blocked AND ts:>=${timeThreshold}`,
+        `status:blocked ts:>=${timeThreshold}`,
         undefined,
         'ts:desc',
         50
@@ -3711,11 +3755,6 @@ export class FirewallaClient {
       sortBy: translateSortBy(searchQuery.sort_by || 'ts:desc', 'flows'),
     };
 
-    // Add query if provided
-    if (searchQuery.query?.trim()) {
-      params.query = searchQuery.query.trim();
-    }
-
     // group_by is not sent as groupBy: a grouped response has one item of
     // totals per group, with no ts or gid, and groupBy=device,category names
     // the device only by id (measured 2026-09-25). Callers such as
@@ -3724,10 +3763,10 @@ export class FirewallaClient {
       params.cursor = searchQuery.cursor;
     }
 
-    // Add box.id filter to query
-    params.query = this.addBoxFilter(params.query as string | undefined);
-
-    // Add time range if specified
+    // The query, time range and blocked filter, ANDed in the API's grammar
+    // (a space: the API has no AND). blocked: and bytes: are rejected by
+    // /v2/flows (see getFlowData) and are translated first.
+    let timeQuery: string | undefined;
     if (options.time_range) {
       const startTs =
         typeof options.time_range.start === 'string'
@@ -3738,25 +3777,21 @@ export class FirewallaClient {
           ? Math.floor(new Date(options.time_range.end).getTime() / 1000)
           : options.time_range.end;
 
-      const timeQuery = `ts:${startTs}-${endTs}`;
-      params.query = params.query
-        ? `${params.query} AND ${timeQuery}`
-        : timeQuery;
+      timeQuery = `ts:${startTs}-${endTs}`;
     }
 
-    // Add blocked flow filter if needed: the API has no `block` qualifier and
-    // answers `block:false` with no results; `-status:blocked` excludes blocked
-    if (options.include_resolved === false) {
-      params.query = params.query
-        ? `${params.query} AND -status:blocked`
-        : '-status:blocked';
-    }
+    // The API has no `block` qualifier and answers `block:false` with no
+    // results; `-status:blocked` excludes blocked flows
+    const unblocked =
+      options.include_resolved === false ? '-status:blocked' : undefined;
 
-    // blocked: and bytes: are rejected by /v2/flows (see getFlowData); translate
-    // once every fragment is in
-    if (typeof params.query === 'string') {
-      params.query = translateToMspQualifiers(params.query, 'flows');
-    }
+    params.query = this.addBoxFilter(
+      mspAnd(
+        translateToMspQualifiers(searchQuery.query?.trim() ?? '', 'flows'),
+        timeQuery,
+        unblocked
+      ) || undefined
+    );
 
     const response = await this.requestPages<any>(
       '/v2/flows',
@@ -3920,9 +3955,7 @@ export class FirewallaClient {
 
       // Enhanced filter application with validation
       if (options.include_resolved === false) {
-        params.query = params.query
-          ? `${params.query} AND status:1`
-          : 'status:1';
+        params.query = mspAnd(params.query as string, 'status:1');
       }
 
       // Build request parameters for GET endpoint
@@ -4213,9 +4246,7 @@ export class FirewallaClient {
         options.min_hits > 0
       ) {
         const minHits = Math.max(1, Math.floor(options.min_hits));
-        params.query = params.query
-          ? `${params.query} AND hit.count:>=${minHits}`
-          : `hit.count:>=${minHits}`;
+        params.query = mspAnd(params.query as string, `hit.count:>=${minHits}`);
       }
 
       // Apply box filter through the query parameter
@@ -4772,9 +4803,9 @@ export class FirewallaClient {
         options.min_targets > 0
       ) {
         const minTargets = Math.max(1, Math.floor(options.min_targets));
-        params.query = params.query
-          ? `${params.query} AND targets.length:>=${minTargets}`
-          : `targets.length:>=${minTargets}`;
+        params.query = [params.query, `targets.length:>=${minTargets}`]
+          .filter(Boolean)
+          .join(' ');
       }
 
       if (options.categories && Array.isArray(options.categories)) {
@@ -4782,10 +4813,10 @@ export class FirewallaClient {
           cat => typeof cat === 'string' && cat.trim()
         );
         if (validCategories.length > 0) {
-          const categoryFilter = `category:(${validCategories.join(',')})`;
-          params.query = params.query
-            ? `${params.query} AND ${categoryFilter}`
-            : categoryFilter;
+          const categoryFilter = `category:${validCategories.join(',')}`;
+          params.query = [params.query, categoryFilter]
+            .filter(Boolean)
+            .join(' ');
         }
       }
 
@@ -4794,10 +4825,8 @@ export class FirewallaClient {
           owner => typeof owner === 'string' && owner.trim()
         );
         if (validOwners.length > 0) {
-          const ownerFilter = `owner:(${validOwners.join(',')})`;
-          params.query = params.query
-            ? `${params.query} AND ${ownerFilter}`
-            : ownerFilter;
+          const ownerFilter = `owner:${validOwners.join(',')}`;
+          params.query = [params.query, ownerFilter].filter(Boolean).join(' ');
         }
       }
 
@@ -5631,10 +5660,12 @@ export class FirewallaClient {
   }
 
   /**
-   * Helper method to build OR queries for array-based geographic filters
+   * Helper method to build the query for an array-based geographic filter:
+   * one comma list, the MSP API's OR within a field (it has no OR keyword
+   * and no parentheses)
    *
    * @param fieldName - The field name for the query (e.g., 'country', 'region')
-   * @param values - Array of values to include in the OR query
+   * @param values - Array of values any of which may match
    * @returns Query string or null if values array is empty
    * @private
    */
@@ -5646,8 +5677,7 @@ export class FirewallaClient {
       return null;
     }
 
-    const queries = values.map(value => `${fieldName}:"${value}"`);
-    return queries.length === 1 ? queries[0] : `(${queries.join(' OR ')})`;
+    return `${fieldName}:${values.map(mspValue).join(',')}`;
   }
 
   /**
@@ -5656,6 +5686,8 @@ export class FirewallaClient {
    * @param query - Existing query string (optional)
    * @param box - Box gid to scope to instead of FIREWALLA_BOX_ID (optional)
    * @returns Query string with box.id filter added, or just box.id filter if no query
+   * @throws {MspQueryError} When the query has no form the MSP API can run,
+   *   or names a box other than the one it is scoped to
    * @private
    */
   private addBoxFilter(query?: string, box?: string): string | undefined {
@@ -5667,13 +5699,10 @@ export class FirewallaClient {
       throw new BoxSelectionError(INVALID_BOX_GID);
     }
 
-    const boxFilter = `box.id:${gid}`;
-
-    if (!query || query.trim() === '') {
-      return boxFilter;
-    }
-
-    return `${query} ${boxFilter}`;
+    // Translated before the box is added: appended to `type:1 OR type:10`,
+    // box.id would bind to type:10 alone. A query naming another box is
+    // refused: the API would read the two box.id terms as either box.
+    return mspBoxScope(query, gid);
   }
 
   /**
@@ -5737,16 +5766,17 @@ export class FirewallaClient {
       booleanFilters: [
         {
           condition: filters.exclude_cloud === true,
-          query: 'NOT is_cloud_provider:true',
+          query: '-is_cloud_provider:true',
         },
-        { condition: filters.exclude_vpn === true, query: 'NOT is_vpn:true' },
+        { condition: filters.exclude_vpn === true, query: '-is_vpn:true' },
         {
           condition: filters.high_risk_countries === true,
           query: 'geographic_risk_score:>=7',
         },
         {
+          // The API grammar cannot exclude a wildcard (-hosting_provider:*)
           condition: filters.exclude_known_providers === true,
-          query: 'NOT is_cloud_provider:true AND NOT hosting_provider:*',
+          query: '-is_cloud_provider:true',
         },
       ],
     };
@@ -5777,7 +5807,8 @@ export class FirewallaClient {
 
     // Note: threat_analysis is handled by the API server, not as a query filter
 
-    return queryParts.join(' AND ');
+    // A space ANDs terms: the API has no AND keyword
+    return mspAnd(...queryParts);
   }
 
   /**
@@ -5815,6 +5846,36 @@ export class FirewallaClient {
   }
 
   /**
+   * An endpoint with a `?query=` for /v2/alarms, /v2/flows or /v2/rules
+   * rewritten into the MSP API's grammar, as request() sends its params
+   *
+   * @throws {MspQueryError} When the query has no form the API can run
+   */
+  private withMspQueryInUrl(endpoint: string): string {
+    const separator = endpoint.indexOf('?');
+    if (separator < 0) {
+      return endpoint;
+    }
+    const path = endpoint.slice(0, separator);
+    const search = new URLSearchParams(endpoint.slice(separator + 1));
+    const query = search.get('query');
+    if (!MSP_QUERY_ENDPOINTS.has(path) || query === null) {
+      return endpoint;
+    }
+    const translated = toMspQuery(query);
+    if (translated === query) {
+      return endpoint;
+    }
+    if (translated) {
+      search.set('query', translated);
+    } else {
+      search.delete('query');
+    }
+    const rest = search.toString();
+    return rest ? `${path}?${rest}` : path;
+  }
+
+  /**
    * Public method for making raw API calls
    * Used by management tools for bulk operations
    */
@@ -5827,7 +5888,7 @@ export class FirewallaClient {
       let response;
       switch (method) {
         case 'get':
-          response = await this.api.get(endpoint);
+          response = await this.api.get(this.withMspQueryInUrl(endpoint));
           break;
         case 'post':
           response = await this.api.post(endpoint, data || {});
@@ -5899,9 +5960,15 @@ export class FirewallaClient {
           break;
       }
 
-      // Get category breakdown with error handling
-      // An empty categories list means all categories: " AND ()" matches nothing
-      const categoryQuery = `ts:${begin}-${end}${options?.categories?.length ? ` AND (${options.categories.map(c => `category:${c}`).join(' OR ')})` : ''}`;
+      // Get category breakdown with error handling. The categories are one
+      // comma list (the API has no OR or parentheses); an empty list means
+      // all categories
+      const categoryQuery = mspAnd(
+        `ts:${begin}-${end}`,
+        options?.categories?.length
+          ? `category:${options.categories.map(mspValue).join(',')}`
+          : undefined
+      );
 
       let categoryData;
       try {
@@ -6007,7 +6074,7 @@ export class FirewallaClient {
       if (options?.includeBlocked) {
         try {
           const blockedData = await this.searchFlows({
-            query: `ts:${begin}-${end} AND status:blocked`,
+            query: `ts:${begin}-${end} status:blocked`,
             group_by: 'category',
             sort_by: 'count:desc',
             limit: 50,

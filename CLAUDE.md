@@ -191,7 +191,14 @@ DEBUG=firewalla:*                         # Debug logging; see Debugging below (
 - **search_target_lists**: Target list searching with category/ownership filters
 
 ### Search Query Syntax
-The server supports search queries using Firewalla API syntax:
+The MSP API's query grammar has no `AND`, `OR`, `NOT` or parentheses: it searches those as words, and a field that appears twice is OR (measured 2026-09-26; see "Measured Query Behavior" in `docs/firewalla-api-reference.md`). The tools accept them anyway, and the client translates every query sent to `/v2/alarms`, `/v2/flows` and `/v2/rules` (`toMspQuery` in `src/utils/msp-query.ts`):
+
+- `AND`, or a space, means both terms must match; it is sent as a space.
+- `OR` works between values of one field and is sent as a comma list (`region:US OR region:CN` becomes `region:US,CN`). An `OR` between different fields (`region:US OR category:social`) has no API form and is refused with a validation error that names one search per field to run instead.
+- `NOT`, or a leading `-`, excludes a field value (`-protocol:tcp`). `NOT` over an `AND`, and the exclusion of free text, a wildcard or a range, are refused.
+- Parentheses may group a same-field `OR` (`status:blocked AND (region:US OR region:CN)` becomes `status:blocked region:US,CN`) or follow `NOT` (`NOT (region:US OR region:CN)` becomes `-region:US -region:CN`); a group that needs an `OR` across fields is refused.
+- Operators are uppercase; lowercase `and`, `or` and `not` are free-text words, as the API reads them.
+- search_devices and search_target_lists filter on the client and evaluate `AND`, `OR`, `NOT` and parentheses themselves, across fields too.
 
 ```text
 # Basic field queries
@@ -199,9 +206,11 @@ type:8                        # Video Activity (alarms)
 device.ip:192.168.1.1         # alarms and flows
 protocol:tcp                  # flows
 
-# Logical operators (the API also takes space for AND and a comma list for OR)
-type:1 AND device.ip:192.168.*     # Security alerts from local network
-action:block OR action:timelimit
+# Combining terms (sent as shown after ->)
+type:1 AND device.ip:192.168.*     # -> type:1 device.ip:192.168.*
+action:block OR action:timelimit   # -> action:block,timelimit
+region:US -protocol:tcp            # the API's own form, sent unchanged
+region:US AND NOT protocol:tcp     # -> region:US -protocol:tcp
 
 # Wildcards and patterns
 device.ip:192.168.*
@@ -210,16 +219,17 @@ target.value:*.facebook.com   # search_rules
 
 # Geographic filtering (flows and alarms)
 region:US                     # United States
-region:CN                     # China
+region:US OR region:CN        # -> region:US,CN
 region:US AND protocol:tcp    # US TCP traffic
 
 # Traffic, status and time
 status:blocked                # blocked flows (blocked:true is translated to this)
 total:>1MB                    # also download:/upload: (bytes: is translated to total:)
-ts:>1h                        # the last hour
+ts:>1h                        # the last hour (search_flows)
 
 # Complex queries
 (type:8 OR type:9 OR type:10) AND device.ip:192.168.* AND status:1
+                              # -> type:8,9,10 device.ip:192.168.* status:1
 ```
 
 ### Example Search Queries
@@ -231,8 +241,14 @@ search_alarms query:"type:1 AND device.ip:192.168.*" limit:50
 # Find blocked flows over 1MB with geographic filtering
 search_flows query:"status:blocked AND total:>1MB AND region:CN" limit:100
 
+# Find blocked flows from either of two countries (sent as region:US,CN)
+search_flows query:"status:blocked AND (region:US OR region:CN)" limit:100
+
 # Find all rules targeting social media
 search_rules query:"target.value:*facebook* OR target.value:*twitter*" limit:25
+
+# Find block rules that are not paused (sent as action:block -status:paused)
+search_rules query:"action:block AND NOT status:paused" limit:25
 
 # Find offline devices by vendor
 search_devices query:"online:false AND mac_vendor:Apple" limit:30
@@ -240,6 +256,11 @@ search_devices query:"online:false AND mac_vendor:Apple" limit:30
 # Geographic security analysis examples
 search_flows query:"region:US AND protocol:tcp AND category:social" limit:50
 search_alarms query:"region:CN AND type:1 AND status:1" limit:25
+
+# Refused: an OR between different fields; run one search per field instead
+# search_flows query:"region:US OR category:social"
+search_flows query:"region:US" limit:50
+search_flows query:"category:social" limit:50
 ```
 
 ## Flow Insights Tool

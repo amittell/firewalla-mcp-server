@@ -1112,7 +1112,7 @@ numeric-match = [ ">" | ">=" | "<" | "<=" ] <number> [ <unit> ] | <number> [ <un
 ```
 
 In short:
-- A space between terms means AND: every term must match.
+- A space between terms means AND: every term must match. Measured, a field that appears twice is OR instead (`type:1 type:10` matches either type), and `AND`, `OR` and `NOT` are searched as words; see [Measured Query Behavior](#measured-query-behavior).
 - A comma between values of one qualifier means OR within that field (`category:social,video`).
 - A `-` prefix excludes the matches of a term (`-status:active`).
 - `n-m` is a range (`ts:1695196894.395-1695604487.633`).
@@ -1275,18 +1275,29 @@ porn                    # Free text; measured to work on alarms (2026-09-25)
 
 ### Measured Query Behavior
 
-The official docs do not cover the points below. Each was measured on 2026-09-25 against a live MSP account.
+The official docs do not cover the points below. Each was measured against a live MSP account, on 2026-09-25 unless a date is given.
 
-- **`AND` / `OR` keywords are accepted** even though the official grammar does not include them. `region:US AND protocol:tcp` and `category:social OR category:games` on flows returned the expected results. `NOT` was not measured; use the `-` prefix, which the official grammar defines.
+- **There are no `AND`, `OR` or `NOT` operators** (measured 2026-09-26, with exact counts from `groupBy=box`, which returns each group's total). The API searches them as free-text words: in the default 30-day window, the bare query `AND` matched 417 alarms, `and` 417 and `NOT` 9. Joined to other terms they change the result. On alarms, `type:1` and `type:1 box.id:<gid>` matched 23 and `type:1 AND box.id:<gid>` 0; `type:10 status:1` matched 12 and `type:10 AND status:1` 5; `ts:<30-day range> type:1` matched 23 and `ts:<30-day range> AND type:1` 0. On flows, `status:blocked` matched 23,420, `region:US` 737,886, `status:blocked region:US` 6,318 and `status:blocked AND region:US` 0; `region:US protocol:tcp` matched 465,213 and `region:US AND protocol:tcp` 2,924.
+- **`OR` is a word as well** (2026-09-26): `type:1 or` matched 23 alarms and `type:10 or` 12, as many as `type:1` and `type:10`, because every one of those alarms has "or" in its text. That is why `type:1 OR type:10` (35) looked right. Over the last 24 hours of blocked flows, `region:US` matched 6,315, `region:CN` 109, `region:US OR region:CN` 632 and `region:US OR` 628; `status:blocked OR` matched 8,799 of the 23,420 blocked flows.
+- **A field repeated, or a comma list, is OR; different fields are AND** (2026-09-26): `type:1 type:10` and `type:1,10` each matched 35 alarms (23 + 12). Over the last 24 hours of blocked flows, `region:US region:CN` matched 6,423 and `region:US,CN` 6,424. Terms on different fields must all match, so one query cannot express an OR between different fields.
+- **`-` excludes; `NOT` does not** (2026-09-26): `region:US -protocol:tcp` matched 272,581 flows (`region:US protocol:udp` 272,575), and `region:US NOT protocol:tcp` 285. On alarms `type:10 -status:1` and `type:10 status:2` both matched 0, consistent with all 12 being active.
 - **Unknown property paths return no results, not an error.** A qualifier the API does not know returns HTTP 200 with an empty result set. On flows, `block:true` returned 0 results, while `status:blocked` returned the blocked flows. An empty result is therefore not proof that nothing matched.
 - **`total:>1MB` works on flows.**
 - **`device.ip:192.168.*` works on alarms**, and so does unqualified free text such as `porn`.
 - **`message:porn` on alarms returns an error.** `message` is not a searchable alarm qualifier.
 - **`id:<rule id>` works on rules**, though it is not a documented rule qualifier. On `/v2/rules`, `id:<box gid>:<n>` alone or with `box.id:<box gid>`, with or without `limit=1`, returned just that rule (count 1; the box had 61 other rules). The status check in `pause_rule`, `resume_rule` and `delete_rule` uses it, and it matches the returned rule's `id` instead of taking the first result.
 - **`groupBy` returns one row per group with the group's total.** On `/v2/alarms`, `groupBy=status` returned `{status, count}` rows, `type` returned `{type, count}` and `box` returned `{gid, count}`; on `/v2/flows`, `box` rows also carried `device`, `download`, `upload` and `total`. The rows have no `ts`, and `count` is the number of matching items in the query window, not limited by `limit`: with `limit=10`, a box's row counted tens of thousands of blocked flows. The row totals agreed across `status`, `type` and `box`. A plain alarm item also carries `count: 1`.
-- **A space-joined qualifier applies to every `OR` branch** (measured with `groupBy=box` on `/v2/alarms`): `type:5` matched alarms on two boxes, while `type:1 OR type:5 box.id:<gid>` and `type:5 OR type:1 box.id:<gid>` each matched only that box's alarms of both types. So appending `box.id:<gid>` to a query with `OR` does not let the other branch escape the box.
-- **Parentheses are not supported and match nothing**: `(type:1 OR type:10) box.id:<gid>` and `(type:1 OR type:10) AND box.id:<gid>` returned no alarms, where `type:1,10 box.id:<gid>` and `type:1 OR type:10 box.id:<gid>` returned the same, non-empty result. Use a comma list (`type:1,10`) or `OR` without parentheses.
+- **Parentheses match nothing**: `(type:1 OR type:10) box.id:<gid>` and `(type:1 OR type:10) AND box.id:<gid>` returned no alarms, where `type:1,10 box.id:<gid>` did; on 2026-09-26, `(region:US OR region:CN)` with other terms returned 0 flows. `type:1 OR type:10 box.id:<gid>` returned the same alarms as `type:1,10 box.id:<gid>` only because the repeated `type` is OR and every one of those alarms has "or" in its text (see above).
 - **`/v2/alarms` returns archived alarms too** unless the query names a status: in the default 30-day window, `groupBy=status` counted active (`status:1`) and archived (`status:2`) alarms together. `get_active_alarms` adds `status:1` unless the query names a status.
+
+**What the client sends.** Every GET to `/v2/alarms`, `/v2/flows` and `/v2/rules` sends its `query` through `toMspQuery` (`src/utils/msp-query.ts`), after the qualifier renames and the box scope, so the tools can take `AND`, `OR`, `NOT` and parentheses:
+
+- `AND`, or no operator, becomes a space: `type:1 AND status:1` is sent as `type:1 status:1`.
+- `OR` between values of one field becomes a comma list, also inside parentheses: `region:US OR region:CN` is sent as `region:US,CN`, and `status:blocked AND (region:US OR region:CN)` as `status:blocked region:US,CN`.
+- `NOT` becomes the `-` prefix: `region:US AND NOT protocol:tcp` is sent as `region:US -protocol:tcp`. `NOT` of an `OR` excludes each term: `NOT (region:US OR region:CN)` is sent as `-region:US -region:CN` (this repeated exclusion is not yet measured). The grammar has no exclusion of numeric terms, so `NOT total:>1MB` is sent as `total:<=1MB`.
+- A lower and an upper bound on one field become one range: `ts:>=a AND ts:<=b` is sent as `ts:a-b` (a range includes its ends).
+- A query that has no form in this grammar is refused with a validation error before anything is sent, naming the part and, where there are some, the searches to run instead: an `OR` between different fields (`region:US OR category:social`), `NOT` over an `AND`, the exclusion of free text, a wildcard or a range, two other conditions on one field (the API would read them as either), and a `box.id` other than the box the request is scoped to (the API would read the two as either box).
+- Lowercase `and`, `or` and `not` stay words, as the API reads them. A query already in this form (spaces, commas, `-`) is sent unchanged.
 
 ### Pagination Support
 

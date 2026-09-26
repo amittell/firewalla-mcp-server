@@ -30,6 +30,45 @@ import {
   getGlobalEnrichmentPipeline,
 } from '../../utils/geographic-enrichment-pipeline.js';
 import { geoCache } from '../../utils/geographic.js';
+import { findMspQueryError } from '../../utils/msp-query.js';
+
+/**
+ * How the MSP API reads a query, for errors about one it cannot run
+ */
+const MSP_QUERY_RULES =
+  'Terms joined by spaces or AND must all match. OR works between values of one field and is sent as a comma list (region:US OR region:CN becomes region:US,CN); the MSP API has no OR between different fields. NOT or a leading - excludes a field value. Parentheses may group terms only where the result is still one list of terms.';
+
+/**
+ * The validation-error response for a query the MSP API cannot run, when
+ * `error` is, or wraps, the MspQueryError toMspQuery threw; undefined for
+ * any other error. The request was not sent.
+ *
+ * @param toolName - The tool reporting the error
+ * @param error - The error a tool caught
+ */
+export function mspQueryErrorResponse(
+  toolName: string,
+  error: unknown
+): ToolResponse | undefined {
+  const queryError = findMspQueryError(error);
+  if (!queryError) {
+    return undefined;
+  }
+  return createErrorResponse(
+    toolName,
+    queryError.message,
+    ErrorType.VALIDATION_ERROR,
+    {
+      query: queryError.query,
+      ...(queryError.part && { unsupported_part: queryError.part }),
+      ...(queryError.suggestions.length > 0 && {
+        suggested_queries: queryError.suggestions,
+      }),
+      query_rules: MSP_QUERY_RULES,
+    },
+    [queryError.message]
+  );
+}
 
 /**
  * Base arguments interface for MCP tool execution
