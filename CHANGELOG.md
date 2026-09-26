@@ -257,7 +257,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   else `FIREWALLA_BOX_ID`, else each box, refusing when several have the aid
   and none is `FIREWALLA_DEFAULT_BOX_ID`), reads the alarm first, and sends
   no DELETE when it is not there. It cannot be undone, so it is marked
-  destructive; `archive_alarm` is the reversible option.
+  destructive; `archive_alarm` keeps the alarm instead (the API has no
+  unarchive).
 - `get_alarm_trends` takes an optional `box` (a box gid) and, with it or
   with `FIREWALLA_BOX_ID`, reports that box's alarms per day.
   `GET /v2/trends/alarms` takes no box, so the tool reads it once for the

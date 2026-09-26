@@ -838,7 +838,8 @@ describe('alarm write tool schemas', () => {
       openWorldHint: true,
     });
     expect(schema.description).toContain('cannot be undone');
-    expect(schema.description).toContain('archive_alarm is the reversible option');
+    expect(schema.description).toContain('archive_alarm keeps the alarm instead');
+    expect(schema.description).toContain('the API has no unarchive');
     expect(schema.description).toBe(new DeleteAlarmHandler().description);
     expect(schema.inputSchema.properties.alarm_id.type).toEqual(['string', 'number']);
     expect(schema.inputSchema.required).toEqual(['alarm_id']);
