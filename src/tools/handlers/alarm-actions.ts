@@ -315,7 +315,7 @@ export class MuteAlarmHandler extends BaseToolHandler {
 export class DeleteAlarmHandler extends BaseToolHandler {
   name = 'delete_alarm';
   description =
-    "Delete an alarm permanently (DELETE /v2/alarms/{gid}/{aid}); it cannot be undone. archive_alarm is the reversible option: it keeps the alarm, among the archived alarms (status:2). The alarm is read first, and an alarm that is not there sends no DELETE. Alarm IDs are per box: pass gid (the alarm's gid field); box selection is the same as archive_alarm.";
+    "Delete an alarm permanently (DELETE /v2/alarms/{gid}/{aid}); it cannot be undone. archive_alarm keeps the alarm instead, among the archived alarms (status:2); the API has no unarchive. The alarm is read first, and an alarm that is not there sends no DELETE. Alarm IDs are per box: pass gid (the alarm's gid field); box selection is the same as archive_alarm.";
   category = 'security' as const;
 
   constructor() {
