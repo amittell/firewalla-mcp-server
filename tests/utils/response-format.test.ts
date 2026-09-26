@@ -401,6 +401,37 @@ describe('renderMarkdown', () => {
     );
   });
 
+  it("renders a unified response's data, with or without a meta object", () => {
+    const every =
+      '_This view has every field of the response. Call again with `response_format: json` for the full JSON response._';
+    expect(renderMarkdown('t', { success: true, data: { n: 1 } })).toBe(
+      ['## t', '', '- **n:** 1', '', every].join('\n')
+    );
+    expect(
+      renderMarkdown('t', { success: true, data: { n: 1 }, meta: 'x' })
+    ).toBe(
+      [
+        '## t',
+        '',
+        '- **n:** 1',
+        '',
+        '_This view leaves out the meta block. Call again with `response_format: json` for the full JSON response._',
+      ].join('\n')
+    );
+    // A field beside data is not the wrapper's, so the object is shown whole
+    expect(
+      renderMarkdown('t', { success: true, data: { n: 1 }, count: 1 })
+    ).toBe(
+      [
+        '## t',
+        '',
+        '- **success:** true\n- **data:**\n  - **n:** 1\n- **count:** 1',
+        '',
+        every,
+      ].join('\n')
+    );
+  });
+
   it('renders a top-level list and a scalar', () => {
     expect(renderMarkdown('t', [])).toBe(
       [

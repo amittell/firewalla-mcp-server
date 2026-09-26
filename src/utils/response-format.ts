@@ -172,6 +172,9 @@ const PREFERRED_COLUMNS = [
 
 type JsonObject = Record<string, unknown>;
 
+/** The keys of a unified response (BaseToolHandler.createUnifiedResponse) */
+const UNIFIED_KEYS = new Set(['success', 'data', 'meta']);
+
 function isPlainObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -519,12 +522,15 @@ function sectionLines(section: Section, state: RenderState): string[] {
 }
 
 /** What the markdown leaves out of the response, as the closing line */
-function closingLine(state: RenderState, meta: JsonObject | undefined): string {
+function closingLine(
+  state: RenderState,
+  meta: { requestId?: string } | undefined
+): string {
   const left: string[] = [];
   if (meta) {
     const requestId =
-      typeof meta.request_id === 'string'
-        ? ` (request_id ${inline(meta.request_id)})`
+      meta.requestId !== undefined
+        ? ` (request_id ${inline(meta.requestId)})`
         : '';
     left.push(`the meta block${requestId}`);
   }
@@ -585,18 +591,26 @@ export function renderMarkdown(
     cellLists: false,
   };
 
-  // A unified response's fields are its data; its meta is left out
+  // A unified response, { success: true, data, meta }, is shown as its
+  // data, with its meta named in the closing line, whether or not meta is
+  // there or an object. One with any other field beside data is shown
+  // whole, so no field is lost.
   let body: unknown = response;
-  let meta: JsonObject | undefined;
+  let meta: { requestId?: string } | undefined;
   if (
     isPlainObject(response) &&
     response.success === true &&
-    'data' in response
+    'data' in response &&
+    Object.keys(response).every(key => UNIFIED_KEYS.has(key))
   ) {
     const { data, meta: responseMeta } = response;
-    if (isPlainObject(responseMeta)) {
-      body = data;
-      meta = responseMeta;
+    body = data;
+    if ('meta' in response) {
+      meta =
+        isPlainObject(responseMeta) &&
+        typeof responseMeta.request_id === 'string'
+          ? { requestId: responseMeta.request_id }
+          : {};
     }
   }
 
