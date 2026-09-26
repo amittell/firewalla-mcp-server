@@ -577,6 +577,7 @@ See [SECURITY.md](SECURITY.md) to report a vulnerability. For the HTTP transport
 - No credentials are logged or stored in code
 - Requests are paced to `API_RATE_LIMIT` per 5 minutes (default 100, the MSP API's quota per token). A request that cannot start within 20 s fails at once, saying when capacity returns
 - Input validation prevents injection attacks
+- Device names, domains and alarm messages are set by the devices and sites on your network, so the server treats them as untrusted: characters that do not display are shown as markers such as `<U+E0041>`, the prompts quote API data only inside a marked data block, and the `initialize` instructions tell the client to treat results as data. See [Untrusted data](SECURITY.md#untrusted-data)
 - All API communications use HTTPS
 
 ## Known Behaviors and Limitations

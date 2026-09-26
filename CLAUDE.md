@@ -331,6 +331,7 @@ This file contains the complete, official Firewalla MSP API v2 documentation inc
 - `src/tools/registry.ts`: Tool registry with 35 handler definitions (24 registered by default)
 - `src/config/write-tools.ts`: `WRITE_TOOL_NAMES`, the tools gated by `FIREWALLA_ENABLE_WRITE_TOOLS`
 - `src/validation/path-segment.ts`: the check every ID goes through before it is put into a request path
+- `src/untrusted-text-server.ts` and `src/utils/untrusted-text.ts`: every result has its invisible characters marked, and the prompts quote API data only through `apiDataBlock()`
 - `src/firewalla/client.ts`: Firewalla API client with caching
 - `src/validation/`: Parameter validation and error handling
 
@@ -406,7 +407,9 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
 4. Implement proper rate limiting as documented
 5. Add to TOOL_SCHEMAS in `src/server.ts`
 6. Register its handler in `src/tools/registry.ts`; a tool that changes state
-   also goes in `WRITE_TOOL_NAMES` in `src/config/write-tools.ts`
+   also goes in `WRITE_TOOL_NAMES` in `src/config/write-tools.ts`, and its
+   description, in `src/server.ts` and in the handler, ends with
+   `${USER_REQUEST_ONLY}`
 
 ### Tool Architecture Requirements
 - All tools must be defined in TOOL_SCHEMAS with proper schema
