@@ -45,8 +45,10 @@ jobs:
     - name: Build
       run: npm run build
     
-    - name: Core Tests
-      run: npm run test:quick
+    - name: Tests
+      # The whole suite: test:quick covered only utils and validation, so the
+      # tool, server, client and search tests never ran in CI
+      run: npm test -- --watchAll=false
       env:
         CI: true
         NODE_ENV: test
