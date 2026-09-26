@@ -957,7 +957,8 @@ interface Flow {
 // Measured 2026-09-25 on 200 live flows: every flow had a string `domain`,
 // empty on the 118 whose destination.type was "ip" and set on the 82 whose
 // destination.type was "dns". There it is the destination.name or a suffix
-// of it (e.g. "example.com" for "www.example.com").
+// of it (e.g. "example.com" for "www.example.com"): the root domain, which is
+// what domain: searches (see Measured Query Behavior).
 // Measured 2026-09-25 on another 200 live flows: every flow had numeric
 // `download`, `upload` and `total`, and `total` equaled download + upload
 // on all 200 (0 on the 4 blocked flows). Every flow had a top-level
@@ -1167,6 +1168,8 @@ domain:*.facebook.com    # Matches any Facebook subdomain
 device.ip:192.168.*      # Matches any IP in 192.168.x.x range (measured on alarms, 2026-09-25)
 ```
 
+Measured on flows (2026-09-26), `domain:*.facebook.com` matches nothing: a flow's `domain` is the root domain (`apple.com` for `www.apple.com`), so `domain:*.apple.com` matched 0 flows where `domain:apple.com` matched 1,283. Use `domain:facebook.com` for the site and its subdomains, or `domain:*facebook*` for any domain containing the word. Alarms, which carry both a domain and a root domain, were not measured; see [Measured Query Behavior](#measured-query-behavior).
+
 Wildcard search does not support unqualified search or exclusive search.
 
 #### Quoted Search
@@ -1307,6 +1310,8 @@ The official docs do not cover the points below. Each was measured against a liv
 - **Rules take the same grammar** (2026-09-26): on `/v2/rules`, `action:block` returned 91 rules, `action:allow` 7, and both `action:block,allow` and `action:block action:allow` 98.
 - **Unknown property paths return no results, not an error.** A qualifier the API does not know returns HTTP 200 with an empty result set. On flows, `block:true` returned 0 results, while `status:blocked` returned the blocked flows. An empty result is therefore not proof that nothing matched.
 - **`total:>1MB` works on flows.**
+- **A comma list of wildcards is OR** (2026-09-26, flows in the last hour, counted with `groupBy=box`): `domain:*apple*` matched 2,518, `domain:*google*` 1,809, and `domain:*apple*,*google*` and `domain:*apple* domain:*google*` 4,327 each, the sum; the mixed list `domain:apple.com,*google*` matched 3,060.
+- **A flow's `domain` is its root domain** (2026-09-26, same hour): the 500 flows returned for `domain:apple.com` had the domains `apple.com` (491) and `cdn-apple.com` (9). `domain:*.apple.com` matched 0 flows, `domain:apple.com` 1,283, `domain:*apple.com` 1,269, and `domain:apple`, `domain:apple*` and `domain:*apple*` 2,539 each. So `domain:*.example.com` finds nothing; `domain:example.com` covers a site and its subdomains, and `domain:*word*` any domain containing a word. Measured on flows only: alarms have both `remote.domain` and `remote.root_domain`.
 - **`device.ip:192.168.*` works on alarms**, and so does unqualified free text such as `porn`.
 - **`message:porn` on alarms returns an error.** `message` is not a searchable alarm qualifier.
 - **Free text matches nothing on rules** (2026-09-26): of 98 rules, one had a given word in its target value, and `/v2/rules?query=<that word>` returned 0 rules.
