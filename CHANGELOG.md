@@ -207,7 +207,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without separators, becomes `removed_fence_tag`, so a value cannot close
   the block, and line breaks in a value become spaces, so it cannot add
   lines of its own. The `device_investigation` heading names the device by
-  the ID it was given instead of its name. The idea came from the fork
+  the ID it was given instead of its name. A prompt whose API reads fail
+  answers with the error in the same block, on one line, after a notice
+  that it can quote the API: a 403's message quotes the error message of
+  the API's answer, and it was placed after `Error generating prompt` as
+  it came, line breaks included. The idea came from the fork
   github.com/matesecurityzach/firewalla-mcp-server; this is a separate
   implementation.
 - Tool results, resources and prompts passed on characters that do not
