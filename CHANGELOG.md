@@ -183,9 +183,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   after field"). `search_devices` matches free text case-insensitively in the
   name, IP, MAC or id, vendor, and network or group name (the network and
   group names are new), and `search_target_lists` in the name, notes and
-  entries. `search_rules` sends it to `GET /v2/rules` and leaves it to the
-  API: the official docs do not say which rule fields free text searches, so
-  a check on the client could only drop rules the API matched.
+  entries. `search_rules` and `get_network_rules` keep free text out of the
+  query sent to `GET /v2/rules`, which matched none (measured 2026-09-26: of
+  98 rules, one had a given word in its target value, and `query=<that
+  word>` returned 0), and keep the rules that have every word,
+  case-insensitively, in their name, notes, action, target type or value, or
+  scope type or value.
 - `search_target_lists` reads a comma list as any of its values, as the API
   grammar does. It compared the list as one value, so `category:social,games`
   found no list. A quoted value keeps its commas (`name:"Block, Social"`), and

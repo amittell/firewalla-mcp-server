@@ -66,6 +66,7 @@ import {
 import {
   mspAnd,
   mspBoxScope,
+  mspSplitText,
   mspValue,
   toMspQuery,
 } from '../utils/msp-query.js';
@@ -377,6 +378,26 @@ function withMspQuery(
   const { query, ...rest } = params;
   const translated = toMspQuery(query);
   return translated ? { ...rest, query: translated } : rest;
+}
+
+/**
+ * Whether a rule, as GET /v2/rules returns it, has every free-text word
+ * (lowercase) in its name, notes, action, target type or value, or scope
+ * type or value, case-insensitively
+ */
+function ruleMatchesWords(rule: any, words: string[]): boolean {
+  const text = [
+    rule?.name,
+    rule?.notes,
+    rule?.action,
+    rule?.target?.type,
+    rule?.target?.value,
+    rule?.scope?.type,
+    rule?.scope?.value,
+  ]
+    .filter((value): value is string => typeof value === 'string')
+    .map(value => value.toLowerCase());
+  return words.every(word => text.some(value => value.includes(word)));
 }
 
 /**
@@ -1913,14 +1934,29 @@ export class FirewallaClient {
     }
   }
 
+  /**
+   * Rules from GET /v2/rules, the box scope applied
+   *
+   * @param query - Rule search terms. Free-text words are not sent: the
+   *   API matched none (measured 2026-09-26: a word in one of 98 rules'
+   *   target value returned 0 rules), so every word must be found here,
+   *   case-insensitively, in the rule's name, notes, action, target type or
+   *   value, or scope type or value.
+   * @param limit - Sent as `limit`
+   * @throws {MspQueryError} When the query has no form the API can run
+   */
   async getNetworkRules(
     query?: string,
     limit?: number
   ): Promise<{ count: number; results: NetworkRule[]; next_cursor?: string }> {
     const params: Record<string, unknown> = {};
 
-    if (query) {
-      params.query = query;
+    const { fields, text } = query
+      ? mspSplitText(query)
+      : { fields: '', text: [] };
+    const words = text.map(word => unquoteQueryValue(word).toLowerCase());
+    if (fields) {
+      params.query = fields;
     }
 
     if (limit !== undefined) {
@@ -1937,56 +1973,60 @@ export class FirewallaClient {
     }>('GET', `/v2/rules`, params);
 
     // API returns {count, results[]} format
-    const rules = (Array.isArray(response.results) ? response.results : []).map(
-      (item: any): NetworkRule => ({
-        id: item.id || 'unknown',
-        action: item.action || 'block',
-        target: {
-          type: item.target?.type || 'ip',
-          value: item.target?.value || 'unknown',
-          dnsOnly: item.target?.dnsOnly,
-          port: item.target?.port,
-        },
-        direction: item.direction || 'bidirection',
-        gid: item.gid || this.config.boxId,
-        group: item.group,
-        scope: item.scope
-          ? {
-              type: item.scope.type || 'ip',
-              value: item.scope.value || 'unknown',
-              port: item.scope.port,
-            }
-          : undefined,
-        notes: item.notes,
-        status: item.status,
-        hit: item.hit
-          ? {
-              count: item.hit.count || 0,
-              lastHitTs: item.hit.lastHitTs || 0,
-              statsResetTs: item.hit.statsResetTs,
-            }
-          : undefined,
-        schedule: item.schedule
-          ? {
-              duration: item.schedule.duration || 0,
-              cronTime: item.schedule.cronTime,
-            }
-          : undefined,
-        timeUsage: item.timeUsage
-          ? {
-              quota: item.timeUsage.quota || 0,
-              used: item.timeUsage.used || 0,
-            }
-          : undefined,
-        protocol: item.protocol,
-        ts: item.ts || Math.floor(Date.now() / 1000),
-        updateTs: item.updateTs || Math.floor(Date.now() / 1000),
-        resumeTs: item.resumeTs,
-      })
-    );
+    const items = Array.isArray(response.results) ? response.results : [];
+    const matching =
+      words.length > 0
+        ? items.filter(item => ruleMatchesWords(item, words))
+        : items;
+    const rules = matching.map((item: any): NetworkRule => ({
+      id: item.id || 'unknown',
+      action: item.action || 'block',
+      target: {
+        type: item.target?.type || 'ip',
+        value: item.target?.value || 'unknown',
+        dnsOnly: item.target?.dnsOnly,
+        port: item.target?.port,
+      },
+      direction: item.direction || 'bidirection',
+      gid: item.gid || this.config.boxId,
+      group: item.group,
+      scope: item.scope
+        ? {
+            type: item.scope.type || 'ip',
+            value: item.scope.value || 'unknown',
+            port: item.scope.port,
+          }
+        : undefined,
+      notes: item.notes,
+      status: item.status,
+      hit: item.hit
+        ? {
+            count: item.hit.count || 0,
+            lastHitTs: item.hit.lastHitTs || 0,
+            statsResetTs: item.hit.statsResetTs,
+          }
+        : undefined,
+      schedule: item.schedule
+        ? {
+            duration: item.schedule.duration || 0,
+            cronTime: item.schedule.cronTime,
+          }
+        : undefined,
+      timeUsage: item.timeUsage
+        ? {
+            quota: item.timeUsage.quota || 0,
+            used: item.timeUsage.used || 0,
+          }
+        : undefined,
+      protocol: item.protocol,
+      ts: item.ts || Math.floor(Date.now() / 1000),
+      updateTs: item.updateTs || Math.floor(Date.now() / 1000),
+      resumeTs: item.resumeTs,
+    }));
 
     return {
-      count: response.count || rules.length,
+      // The API's count does not know the words matched here
+      count: words.length > 0 ? rules.length : response.count || rules.length,
       results: rules,
       next_cursor: response.next_cursor,
     };
