@@ -14,6 +14,12 @@
  * cursors are base64 "offset <n>", a stand-in: the API's cursors are opaque.
  */
 
+import {
+  AxiosError,
+  type AxiosAdapter,
+  type AxiosResponse,
+  type InternalAxiosRequestConfig,
+} from 'axios';
 import { Buffer } from 'node:buffer';
 import { setTimeout as delay } from 'node:timers/promises';
 import { FirewallaClient } from '../../src/firewalla/client.js';
@@ -24,17 +30,6 @@ import {
   StreamingSessionError,
 } from '../../src/utils/streaming-manager.js';
 import { pagingCoverage } from '../../src/utils/paging-coverage.js';
-
-jest.mock('axios', () => {
-  const instance = {
-    interceptors: { request: { use: jest.fn() }, response: { use: jest.fn() } },
-    get: jest.fn(),
-  };
-  return {
-    create: jest.fn(() => instance),
-    interceptors: instance.interceptors,
-  };
-});
 
 const TOTAL = 1000;
 /** Flow i ends at NOW - i */
@@ -48,6 +43,7 @@ const iso = (seconds: number) => new Date(seconds * 1000).toISOString();
 const ids = (from: number, to: number) =>
   Array.from({ length: to - from }, (_, i) => `dev-${from + i}`);
 
+/** A request as it reached the network */
 interface Call {
   limit: number;
   cursor?: string;
@@ -55,27 +51,52 @@ interface Call {
 }
 
 /**
- * A client over the stubbed endpoint. With `repeatCursor`, every page after
- * the first is `pageSize` flows and carries the cursor it was asked with.
- * With `delayMs`, each answer takes that long, so overlapping calls overlap.
+ * A client whose HTTP adapter serves `total` flows (default 1,000). axios is
+ * real, so requests pass through the client's interceptors and response
+ * cache as in production; `calls` records each one that reaches the
+ * adapter. Options:
+ * - `repeatCursor`: every page after the first is `pageSize` flows and
+ *   carries the cursor it was asked with
+ * - `delayMs`: each answer takes that long, so overlapping calls overlap
+ * - `emptyAt`: a page asked for at that offset comes back with no flows and a
+ *   cursor to the page after it
+ * - `tooManyFirst`: the first request is answered 429 with retry-after 1
+ * Time is a clock that moves only when the client sleeps, so a 429's pause
+ * takes no real time.
  */
 function makeClient(
-  options: { pageSize?: number; repeatCursor?: boolean; delayMs?: number } = {}
+  options: {
+    pageSize?: number;
+    repeatCursor?: boolean;
+    delayMs?: number;
+    total?: number;
+    emptyAt?: number;
+    tooManyFirst?: boolean;
+  } = {}
 ) {
-  const client = new FirewallaClient({
-    mspToken: 'test-token',
-    mspId: 'test.firewalla.net',
-    apiTimeout: 30000,
-    rateLimit: 100,
-    cacheTtl: 300,
-    defaultPageSize: 100,
-    maxPageSize: 10000,
-  } as any);
+  let time = Date.UTC(2026, 0, 1);
+  const clock = {
+    now: () => time,
+    sleep: async (ms: number) => {
+      time += Math.max(ms, 0);
+    },
+  };
+  const client = new FirewallaClient(
+    {
+      mspToken: 'test-token',
+      mspId: 'test.firewalla.net',
+      apiTimeout: 30000,
+      rateLimit: 100,
+      cacheTtl: 300,
+      defaultPageSize: 100,
+      maxPageSize: 10000,
+    } as any,
+    clock
+  );
+  const total = options.total ?? TOTAL;
   const calls: Call[] = [];
-  const get = (client as any).api.get as jest.Mock;
-  get.mockReset();
-  get.mockImplementation(async (endpoint: string, config: any) => {
-    const params = config?.params ?? {};
+  const adapter: AxiosAdapter = async (config: InternalAxiosRequestConfig) => {
+    const params = config.params ?? {};
     if (options.delayMs) {
       await delay(options.delayMs);
     }
@@ -84,32 +105,74 @@ function makeClient(
       cursor: params.cursor,
       query: params.query,
     });
+    const reply = (status: number, data: unknown, headers = {}) =>
+      ({
+        status,
+        statusText: '',
+        headers,
+        data,
+        config,
+        request: {},
+      }) as AxiosResponse;
+    if (options.tooManyFirst && calls.length === 1) {
+      throw new AxiosError(
+        'Request failed with status code 429',
+        AxiosError.ERR_BAD_REQUEST,
+        config,
+        {},
+        reply(
+          429,
+          { error: { message: 'Too Many Requests' } },
+          { 'retry-after': '1' }
+        )
+      );
+    }
     const start = offsetOf(params.cursor);
     const size = Math.min(Number(params.limit), options.pageSize ?? Infinity);
-    const end = Math.min(TOTAL, start + size);
-    const results = Array.from({ length: end - start }, (_, i) => ({
-      ts: NOW - (start + i),
-      gid: '00000000-0000-0000-0000-000000000000',
-      protocol: 'tcp',
-      download: 1,
-      upload: 1,
-      total: 2,
-      device: { id: `dev-${start + i}`, ip: '192.168.1.10' },
-      source: { ip: '192.168.1.10' },
-      destination: { ip: '10.0.0.7' },
-    }));
-    let nextCursor = end < TOTAL ? cursorAt(end) : undefined;
+    if (start === options.emptyAt) {
+      return reply(200, {
+        count: 0,
+        results: [],
+        next_cursor: cursorAt(start + size),
+      });
+    }
+    const end = Math.min(total, start + size);
+    const results = Array.from(
+      { length: Math.max(0, end - start) },
+      (_, i) => ({
+        ts: NOW - (start + i),
+        gid: '00000000-0000-0000-0000-000000000000',
+        protocol: 'tcp',
+        download: 1,
+        upload: 1,
+        total: 2,
+        device: { id: `dev-${start + i}`, ip: '192.168.1.10' },
+        source: { ip: '192.168.1.10' },
+        destination: { ip: '10.0.0.7' },
+      })
+    );
+    let nextCursor = end < total ? cursorAt(end) : undefined;
     if (options.repeatCursor && params.cursor) {
       nextCursor = params.cursor;
     }
-    return {
-      status: 200,
-      config: { url: endpoint },
-      data: { count: results.length, results, next_cursor: nextCursor },
-    };
-  });
+    return reply(200, {
+      count: results.length,
+      results,
+      next_cursor: nextCursor,
+    });
+  };
+  (client as any).api.defaults.adapter = adapter;
   return { client, calls };
 }
+
+beforeEach(() => {
+  // The client logs each request and response to stderr
+  jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
 
 const run = (args: Record<string, unknown>, client: FirewallaClient) =>
   new GetFlowDataHandler().execute(args, client);
@@ -408,6 +471,126 @@ describe('a cursor the API repeats', () => {
   });
 });
 
+/** What a page says about the next one, streamed or not */
+function continuation(p: ReturnType<typeof page>) {
+  return {
+    more: p.streaming ? !p.final : p.hasMore,
+    next: p.next,
+    reason: p.coverage?.stopped_reason,
+  };
+}
+
+/** The continuation fields of a page agree with each other */
+function expectConsistent(p: ReturnType<typeof page>) {
+  const { more, next, reason } = continuation(p);
+  expect(next !== undefined).toBe(more);
+  expect(['limit_reached', 'empty_page'].includes(reason)).toBe(more);
+}
+
+describe('an empty page', () => {
+  it('with a cursor: plain and streamed pages both offer the next page', async () => {
+    const { client } = makeClient({ emptyAt: 200 });
+    const plain = page(
+      await run({ limit: 200, stream: false, cursor: cursorAt(200) }, client)
+    );
+    expect(plain.ids).toEqual([]);
+    expect(continuation(plain)).toEqual({
+      more: true,
+      next: cursorAt(400),
+      reason: 'empty_page',
+    });
+    expectConsistent(plain);
+
+    const first = page(await run({ limit: 200 }, client));
+    const empty = page(
+      await run({ streaming_session_id: first.sessionId }, client)
+    );
+    expect(empty.ids).toEqual([]);
+    expect(continuation(empty)).toEqual({
+      more: true,
+      next: cursorAt(400),
+      reason: 'empty_page',
+    });
+    expectConsistent(empty);
+    const after = page(
+      await run({ streaming_session_id: first.sessionId }, client)
+    );
+    expect(after.ids).toEqual(ids(400, 600));
+  });
+
+  it('past the last flow: plain and streamed pages both end', async () => {
+    const plain = page(
+      await run({ limit: 50, cursor: cursorAt(TOTAL) }, makeClient().client)
+    );
+    expect(plain.ids).toEqual([]);
+    expect(continuation(plain)).toEqual({
+      more: false,
+      next: undefined,
+      reason: 'no_more_pages',
+    });
+    expectConsistent(plain);
+
+    const streamed = page(
+      await run({ limit: 200 }, makeClient({ total: 0 }).client)
+    );
+    expect(streamed.streaming).toBe(true);
+    expect(streamed.ids).toEqual([]);
+    expect(continuation(streamed)).toEqual({
+      more: false,
+      next: undefined,
+      reason: 'no_more_pages',
+    });
+    expectConsistent(streamed);
+  });
+
+  it('every page of a listing has consistent continuation fields', async () => {
+    const { client } = makeClient();
+    const first = page(await run({ limit: 500 }, client));
+    const last = page(
+      await run({ streaming_session_id: first.sessionId }, client)
+    );
+    const byCursor = page(
+      await run({ limit: 500, cursor: cursorAt(500) }, client)
+    );
+    [first, last, byCursor].forEach(expectConsistent);
+  });
+});
+
+describe('api_requests counts requests sent to the API', () => {
+  it('a page read again within the cache TTL sends none', async () => {
+    const { client, calls } = makeClient();
+    const first = page(await run({ limit: 50 }, client));
+    const again = page(await run({ limit: 50 }, client));
+    expect(calls).toHaveLength(1);
+    expect(again.ids).toEqual(first.ids);
+    // The second read was answered from the cache: no request
+    expect(again.coverage.api_requests).toBe(0);
+    expect(again.coverage.cached_pages).toBe(1);
+    expect(first.coverage).toMatchObject({ api_requests: 1, cached_pages: 0 });
+  });
+
+  it('a streamed chunk read again from the cache sends none', async () => {
+    const { client, calls } = makeClient();
+    const first = page(await run({ limit: 700 }, client));
+    const again = page(await run({ limit: 700 }, client));
+    expect(calls).toHaveLength(2);
+    expect(again.coverage.api_requests).toBe(0);
+    expect(again.coverage.cached_pages).toBe(2);
+    expect(first.coverage).toMatchObject({ api_requests: 2, cached_pages: 0 });
+  });
+
+  it('a 429 and its retry are two requests', async () => {
+    const { client, calls } = makeClient({ tooManyFirst: true });
+    const retried = page(await run({ limit: 50 }, client));
+    expect(retried.ids).toEqual(ids(0, 50));
+    expect(calls).toHaveLength(2);
+    expect(retried.coverage).toMatchObject({
+      api_requests: 2,
+      cached_pages: 0,
+    });
+  });
+});
+
 describe('coverage of flow results', () => {
   it('get_flow_data gives the oldest and newest ts and why paging stopped', async () => {
     const { client } = makeClient();
@@ -418,6 +601,7 @@ describe('coverage of flow results', () => {
       oldest: iso(NOW - 49),
       newest: iso(NOW),
       api_requests: 1,
+      cached_pages: 0,
       stopped_reason: 'limit_reached',
     });
 
@@ -457,6 +641,7 @@ describe('coverage of flow results', () => {
       oldest: iso(NOW - 99),
       newest: iso(NOW),
       api_requests: 1,
+      cached_pages: 0,
       stopped_reason: 'limit_reached',
     });
   });
@@ -470,11 +655,15 @@ describe('coverage of flow results', () => {
           { ts: 'soon' },
           { ts: 1_700_000_100_000 },
         ],
-        { api_requests: 1, stopped_reason: 'no_more_pages' }
+        { api_requests: 1, cached_pages: 0, stopped_reason: 'no_more_pages' }
       )
     ).toMatchObject({ oldest_ts: 1_700_000_000.5, newest_ts: 1_700_000_100 });
     expect(
-      pagingCoverage([], { api_requests: 1, stopped_reason: 'no_more_pages' })
+      pagingCoverage([], {
+        api_requests: 1,
+        cached_pages: 0,
+        stopped_reason: 'no_more_pages',
+      })
     ).toMatchObject({ oldest_ts: null, newest_ts: null, oldest: null });
   });
 });

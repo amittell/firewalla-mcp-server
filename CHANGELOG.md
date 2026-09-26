@@ -29,7 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   minute later. Overlapping calls for one session are read one after the
   other and get consecutive chunks, not the same chunk twice.
   `streaming_session_id` with `stream: false` is refused, and with a `cursor`
-  the cursor is read. `stream: false` returns plain pages at any limit. The
+  the cursor is read. A chunk is final exactly when it has no
+  `nextContinuationToken`: an empty chunk with a cursor had `isFinalChunk`
+  true and a token, where a plain page with the same answer has
+  `has_more: true`. `stream: false` returns plain pages at any limit. The
   schema lists `stream` and `streaming_session_id`. Each streamed call also
   left its manager's one-minute cleanup timer running for the life of the
   process; the timer now runs only while a session exists.
@@ -149,7 +152,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `get_flow_data` and `search_flows` return `coverage` with their flows:
   `oldest_ts` and `newest_ts`, the oldest and newest `ts` among the flows the
   API returned (Unix seconds; `oldest` and `newest` give them as ISO
-  strings), `api_requests`, and why paging stopped, `stopped_reason`:
+  strings), `api_requests` (the requests sent to the API, which count against
+  its 100 per 5 minutes, 429 retries included; a page answered from the
+  client's response cache sends none), `cached_pages` (the pages answered
+  from that cache), and why paging stopped, `stopped_reason`:
   `limit_reached`, `no_more_pages`, `repeated_cursor` or `empty_page`.
   Without a `ts:` qualifier the API covers only the last 24 hours, newest
   first, so a client can tell how far back a read looked and whether it saw

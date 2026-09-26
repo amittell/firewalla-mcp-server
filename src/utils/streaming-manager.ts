@@ -261,14 +261,20 @@ export class StreamingManager {
       // Execute the operation to get data
       const result = await operation(chunkParams);
 
+      // The chunk is final when there is no cursor to read on from. An empty
+      // chunk with a cursor is not: the API offered another page, and a
+      // final chunk that still carried nextContinuationToken contradicted
+      // itself (a plain page with the same answer has has_more: true).
+      const nextCursor =
+        result.hasMore && result.nextCursor ? result.nextCursor : undefined;
+      const isFinalChunk = nextCursor === undefined;
+
       // Update session state
       session.chunksStreamed++;
       session.itemsStreamed += result.data.length;
       session.lastActivity = now;
-      session.continuationToken = result.nextCursor || undefined;
+      session.continuationToken = nextCursor;
 
-      // Check if this is the final chunk
-      const isFinalChunk = !result.hasMore || result.data.length === 0;
       if (isFinalChunk) {
         this.completeSession(sessionId);
       }
@@ -282,7 +288,7 @@ export class StreamingManager {
         data: result.data,
         count: result.data.length,
         isFinalChunk,
-        nextContinuationToken: result.nextCursor,
+        nextContinuationToken: nextCursor,
         metadata: {
           chunkIndex: session.chunksStreamed - 1,
           totalItemsInSession: session.itemsStreamed,

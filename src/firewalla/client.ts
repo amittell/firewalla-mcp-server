@@ -21,6 +21,7 @@
 import axios, {
   type AxiosError,
   type AxiosInstance,
+  type AxiosRequestConfig,
   type AxiosResponse,
   type InternalAxiosRequestConfig,
 } from 'axios';
@@ -459,6 +460,18 @@ interface RateLimitedConfig extends InternalAxiosRequestConfig {
   rateLimitDeadline?: number;
   /** 429 retries sent so far */
   rateLimitRetries?: number;
+  /**
+   * Called each time the request goes to the API, 429 retries included. A
+   * function because axios copies a plain object in a config, so a counter
+   * object would be counted in a copy.
+   */
+  onSent?: () => void;
+}
+
+/** One read's requests: sent to the API, and answered from the cache */
+interface RequestTrace {
+  sent: number;
+  cached: number;
 }
 
 /**
@@ -640,6 +653,7 @@ export class FirewallaClient {
         const name = `${config.method?.toUpperCase()} ${config.url}`;
         const send = () => {
           process.stderr.write(`API Request: ${name}\n`);
+          request.onSent?.();
           return config;
         };
         const refuse = (error: RateLimitError) => {
@@ -910,10 +924,12 @@ export class FirewallaClient {
    * GET up to `limit` results from a /v2 list endpoint, at most
    * MAX_API_PAGE_SIZE per request, following next_cursor. The MSP API answers
    * 400 "limit exceeds max allowed value of 500" to a larger limit on
-   * /v2/alarms and /v2/flows. Reports the requests made and why paging
-   * stopped (see PagingStopReason). A next_cursor this read already sent
-   * stops it, with no cursor returned: following it would fetch the same page
-   * again, and the loop would repeat until `limit` with duplicates.
+   * /v2/alarms and /v2/flows. Reports the requests sent to the API (429
+   * retries included; a page from the response cache sends none), the pages
+   * answered from the cache, and why paging stopped (see PagingStopReason).
+   * A next_cursor this read already sent stops it, with no cursor returned:
+   * following it would fetch the same page again, and the loop would repeat
+   * until `limit` with duplicates.
    */
   private async requestPages<T>(
     endpoint: string,
@@ -925,6 +941,7 @@ export class FirewallaClient {
     results: T[];
     next_cursor?: string;
     api_requests: number;
+    cached_pages: number;
     stopped_reason: PagingStopReason;
     [key: string]: any;
   }> {
@@ -934,7 +951,7 @@ export class FirewallaClient {
     let cursor = params.cursor as string | undefined;
     const sentCursors = new Set<string>();
     let first: Record<string, unknown> | undefined;
-    let apiRequests = 0;
+    const trace: RequestTrace = { sent: 0, cached: 0 };
     let stoppedReason: PagingStopReason;
     for (;;) {
       const pageParams: Record<string, unknown> = {
@@ -948,8 +965,7 @@ export class FirewallaClient {
       const page = await this.request<{
         results?: T[];
         next_cursor?: string;
-      }>('GET', endpoint, pageParams, undefined, cacheable);
-      apiRequests++;
+      }>('GET', endpoint, pageParams, undefined, cacheable, trace);
       if (!first && page && !Array.isArray(page)) {
         first = page;
       }
@@ -963,7 +979,7 @@ export class FirewallaClient {
       if (sentCursors.has(cursor)) {
         logger.warn('The API repeated a cursor; paging stopped', {
           endpoint,
-          requests: apiRequests,
+          requests: trace.sent,
         });
         stoppedReason = 'repeated_cursor';
         cursor = undefined;
@@ -984,17 +1000,22 @@ export class FirewallaClient {
       count: results.length,
       results,
       next_cursor: cursor,
-      api_requests: apiRequests,
+      api_requests: trace.sent,
+      cached_pages: trace.cached,
       stopped_reason: stoppedReason,
     };
   }
 
+  /**
+   * @param trace - Counts the GET's sends to the API and its cache answers
+   */
   private async request<T>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
     endpoint: string,
     params?: Record<string, unknown>,
     body?: Record<string, unknown> | boolean,
-    cacheable = true
+    cacheable = true,
+    trace?: RequestTrace
   ): Promise<T> {
     // Filter parameters for raw /v2/* data endpoints to prevent "Bad Request"
     // errors, and send a search query in the API's grammar (AND, OR, NOT and
@@ -1009,6 +1030,9 @@ export class FirewallaClient {
     if (cacheable && method === 'GET') {
       const cached = this.getFromCache<T>(cacheKey);
       if (cached) {
+        if (trace) {
+          trace.cached++;
+        }
         return cached;
       }
     }
@@ -1017,9 +1041,17 @@ export class FirewallaClient {
       let response: AxiosResponse<APIResponse<T>>;
 
       switch (method) {
-        case 'GET':
-          response = await this.api.get(endpoint, { params: filteredParams });
+        case 'GET': {
+          const config: AxiosRequestConfig & Pick<RateLimitedConfig, 'onSent'> =
+            { params: filteredParams };
+          if (trace) {
+            config.onSent = () => {
+              trace.sent++;
+            };
+          }
+          response = await this.api.get(endpoint, config);
           break;
+        }
         case 'POST':
           response = await this.api.post(endpoint, body, {
             params: filteredParams,
