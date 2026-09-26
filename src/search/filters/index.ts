@@ -130,11 +130,13 @@ class IpAddressFilter implements Filter {
 
     // Handle common IP wildcard patterns
     if (pattern.includes('*')) {
-      // Convert IP wildcard to regex (e.g., 192.168.*.* or 10.0.0.*)
+      // `*` matches the rest of the address, or any run of it: 192.168.*
+      // matches 192.168.1.20, as the device search itself does. It used to
+      // match one octet, so 192.168.* matched no address with four.
       const regexPattern = pattern
-        .replace(/\./g, '\\.')
-        .replace(/\*/g, '\\d{1,3}');
-      const regex = new RegExp(`^${regexPattern}$`);
+        .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+        .replace(/\*/g, '.*');
+      const regex = new RegExp(`^${regexPattern}$`, 'i');
       return regex.test(ip);
     }
 

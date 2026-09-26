@@ -240,6 +240,16 @@ function validateCommonSearchParameters(
   );
 
   if (!fieldValidation.isValid) {
+    // A bare MAC address reads as a field (`aa:` in aa:bb:cc:dd:ee:ff)
+    const bareMac =
+      /(?:^|[\s(])-?((?:[0-9a-f]{2}:){5}[0-9a-f]{2})(?=$|[\s)])/i.exec(
+        args.query
+      )?.[1];
+    const macHint = bareMac
+      ? entityType === 'devices'
+        ? `To search by MAC address, write mac:${bareMac}`
+        : `To search by MAC address, write device.id:"${bareMac}"`
+      : undefined;
     return {
       isValid: false,
       response: createErrorResponse(
@@ -252,8 +262,9 @@ function validateCommonSearchParameters(
             entityType === 'alarms'
               ? 'See /docs/error-handling-guide.md for troubleshooting'
               : 'See /docs/query-syntax-guide.md for valid field names',
+          ...(macHint && { hint: macHint }),
         },
-        fieldValidation.errors
+        macHint ? [...fieldValidation.errors, macHint] : fieldValidation.errors
       ),
     };
   }

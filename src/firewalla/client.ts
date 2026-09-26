@@ -4547,11 +4547,13 @@ export class FirewallaClient {
             const name = device.name?.toLowerCase() || '';
             const ip = device.ip?.toLowerCase() || '';
             const macVendor = device.macVendor?.toLowerCase() || '';
-            const id = device.id?.toLowerCase() || '';
-            // MSP device ids are `mac:<address>` for devices identified by MAC
+            const id = String(device.id ?? '').toLowerCase();
+            // A device id is its MAC address (the API reference's device.id
+            // is a plain MAC), or `mac:<address>` on some devices
+            const macId = id.startsWith('mac:') ? id.slice(4) : id;
             const mac =
               device.mac?.toLowerCase() ||
-              (id.startsWith('mac:') ? id.slice(4) : '');
+              (/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(macId) ? macId : '');
             const gid = device.gid?.toLowerCase() || '';
             const networkName = device.network?.name?.toLowerCase() || '';
             const groupName = device.group?.name?.toLowerCase() || '';
@@ -4559,8 +4561,8 @@ export class FirewallaClient {
               device.online || device.isOnline || device.connected
             );
 
-            // `ip:`, `mac:` and `gid:` take an exact value or a `*` wildcard
-            // (172.16.2.*, AA:BB:*)
+            // `id:`, `ip:`, `mac:` and `gid:` take an exact value or a `*`
+            // wildcard (172.16.2.*, AA:BB:*)
             const matchesPattern = (
               value: string,
               pattern: string
@@ -4591,6 +4593,8 @@ export class FirewallaClient {
               const value = unquoteQueryValue(rawValue);
 
               switch (field) {
+                case 'id':
+                  return matchesPattern(id, value);
                 case 'ip':
                   return matchesPattern(ip, value);
                 case 'mac':
