@@ -170,9 +170,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   got 400 "Bad Request: No valid session ID provided", the answer for a
   request with no session ID. The MCP transport spec says the server MUST
   answer a terminated session's ID with 404, and a client that gets 404
-  MUST start a new session with a new `initialize`. A request without a
-  session ID, other than `initialize`, and a session ID that is not a UUID
-  v4 still get 400.
+  MUST start a new session with a new `initialize`. A POST whose session
+  is closed while its body arrives gets 404 as well, also when the body is
+  not JSON or is over 1 MB; with the session open, those bodies get 400
+  and 413. A request without a session ID, other than `initialize`, and a
+  session ID that is not a UUID v4 still get 400.
 - `search_flows` counts the requests of both attempts in
   `coverage.api_requests`. The tool tries a read again when the first attempt
   fails with a timeout or a network error, and each attempt counted its own
