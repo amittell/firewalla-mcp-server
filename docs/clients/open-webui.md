@@ -9,12 +9,12 @@ Open WebUI can reach this server two ways:
 
 Every command and file on this page was run on 2026-09-26; see [What was tested](#what-was-tested).
 
-**Versions.** This page describes the server after 1.5.0: 24 read-only tools unless `FIREWALLA_ENABLE_WRITE_TOOLS=true`, and an HTTP transport that checks the `Host` header and an optional bearer token. Releases up to 1.5.0 list 28 tools, five of which change your box, and their HTTP transport listens on every interface with neither check. They ignore the `MCP_HTTP_*` settings below, so the same configs work with them.
+**Versions.** Routes 2 and 3 use the HTTP transport and need **1.6.0 or later**, the first release whose HTTP transport checks the `Host` header and a bearer token. On 2026-09-26, npm and Docker Hub still have 1.5.0. Up to 1.5.0 the HTTP transport listens on every interface and ignores `MCP_HTTP_BEARER_TOKEN`, `MCP_HTTP_ALLOWED_HOSTS` and the other `MCP_HTTP_*` settings, so the token in these recipes protects nothing, and the server registers 5 tools that change your box. Until 1.6.0 is published, run routes 2 and 3 on a build of the main branch, as each route shows. With 1.5.0 or earlier, do not expose the HTTP port: use route 1. Route 1 uses stdio and works from 1.4.0; with 1.5.0 it lists 28 tools, 5 of them write tools, and with later releases 24 read-only tools.
 
 ## Prerequisites
 
 - Open WebUI, and a model with tool (function) calling
-- firewalla-mcp-server **1.4.0 or later**. Earlier releases never start under `npx`; see [mcpo never opens its port](#mcpo-never-opens-its-port-port-8000-shows-down)
+- firewalla-mcp-server **1.4.0 or later** for route 1; earlier releases never start under `npx` (see [mcpo never opens its port](#mcpo-never-opens-its-port-port-8000-shows-down)). **1.6.0 or later** for routes 2 and 3, or a build of main until 1.6.0 is published; see Versions above
 - For the mcpo routes: mcpo 0.0.20, as the Docker image `ghcr.io/open-webui/mcpo:main` (it includes Node.js 22 and `npx`) or through `uvx`
 - Node.js 18+ if mcpo runs the server with `npx` or `node` outside the mcpo image
 - Docker, for the Docker image and Compose routes
@@ -111,7 +111,7 @@ In `config.json`, use `"args": ["/app/tools/firewalla/dist/server.js"]`. The ser
 
 ### Or start the Docker image
 
-mcpo on the host can start the image over stdio and keeps that container while mcpo runs. The `-e NAME` form passes the value from the `env` block without putting the token on the command line:
+mcpo on the host can start the image over stdio and keeps that container while mcpo runs. The `-e NAME` form passes the value from the `env` block without putting the token on the command line. mcpo's `env` reaches the `docker` command, not the container, so every variable the server needs must be named in `args` as well:
 
 ```json
 {
@@ -120,6 +120,7 @@ mcpo on the host can start the image over stdio and keeps that container while m
       "command": "docker",
       "args": ["run", "-i", "--rm",
         "-e", "FIREWALLA_MSP_TOKEN", "-e", "FIREWALLA_MSP_ID",
+        "-e", "FIREWALLA_BOX_ID",
         "amittell/firewalla-mcp-server:latest"],
       "env": {
         "FIREWALLA_MSP_TOKEN": "your_msp_access_token_here",
@@ -130,7 +131,7 @@ mcpo on the host can start the image over stdio and keeps that container while m
 }
 ```
 
-This needs the Docker CLI where mcpo runs; the mcpo image does not include it. To turn on the write tools here, add `"-e", "FIREWALLA_ENABLE_WRITE_TOOLS"` to `args` and `"FIREWALLA_ENABLE_WRITE_TOOLS": "true"` to `env`.
+`-e FIREWALLA_BOX_ID` forwards a box ID when you add `"FIREWALLA_BOX_ID": "<box gid>"` to `env`, and sets nothing when you don't. To turn on the write tools here, add `"-e", "FIREWALLA_ENABLE_WRITE_TOOLS"` to `args` and `"FIREWALLA_ENABLE_WRITE_TOOLS": "true"` to `env`. This needs the Docker CLI where mcpo runs; the mcpo image does not include it.
 
 ### Add mcpo to Open WebUI
 
@@ -144,14 +145,16 @@ A connection added here is called by the Open WebUI server, not your browser. If
 
 ## 2. The Docker image over HTTP (Docker Compose)
 
-The Docker image [`amittell/firewalla-mcp-server`](https://hub.docker.com/r/amittell/firewalla-mcp-server) (amd64, arm64 and arm/v7) runs the server; with `MCP_TRANSPORT=http` it serves MCP Streamable HTTP on port 3000 at `/mcp`, and Open WebUI connects to it over the Compose network. Nothing is built on the host.
+The Docker image [`amittell/firewalla-mcp-server`](https://hub.docker.com/r/amittell/firewalla-mcp-server) (amd64, arm64 and arm/v7) runs the server; with `MCP_TRANSPORT=http` it serves MCP Streamable HTTP on port 3000 at `/mcp`, and Open WebUI connects to it over the Compose network.
+
+This route needs the 1.6.0 image. Until it is on Docker Hub, `docker compose up` stops with `docker.io/amittell/firewalla-mcp-server:1.6.0: not found`; replace the `image:` line with `build: https://github.com/amittell/firewalla-mcp-server.git#main`, which builds the image from the main branch, or run `docker build -t firewalla-mcp-server:main .` in a checkout and use `image: firewalla-mcp-server:main`. Do not use `latest` or `1.5.0` here: they have no token or `Host` checks.
 
 `compose.yaml`:
 
 ```yaml
 services:
   firewalla-mcp:
-    image: amittell/firewalla-mcp-server:latest
+    image: amittell/firewalla-mcp-server:1.6.0
     environment:
       MCP_TRANSPORT: http
       MCP_HTTP_PORT: "3000"
@@ -161,7 +164,7 @@ services:
       MCP_HTTP_BEARER_TOKEN: ${MCP_HTTP_BEARER_TOKEN}
       FIREWALLA_MSP_TOKEN: ${FIREWALLA_MSP_TOKEN}
       FIREWALLA_MSP_ID: ${FIREWALLA_MSP_ID}
-      # FIREWALLA_BOX_ID: ${FIREWALLA_BOX_ID}         # optional
+      # FIREWALLA_BOX_ID: ${FIREWALLA_BOX_ID}         # optional; set it in .env too
       # FIREWALLA_ENABLE_WRITE_TOOLS: "true"          # optional: the 11 write tools
       # MCP_SESSION_IDLE_TIMEOUT_MS: "31536000000"    # with mcpo, see below
     # No "ports:": only the other services here can reach the server.
@@ -195,9 +198,10 @@ FIREWALLA_MSP_TOKEN=your_msp_access_token_here
 FIREWALLA_MSP_ID=yourdomain.firewalla.net
 MCP_HTTP_BEARER_TOKEN=choose-a-long-random-token
 WEBUI_SECRET_KEY=another-long-random-value
+# FIREWALLA_BOX_ID=00000000-0000-0000-0000-000000000000
 ```
 
-`openssl rand -hex 32` makes a suitable token. Then `docker compose up -d`. If Open WebUI already runs in another Compose file, add the `firewalla-mcp` service to that file instead, so that the two share a network.
+If you uncomment `FIREWALLA_BOX_ID` in `compose.yaml`, set it in `.env` too; without a value Compose passes an empty string, and queries cover every box. `openssl rand -hex 32` makes a suitable token. Then `docker compose up -d`. If Open WebUI already runs in another Compose file, add the `firewalla-mcp` service to that file instead, so that the two share a network.
 
 ### Connect Open WebUI natively
 
@@ -258,15 +262,19 @@ MCP_HTTP_ALLOWED_HOSTS=host.docker.internal,192.168.1.10 \
 MCP_HTTP_BEARER_TOKEN=choose-a-long-random-token \
 FIREWALLA_MSP_TOKEN=your_msp_access_token_here \
 FIREWALLA_MSP_ID=yourdomain.firewalla.net \
-npx -y firewalla-mcp-server
+npx -y 'firewalla-mcp-server@>=1.6.0'
 ```
+
+The version range keeps `npx` from running 1.5.0; until 1.6.0 is published it stops with `No matching version found for firewalla-mcp-server@>=1.6.0`. Before then, build main from source ([README](../../README.md#option-c-install-from-source)) and replace the last line with `node /absolute/path/to/firewalla-mcp-server/dist/server.js`.
 
 - `MCP_HTTP_HOST=0.0.0.0` accepts connections from other machines and from containers. Without it the server listens on 127.0.0.1 only.
 - `MCP_HTTP_ALLOWED_HOSTS` lists every name or address clients put in the URL, besides `localhost`, `127.0.0.1` and `[::1]`: here `host.docker.internal` for an Open WebUI container on this host, and `192.168.1.10` standing for the host's LAN address. A request with any other `Host` gets 403.
 - `MCP_HTTP_BEARER_TOKEN`: set it whenever the port is reachable from other machines. In Open WebUI, choose **Auth** Bearer with this value.
 - Port 3001 avoids the `3000:8080` mapping that Open WebUI installs often use.
 
-Then add the connection as in route 2, with **URL** `http://host.docker.internal:3001/mcp` from an Open WebUI container on this host, or `http://192.168.1.10:3001/mcp` from elsewhere. `FIREWALLA_ENABLE_WRITE_TOOLS=true` goes on the same command line if you want the write tools.
+Then add the connection as in route 2, with **URL** `http://host.docker.internal:3001/mcp` from an Open WebUI container on this host, or `http://192.168.1.10:3001/mcp` from another machine. `FIREWALLA_BOX_ID` and `FIREWALLA_ENABLE_WRITE_TOOLS=true` go on the same command line if you want them.
+
+Plain HTTP is fine on the same host or an isolated container network. From another machine the bearer token and your Firewalla data cross the network unencrypted: put an HTTPS reverse proxy in front of the server, or connect over an encrypted tunnel such as Tailscale or WireGuard. The same goes for mcpo's port 8000.
 
 On macOS with colima, `host.docker.internal` resolved in the Open WebUI container and reached the host. On Linux, Docker needs `extra_hosts: ["host.docker.internal:host-gateway"]` on the Open WebUI service for that name (not tested here).
 
@@ -299,7 +307,7 @@ Routes 2 and 3 use the HTTP transport. Its checks, and what Open WebUI and mcpo 
      -H "Authorization: Bearer $MCPO_API_KEY" -H "Content-Type: application/json" -d '{}'
    ```
 
-   With real credentials this returns your boxes. An answer that quotes a Firewalla API error, such as `getaddrinfo ENOTFOUND` for a mistyped MSP domain, still shows that mcpo reached the server.
+   Export the key first (`export MCPO_API_KEY=choose-a-long-random-key`) or paste it in place of `$MCPO_API_KEY`. Route 1 passes it only as `--api-key`, and Compose reads `.env` without exporting it to your shell, so an unset variable sends an empty key and mcpo answers 401. With real credentials this returns your boxes. An answer that quotes a Firewalla API error, such as `getaddrinfo ENOTFOUND` for a mistyped MSP domain, still shows that mcpo reached the server.
 
 2. Over the HTTP transport: send an MCP `initialize` from where Open WebUI runs, with the URL and token it uses. In route 2, from the Open WebUI container:
 
@@ -391,8 +399,9 @@ On 2026-09-26, on macOS (arm64) with Docker in colima (Linux arm64), with dummy 
 - The server built from the main branch after 1.5.0: `node dist/server.js`, `npx` of its packed tarball, and a Docker image built from it. mcpo listed 24 tools, 35 with `FIREWALLA_ENABLE_WRITE_TOOLS=true` and 32 with the `disabledTools` example. The route 1 configs were also run with 1.5.0 from npm and the `amittell/firewalla-mcp-server:1.5.0` image, which list 28.
 - mcpo 0.0.20 as `ghcr.io/open-webui/mcpo:main` (Node.js 22.22.0, npm 10.9.4, `mcp` 1.26.0) and through `uvx` with `mcp` 1.30.0, on host Node.js 24.18.0; each passed a `get_boxes` call through to the server.
 - The HTTP transport: `initialize` got 200 with an allowed `Host` and the token, 401 without the token or with a wrong one, 403 for a `Host` not in `MCP_HTTP_ALLOWED_HOSTS` (the service name `firewalla-mcp` before it was added) and for a browser `Origin`, and 404 on `/mcpx`. mcpo's `headers` carried the token; without them mcpo got 401.
-- The Compose file above with Open WebUI 0.11.4, with an override that used the locally built image and published the ports on loopback, with and without the mcpo service. Open WebUI accepted the native connection with **Auth** Bearer and refused it with no auth or a wrong key, and accepted the mcpo connection; each listed 24 tools. In a chat through each, a stand-in OpenAI-compatible model called `get_boxes`, and Open WebUI ran the tool and passed the server's answer back to the model. The native chat still worked after `docker compose restart firewalla-mcp`. The same stack with the published 1.5.0 image worked too, with 28 tools; it ignored the token and `Host` settings.
-- Route 3 with the local build: an Open WebUI container reached it at `http://host.docker.internal:3001/mcp` once `host.docker.internal` was in `MCP_HTTP_ALLOWED_HOSTS`, and got 403 before.
+- The Compose file above with Open WebUI 0.11.4, with an override that used the locally built image and published the ports on loopback, with and without the mcpo service. Open WebUI accepted the native connection with **Auth** Bearer and refused it with no auth or a wrong key, and accepted the mcpo connection; each listed 24 tools. In a chat through each, a stand-in OpenAI-compatible model called `get_boxes`, and Open WebUI ran the tool and passed the server's answer back to the model. The native chat still worked after `docker compose restart firewalla-mcp`. The `build:` line for the Compose file built an image from the repository that answered 403 to an unknown `Host` and 401 without the token.
+- Route 3 with the local build: an Open WebUI container reached it at `http://host.docker.internal:3001/mcp` once `host.docker.internal` was in `MCP_HTTP_ALLOWED_HOSTS`, and got 403 before. With plain `npx -y firewalla-mcp-server`, which installed 1.5.0, the same settings answered 200 to a request without the token and to one with an unknown `Host`, which is why routes 2 and 3 need 1.6.0. `npx -y 'firewalla-mcp-server@>=1.6.0'` stopped with `ETARGET` while npm had only 1.5.0, and the same form with `>=1.5.0` started the server.
+- `"-e", "FIREWALLA_BOX_ID"` in the `docker run` args forwarded a value set in the environment mcpo passes to `docker`, and set nothing in the container when it was unset.
 - mcpo over HTTP after the server closed its session. With the default timeout, mcpo's last request was its event stream reconnecting 5 minutes after it started; the server closed the session 31 minutes after that, and a tool call 42 minutes after the start did not answer in 25 seconds. With `MCP_SESSION_IDLE_TIMEOUT_MS=5000` the same happened within 15 seconds. After the `firewalla-mcp` container was re-created, mcpo's call hung and mcpo used 105% CPU. With the one-year setting, a call after 70 seconds idle (past the server's 60-second sweep) answered.
 
 Not tested: a real MSP account, a real model, Windows, an amd64 host, a Linux Docker host, a user-level (browser-side) tool server connection, and the Open WebUI screens themselves (connections were made through Open WebUI's API).
