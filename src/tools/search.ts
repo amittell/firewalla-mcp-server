@@ -987,8 +987,14 @@ export class SearchEngine {
    * Execute a search query for flows using simplified implementation with direct API calls.
    * Performs basic validation and uses getFlowData API directly for improved reliability.
    * Supports time range filtering and proper limit enforcement.
+   *
+   * @param trace - The client's RequestTrace: counts the requests sent and
+   *   the pages answered from the cache, adding to what it already holds
    */
-  async searchFlows(params: SearchParams): Promise<SearchResult> {
+  async searchFlows(
+    params: SearchParams,
+    trace?: { sent: number; cached: number }
+  ): Promise<SearchResult> {
     const startTime = Date.now();
 
     try {
@@ -1067,7 +1073,8 @@ export class SearchEngine {
         params.group_by,
         params.sort_by || 'ts:desc',
         params.limit,
-        params.cursor
+        params.cursor,
+        trace
       );
 
       // Grouped: the API returned groups, not flows

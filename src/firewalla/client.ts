@@ -479,8 +479,12 @@ interface RateLimitedConfig extends InternalAxiosRequestConfig {
   onSent?: () => void;
 }
 
-/** One read's requests: sent to the API, and answered from the cache */
-interface RequestTrace {
+/**
+ * One read's requests: sent to the API, and answered from the cache. A
+ * caller that retries a read passes one trace to every attempt, so the
+ * count includes the requests of an attempt that failed.
+ */
+export interface RequestTrace {
   sent: number;
   cached: number;
 }
@@ -952,12 +956,16 @@ export class FirewallaClient {
    * A next_cursor this read already sent stops it, with no cursor returned:
    * following it would fetch the same page again, and the loop would repeat
    * until `limit` with duplicates.
+   *
+   * @param trace - Counts this read's requests; one passed in keeps its
+   *   earlier counts, and api_requests and cached_pages are its totals
    */
   private async requestPages<T>(
     endpoint: string,
     params: Record<string, unknown>,
     limit: number,
-    cacheable = true
+    cacheable = true,
+    trace: RequestTrace = { sent: 0, cached: 0 }
   ): Promise<{
     count: number;
     results: T[];
@@ -973,7 +981,6 @@ export class FirewallaClient {
     let cursor = params.cursor as string | undefined;
     const sentCursors = new Set<string>();
     let first: Record<string, unknown> | undefined;
-    const trace: RequestTrace = { sent: 0, cached: 0 };
     let stoppedReason: PagingStopReason;
     for (;;) {
       const pageParams: Record<string, unknown> = {
@@ -1381,6 +1388,7 @@ export class FirewallaClient {
    * @param groupBy - Optional fields to group by (e.g., 'category',
    *   'device', 'category,domain'). The API then returns groups, not flows:
    *   the result has `groups` and `group_by`, and empty `results`.
+   * @param trace - Counts the read's requests; see requestPages
    * @returns flows with `coverage`: the oldest and newest `ts` returned, the
    *   requests made and why paging stopped (no coverage for groups)
    */
@@ -1389,7 +1397,8 @@ export class FirewallaClient {
     groupBy?: string,
     sortBy = 'ts:desc',
     limit = 200,
-    cursor?: string
+    cursor?: string,
+    trace?: RequestTrace
   ): Promise<{
     count: number;
     results: Flow[];
@@ -1425,7 +1434,9 @@ export class FirewallaClient {
     const response = await this.requestPages<any>(
       '/v2/flows',
       params,
-      Number(limit)
+      Number(limit),
+      true,
+      trace
     );
 
     // A grouped response has one item of totals per group and no ts or gid
