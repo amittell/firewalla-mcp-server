@@ -72,6 +72,57 @@ describe('the search parser reads free text', () => {
   it('still refuses an unknown field', () => {
     expect(queryParser.parse('nmae:nas', 'devices').isValid).toBe(false);
   });
+
+  // Terms with no operator between them are ANDed. The parse ended at the
+  // first free-text term, and reported `nas online:true` as `nas` alone.
+  it.each([
+    [
+      'nas online:true',
+      {
+        type: 'logical',
+        operator: 'AND',
+        left: { type: 'text', value: 'nas' },
+        right: { type: 'field', field: 'online', value: 'true', operator: '=' },
+      },
+    ],
+    [
+      'homework kids',
+      {
+        type: 'logical',
+        operator: 'AND',
+        left: { type: 'text', value: 'homework' },
+        right: { type: 'text', value: 'kids' },
+      },
+    ],
+    [
+      'name:nas OR laptop kids',
+      {
+        type: 'logical',
+        operator: 'OR',
+        left: { type: 'field', field: 'name', value: 'nas', operator: '=' },
+        right: {
+          type: 'logical',
+          operator: 'AND',
+          left: { type: 'text', value: 'laptop' },
+          right: { type: 'text', value: 'kids' },
+        },
+      },
+    ],
+  ])('ANDs the adjacent terms of %s', (query, ast) => {
+    const parsed = queryParser.parse(query, 'devices');
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.ast).toEqual(ast);
+  });
+
+  it('checks every term, not only the first', () => {
+    expect(queryParser.parse('nas nmae:x', 'devices').isValid).toBe(false);
+  });
+
+  it('refuses a token it cannot read instead of dropping it', () => {
+    const parsed = queryParser.parse('name:nas )', 'devices');
+    expect(parsed.isValid).toBe(false);
+    expect(parsed.errors).toEqual(["Unexpected token ')' at position 9"]);
+  });
 });
 
 describe('search_devices free text', () => {
@@ -108,9 +159,26 @@ describe('search_devices free text', () => {
     return (body(res).data.devices as any[]).map(device => device.name);
   }
 
+  it.each(['nas online:maybe', 'name:nas online:maybe'])(
+    'checks every term of %s, not only the first',
+    async query => {
+      // The parse ended after the first term, so online:maybe was never
+      // checked, and it matched every device named like nas, online or not
+      const { client } = makeClient(DEVICES);
+      const res = await new SearchDevicesHandler().execute(
+        { query, limit: 10 },
+        client
+      );
+      expect(res.isError).toBe(true);
+      expect(body(res).message).toContain("Field 'online' expects a boolean");
+    }
+  );
+
   it.each([
     // name, case-insensitively
     ['nas', ['NAS']],
+    ['nas online:true', ['NAS']],
+    ['laptop online:true', []],
     ['NAS', ['NAS']],
     ['LAPTOP', ['laptop']],
     // vendor, IP, MAC or id
