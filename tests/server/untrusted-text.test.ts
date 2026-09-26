@@ -206,7 +206,7 @@ describe('invisible characters are shown as markers', () => {
     expect(text).not.toMatch(INVISIBLE);
   });
 
-  it('in a prompt', async () => {
+  it('in a prompt, inside its data block', async () => {
     const { messages } = await client.getPrompt({
       name: 'device_investigation',
       arguments: { device_id: MAC },
@@ -215,5 +215,8 @@ describe('invisible characters are shown as markers', () => {
     expect(text).toContain(`- Name: ${DEVICE_NAME_SHOWN}\n`);
     expect(text).toContain(`Alarm about ${DEVICE_NAME_SHOWN}`);
     expect(text).not.toMatch(INVISIBLE);
+    const blockAt = text.lastIndexOf('<firewalla_api_data>');
+    expect(blockAt).toBeGreaterThan(0);
+    expect(text.indexOf(DEVICE_NAME_SHOWN)).toBeGreaterThan(blockAt);
   });
 });
