@@ -684,9 +684,11 @@ export class ParameterValidator {
 
   /**
    * Validate an ID that goes into a request path as one segment: a
-   * target-list id, rule id, alarm id, box gid or device id. The trimmed
-   * string is refused when it holds `/`, a backslash, `?`, `#`, `%`, whitespace or
-   * a control character, or is `.` or `..` (see path-segment.ts); `:` is
+   * target-list id, rule id, alarm id, box gid or device id. The value is
+   * checked as given, never trimmed or cleaned, so an ID is refused rather
+   * than rewritten into another one: it is refused when it holds `/`, a
+   * backslash, `?`, `#`, `%`, whitespace (leading or trailing too) or a
+   * control character, or is `.` or `..` (see path-segment.ts). `:` is
    * allowed. With `required` false, a missing or empty value is valid and
    * gives undefined.
    */
@@ -695,27 +697,29 @@ export class ParameterValidator {
     paramName: string,
     { required = true }: { required?: boolean } = {}
   ): ValidationResult {
-    const stringValidation = required
-      ? this.validateRequiredString(value, paramName)
-      : this.validateOptionalString(value, paramName);
-    if (
-      !stringValidation.isValid ||
-      stringValidation.sanitizedValue === undefined
-    ) {
-      return { ...stringValidation, errors: stringValidation.errors ?? [] };
+    if (!required && (value === undefined || value === null || value === '')) {
+      return { isValid: true, errors: [], sanitizedValue: undefined };
     }
-    const problem = pathSegmentProblem(stringValidation.sanitizedValue);
+    if (typeof value !== 'string') {
+      // The usual missing-value and wrong-type messages
+      const typeValidation = required
+        ? this.validateRequiredString(value, paramName)
+        : this.validateOptionalString(value, paramName);
+      return { ...typeValidation, errors: typeValidation.errors ?? [] };
+    }
+    const problem = pathSegmentProblem(value);
     if (problem) {
       return { isValid: false, errors: [`${paramName} ${problem}`] };
     }
-    return { ...stringValidation, errors: [] };
+    return { isValid: true, errors: [], sanitizedValue: value };
   }
 
   /**
    * Validate Firewalla rule ID format
    */
   static validateRuleId(value: unknown, paramName: string): ValidationResult {
-    const stringValidation = this.validateRequiredString(value, paramName);
+    // A rule ID goes into the request path: checked as given, not trimmed
+    const stringValidation = this.validatePathSegment(value, paramName);
     if (!stringValidation.isValid) {
       return stringValidation;
     }
@@ -761,7 +765,8 @@ export class ParameterValidator {
     if (typeof value === 'number' && Number.isInteger(value) && value >= 0) {
       value = String(value);
     }
-    const stringValidation = this.validateRequiredString(value, paramName);
+    // An alarm ID goes into the request path: checked as given, not trimmed
+    const stringValidation = this.validatePathSegment(value, paramName);
     if (!stringValidation.isValid) {
       return stringValidation;
     }

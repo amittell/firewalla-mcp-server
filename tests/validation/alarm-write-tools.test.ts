@@ -364,7 +364,9 @@ describe('archiveAlarm', () => {
     async aid => {
       const { client, request } = makeClient({ alarms: { [BOX_A]: ['42'] } });
       await expect(client.archiveAlarm(aid, BOX_A)).rejects.toThrow(
-        /Invalid alarm ID/
+        // "Invalid alarm_id" from the path-segment check, "Invalid alarm
+        // ID" from the aid check
+        /Invalid alarm[ _]ID/i
       );
       expect(request).not.toHaveBeenCalled();
     }
@@ -681,7 +683,9 @@ describe('deleteAlarm', () => {
     async aid => {
       const { client, request } = makeClient({ alarms: { [BOX_A]: ['42'] } });
       await expect(client.deleteAlarm(aid, BOX_A)).rejects.toThrow(
-        /Invalid alarm ID/
+        // "Invalid alarm_id" from the path-segment check, "Invalid alarm
+        // ID" from the aid check
+        /Invalid alarm[ _]ID/i
       );
       expect(request).not.toHaveBeenCalled();
     }
