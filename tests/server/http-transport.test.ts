@@ -45,6 +45,15 @@ const MCP_HEADERS = {
   accept: 'application/json, text/event-stream',
 };
 
+const TOOLS_LIST = JSON.stringify({
+  jsonrpc: '2.0',
+  id: 1,
+  method: 'tools/list',
+});
+
+/** A well-formed session ID that no server here issued */
+const UNKNOWN_SESSION = '11111111-2222-4333-8444-555555555555';
+
 interface Reply {
   status: number;
   headers: IncomingHttpHeaders;
@@ -60,7 +69,10 @@ function closeHttpServer(httpServer: HttpServer): Promise<void> {
 }
 
 /** Starts the transport on an ephemeral port with the given environment */
-async function start(env: Record<string, string> = {}) {
+async function start(
+  env: Record<string, string> = {},
+  { idleTimeoutMs }: { idleTimeoutMs?: number } = {}
+) {
   const security = parseHttpSecurityConfig(env);
   const createServerInstance = jest.fn(
     () =>
@@ -73,6 +85,7 @@ async function start(env: Record<string, string> = {}) {
     path: '/mcp',
     security,
     createServerInstance,
+    idleTimeoutMs,
   });
   await listenHttpTransport(httpServer, 0, '/mcp', security);
   cleanups.push(async () => {
@@ -86,6 +99,7 @@ async function start(env: Record<string, string> = {}) {
 /**
  * Sends one request to the server at `address`. The Host header defaults to
  * localhost:<port>, what a client connecting to http://localhost sends.
+ * With `endAfterMs`, the request is ended that long after its body is sent.
  */
 function send(
   address: AddressInfo,
@@ -95,12 +109,14 @@ function send(
     headers = {},
     body,
     end = true,
+    endAfterMs,
   }: {
     method?: string;
     path?: string;
     headers?: Record<string, string>;
     body?: string;
     end?: boolean;
+    endAfterMs?: number;
   } = {}
 ): Promise<Reply> {
   return new Promise((resolve, reject) => {
@@ -133,7 +149,9 @@ function send(
     if (body !== undefined) {
       req.write(body);
     }
-    if (end) {
+    if (end && endAfterMs !== undefined) {
+      setTimeout(() => req.end(), endAfterMs);
+    } else if (end) {
       req.end();
     }
   });
@@ -450,6 +468,20 @@ describe('HTTP transport', () => {
         allowed.origin,
       ],
       [
+        'unknown session',
+        {
+          headers: {
+            ...allowed,
+            ...token,
+            ...MCP_HEADERS,
+            'mcp-session-id': UNKNOWN_SESSION,
+          },
+          body: TOOLS_LIST,
+        },
+        404,
+        allowed.origin,
+      ],
+      [
         'Origin refused',
         { headers: { origin: 'http://evil.example', ...token } },
         403,
@@ -639,6 +671,12 @@ describe('HTTP transport', () => {
         100,
       ],
       [
+        'unknown session',
+        `POST /mcp HTTP/1.1\r\n${host}${token}Mcp-Session-Id: ${UNKNOWN_SESSION}\r\n`,
+        404,
+        100,
+      ],
+      [
         'GET without a session',
         `GET /mcp HTTP/1.1\r\n${host}${token}`,
         400,
@@ -722,6 +760,113 @@ describe('HTTP transport', () => {
     const reply = await preflight('/mcp?x=1');
     expect(reply.status).toBe(204);
     expect(reply.headers['access-control-allow-methods']).toContain('POST');
+  });
+});
+
+/**
+ * The MCP transport spec (2025-03-26, 2025-06-18 and 2025-11-25): after the
+ * server terminates a session it MUST answer requests with that session ID
+ * with 404, a client that gets 404 MUST start a new session with a new
+ * initialize, and a request without a session ID (other than initialize)
+ * SHOULD get 400. The server closes sessions idle past the timeout, and a
+ * restarted server has none; it answered 400 to both, which a client
+ * following the spec does not treat as a lost session.
+ */
+describe('HTTP transport sessions', () => {
+  /** A POST (tools/list), a GET and a DELETE, each with `sessionId` */
+  async function sessionRequests(address: AddressInfo, sessionId: string) {
+    const headers = { ...MCP_HEADERS, 'mcp-session-id': sessionId };
+    const replies: Array<Record<string, unknown>> = [];
+    for (const method of ['POST', 'GET', 'DELETE']) {
+      const reply = await send(address, {
+        method,
+        headers,
+        body: method === 'POST' ? TOOLS_LIST : undefined,
+      });
+      replies.push({
+        method,
+        status: reply.status,
+        error: reply.body ? JSON.parse(reply.body).error : undefined,
+        connection: reply.headers.connection,
+      });
+    }
+    return replies;
+  }
+
+  const NOT_FOUND = ['POST', 'GET', 'DELETE'].map(method => ({
+    method,
+    status: 404,
+    error: { code: -32001, message: 'Session not found' },
+    connection: 'close',
+  }));
+
+  it('answers 404 to a session ID it never issued, as after a restart', async () => {
+    const { address, createServerInstance } = await start();
+    expect(await sessionRequests(address, UNKNOWN_SESSION)).toEqual(NOT_FOUND);
+    expect(createServerInstance).not.toHaveBeenCalled();
+
+    // What the client then does: a new initialize, without the old ID
+    const renewed = await initialize(address);
+    expect(renewed.status).toBe(200);
+    expect(renewed.headers['mcp-session-id']).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('answers 404 to a session ended by DELETE', async () => {
+    const { address } = await start();
+    const sessionId = (await initialize(address)).headers[
+      'mcp-session-id'
+    ] as string;
+    const ended = await send(address, {
+      method: 'DELETE',
+      headers: { ...MCP_HEADERS, 'mcp-session-id': sessionId },
+    });
+    expect(ended.status).toBe(200);
+    expect(await sessionRequests(address, sessionId)).toEqual(NOT_FOUND);
+  });
+
+  it('answers 404 to a session closed for being idle', async () => {
+    const { address } = await start({}, { idleTimeoutMs: 50 });
+    const sessionId = (await initialize(address)).headers[
+      'mcp-session-id'
+    ] as string;
+    // The sweep runs every 50 ms here
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(await sessionRequests(address, sessionId)).toEqual(NOT_FOUND);
+  });
+
+  it('answers 404 to a session closed while its POST body arrived', async () => {
+    const { address } = await start({}, { idleTimeoutMs: 100 });
+    const sessionId = (await initialize(address)).headers[
+      'mcp-session-id'
+    ] as string;
+    const reply = await send(address, {
+      headers: { ...MCP_HEADERS, 'mcp-session-id': sessionId },
+      body: TOOLS_LIST,
+      endAfterMs: 500,
+    });
+    expect(reply.status).toBe(404);
+    expect(JSON.parse(reply.body).error.code).toBe(-32001);
+  });
+
+  it('keeps 400 for a request with no session ID other than initialize', async () => {
+    const { address, createServerInstance } = await start();
+    const post = await send(address, {
+      headers: MCP_HEADERS,
+      body: TOOLS_LIST,
+    });
+    expect(post.status).toBe(400);
+    expect(JSON.parse(post.body).error.message).toBe(
+      'Bad Request: No valid session ID provided'
+    );
+    for (const method of ['GET', 'DELETE']) {
+      const reply = await send(address, { method, headers: MCP_HEADERS });
+      expect({ method, status: reply.status, body: reply.body }).toEqual({
+        method,
+        status: 400,
+        body: 'Invalid or missing session ID',
+      });
+    }
+    expect(createServerInstance).not.toHaveBeenCalled();
   });
 });
 

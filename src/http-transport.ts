@@ -87,6 +87,17 @@ function sendJsonRpcError(
 }
 
 /**
+ * Answers a request whose session ID this server does not hold: the session
+ * was closed (idle past the timeout, or ended by DELETE), or the server has
+ * restarted since. The MCP transport spec says a terminated session's ID
+ * MUST get 404, and a client that gets 404 MUST start a new session with a
+ * new initialize. The error is the one the SDK's own transport sends.
+ */
+function sendSessionNotFound(res: ServerResponse): void {
+  sendJsonRpcError(res, 404, -32001, 'Session not found');
+}
+
+/**
  * Makes Node close the connection once the answer is sent. Call it before
  * answering a request whose body is not read. Otherwise Node keeps the
  * connection open to read and discard the rest of the body, so a client that
@@ -285,6 +296,16 @@ export function createHttpTransportServer(
       return;
     }
 
+    // A session ID this server does not hold gets 404 on the methods that
+    // use a session, before a POST body is read
+    const usesSession =
+      req.method === 'POST' || req.method === 'GET' || req.method === 'DELETE';
+    if (sessionId && usesSession && !transports.has(sessionId)) {
+      closeAfterAnswer(res);
+      sendSessionNotFound(res);
+      return;
+    }
+
     if (req.method === 'POST') {
       const parsedBody = await readJsonBody(req);
 
@@ -293,7 +314,11 @@ export function createHttpTransportServer(
       if (sessionId && transports.has(sessionId)) {
         // Reuse existing transport for this session
         transport = transports.get(sessionId)!;
-      } else if (!sessionId && isInitializeRequest(parsedBody)) {
+      } else if (sessionId) {
+        // Closed while its body arrived
+        sendSessionNotFound(res);
+        return;
+      } else if (isInitializeRequest(parsedBody)) {
         // New initialization request - create new transport
         // Generate session ID immediately to prevent race condition
         const newSessionId = randomUUID();

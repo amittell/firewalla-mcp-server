@@ -162,6 +162,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `MAX_CONCURRENT_REQUESTS` and `GRACEFUL_SHUTDOWN_TIMEOUT`, which only that
   module read and nothing used, are no longer read, so a value out of their
   range no longer stops the server either.
+- The HTTP transport answers a request with the `Mcp-Session-Id` of a
+  session it does not hold with 404 and the JSON-RPC error -32001 "Session
+  not found", on POST, GET and DELETE. The server closes a session on a
+  DELETE or after `MCP_SESSION_IDLE_TIMEOUT_MS` without a request (default
+  30 minutes), and a restarted server has none; a request with such an ID
+  got 400 "Bad Request: No valid session ID provided", the answer for a
+  request with no session ID. The MCP transport spec says the server MUST
+  answer a terminated session's ID with 404, and a client that gets 404
+  MUST start a new session with a new `initialize`. A request without a
+  session ID, other than `initialize`, and a session ID that is not a UUID
+  v4 still get 400.
 - The HTTP transport answers a request body over 1 MB with 413, and a body
   that is not JSON with 400 and a JSON-RPC parse error (-32700). Over 1 MB
   it closed the connection without an answer, and a body that is not JSON
