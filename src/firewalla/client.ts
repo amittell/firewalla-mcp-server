@@ -523,9 +523,15 @@ function namesBox(config?: {
  * box with an unknown alarm id gets 404. The message used to blame the MSP
  * subscription. It does not quote the gid: handlers match "404" and
  * "not found" in error messages, and a gid can contain either.
+ *
+ * A 403 to a request that changes state (anything but a GET) may also come
+ * from a read-only token: Firewalla said on 2026-09-08 that MSP 2.12 adds
+ * read-only API tokens. What the API answers a read-only token's write is
+ * not measured here, so the message says the token may be read-only, not
+ * that it is.
  */
 export function forbiddenMessage(error: {
-  config?: { url?: string; params?: unknown; data?: unknown };
+  config?: { url?: string; method?: string; params?: unknown; data?: unknown };
   response?: { data?: unknown };
 }): string {
   const apiMessage = (
@@ -535,10 +541,15 @@ export function forbiddenMessage(error: {
     typeof apiMessage === 'string' && apiMessage.trim()
       ? `: ${apiMessage.trim()}`
       : '';
+  const method = (error.config?.method ?? 'GET').toUpperCase();
+  const readOnly =
+    method === 'GET'
+      ? ''
+      : ` This request changes state (${method}), so the token may be read-only: MSP 2.12 adds read-only API tokens, which cannot make changes. The write tools need a token with write access.`;
   const cause = namesBox(error.config)
     ? 'The MSP API answers 403 when a request names a box this token cannot access, and this request names one: check that its gid is right and belongs to this account.'
     : "This MSP token cannot access the requested resource. The MSP API answers 403 when a request names a box the token cannot access (a wrong gid, or another account's).";
-  return `Forbidden (HTTP 403)${detail}. ${cause} get_boxes lists the box gids this token can access; if get_boxes is refused as well, the token itself lacks access.`;
+  return `Forbidden (HTTP 403)${detail}.${readOnly} ${cause} get_boxes lists the box gids this token can access; if get_boxes is refused as well, the token itself lacks access.`;
 }
 
 /**
