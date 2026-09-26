@@ -31,7 +31,6 @@ describe('takeResponseFormat', () => {
   it.each([
     ['json', 'json'],
     ['markdown', 'markdown'],
-    [' MarkDown ', 'markdown'],
     [null, 'json'],
   ])('takes %j as %s and removes it', (value, format) => {
     const args = { limit: 5, response_format: value };
@@ -40,11 +39,15 @@ describe('takeResponseFormat', () => {
     expect(args).toHaveProperty('response_format');
   });
 
-  it.each([['xml'], [''], [5], [true]])('refuses %j', value => {
-    expect(takeResponseFormat({ response_format: value })).toEqual({
-      error: `response_format must be 'json' or 'markdown', not ${JSON.stringify(value)}`,
-    });
-  });
+  // The schema's enum is exact, so the dispatcher is too
+  it.each([['xml'], [''], [5], [true], ['Markdown'], ['JSON'], [' markdown ']])(
+    'refuses %j',
+    value => {
+      expect(takeResponseFormat({ response_format: value })).toEqual({
+        error: `response_format must be 'json' or 'markdown', not ${JSON.stringify(value)}`,
+      });
+    }
+  );
 });
 
 describe('withResponseFormatProperty', () => {
@@ -320,6 +323,21 @@ describe('renderMarkdown', () => {
         '_This view has every field of the response. Call again with `response_format: json` for the full JSON response._',
       ].join('\n')
     );
+  });
+
+  it('shows every item of a list in a cell unless all are records', () => {
+    const text = renderMarkdown('t', {
+      rows: [
+        { id: 1, roles: [{ name: '<img src=x>' }, 'admin'], peers: [{ a: 1 }] },
+        { id: 2, roles: [[1, 2], 'x<y'], peers: [{ a: 2 }, { a: 3 }] },
+      ],
+    });
+    expect(text.split('\n').filter(line => line.startsWith('|'))).toEqual([
+      '| id | roles | peers |',
+      '| --- | --- | --- |',
+      '| 1 | {"name":"\\<img src=x>"}, admin | 1 record |',
+      '| 2 | \\[1,2\\], x\\<y | 2 records |',
+    ]);
   });
 
   it('escapes a scalar response that would start a heading', () => {
