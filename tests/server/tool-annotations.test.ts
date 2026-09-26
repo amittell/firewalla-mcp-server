@@ -14,6 +14,7 @@ import { FirewallaMCPServer } from '../../src/server.js';
 import { logger } from '../../src/monitoring/logger.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
 import { ResourceValidator } from '../../src/validation/resource-validator.js';
+import { WRITE_TOOL_NAMES } from '../../src/config/write-tools.js';
 
 const BOX = '11111111-2222-3333-4444-555555555555';
 const MAC = 'AA:BB:CC:DD:EE:FF';
@@ -123,6 +124,7 @@ const CALLS: Record<
   get_active_alarms: { args: {} },
   get_specific_alarm: { args: { alarm_id: '1', gid: BOX } },
   archive_alarm: { args: { alarm_id: '1', gid: BOX } },
+  delete_alarm: { args: { alarm_id: '1', gid: BOX } },
   mute_alarm: {
     args: {
       alarm_id: '1',
@@ -183,6 +185,16 @@ async function listTools(): Promise<Tool[]> {
   }
 }
 
+/** Runs `body` with FIREWALLA_ENABLE_WRITE_TOOLS unset, as a default install */
+async function withoutWriteFlag<T>(body: () => Promise<T>): Promise<T> {
+  delete process.env.FIREWALLA_ENABLE_WRITE_TOOLS;
+  try {
+    return await body();
+  } finally {
+    process.env.FIREWALLA_ENABLE_WRITE_TOOLS = 'true';
+  }
+}
+
 const savedWriteFlag = process.env.FIREWALLA_ENABLE_WRITE_TOOLS;
 let tools: Tool[];
 
@@ -216,12 +228,30 @@ describe('tools/list', () => {
           .getToolNames()
           .sort();
         expect(listed).toEqual(registered);
-        expect(listed.length).toBeGreaterThanOrEqual(29);
+        expect(listed).toHaveLength(enableWriteTools ? 35 : 24);
       } finally {
         process.env.FIREWALLA_ENABLE_WRITE_TOOLS = 'true';
       }
     }
   );
+
+  it('lists only read-only tools by default: nothing that changes state', async () => {
+    const listed = await withoutWriteFlag(listTools);
+    expect(listed).toHaveLength(24);
+    const writes = listed
+      .filter(tool => tool.annotations?.readOnlyHint !== true)
+      .map(tool => tool.name);
+    expect(writes).toEqual([]);
+  });
+
+  it('gates exactly the tools that are not read-only', () => {
+    const notReadOnly = tools
+      .filter(tool => tool.annotations?.readOnlyHint === false)
+      .map(tool => tool.name)
+      .sort();
+    expect(notReadOnly).toEqual([...WRITE_TOOL_NAMES].sort());
+    expect(notReadOnly).toHaveLength(11);
+  });
 
   it('gives every tool a title, readOnlyHint and openWorldHint', () => {
     for (const tool of tools) {
@@ -272,6 +302,47 @@ describe('tools/list', () => {
     const missing = tools.map(tool => tool.name).filter(name => !CALLS[name]);
     expect(missing).toEqual([]);
   });
+});
+
+describe('write tools called without FIREWALLA_ENABLE_WRITE_TOOLS', () => {
+  // Named here rather than taken from WRITE_TOOL_NAMES, so dropping a tool
+  // from that list fails this test
+  const WRITE_TOOLS = [
+    'create_rule',
+    'delete_rule',
+    'pause_rule',
+    'resume_rule',
+    'create_target_list',
+    'update_target_list',
+    'delete_target_list',
+    'rename_device',
+    'archive_alarm',
+    'mute_alarm',
+    'delete_alarm',
+  ];
+
+  beforeEach(() => {
+    requests.length = 0;
+    ruleStatus = 'active';
+    ResourceValidator.clearCache();
+  });
+
+  it.each(WRITE_TOOLS)(
+    '%s is an unknown tool and sends nothing',
+    async name => {
+      const result = await withoutWriteFlag(async () => {
+        const client = await connect();
+        try {
+          return await client.callTool({ name, arguments: CALLS[name].args });
+        } finally {
+          await client.close();
+        }
+      });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain(`Unknown tool: ${name}`);
+      expect(requests).toEqual([]);
+    }
+  );
 });
 
 describe('annotations agree with the requests each tool sends', () => {

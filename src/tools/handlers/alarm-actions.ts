@@ -1,7 +1,7 @@
 /**
- * Alarm write tools (MSP 2.11.0 or later): archive_alarm and mute_alarm. They
- * change alarm state on the box, so they are registered only with
- * FIREWALLA_ENABLE_WRITE_TOOLS=true.
+ * Alarm write tools: archive_alarm and mute_alarm (MSP 2.11.0 or later) and
+ * delete_alarm. They change alarms on the box, so they are registered only
+ * with FIREWALLA_ENABLE_WRITE_TOOLS=true.
  */
 
 import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
@@ -106,7 +106,7 @@ function describeMute(
 
 function alarmWriteErrorResponse(
   tool: string,
-  verb: 'archive' | 'mute',
+  verb: 'archive' | 'mute' | 'delete',
   error: unknown,
   args: ToolArgs
 ): ToolResponse {
@@ -302,6 +302,63 @@ export class MuteAlarmHandler extends BaseToolHandler {
       });
     } catch (error: unknown) {
       return alarmWriteErrorResponse(this.name, 'mute', error, args);
+    }
+  }
+}
+
+/**
+ * Handler for deleting an alarm permanently. Measured 2026-09-26: the DELETE
+ * removed an archived alarm (a GET of it then answered 404, and the account's
+ * archived alarms counted one fewer); in July 2025 the same request answered
+ * success without deleting.
+ */
+export class DeleteAlarmHandler extends BaseToolHandler {
+  name = 'delete_alarm';
+  description =
+    "Delete an alarm permanently (DELETE /v2/alarms/{gid}/{aid}); it cannot be undone. archive_alarm is the reversible option: it keeps the alarm, among the archived alarms (status:2). The alarm is read first, and an alarm that is not there sends no DELETE. Alarm IDs are per box: pass gid (the alarm's gid field); box selection is the same as archive_alarm.";
+  category = 'security' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false,
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'alarm_operations',
+        entity_type: 'alarm_deletion',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
+  async execute(
+    args: ToolArgs,
+    firewalla: FirewallaClient
+  ): Promise<ToolResponse> {
+    const parsed = readAlarmWriteArgs(args);
+    if (parsed.errors) {
+      return createErrorResponse(
+        this.name,
+        'Parameter validation failed',
+        ErrorType.VALIDATION_ERROR,
+        undefined,
+        parsed.errors
+      );
+    }
+
+    try {
+      // Not wrapped in withToolTimeout; see ArchiveAlarmHandler
+      const result = await firewalla.deleteAlarm(parsed.alarmId, parsed.gid);
+      return this.createUnifiedResponse({
+        deleted: true,
+        alarm_id: result.aid,
+        gid: result.gid,
+        alarm: summarizeAlarm(result.alarm),
+        api_response: result.response ?? null,
+      });
+    } catch (error: unknown) {
+      return alarmWriteErrorResponse(this.name, 'delete', error, args);
     }
   }
 }

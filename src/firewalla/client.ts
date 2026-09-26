@@ -27,7 +27,6 @@ import axios, {
 } from 'axios';
 import { createHash } from 'crypto';
 import { URLSearchParams } from 'url';
-import { getCurrentTimestamp } from '../utils/timestamp.js';
 import type {
   FirewallaConfig,
   Alarm,
@@ -414,15 +413,26 @@ export class AlarmNotFoundError extends Error {
   }
 }
 
-/** The alarm archiveAlarm or muteAlarm acted on, and the API's answer */
+/** The alarm an alarm write acted on, and the API's answer */
 export interface AlarmActionResult {
   gid: string;
   aid: string;
   /** The alarm as GET /v2/alarms/{gid}/{aid} returned it before the action */
   alarm: Record<string, any>;
-  /** The API's answer to the POST; the official docs show no response body */
+  /**
+   * The API's answer to the POST or DELETE. The official docs show no
+   * response body; a DELETE answered {"message":"success","success":true}
+   * (measured 2026-09-26).
+   */
   response: unknown;
 }
+
+/** Each alarm write in the past tense, for messages */
+const ALARM_ACTION_DONE = {
+  archive: 'archived',
+  mute: 'muted',
+  delete: 'deleted',
+} as const;
 
 /**
  * request() reports an HTTP 404 as "Resource not found: ..."; the MSP API's
@@ -2828,201 +2838,25 @@ export class FirewallaClient {
     }
   }
 
-  async deleteAlarm(alarmId: string, gid?: string): Promise<any> {
-    try {
-      // Enhanced input validation and sanitization
-      const validatedGid = this.sanitizeInput(gid || this.config.boxId);
-
-      if (!validatedGid || validatedGid.length === 0) {
-        throw new Error('Invalid or empty gid provided');
-      }
-
-      // Additional validation for GID format
-      if (!/^[a-zA-Z0-9_-]+$/.test(validatedGid)) {
-        throw new Error('GID contains invalid characters');
-      }
-
-      // Enhanced length validation for GID
-      if (validatedGid.length > 128) {
-        throw new Error('GID is too long (maximum 128 characters)');
-      }
-
-      // Simple alarm ID validation
-      const validatedAlarmId = validateAlarmId(alarmId);
-
-      // Get all possible alarm ID variations to try
-      const idVariations = [validatedAlarmId]; // Just use the validated ID
-      const debugInfo = { originalId: alarmId };
-
-      logger.debug('Attempting alarm deletion with ID resolution', {
-        originalId: alarmId,
-        variations: idVariations,
-        debugInfo,
-      });
-
-      let lastError: Error | null = null;
-      let response: any = null;
-      let successfulId: string | null = null;
-
-      // Try each ID variation until one succeeds
-      for (const idVariation of idVariations) {
-        const validatedAlarmId = this.sanitizeInput(idVariation);
-
-        if (!validatedAlarmId || validatedAlarmId.length === 0) {
-          continue; // Skip invalid variations
-        }
-
-        // Additional validation for alarm ID format
-        if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
-          continue; // Skip invalid format variations
-        }
-
-        // Enhanced length validation for alarm ID
-        if (validatedAlarmId.length > 128) {
-          continue; // Skip variations that are too long
-        }
-
-        try {
-          logger.debug(
-            `Trying to delete alarm with ID variation: ${validatedAlarmId}`
-          );
-
-          response = await this.request<{
-            success: boolean;
-            message: string;
-            deleted?: boolean;
-            status?: string;
-          }>(
-            'DELETE',
-            `/v2/alarms/${pathSegment(validatedGid, 'gid')}/${pathSegment(validatedAlarmId, 'alarm_id')}`,
-            undefined,
-            false
-          );
-
-          // If we get here, the request succeeded
-          successfulId = validatedAlarmId;
-          logger.debug(
-            `Successfully deleted alarm with ID: ${validatedAlarmId}`
-          );
-          break;
-        } catch (error) {
-          lastError = error instanceof Error ? error : new Error(String(error));
-          logger.debug(`Failed to delete alarm with ID ${validatedAlarmId}:`, {
-            error: lastError.message,
-          });
-
-          // Continue to next variation
-        }
-      }
-
-      // If no variation worked, throw the last error
-      if (!response || !successfulId) {
-        const errorMessage = `Alarm deletion failed: tried ${idVariations.length} ID variations. Last error: ${lastError?.message || 'Unknown error'}`;
-        logger.warn('All alarm ID variations failed for deletion', {
-          originalId: alarmId,
-          variations: idVariations,
-          lastError: lastError?.message,
-        });
-        throw new Error(errorMessage);
-      }
-
-      // Handle various response formats - API may return empty body, status text, or object
-      let isSuccess = true; // Default to success for 200 responses
-      let responseMessage = `Alarm ${successfulId} deleted successfully`;
-
-      if (response && typeof response === 'object') {
-        // Check if it's an empty object {} which indicates success
-        if (Object.keys(response).length === 0) {
-          isSuccess = true;
-          responseMessage = `Alarm ${successfulId} deleted successfully`;
-        } else {
-          // Complex response object - check multiple success indicators
-          isSuccess = Boolean(
-            response.success ||
-            response.deleted ||
-            (response.status &&
-              ['deleted', 'removed', 'success', 'ok'].includes(
-                response.status.toLowerCase()
-              ))
-          );
-          if ('message' in response && response.message) {
-            responseMessage = response.message;
-          }
-        }
-      } else if (typeof response === 'string') {
-        // String response - check for success keywords
-        isSuccess = /success|deleted|removed|ok/i.test(response);
-        responseMessage = response;
-      }
-      // For null/undefined response with 200 status, assume success
-
-      // Enhanced response object construction
-      const result = {
-        id: successfulId,
-        success: isSuccess,
-        message: responseMessage,
-        timestamp: getCurrentTimestamp(),
-        // Add additional fields if available from object responses
-        ...(response &&
-          typeof response === 'object' &&
-          response.status && { status: response.status }),
-        ...(response &&
-          typeof response === 'object' &&
-          typeof response.deleted === 'boolean' && {
-            deleted: response.deleted,
-          }),
-      };
-
-      return result;
-    } catch (error) {
-      logger.error(
-        'Error in deleteAlarm:',
-        error instanceof Error ? error : new Error(String(error))
-      );
-      // Log detailed error information for debugging
-      logger.error(
-        `DeleteAlarm detailed error info - alarmId: ${alarmId}, errorType: ${(error as any)?.constructor?.name}, errorMessage: ${error instanceof Error ? error.message : String(error)}`
-      );
-
-      // Enhanced error handling with specific error types
-      if (error instanceof Error) {
-        if (
-          error.message.includes('Invalid') ||
-          error.message.includes('validation')
-        ) {
-          throw error; // Re-throw validation errors
-        }
-        if (
-          error.message.includes('404') ||
-          error.message.includes('not found')
-        ) {
-          throw new Error(
-            `Alarm with ID '${alarmId}' not found or already deleted`
-          );
-        }
-        if (
-          error.message.includes('403') ||
-          error.message.includes('unauthorized')
-        ) {
-          throw new Error(
-            `Insufficient permissions to delete alarm '${alarmId}'`
-          );
-        }
-        if (
-          error.message.includes('409') ||
-          error.message.includes('conflict')
-        ) {
-          throw new Error(
-            `Cannot delete alarm '${alarmId}' due to conflict or dependency`
-          );
-        }
-        // Include the actual error message for better debugging
-        throw new Error(`Failed to delete alarm: ${error.message}`);
-      }
-      throw new Error(
-        `Failed to delete alarm: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
+  /**
+   * Delete an alarm permanently; it cannot be restored. The box is found as
+   * locateAlarmForWrite describes, and the alarm is read first, so an alarm
+   * that is not there sends no DELETE. Measured 2026-09-26 on an archived
+   * alarm: DELETE /v2/alarms/{gid}/{aid} answered 200
+   * {"message":"success","success":true}, a GET of the alarm then answered
+   * 404 (still 404 65 s later), and the account's archived alarms counted one
+   * fewer. In July 2025 the same request answered success without deleting.
+   *
+   * @param alarmId - The numeric aid, as a number or a string
+   * @param gid - Box the alarm belongs to (the alarm's gid field)
+   */
+  async deleteAlarm(
+    alarmId: string | number,
+    gid?: string
+  ): Promise<AlarmActionResult> {
+    const located = await this.locateAlarmForWrite(alarmId, gid);
+    const response = await this.sendAlarmAction(located, 'delete');
+    return { ...located, response };
   }
 
   /**
@@ -3040,7 +2874,7 @@ export class FirewallaClient {
     gid?: string
   ): Promise<AlarmActionResult> {
     const located = await this.locateAlarmForWrite(alarmId, gid);
-    const response = await this.postAlarmAction(located, 'archive');
+    const response = await this.sendAlarmAction(located, 'archive');
     return { ...located, response };
   }
 
@@ -3066,7 +2900,7 @@ export class FirewallaClient {
       throw new Error(`Invalid mute request: ${checked.problems.join('; ')}`);
     }
     const located = await this.locateAlarmForWrite(alarmId, gid);
-    const response = await this.postAlarmAction(located, 'mute', {
+    const response = await this.sendAlarmAction(located, 'mute', {
       target: checked.request.target,
       scope: checked.request.scope,
     });
@@ -3187,19 +3021,22 @@ export class FirewallaClient {
   }
 
   /**
-   * POST an alarm action for an alarm locateAlarmForWrite found. Not retried:
-   * a request that got no HTTP answer may still have been applied.
+   * Send an alarm write for an alarm locateAlarmForWrite found: POST
+   * .../archive or .../mute, or DELETE the alarm. Not retried: a request that
+   * got no HTTP answer may still have been applied.
    */
-  private async postAlarmAction(
+  private async sendAlarmAction(
     located: { gid: string; aid: string },
-    action: 'archive' | 'mute',
+    action: 'archive' | 'mute' | 'delete',
     body?: Record<string, unknown>
   ): Promise<unknown> {
-    const endpoint = `/v2/alarms/${pathSegment(located.gid, 'gid')}/${pathSegment(located.aid, 'alarm_id')}/${action}`;
+    const alarmPath = `/v2/alarms/${pathSegment(located.gid, 'gid')}/${pathSegment(located.aid, 'alarm_id')}`;
+    const method = action === 'delete' ? 'DELETE' : 'POST';
+    const endpoint = action === 'delete' ? alarmPath : `${alarmPath}/${action}`;
     let response: unknown;
     try {
       response = await this.request<unknown>(
-        'POST',
+        method,
         endpoint,
         undefined,
         body,
@@ -3209,12 +3046,18 @@ export class FirewallaClient {
       const message = error instanceof Error ? error.message : String(error);
       if (isNotFoundError(error)) {
         throw new Error(
-          `POST ${endpoint} returned 404 although the alarm exists (GET returned it). ${action} needs MSP 2.11.0 or later, and the API's 404 does not say whether the endpoint or the alarm was missing`
+          action === 'delete'
+            ? `DELETE ${endpoint} returned 404 although GET returned the alarm just before; it may have been deleted in between. get_specific_alarm answers not found once it is gone`
+            : `POST ${endpoint} returned 404 although the alarm exists (GET returned it). ${action} needs MSP 2.11.0 or later, and the API's 404 does not say whether the endpoint or the alarm was missing`
         );
       }
       if (/API Error \(unknown\)|^Request failed:/.test(message)) {
+        const check =
+          action === 'delete'
+            ? 'check with get_specific_alarm, which answers not found once it is gone,'
+            : 'check its status with get_specific_alarm (2 is archived)';
         throw new Error(
-          `POST ${endpoint} got no HTTP status (${message}). The alarm may or may not have been ${action === 'archive' ? 'archived' : 'muted'}: check its status with get_specific_alarm (2 is archived) before retrying`
+          `${method} ${endpoint} got no HTTP status (${message}). The alarm may or may not have been ${ALARM_ACTION_DONE[action]}: ${check} before retrying`
         );
       }
       throw error;

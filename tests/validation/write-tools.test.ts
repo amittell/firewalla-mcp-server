@@ -280,12 +280,19 @@ describe('rename_device', () => {
 });
 
 describe('FIREWALLA_ENABLE_WRITE_TOOLS', () => {
+  // Every tool that changes state: by default the server has none of them
   const WRITE_TOOLS = [
     'create_rule',
     'delete_rule',
+    'pause_rule',
+    'resume_rule',
+    'create_target_list',
+    'update_target_list',
+    'delete_target_list',
     'rename_device',
     'archive_alarm',
     'mute_alarm',
+    'delete_alarm',
   ];
 
   it.each([
@@ -306,6 +313,8 @@ describe('FIREWALLA_ENABLE_WRITE_TOOLS', () => {
     expect(on.filter(name => WRITE_TOOLS.includes(name)).sort()).toEqual(
       [...WRITE_TOOLS].sort()
     );
-    expect(on.length - off.length).toBe(5);
+    expect(on.length - off.length).toBe(11);
+    expect(off).toHaveLength(24);
+    expect(on).toHaveLength(35);
   });
 });

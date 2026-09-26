@@ -163,6 +163,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plain page's: the flow's time is `ts`, an ISO string, where a chunk had
   `timestamp`. A listing whose first page is streamed (a limit over 50) and
   whose next pages are read by cursor, not streamed, now has one record shape.
+- Every tool that changes state is off unless
+  `FIREWALLA_ENABLE_WRITE_TOOLS=true`, so the default server is read-only: 24
+  tools, none of which changes anything. `pause_rule`, `resume_rule`,
+  `create_target_list`, `update_target_list` and `delete_target_list` were
+  always registered, and now join the other write tools (11 with
+  `delete_alarm`). This breaks setups that call those five without the
+  setting: the server no longer lists them, and a call answers "Unknown tool"
+  and sends nothing. To keep using them, set
+  `FIREWALLA_ENABLE_WRITE_TOOLS=true`.
 - Tool responses and the `firewalla://` resources are compact JSON, the
   same JSON without the indentation. On large stubbed answers (400 devices,
   500 flows, 500 alarms, 400 rules) the text is 34% smaller in bytes.
@@ -233,6 +242,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Without a `ts:` qualifier the API covers only the last 24 hours, newest
   first, so a client can tell how far back a read looked and whether it saw
   every match. After an idea in the fork martin2110/firewalla-mcp-server.
+- `delete_alarm`, an opt-in write tool (`FIREWALLA_ENABLE_WRITE_TOOLS=true`)
+  that deletes an alarm with `DELETE /v2/alarms/{gid}/{aid}`. It was
+  withdrawn in July 2025, when that request answered success and kept the
+  alarm. Measured 2026-09-26 on an archived alarm, the request answered 200
+  `{"message":"success","success":true}`, a GET of the alarm then answered
+  404 (still 404 65 s later), and the account's archived alarms counted one
+  fewer (861 to 860). The tool finds the box as `archive_alarm` does (`gid`,
+  else `FIREWALLA_BOX_ID`, else each box, refusing when several have the aid
+  and none is `FIREWALLA_DEFAULT_BOX_ID`), reads the alarm first, and sends
+  no DELETE when it is not there. It cannot be undone, so it is marked
+  destructive; `archive_alarm` is the reversible option.
 - `get_alarm_trends` takes an optional `box` (a box gid) and, with it or
   with `FIREWALLA_BOX_ID`, reports that box's alarms per day.
   `GET /v2/trends/alarms` takes no box, so the tool reads it once for the

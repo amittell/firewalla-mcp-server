@@ -147,7 +147,8 @@ interface Flow {
 - `active_only` (optional): Only active rules (default: true)
 
 ### pause_rule
-**Purpose**: Pause a specific firewall rule until `resume_rule` reactivates it
+**Purpose**: Pause a specific firewall rule until `resume_rule` reactivates it.
+A write tool: registered only with `FIREWALLA_ENABLE_WRITE_TOOLS=true`.
 **Parameters**:
 - `rule_id`: Rule identifier to pause
 

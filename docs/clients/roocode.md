@@ -122,7 +122,7 @@ In Roocode, test the connection:
 
 ## Advanced Features
 
-- **29 specialized tools** for comprehensive network security analysis
+- **24 read-only tools** for comprehensive network security analysis, plus 11 write tools with `FIREWALLA_ENABLE_WRITE_TOOLS=true`
 - **Geographic threat analysis** with country-level filtering
 - **Advanced search syntax** supporting complex queries with logical operators
 - **Real-time monitoring** with intelligent caching for optimal performance

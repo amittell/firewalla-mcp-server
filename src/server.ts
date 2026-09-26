@@ -4,13 +4,15 @@
  * @fileoverview Firewalla MCP Server
  *
  * This file implements the primary MCP server class that provides Claude with access to
- * Firewalla firewall data through 29 tools that map to Firewalla API endpoints,
- * plus 5 opt-in write tools (FIREWALLA_ENABLE_WRITE_TOOLS=true).
+ * Firewalla firewall data through 24 read-only tools that map to Firewalla API
+ * endpoints, plus 11 opt-in write tools (FIREWALLA_ENABLE_WRITE_TOOLS=true).
+ * Without that setting no listed tool changes anything.
  * Tools include parameter validation and error handling.
  *
  * Architecture:
- * - 24 Direct API Endpoints
- * - 5 Convenience Wrappers
+ * - 19 Direct API Endpoints (read-only)
+ * - 5 Convenience Wrappers (read-only)
+ * - 11 opt-in write tools, named in src/config/write-tools.ts
  * - Limits set to API maximum (500)
  * - Required parameters for proper API calls
  * - CRUD operations for all resources
@@ -42,7 +44,8 @@ import { PACKAGE_VERSION } from './utils/package-version.js';
 import { isWriteTool, writeToolsEnabled } from './config/write-tools.js';
 
 /**
- * Main MCP Server class for Firewalla integration with 29-tool architecture
+ * Main MCP Server class for Firewalla integration: 24 read-only tools, plus 11
+ * opt-in write tools
  */
 export class FirewallaMCPServer {
   private static signalHandlersRegistered = false;
@@ -84,11 +87,12 @@ export class FirewallaMCPServer {
    * Registers all MCP protocol request handlers on a Server instance
    */
   private registerHandlers(server: Server): void {
-    // List available tools - 29-Tool Complete API Coverage
+    // List available tools: the write tools (WRITE_TOOL_NAMES) only with
+    // FIREWALLA_ENABLE_WRITE_TOOLS=true
     server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
-          // Direct API Endpoints (24 tools)
+          // Direct API Endpoints, and the write tools
           {
             name: 'get_active_alarms',
             description:
@@ -157,23 +161,36 @@ export class FirewallaMCPServer {
               required: ['alarm_id'],
             },
           },
-          // Disabled: delete_alarm tool commented out because the Firewalla MSP API
-          // returns false success responses but doesn't actually delete alarms
-          // archive_alarm (below, opt-in) is the documented alternative
-          // {
-          //   name: 'delete_alarm',
-          //   description: 'Delete/dismiss a specific Firewalla alarm',
-          //   inputSchema: {
-          //     type: 'object',
-          //     properties: {
-          //       alarm_id: {
-          //         type: 'string',
-          //         description: 'Alarm ID (required for API call)',
-          //       },
-          //     },
-          //     required: ['alarm_id'],
-          //   },
-          // },
+          {
+            name: 'delete_alarm',
+            description:
+              "Delete an alarm permanently (DELETE /v2/alarms/{gid}/{aid}); it cannot be undone. archive_alarm is the reversible option: it keeps the alarm, among the archived alarms (status:2). The alarm is read first, and an alarm that is not there sends no DELETE. Alarm IDs are per box: pass gid (the alarm's gid field); box selection is the same as archive_alarm.",
+            annotations: {
+              title: 'Delete Alarm',
+              readOnlyHint: false,
+              // The alarm is gone for good; archive_alarm keeps it
+              destructiveHint: true,
+              // A second delete finds no alarm and sends nothing
+              idempotentHint: true,
+              openWorldHint: true,
+            },
+            inputSchema: {
+              type: 'object',
+              properties: {
+                alarm_id: {
+                  type: ['string', 'number'],
+                  description:
+                    'Alarm ID: the numeric aid from get_active_alarms or search_alarms, as a number or a string',
+                },
+                gid: {
+                  type: 'string',
+                  description:
+                    'Box the alarm belongs to (the gid field of get_active_alarms or search_alarms results). Defaults to FIREWALLA_BOX_ID; without either, each box on the account is checked.',
+                },
+              },
+              required: ['alarm_id'],
+            },
+          },
           {
             name: 'archive_alarm',
             description:

@@ -132,6 +132,10 @@ Delete a specific alarm.
 
 **Responses**: 200 Success, 401 Permission Denied, 404 Not Found
 
+**Measured 2026-09-26** on the oldest archived alarm of a live account: `GET /v2/alarms/{gid}/{aid}` answered 200; `DELETE /v2/alarms/{gid}/{aid}` answered 200 `{"message":"success","success":true}`; a `GET` of the alarm afterwards answered 404, and still 404 65 s later; and the account's archived alarms, counted exactly with `groupBy=box` on `status:2`, went from 861 to 860. So the DELETE removes the alarm. In July 2025 the same request answered success without deleting anything, which is why the tool was withdrawn then.
+
+**MCP tool**: `delete_alarm` (opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`). It finds the box the way `archive_alarm` does (`gid`, else `FIREWALLA_BOX_ID`, else each box, preferring `FIREWALLA_DEFAULT_BOX_ID`, and refusing when several boxes have the aid), reads the alarm first and sends no DELETE when it is not there. It cannot be undone; `archive_alarm` keeps the alarm, among the archived alarms.
+
 #### Archive Alarm
 Archive an alarm. Requires MSP 2.11.0 or later.
 
@@ -463,6 +467,8 @@ A paused rule has `status: "paused"`, and the Rule model's `resumeTs` is "the au
 
 No request tried here set `resumeTs`. A rule paused through the API stays paused until it is resumed.
 
+**MCP tool**: `pause_rule` (opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`; checks the rule's status first)
+
 **Client**: `pauseRule` in `src/firewalla/client.ts` sends the request with no body and no query string, and `pause_rule` takes only `rule_id`. Up to 1.4.1 the client sent `{duration, box}` and the tool took a `duration` of 1 to 1440 minutes. The API ignored that duration, so a pause never ended by itself. `pause_rule` now ignores a `duration` argument and says so in its response (`duration_ignored: true` and a `note`).
 
 **Example Request** (as in the official docs and the `pause-an-existing-rule` example):
@@ -485,6 +491,8 @@ Resume a previously paused rule.
 **Responses**: 200 Success, 401 Permission Denied, 404 Not Found. The official docs show no response body.
 
 **Measured 2026-09-25** on the same disposable rules: a resume with no body returns 200 with the JSON string `"ok"`, and the rule reads back with `status: "active"`. Resuming a rule that is already active also returns 200 `"ok"`. For a rule ID that does not exist, resume returns the same 403 as pause.
+
+**MCP tool**: `resume_rule` (opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`; checks the rule's status first)
 
 **Client**: `resumeRule` in `src/firewalla/client.ts` sends the request with no body. Up to 1.4.1 it sent `{box}`. After a pause or a resume the client drops its cached `GET /v2/rules` answers, so the next read shows the new status. Before this change, `resume_rule` could read the cached pre-pause `active` status for up to `CACHE_TTL` (300 s by default) and refuse to resume.
 
@@ -695,6 +703,8 @@ Create a new target list for the whole MSP or for one box under MSP management.
 
 **Responses**: 200 Success (the created target list with its generated ID), 400 Bad Request, 401 Permission Denied
 
+**MCP tool**: `create_target_list` (opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)
+
 #### Update Target List
 Update an existing target list.
 
@@ -707,6 +717,8 @@ Update an existing target list.
 
 **Responses**: 200 Success (the updated target list), 400 Bad Request, 401 Permission Denied, 404 Not Found
 
+**MCP tool**: `update_target_list` (opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)
+
 #### Delete Target List
 Delete a target list.
 
@@ -716,6 +728,8 @@ Delete a target list.
 - `id` (string, required): Target list ID
 
 **Responses**: 200 Success, 401 Permission Denied, 404 Not Found
+
+**MCP tool**: `delete_target_list` (opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)
 
 ### Trends
 
