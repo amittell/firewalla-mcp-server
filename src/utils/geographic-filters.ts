@@ -22,6 +22,31 @@ import { MspQueryError, mspTerms, mspTermText } from './msp-query.js';
 /** The filters that map to the documented `region` qualifier */
 const REGION_FILTERS = new Set(['countries', 'regions']);
 
+/** Filters this server knows that take a list and have no API equivalent */
+const LIST_FILTERS = new Set([
+  'continents',
+  'cities',
+  'asns',
+  'hosting_providers',
+]);
+
+/** Yes-or-no filters this server knows that have no API equivalent */
+const FLAG_FILTERS = new Set([
+  'exclude_vpn',
+  'exclude_cloud',
+  'high_risk_countries',
+  'exclude_known_providers',
+  'threat_analysis',
+]);
+
+/** Every filter name this server knows */
+const KNOWN_FILTERS = new Set([
+  ...REGION_FILTERS,
+  ...LIST_FILTERS,
+  ...FLAG_FILTERS,
+  'min_risk_score',
+]);
+
 /** geographic_filters that cannot be sent to the MSP API as given */
 export class GeographicFilterError extends Error {
   /** Filters with no documented equivalent, e.g. `continents` */
@@ -44,14 +69,27 @@ export class GeographicFilterError extends Error {
   }
 }
 
-/** A filter that asks for nothing: absent, null, false or an empty list */
-function isUnset(value: unknown): boolean {
-  return (
-    value === undefined ||
-    value === null ||
-    value === false ||
-    (Array.isArray(value) && value.length === 0)
-  );
+/**
+ * Whether a filter asks for nothing: a known one that is absent or null, a
+ * yes-or-no one that is false, or a list one that is an empty list. A name
+ * this server does not know always asks for something, and so does a list
+ * filter set to false: `{ contintents: false }` and `{ countries: false }`
+ * were skipped as unset, and the search ran without the restriction.
+ */
+function asksForNothing(name: string, value: unknown): boolean {
+  if (!KNOWN_FILTERS.has(name)) {
+    return false;
+  }
+  if (value === undefined || value === null) {
+    return true;
+  }
+  if (FLAG_FILTERS.has(name)) {
+    return value === false;
+  }
+  if (REGION_FILTERS.has(name) || LIST_FILTERS.has(name)) {
+    return Array.isArray(value) && value.length === 0;
+  }
+  return false;
 }
 
 /**
@@ -83,14 +121,21 @@ export function geographicFiltersToMspQuery(
   const codes: string[] = [];
 
   for (const [name, value] of Object.entries(filters)) {
-    if (isUnset(value)) {
+    if (asksForNothing(name, value)) {
       continue;
     }
     if (!REGION_FILTERS.has(name)) {
       unsupported.push(name);
       continue;
     }
-    const values = Array.isArray(value) ? value : [value];
+    if (!Array.isArray(value)) {
+      invalid[name] = [JSON.stringify(value)];
+      problems.push(
+        `geographic_filters.${name} takes a list of ISO 3166-1 alpha-2 country codes (the API's region qualifier), such as ["US", "CN"], not ${JSON.stringify(value)}.`
+      );
+      continue;
+    }
+    const values: unknown[] = value;
     const strings = values.filter(
       (entry): entry is string => typeof entry === 'string'
     );
@@ -102,8 +147,8 @@ export function geographicFiltersToMspQuery(
         .filter(entry => typeof entry !== 'string')
         .map(entry => JSON.stringify(entry))
     );
-    if (!Array.isArray(value) || bad.length > 0) {
-      invalid[name] = Array.isArray(value) ? bad : [JSON.stringify(value)];
+    if (bad.length > 0) {
+      invalid[name] = bad;
       problems.push(
         `geographic_filters.${name} takes a list of ISO 3166-1 alpha-2 country codes (the API's region qualifier), such as ["US", "CN"]; ${invalid[name].join(', ')} ${invalid[name].length === 1 ? 'is not an assigned code' : 'are not assigned codes'}. To send another code anyway (such as XK), put region:<code> in the query.`
       );

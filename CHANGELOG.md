@@ -177,7 +177,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unknown country code is a validation error too; it was reported as a search
   error, after a retry two seconds later. Country codes are checked against
   the 249 assigned ISO 3166-1 alpha-2 codes; the table used before had 187,
-  and refused real codes such as CY, MT, MC, LI and AD.
+  and refused real codes such as CY, MT, MC, LI and AD. Only a yes-or-no
+  filter set to `false`, a known filter that is `null`, or an empty list asks
+  for nothing; a name the server does not know (`contintents`) and a list
+  filter set to anything but a list (`countries: false`) are refused, and the
+  response says geographic filters were applied only when they added a term.
 - `search_flows`, `search_alarms`, `get_flow_data` and `get_active_alarms`
   refuse a geographic name typed in the query that is not an API qualifier
   (`country:`, `continent:`, `city:`, `asn:`, `isp:`, `is_vpn:` and the

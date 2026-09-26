@@ -186,6 +186,79 @@ describe('search_flows geographic_filters', () => {
   });
 });
 
+describe('a filter set to false or null', () => {
+  // false and null were skipped as "asks for nothing" whatever the filter,
+  // so { countries: false } and a misspelled { contintents: false } ran the
+  // search without the restriction
+  it.each([
+    [{ exclude_vpn: false }, undefined],
+    [{ exclude_cloud: false, high_risk_countries: false }, undefined],
+    [{ countries: null, min_risk_score: null }, undefined],
+    [{ countries: [], continents: [] }, undefined],
+  ])('%j asks for nothing', (filters, expected) => {
+    expect(geographicFiltersToMspQuery(filters)).toBe(expected);
+  });
+
+  it.each([
+    [{ contintents: false }, ['contintents'], {}],
+    [{ contintents: null }, ['contintents'], {}],
+    [{ countries: ['US'], cuontries: false }, ['cuontries'], {}],
+    [{ continents: false }, ['continents'], {}],
+    [{ countries: false }, [], { countries: ['false'] }],
+    [{ regions: false }, [], { regions: ['false'] }],
+  ])('refuses %j', (filters, unsupported, invalid) => {
+    let error: unknown;
+    try {
+      geographicFiltersToMspQuery(filters);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(GeographicFilterError);
+    expect((error as GeographicFilterError).unsupported).toEqual(unsupported);
+    expect((error as GeographicFilterError).invalid).toEqual(invalid);
+  });
+
+  it.each([{ countries: false }, { contintents: false }])(
+    'search_flows refuses %j before a request',
+    async filters => {
+      const { res, get } = await searchFlows(filters);
+      expect(res.isError).toBe(true);
+      expect(body(res).errorType).toBe('validation_error');
+      expect(get).not.toHaveBeenCalled();
+    }
+  );
+
+  it('reports geographic filters as applied only when they add a term', async () => {
+    const none = await searchFlows({ countries: [], exclude_vpn: false });
+    expect(sentQueries(none.get)).toEqual(['protocol:tcp']);
+    expect(body(none.res).data.query_info.applied_filters.geographic).toBe(
+      false
+    );
+    const some = await searchFlows({ countries: ['US'] });
+    expect(sentQueries(some.get)).toEqual(['protocol:tcp region:US']);
+    expect(body(some.res).data.query_info.applied_filters.geographic).toBe(
+      true
+    );
+  });
+
+  it('the search engine marks them applied only when they add a term', async () => {
+    const { client } = makeClient();
+    const engine = new SearchEngine(client);
+    const none = await engine.searchFlows({
+      query: 'protocol:tcp',
+      limit: 10,
+      geographic_filters: { countries: [] },
+    });
+    expect((none as any).geographic_filters_applied).toBeUndefined();
+    const some = await engine.searchFlows({
+      query: 'protocol:tcp',
+      limit: 10,
+      geographic_filters: { countries: ['US'] },
+    });
+    expect((some as any).geographic_filters_applied).toBe(true);
+  });
+});
+
 describe('geographic alarm search and statistics', () => {
   // searchAlarmsByGeography sends the query `*` and getGeographicStatistics
   // `*` when no time range is given; neither handler is registered, so no

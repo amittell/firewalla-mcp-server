@@ -451,8 +451,11 @@ export class SearchFlowsHandler extends BaseToolHandler {
       // geographic flow qualifier it documents; any other filter is refused
       // here, before a request, as the API would match nothing
       // ------------------------------------------------------------
+      let geographicTerm: string | undefined;
       try {
-        geographicFiltersToMspQuery(searchArgs.geographic_filters);
+        geographicTerm = geographicFiltersToMspQuery(
+          searchArgs.geographic_filters
+        );
       } catch (error) {
         if (!(error instanceof GeographicFilterError)) {
           throw error;
@@ -654,7 +657,8 @@ export class SearchFlowsHandler extends BaseToolHandler {
           original_query: searchArgs.query,
           final_query: finalQuery,
           applied_filters: {
-            geographic: !!searchArgs.geographic_filters,
+            // only when the filters added a term to the query
+            geographic: !!geographicTerm,
             time_range: !!searchArgs.time_range,
             analytics: !!searchArgs.include_analytics,
           },

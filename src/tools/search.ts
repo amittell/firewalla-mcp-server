@@ -1131,7 +1131,9 @@ export class SearchEngine {
       if (geographicAnalysis) {
         (result as any).geographic_analysis = geographicAnalysis;
       }
-      if (params.geographic_filters) {
+      // Applied only when they restricted the query: filters that ask for
+      // nothing ({ countries: [] }) add no term
+      if (geographicQuery) {
         (result as any).geographic_filters_applied = true;
       }
 
