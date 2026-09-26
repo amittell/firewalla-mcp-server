@@ -449,7 +449,7 @@ describe('box-scoped getAlarmTrends and getFlowTrends', () => {
   });
 
   it('marks days counted from items rather than groups as lower bounds', async () => {
-    const { client } = makeClient({
+    const { client, calls } = makeClient({
       '/v2/trends/alarms': () => ALARM_TREND,
       '/v2/alarms': params =>
         dayIndex(params.query) === 29
@@ -471,6 +471,14 @@ describe('box-scoped getAlarmTrends and getFlowTrends', () => {
     ]);
     expect(series.note).toContain('On 1 of the 2 days');
     expect(series.note).toContain('lower bounds');
+    // An items answer is not paged, so the cost stays 1 + days even when
+    // the API sends a next_cursor
+    expect(calls.map(call => call.url)).toEqual([
+      '/v2/trends/alarms',
+      '/v2/alarms',
+      '/v2/alarms',
+    ]);
+    expect(calls.some(call => call.params.cursor)).toBe(false);
   });
 });
 
