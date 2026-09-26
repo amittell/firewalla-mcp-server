@@ -282,7 +282,9 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
         ),
         // With free text: the rules checked for the words, and whether they
         // were every rule the other terms match
-        ...(response.coverage && { coverage: response.coverage }),
+        ...(response.free_text_coverage && {
+          free_text_coverage: response.free_text_coverage,
+        }),
         ...(summaryOnly &&
           optimizedResponse.pagination_note && {
             pagination_note: optimizedResponse.pagination_note,

@@ -131,7 +131,7 @@ export interface SearchResult<T = any> {
   offset: number; // Deprecated: use next_cursor for new implementations
   next_cursor?: string; // Cursor-based pagination (preferred)
   coverage?: PagingCoverage; // Flows: oldest and newest ts returned, and why paging stopped
-  rules_coverage?: RulesTextCoverage; // Rules searched with free text: how many were checked
+  free_text_coverage?: RulesTextCoverage; // Rules searched with free text: how many were checked
   groups?: FlowGroup[] | AlarmGroup[]; // Grouped flows or alarms; results is empty then
   group_by?: string; // The groupBy the groups were requested with
   query: string;

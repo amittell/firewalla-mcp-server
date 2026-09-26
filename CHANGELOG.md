@@ -283,9 +283,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   documents none of for rules, so it checks every rule the other terms match:
   with a limit, `search_rules` read at most twice its own (2,000 at most) and
   `get_network_rules` its own, and a match past them was never checked. The
-  answer's `coverage` gives the rules checked and matched, and `complete:
-  false` with a note when the API answered as if it held more (a
-  `next_cursor`, or a `count` above the rules it sent).
+  answer's `free_text_coverage` gives the rules checked and matched, and
+  `complete: false` with a note when the API answered as if it held more (a
+  `next_cursor`, or a `count` above the rules it sent). It is named apart
+  from the flow tools' `coverage`, which has another shape.
 - `search_devices`, `search_target_lists` and `search_rules` check every
   term of a query whose terms are side by side with no operator
   (`name:nas online:maybe`, `nas online:maybe`). The search engine's query

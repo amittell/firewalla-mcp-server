@@ -8,7 +8,6 @@ import { filterFactory } from '../search/filters/index.js';
 import type { FilterContext } from '../search/filters/base.js';
 import type { SearchParams, SearchResult } from '../search/types.js';
 import type { RulesTextCoverage, SearchOptions } from '../types.js';
-import type { PagingCoverage } from '../utils/paging-coverage.js';
 import type { FirewallaClient } from '../firewalla/client.js';
 import { translateBooleanQuery } from '../utils/simple-boolean-translator.js';
 import { translateRelativeTimestamps } from '../utils/timestamp.js';
@@ -205,8 +204,8 @@ interface SearchStrategy {
     results: any[];
     count: number;
     next_cursor?: string;
-    // Flows: what a paged read covered; rules with free text: what was checked
-    coverage?: PagingCoverage | RulesTextCoverage;
+    // Rules searched with free text: what was checked
+    free_text_coverage?: RulesTextCoverage;
   }>;
 
   validateParams?: (params: SearchParams) => {
@@ -977,12 +976,8 @@ export class SearchEngine {
 
       // Rules searched with free text: how many rules were checked, and
       // whether they were all the rules the other terms match
-      if (
-        entityType === 'rules' &&
-        response.coverage &&
-        'rules_checked' in response.coverage
-      ) {
-        result.rules_coverage = response.coverage;
+      if (entityType === 'rules' && response.free_text_coverage) {
+        result.free_text_coverage = response.free_text_coverage;
       }
 
       // Add cursor for devices with proper typing
