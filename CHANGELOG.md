@@ -37,48 +37,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   never measured, and request spacing, concurrency caps, priority queues and
   backoff settings that the code does not have.
 - Combined searches, and several queries the server builds itself, returned
-  wrong results or none: the MSP API's query grammar has no `AND`, `OR`,
-  `NOT` or parentheses. It searches those as words and matches nothing in
+  wrong results or none: the MSP API's query grammar has no `AND`, `OR`, `NOT`
+  or parentheses. It searches those as words and matches nothing in
   parentheses, and a field that appears twice is OR. Measured 2026-09-26:
-  `status:blocked AND region:US` matched 0 flows where
-  `status:blocked region:US` matched 6,318; `type:10 AND status:1` matched 5
-  alarms where `type:10 status:1` matched 12; and `region:US NOT
-  protocol:tcp` matched 285 flows where `region:US -protocol:tcp` matched
-  272,581. The search tools passed such queries through, and the client
-  built them: the `time_range` of `search_flows` and the
-  `start_time`/`end_time` of `get_flow_data` as `ts:a-b AND (query)` (which
-  the API answered with HTTP 400), the categories and blocked summary of
-  `get_flow_insights`, the blocked flows of the recent-threats summary, and
-  the `status:1` of `get_active_alarms` and the box scope, which bound to
-  one branch of an `OR`. Every GET to `/v2/alarms`, `/v2/flows` and
-  `/v2/rules` now sends its query through `toMspQuery`
-  (`src/utils/msp-query.ts`): `AND` becomes a space, an `OR` between values
-  of one field a comma list (`status:blocked AND (region:US OR region:CN)`
-  is sent as `status:blocked region:US,CN`), and `NOT` the `-` prefix. A
-  query that needs an `OR` between different fields, `NOT` over an `AND`,
-  or two conditions on one field has no API form and is refused as a
-  validation error before anything is sent, naming the searches to run
-  instead. The client's own queries are built in the API's form, and the
-  query descriptions of the search tools state the rule.
-- The search tools accept the API's own forms: terms separated by spaces,
-  the `-` prefix (`region:US -protocol:tcp`), free-text words, and a query
-  that starts with `NOT`. They refused all of these.
+  `status:blocked AND region:US` matched 0 flows where `status:blocked
+  region:US` matched 6,318; `type:10 AND status:1` matched 5 alarms where
+  `type:10 status:1` matched 12; and `region:US NOT protocol:tcp` matched 285
+  flows where `region:US -protocol:tcp` matched 272,581. The search tools
+  passed such queries through, and the client built them: the `time_range` of
+  `search_flows` and the `start_time`/`end_time` of `get_flow_data` as `ts:a-b
+  AND (query)` (which the API answered with HTTP 400), the categories and
+  blocked summary of `get_flow_insights`, the blocked flows of the
+  recent-threats summary, and the `status:1` of `get_active_alarms` and the
+  box scope, which bound to one branch of an `OR`. Every GET to `/v2/alarms`,
+  `/v2/flows` and `/v2/rules` now sends its query through `toMspQuery`
+  (`src/utils/msp-query.ts`): `AND` becomes a space, an `OR` between values of
+  one field a comma list (`status:blocked AND (region:US OR region:CN)` is
+  sent as `status:blocked region:US,CN`), and `NOT` the `-` prefix. A query
+  that needs an `OR` between different fields, `NOT` over an `AND`, or two
+  conditions on one field has no API form and is refused as a validation error
+  before anything is sent. For an `OR` or `NOT`, the error names one runnable
+  query per disjunct of the query, whose results together are the query's
+  (`region:US OR (category:social AND status:blocked)` suggests `region:US`
+  and `category:social status:blocked`). The client's own queries are built in
+  the API's form, and the query descriptions of the search tools state the
+  rule.
+- `search_flows` and `search_alarms` accept the API's own forms: terms
+  separated by spaces, the `-` prefix (`region:US -protocol:tcp`), free-text
+  words, and a query that starts with `NOT`; they refused all of these.
+  `search_rules`, `search_devices` and `search_target_lists` accept spaces,
+  `-` and a leading `NOT` too, but still refuse a query that is only free
+  text. `search_flows` accepts the flow qualifiers `sport:` and `dport:`, and
+  `block:` (sent as `status:blocked`, like `blocked:`), and `search_rules` the
+  rule qualifiers `device.id:` and `box.group.id:`, which their field checks
+  refused. `field:[low TO high]` is refused, as the search tools did in 1.5.0
+  and now every tool does, with the API's form as the suggestion
+  (`bytes:[1000000 TO 50000000]` suggests `total:1000000-50000000`).
+- A relative time (`ts:>1h`, `ts:>=24h`) is sent as Unix seconds on every
+  query to `/v2/alarms`, `/v2/flows` and `/v2/rules`. Only `search_flows`
+  converted it; `get_active_alarms`, `get_flow_data` and `search_alarms` sent
+  `ts:>24h` as it was.
 - `search_alarms` applies `time_range`, which it ignored, and can no longer
   add a `severity:` term: alarms have no severity.
 - `search_rules` checks the rules the API returns against every term of the
-  query it can read (`action`, `status`, `target.value`), with comma lists
-  as OR and `-` as exclusion. It checked only the first `action:` and
-  `status:` values, so `action:block OR action:allow` returned block rules
-  only and `action:block AND NOT status:paused` returned paused ones only.
-- A query that names a `box.id` other than the box a request is scoped to
-  (the `box` argument, else `FIREWALLA_BOX_ID`) is refused. The API reads
-  two `box.id` terms as either box, so the query widened the scope.
+  query it can read (`action`, `status`, `target.value`), with comma lists as
+  OR and `-` as exclusion. It checked only the first `action:` and `status:`
+  values, so `action:block OR action:allow` returned block rules only and
+  `action:block AND NOT status:paused` returned paused ones only.
+- A query that names a `box.id` other than the box a request is scoped to (the
+  `box` argument, else `FIREWALLA_BOX_ID`) is refused. The API reads two
+  `box.id` terms as either box, so the query widened the scope.
 - `search_devices` matches `ip:192.168.*` against four-part addresses (the
-  search engine's IP filter read `*` as exactly one octet, so
-  `192.168.*` matched no device while `192.168.*.*` did), matches `mac:` against a device id that is a plain MAC address,
-  as the API reference gives device ids, and matches `id:` against the
-  device id, exactly or with `*`. A bare MAC address is still refused, with
-  a hint to write `mac:<address>`.
+  search engine's IP filter read `*` as exactly one octet, so `192.168.*`
+  matched no device while `192.168.*.*` did), matches `mac:` against a device
+  id that is a plain MAC address, as the API reference gives device ids, and
+  matches `id:` against the device id, exactly or with `*`. A bare MAC address
+  is still refused, with a hint to write `mac:<address>`.
 
 ### Changed
 

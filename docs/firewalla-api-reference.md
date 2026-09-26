@@ -1174,7 +1174,7 @@ download:1000-2000      # Between values
 ts:1695196894.395-1695604487.633  # Time range
 ```
 
-Numeric search supports neither unqualified search nor exclusive search.
+Numeric search supports neither unqualified search nor exclusive search. (Measured 2026-09-26, the API does exclude a comparison: `-total:>1MB` matched the same flows as `total:<=1MB`; see [Measured Query Behavior](#measured-query-behavior).)
 
 #### Exclusive Search
 ```bash
@@ -1281,6 +1281,10 @@ The official docs do not cover the points below. Each was measured against a liv
 - **`OR` is a word as well** (2026-09-26): `type:1 or` matched 23 alarms and `type:10 or` 12, as many as `type:1` and `type:10`, because every one of those alarms has "or" in its text. That is why `type:1 OR type:10` (35) looked right. Over the last 24 hours of blocked flows, `region:US` matched 6,315, `region:CN` 109, `region:US OR region:CN` 632 and `region:US OR` 628; `status:blocked OR` matched 8,799 of the 23,420 blocked flows.
 - **A field repeated, or a comma list, is OR; different fields are AND** (2026-09-26): `type:1 type:10` and `type:1,10` each matched 35 alarms (23 + 12). Over the last 24 hours of blocked flows, `region:US region:CN` matched 6,423 and `region:US,CN` 6,424. Terms on different fields must all match, so one query cannot express an OR between different fields.
 - **`-` excludes; `NOT` does not** (2026-09-26): `region:US -protocol:tcp` matched 272,581 flows (`region:US protocol:udp` 272,575), and `region:US NOT protocol:tcp` 285. On alarms `type:10 -status:1` and `type:10 status:2` both matched 0, consistent with all 12 being active.
+- **Repeated exclusions each hold** (2026-09-26): `-region:US -region:CN` matched 56,736 flows and `-region:US,CN` 56,837, in requests made one after the other while flows were arriving.
+- **A comparison can be excluded** (2026-09-26), although the official grammar says numeric search does not support exclusion: `-total:>1MB` and `total:<=1MB` each matched 735,778 flows.
+- **Two inclusive bounds are the range** (2026-09-26): `ts:>=<a> ts:<=<b>` and `ts:<a>-<b>` each matched 197 alarms.
+- **Rules take the same grammar** (2026-09-26): on `/v2/rules`, `action:block` returned 91 rules, `action:allow` 7, and both `action:block,allow` and `action:block action:allow` 98.
 - **Unknown property paths return no results, not an error.** A qualifier the API does not know returns HTTP 200 with an empty result set. On flows, `block:true` returned 0 results, while `status:blocked` returned the blocked flows. An empty result is therefore not proof that nothing matched.
 - **`total:>1MB` works on flows.**
 - **`device.ip:192.168.*` works on alarms**, and so does unqualified free text such as `porn`.
@@ -1294,9 +1298,11 @@ The official docs do not cover the points below. Each was measured against a liv
 
 - `AND`, or no operator, becomes a space: `type:1 AND status:1` is sent as `type:1 status:1`.
 - `OR` between values of one field becomes a comma list, also inside parentheses: `region:US OR region:CN` is sent as `region:US,CN`, and `status:blocked AND (region:US OR region:CN)` as `status:blocked region:US,CN`.
-- `NOT` becomes the `-` prefix: `region:US AND NOT protocol:tcp` is sent as `region:US -protocol:tcp`. `NOT` of an `OR` excludes each term: `NOT (region:US OR region:CN)` is sent as `-region:US -region:CN` (this repeated exclusion is not yet measured). The grammar has no exclusion of numeric terms, so `NOT total:>1MB` is sent as `total:<=1MB`.
+- `NOT` becomes the `-` prefix: `region:US AND NOT protocol:tcp` is sent as `region:US -protocol:tcp`. `NOT` of an `OR` excludes each term: `NOT (region:US OR region:CN)` is sent as `-region:US -region:CN` (measured above: each exclusion holds). `NOT` of a comparison is sent as the opposite comparison, the form the official grammar documents: `NOT total:>1MB` is sent as `total:<=1MB`, which matched the same flows as `-total:>1MB`.
+- A relative time is sent as Unix seconds: `ts:>1h` becomes `ts:>` the time an hour before the request, and so do `s`, `m`, `d` and `w` (`ts:<=7d`).
 - A lower and an upper bound on one field become one range: `ts:>=a AND ts:<=b` is sent as `ts:a-b` (measured equal: 197 alarms either way). A range includes its ends, so a pair with a strict bound (`ts:>a AND ts:<b`) is refused, with the inclusive range as the suggestion.
-- A query that has no form in this grammar is refused with a validation error before anything is sent, naming the part and, where there are some, the searches to run instead: an `OR` between different fields (`region:US OR category:social`), `NOT` over an `AND`, the exclusion of free text, a wildcard or a range, two other conditions on one field (the API would read them as either), and a `box.id` other than the box the request is scoped to (the API would read the two as either box).
+- A query that has no form in this grammar is refused with a validation error before anything is sent: an `OR` between different fields (`region:US OR category:social`), `NOT` over an `AND`, the exclusion of free text, a wildcard or a range, two other conditions on one field (the API would read them as either), `[low TO high]` range syntax (the API's ranges are `field:low-high`, which is what the error suggests), and a `box.id` other than the box the request is scoped to (the API would read the two as either box).
+- The error for an `OR` or `NOT` the API cannot run lists one query per disjunct of the query's disjunctive normal form, in API form, whose results together are the query's: `region:US OR (category:social AND status:blocked)` suggests `region:US` and `category:social status:blocked`, and `NOT (action:block AND status:paused)` suggests `-action:block` and `-status:paused`. Disjuncts that differ only in one field's value are merged into a comma list. There are no suggestions when a disjunct has no API form of its own, or past 64 disjuncts.
 - Lowercase `and`, `or` and `not` stay words, as the API reads them. A query already in this form (spaces, commas, `-`) is sent unchanged.
 
 ### Pagination Support

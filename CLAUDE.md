@@ -196,9 +196,12 @@ The MSP API's query grammar has no `AND`, `OR`, `NOT` or parentheses: it searche
 - `AND`, or a space, means both terms must match; it is sent as a space.
 - `OR` works between values of one field and is sent as a comma list (`region:US OR region:CN` becomes `region:US,CN`). An `OR` between different fields (`region:US OR category:social`) has no API form and is refused with a validation error that names one search per field to run instead.
 - `NOT`, or a leading `-`, excludes a field value (`-protocol:tcp`). `NOT` over an `AND`, and the exclusion of free text, a wildcard or a range, are refused.
+- A refused `OR` or `NOT` comes with one runnable query per disjunct, whose results together are the query's: `region:US OR (category:social AND status:blocked)` suggests `region:US` and `category:social status:blocked`.
+- Ranges are `field:low-high` and include both ends; `[low TO high]` is refused with the `field:low-high` form as the suggestion. Relative times (`ts:>1h`, `ts:>=7d`) are sent as Unix seconds.
 - Parentheses may group a same-field `OR` (`status:blocked AND (region:US OR region:CN)` becomes `status:blocked region:US,CN`) or follow `NOT` (`NOT (region:US OR region:CN)` becomes `-region:US -region:CN`); a group that needs an `OR` across fields is refused.
 - Operators are uppercase; lowercase `and`, `or` and `not` are free-text words, as the API reads them.
 - search_devices and search_target_lists filter on the client and evaluate `AND`, `OR`, `NOT` and parentheses themselves, across fields too.
+- Free text on its own (`porn`) works in search_flows and search_alarms; search_rules, search_devices and search_target_lists refuse a query that is only free text.
 
 ```text
 # Basic field queries
@@ -215,7 +218,7 @@ region:US AND NOT protocol:tcp     # -> region:US -protocol:tcp
 # Wildcards and patterns
 device.ip:192.168.*
 name:*laptop*                 # search_devices
-target.value:*.facebook.com   # search_rules
+domain:*.facebook.com         # flows
 
 # Geographic filtering (flows and alarms)
 region:US                     # United States
@@ -244,8 +247,10 @@ search_flows query:"status:blocked AND total:>1MB AND region:CN" limit:100
 # Find blocked flows from either of two countries (sent as region:US,CN)
 search_flows query:"status:blocked AND (region:US OR region:CN)" limit:100
 
-# Find all rules targeting social media
-search_rules query:"target.value:*facebook* OR target.value:*twitter*" limit:25
+# Find block and allow rules
+search_rules query:"action:block OR action:allow" limit:25
+# sent as action:block,allow; measured 2026-09-26: 98 rules, the 91 block
+# rules and the 7 allow rules
 
 # Find block rules that are not paused (sent as action:block -status:paused)
 search_rules query:"action:block AND NOT status:paused" limit:25

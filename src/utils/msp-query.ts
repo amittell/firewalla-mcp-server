@@ -19,8 +19,9 @@
  * - OR between values of one field: a comma list (`region:US OR region:CN`
  *   is sent as `region:US,CN`), also where AND distributes over it
  * - NOT of a term: the `-` prefix; NOT of a comparison: the opposite
- *   comparison (`NOT total:>1MB` is sent as `total:<=1MB`, since the API
- *   cannot exclude numeric terms); NOT of an OR: each term excluded
+ *   comparison (`NOT total:>1MB` is sent as `total:<=1MB`; measured
+ *   2026-09-26, both that and `-total:>1MB` matched the same 735,778
+ *   flows); NOT of an OR: each term excluded
  * - a lower and an upper bound on one field: one range (`ts:>=a ts:<=b` is
  *   sent as `ts:a-b`; a range includes its ends, so a strict bound is refused)
  * - a relative time (`ts:>1h`, `ts:<=7d`): Unix seconds
@@ -348,9 +349,12 @@ function render(node: Node): string {
 }
 
 /**
- * The literal that excludes what `literal` matches. The API's `-` prefix
- * applies to literal values only: its grammar has no exclusion of free
- * text, wildcards or numeric terms, so a comparison is flipped instead.
+ * The literal that excludes what `literal` matches. The official grammar
+ * defines the `-` prefix for field values only, with no exclusion of free
+ * text, wildcards or numeric terms, so those are refused. A comparison is
+ * sent as the opposite comparison instead: the API does exclude one
+ * (measured 2026-09-26, `-total:>1MB` and `total:<=1MB` matched the same
+ * 735,778 flows), and the flipped form is the one the grammar documents.
  */
 function negateLiteral(literal: Literal, part: string, query: string): Literal {
   switch (literal.kind) {
@@ -367,7 +371,7 @@ function negateLiteral(literal: Literal, part: string, query: string): Literal {
       throw new MspQueryError(
         cannotSend(
           query,
-          `"${part}" excludes a wildcard match, and the API can exclude exact values only (for example -domain:ads.example.com). Exclude exact values, or search without the exclusion.`
+          `"${part}" excludes a wildcard match, and the API's grammar has no exclusion of a wildcard: it excludes exact values (for example -domain:ads.example.com). Exclude exact values, or search without the exclusion.`
         ),
         query,
         part
@@ -377,7 +381,7 @@ function negateLiteral(literal: Literal, part: string, query: string): Literal {
       throw new MspQueryError(
         cannotSend(
           query,
-          `"${part}" excludes a range, and the API cannot exclude one. Run two searches instead, one with ${literal.field}:<${low} and one with ${literal.field}:>${high}.`
+          `"${part}" excludes a range, and the API's grammar has no exclusion of a range. Run two searches instead, one with ${literal.field}:<${low} and one with ${literal.field}:>${high}.`
         ),
         query,
         part,

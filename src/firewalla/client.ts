@@ -5778,7 +5778,7 @@ export class FirewallaClient {
           query: 'geographic_risk_score:>=7',
         },
         {
-          // The API grammar cannot exclude a wildcard (-hosting_provider:*)
+          // The official grammar has no exclusion of a wildcard (-hosting_provider:*)
           condition: filters.exclude_known_providers === true,
           query: '-is_cloud_provider:true',
         },
