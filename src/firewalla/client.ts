@@ -3154,11 +3154,15 @@ export class FirewallaClient {
       async day => {
         const next = nextStart.get(day.ts);
         // The current day ends when its count is requested, not when the
-        // series started, so alarms raised meanwhile are counted. max: a clock
-        // behind the API's would end the current day before it starts
+        // series started, so alarms raised meanwhile are counted, but never
+        // after the day itself ends (the account's day can roll over while
+        // the counts run). max: a clock behind the API's would end the current
+        // day before it starts
         const end = Math.max(
           day.ts,
-          next !== undefined ? next - 1 : Math.floor(Date.now() / 1000)
+          next !== undefined
+            ? next - 1
+            : Math.min(Math.floor(Date.now() / 1000), day.ts + DAY_SECONDS - 1)
         );
         const { groups, exact } = await this.countMatching(
           endpoint,

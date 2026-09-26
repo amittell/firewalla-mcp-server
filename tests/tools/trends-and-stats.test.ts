@@ -462,6 +462,22 @@ describe('box-scoped getAlarmTrends and getFlowTrends', () => {
     expect(today?.params.query).toBe(`ts:${TODAY}-${NOW + 5} box.id:${BOX_A}`);
   });
 
+  it('does not run the current day past its end when the day rolls over meanwhile', async () => {
+    const { client, calls } = makeClient({
+      '/v2/trends/alarms': () => {
+        // the account's next day begins while the counts run
+        (Date.now as jest.Mock).mockReturnValue((TODAY + DAY + 60) * 1000);
+        return ALARM_TREND;
+      },
+      '/v2/alarms': () => ({ count: 1, results: [{ gid: BOX_A, count: 7 }] }),
+    });
+    await client.getAlarmTrends('1h', undefined, BOX_A);
+    const today = calls.filter(call => call.url === '/v2/alarms').pop();
+    expect(today?.params.query).toBe(
+      `ts:${TODAY}-${TODAY + DAY - 1} box.id:${BOX_A}`
+    );
+  });
+
   it('marks days counted from items rather than groups as lower bounds', async () => {
     const { client, calls } = makeClient({
       '/v2/trends/alarms': () => ALARM_TREND,
