@@ -34,7 +34,7 @@ The groups are each handler's `category`, which `ToolRegistry.getToolsByCategory
 - **Search (5 tools)**: search_flows, search_alarms, search_rules, search_devices, search_target_lists
 - **Analytics (9 tools)**: get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_recent_flow_activity, get_flow_insights, get_flow_trends, get_alarm_trends, get_rule_trends
 - **Convenience wrappers** (client-side processing; counted in the groups above): get_bandwidth_usage, get_offline_devices, search_devices, search_target_lists, get_network_rules_summary
-- **Write tools (11, opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)**: create_rule, delete_rule, pause_rule, resume_rule, create_target_list, update_target_list and delete_target_list (rules), rename_device (device), archive_alarm, mute_alarm and delete_alarm (security). Not counted in the 24.
+- **Write tools (11, opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)**: create_rule, delete_rule, pause_rule, resume_rule, create_target_list, update_target_list and delete_target_list (rules), rename_device (device), archive_alarm, mute_alarm and delete_alarm (security). Not counted in the 24. They need an MSP token with write access: MSP 2.12 adds read-only tokens, and a 403 on a write says the token may be read-only.
 
 ## Development Commands
 

@@ -42,7 +42,7 @@ config:
         example: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
       enable_write_tools:
         type: string
-        description: 'Optional: "true" registers the 11 write tools create_rule, delete_rule, pause_rule, resume_rule, create_target_list, update_target_list, delete_target_list, rename_device, archive_alarm, mute_alarm and delete_alarm (default "false": read-only)'
+        description: 'Optional: "true" registers the 11 write tools create_rule, delete_rule, pause_rule, resume_rule, create_target_list, update_target_list, delete_target_list, rename_device, archive_alarm, mute_alarm and delete_alarm (default "false": read-only). They need an MSP token with write access.'
         example: "false"
         default: "false"
     required:

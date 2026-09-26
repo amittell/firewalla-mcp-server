@@ -172,6 +172,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   setting: the server no longer lists them, and a call answers "Unknown tool"
   and sends nothing. To keep using them, set
   `FIREWALLA_ENABLE_WRITE_TOOLS=true`.
+- A write that gets HTTP 403 says the token may be read-only and that the
+  write tools need a token with write access: Firewalla said on 2026-09-08
+  that MSP 2.12 adds read-only API tokens. The error still gives the other
+  cause of a 403, a box the token cannot access, and a 403 on a read says
+  nothing about read-only tokens.
 - Tool responses and the `firewalla://` resources are compact JSON, the
   same JSON without the indentation. On large stubbed answers (400 devices,
   500 flows, 500 alarms, 400 rules) the text is 34% smaller in bytes.

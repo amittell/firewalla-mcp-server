@@ -13,6 +13,8 @@ The official docs carry their own caveat: "since Firewalla MSP is still evolving
 Authorization: Token {your_personal_access_token}
 ```
 
+**Read-only tokens**: Firewalla said on Reddit on 2026-09-08 that MSP 2.12 adds read-only API tokens. A read-only token can read but cannot make changes, so this server's write tools (`FIREWALLA_ENABLE_WRITE_TOOLS=true`) need a token with write access. What the API answers when a read-only token tries a change has not been measured here. When a write (any request other than a GET) gets HTTP 403, the server's error says the token may be read-only and that the write tools need a token with write access; it also gives the other measured cause of a 403, a box the token cannot access (see [Error Handling](#error-handling)).
+
 **IDs in paths**: IDs that go into a request path (target-list ids, rule ids, alarm gids and aids, box gids, device ids) are checked by the client before anything is sent, and refused unless they are one path segment: no `/`, backslash, `?`, `#`, `%`, whitespace or control characters, and not `.` or `..`. A `:` is allowed and sent as it is in rule ids (`<box gid>:<n>`, sent that way when pause and resume were measured on 2026-09-25); in device ids (`PATCH /v2/boxes/{gid}/devices/{id}`) it is sent as `%3A`, as the client always did.
 
 ## Table of Contents
@@ -1547,6 +1549,9 @@ The official docs list these per endpoint:
 Measured, not in the official docs:
 - **429 Too Many Requests**: Rate limit exceeded (see below)
 - **403 Forbidden** for `POST /v2/rules/{id}/pause` and `/resume` with a rule ID that does not exist, where the official docs list 404 (measured 2026-09-25)
+- **403 Forbidden** for a box gid the token cannot access, on `GET /v2/devices?box=<gid>` and `GET /v2/alarms/<gid>/<aid>` (measured 2026-09-25)
+
+Not measured: a read-only token (MSP 2.12, see [Overview](#overview)) trying a change. The server's error for a 403 on a write says the token may be read-only and that the write tools need a token with write access, next to the box explanation above.
 
 ### Error Response Format
 

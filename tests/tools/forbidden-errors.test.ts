@@ -190,4 +190,30 @@ describe('forbiddenMessage', () => {
       forbiddenMessage({ config: { url: '/v2/rules' }, response: { data: '' } })
     ).toMatch(/^Forbidden \(HTTP 403\)\. /);
   });
+
+  it.each([
+    ['post', '/v2/target-lists'],
+    ['patch', `/v2/boxes/${OTHER_BOX}/devices/x`],
+    ['delete', '/v2/rules/R1'],
+    ['put', '/v2/rules/R1'],
+  ])(
+    'on a %s, says the token may be read-only (MSP 2.12) and write tools need write access',
+    (method, url) => {
+      const message = forbidden({ url, method });
+      expect(message).toContain(
+        `This request changes state (${method.toUpperCase()}), so the token may be read-only: MSP 2.12 adds read-only API tokens, which cannot make changes. The write tools need a token with write access.`
+      );
+      // A 403 can also mean an inaccessible box, so both causes are given
+      expect(message).toContain('names a box');
+      expect(message).toContain('get_boxes');
+    }
+  );
+
+  it.each([['get'], [undefined]])(
+    'on a read (method %j), says nothing about read-only tokens',
+    method => {
+      const message = forbidden({ url: '/v2/rules', method });
+      expect(message).not.toMatch(/read-only|write access/);
+    }
+  );
 });
