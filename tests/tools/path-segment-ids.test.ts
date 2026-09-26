@@ -76,6 +76,8 @@ function makeClient() {
         count: 1,
         results: [{ id: RULE, gid: BOX, action: 'block', status: 'active' }],
       };
+    } else if (method === 'GET' && pathname === '/v2/boxes') {
+      data = [{ gid: BOX, name: 'Box', online: true }];
     } else if (method === 'GET' && pathname.startsWith('/v2/alarms/')) {
       data = { aid: 12, gid: BOX, type: 1, status: 1, message: 'alarm' };
     } else if (method === 'GET' && pathname.startsWith('/v2/target-lists/')) {
@@ -266,6 +268,64 @@ const MUTE = {
   target: { type: 'alarmType' as const },
   scope: { type: 'all' as const },
 };
+
+/**
+ * Without a gid or FIREWALLA_BOX_ID the alarm tools list the boxes (GET
+ * /v2/boxes) and look for the alarm on each. An alarm ID that cannot be a
+ * path segment is refused before that; the client's getSpecificAlarm
+ * listed the boxes first and refused the ID after.
+ */
+describe('an alarm ID refused without a gid', () => {
+  const ALARM_IDS = [TRAVERSAL, '..', 'a b', '%2e'];
+  const tools: Array<[string, ToolHandler, Record<string, unknown>]> = [
+    ['get_specific_alarm', new GetSpecificAlarmHandler(), {}],
+    ['archive_alarm', new ArchiveAlarmHandler(), {}],
+    [
+      'mute_alarm',
+      new MuteAlarmHandler(),
+      { target_type: 'alarmType', scope_type: 'all' },
+    ],
+    ['delete_alarm', new DeleteAlarmHandler(), {}],
+  ];
+
+  it.each(tools)(
+    '%s is a validation error, and nothing is sent',
+    async (_name, handler, args) => {
+      const outcomes = [];
+      for (const aid of ALARM_IDS) {
+        const { client, sent } = makeClient();
+        const body = parse(
+          await handler.execute({ alarm_id: aid, ...args }, client)
+        );
+        outcomes.push({ aid, errorType: body.errorType, sent });
+      }
+      expect(outcomes).toEqual(
+        ALARM_IDS.map(aid => ({ aid, errorType: 'validation_error', sent: [] }))
+      );
+    }
+  );
+
+  it('the client refuses one before listing the boxes', async () => {
+    const { client, sent } = makeClient();
+    for (const aid of ALARM_IDS) {
+      await expect(client.getSpecificAlarm(aid)).rejects.toThrow(
+        'Invalid alarm_id'
+      );
+      await expect(client.archiveAlarm(aid)).rejects.toThrow(
+        'Invalid alarm_id'
+      );
+      await expect(client.muteAlarm(aid, MUTE)).rejects.toThrow(
+        'Invalid alarm_id'
+      );
+      await expect(client.deleteAlarm(aid)).rejects.toThrow('Invalid alarm_id');
+    }
+    // Refused by the client's alarm ID check, not the path check
+    await expect(client.getSpecificAlarm('0')).rejects.toThrow(
+      'Invalid alarm ID: "0"'
+    );
+    expect(sent).toEqual([]);
+  });
+});
 
 describe('a refused character is refused, not removed or trimmed, by the client', () => {
   const calls: Array<
