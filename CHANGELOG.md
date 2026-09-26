@@ -19,6 +19,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tool responses and the `firewalla://` resources are compact JSON, the
   same JSON without the indentation. On large stubbed answers (400 devices,
   500 flows, 500 alarms, 400 rules) the text is 34% smaller in bytes.
+- With `FIREWALLA_BOX_ID` set, `get_alarm_trends` covers that box instead of
+  every box, and makes 1 request plus 1 per day (31 for the default `30d`)
+  instead of one. An explicit `group` takes precedence over
+  `FIREWALLA_BOX_ID`: the tool then reads the group's `GET /v2/trends/alarms`
+  as before, and its note says `FIREWALLA_BOX_ID` was not applied.
+
+### Added
+
+- `get_alarm_trends` takes an optional `box` (a box gid) and, with it or
+  with `FIREWALLA_BOX_ID`, reports that box's alarms per day.
+  `GET /v2/trends/alarms` takes no box, so the tool reads it once for the
+  days, the same days as the account-wide series, and counts each day that
+  `period` selects with one
+  `GET /v2/alarms?query=ts:<day start>-<next day start - 1> box.id:<gid>&groupBy=box`,
+  ending the current day at the time of the request; the box's row is the
+  day's count, 0 when it has no row. That is 1 request plus 1 per day (31 for
+  `30d`), at most 4 at a time. `scope` names the box, `source` is
+  `GET /v2/alarms groupBy=box per day`, and `note` gives the query and the
+  request count. A `box` that is not a box gid, and `box` with `group`, are
+  refused before any request. The client's `getFlowTrends` takes the same
+  `box` and counts `status:blocked` flows per day the same way.
 
 ## [1.5.0] - 2026-09-25
 

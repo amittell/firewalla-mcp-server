@@ -3,7 +3,11 @@
  */
 
 import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
-import type { FirewallaClient } from '../../firewalla/client.js';
+import {
+  BoxSelectionError,
+  isValidBoxGid,
+  type FirewallaClient,
+} from '../../firewalla/client.js';
 import {
   ParameterValidator,
   SafeAccess,
@@ -973,6 +977,45 @@ function validateTrendArgs(args: ToolArgs): {
   };
 }
 
+/**
+ * Validate get_alarm_trends' optional `box`: a box gid, and not together
+ * with `group`
+ */
+function validateTrendBox(
+  args: ToolArgs,
+  group: string | undefined
+): { errors: string[]; box?: string } {
+  const boxValidation = ParameterValidator.validateOptionalString(
+    args?.box,
+    'box'
+  );
+  const box = boxValidation.sanitizedValue as string | undefined;
+  const errors = [...boxValidation.errors];
+  if (box !== undefined && !isValidBoxGid(box)) {
+    errors.push(
+      "box must be a box gid (letters, digits, '-' or '_'); get_boxes lists them"
+    );
+  }
+  if (box !== undefined && group !== undefined) {
+    errors.push(
+      'box and group cannot be combined: pass box for one box or group for a box group'
+    );
+  }
+  return { errors, box };
+}
+
+/**
+ * The BoxSelectionError behind a failure, if any: withToolTimeout rewraps
+ * errors and keeps the original as `cause`
+ */
+function boxSelectionError(error: unknown): BoxSelectionError | undefined {
+  if (error instanceof BoxSelectionError) {
+    return error;
+  }
+  const cause = (error as { cause?: unknown })?.cause;
+  return cause instanceof BoxSelectionError ? cause : undefined;
+}
+
 /** Where a trend tool's daily points came from and what they cover */
 function describeTrend(series: TrendSeries, period: TrendPeriod) {
   const notes = [
@@ -1019,7 +1062,7 @@ function summarizeValues(points: Array<{ value: number }>) {
 export class GetAlarmTrendsHandler extends BaseToolHandler {
   name = 'get_alarm_trends';
   description =
-    'Alarms generated per day, from GET /v2/trends/alarms: one point per day for the last 30 days, the last point being today so far. period (default 30d) returns the days that overlap it. The trends API takes no box, so it covers every box (or the group) even with FIREWALLA_BOX_ID set.';
+    'Alarms generated per day for the last 30 days, one point per day, the last being today so far; period (default 30d) returns the days that overlap it. Without a box it is one GET /v2/trends/alarms covering every box, or the box group. That endpoint takes no box, so with box (else FIREWALLA_BOX_ID, unless group is given) each day is counted with one GET /v2/alarms groupBy=box scoped to the box: 1 request plus 1 per day, ~31 for 30d (the account allows ~100 a minute). box and group cannot be combined.';
   category = 'analytics' as const;
 
   constructor() {
@@ -1042,6 +1085,8 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
   ): Promise<ToolResponse> {
     try {
       const { errors, period, group } = validateTrendArgs(_args);
+      const boxCheck = validateTrendBox(_args, group);
+      errors.push(...boxCheck.errors);
       if (errors.length > 0) {
         return this.createErrorResponse(
           'Parameter validation failed',
@@ -1053,7 +1098,7 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
 
       const startTime = Date.now();
       const series = await withToolTimeout(
-        async () => firewalla.getAlarmTrends(period, group),
+        async () => firewalla.getAlarmTrends(period, group, boxCheck.box),
         this.name
       );
       const points = Array.isArray(series?.results) ? series.results : [];
@@ -1081,6 +1126,16 @@ export class GetAlarmTrendsHandler extends BaseToolHandler {
         executionTimeMs: Date.now() - startTime,
       });
     } catch (error: unknown) {
+      // A malformed FIREWALLA_BOX_ID, refused before any request
+      const selectionError = boxSelectionError(error);
+      if (selectionError) {
+        return this.createErrorResponse(
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          [selectionError.message]
+        );
+      }
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
