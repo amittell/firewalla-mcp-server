@@ -125,6 +125,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   id that is a plain MAC address, as the API reference gives device ids, and
   matches `id:` against the device id, exactly or with `*`. A bare MAC address
   is still refused, with a hint to write `mac:<address>`.
+- With `MCP_TEST_MODE=true` the server printed "Running in test mode -
+  using dummy credentials" to stdout, which carries the stdio transport's
+  JSON-RPC, so an MCP client read a line that is not JSON-RPC before the
+  answer to `initialize`. It goes to stderr through the logger, and stdout
+  carries only JSON-RPC. Nothing else in `src/` calls `console.log`,
+  `console.info`, `console.debug` or `process.stdout.write`.
 
 ### Changed
 

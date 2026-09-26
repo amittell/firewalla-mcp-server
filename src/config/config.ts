@@ -36,6 +36,7 @@ import {
   parseTransportConfig,
 } from '../utils/env.js';
 import { getTestConfig } from './test-mode-config.js';
+import { logger } from '../monitoring/logger.js';
 
 dotenv.config();
 
@@ -63,8 +64,9 @@ export function getConfig(): FirewallaConfig {
     (process.env.MCP_TEST_MODE || 'false').toLowerCase() === 'true';
 
   if (testMode) {
-    // eslint-disable-next-line no-console
-    console.log('Running in test mode - using dummy credentials');
+    // Through the logger, which writes to stderr: stdout carries the stdio
+    // transport's JSON-RPC, and a line of text there breaks the client.
+    logger.warn('Running in test mode - using dummy credentials');
     return getTestConfig();
   }
 
