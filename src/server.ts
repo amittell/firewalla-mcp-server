@@ -1024,7 +1024,7 @@ export class FirewallaMCPServer {
           {
             name: 'get_alarm_trends',
             description:
-              'Alarms generated per day, from GET /v2/trends/alarms: one point per day for the last 30 days, the last point being today so far. period (default 30d) returns the days that overlap it. The trends API takes no box, so it covers every box (or the group) even with FIREWALLA_BOX_ID set.',
+              'Alarms generated per day for the last 30 days, one point per day, the last being today so far; period (default 30d) returns the days that overlap it. Without a box it is one GET /v2/trends/alarms covering every box, or the box group. That endpoint takes no box, so with box (else FIREWALLA_BOX_ID, unless group is given) each day is counted with one GET /v2/alarms groupBy=box scoped to the box: 1 request plus 1 per day, ~31 for 30d (the account allows ~100 a minute). box and group cannot be combined.',
             annotations: {
               title: 'Alarm Trends',
               readOnlyHint: true,
@@ -1042,7 +1042,13 @@ export class FirewallaMCPServer {
                 },
                 group: {
                   type: 'string',
-                  description: 'Get trends for a specific box group',
+                  description:
+                    'Get trends for a specific box group. Takes precedence over FIREWALLA_BOX_ID; not with box',
+                },
+                box: {
+                  type: 'string',
+                  description:
+                    'Only alarms of this box (box gid), counted per day: 1 request plus 1 per day (~31 for 30d). Defaults to FIREWALLA_BOX_ID unless group is given; without either, every box. Not with group',
                 },
               },
               required: [],

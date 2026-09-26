@@ -187,6 +187,48 @@ const DAY_SECONDS = 24 * 60 * 60;
 /** Days in a /v2/trends series (measured 2026-09-25) */
 const TREND_DAYS = 30;
 
+/**
+ * Per-day count requests a box-scoped trend has in flight at once. A 30-day
+ * series is 31 requests, and the account allows about 100 a minute.
+ */
+const BOX_TREND_CONCURRENCY = 4;
+
+/**
+ * `fn` over `items` with at most `limit` calls in flight, results in the
+ * order of `items`. After a call fails no new call starts, and the first
+ * failure is thrown once the calls in flight settle.
+ */
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  let failed = false;
+  let firstError: unknown;
+  const worker = async (): Promise<void> => {
+    while (!failed && next < items.length) {
+      const i = next++;
+      try {
+        results[i] = await fn(items[i]);
+      } catch (error) {
+        if (!failed) {
+          failed = true;
+          firstError = error;
+        }
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker)
+  );
+  if (failed) {
+    throw firstError;
+  }
+  return results;
+}
+
 /** Length of each period the trend tools accept */
 const TREND_PERIOD_SECONDS: Record<TrendPeriod, number> = {
   '1h': 60 * 60,
@@ -257,6 +299,9 @@ const BOX_GID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 export function isValidBoxGid(gid: string): boolean {
   return BOX_GID_PATTERN.test(gid);
 }
+
+/** Why a box or FIREWALLA_BOX_ID that is not a box gid is refused */
+const INVALID_BOX_GID = `Invalid box gid: expected letters, digits, '-' or '_' only (get_boxes lists the gids)`;
 
 /**
  * A single-box operation could not pick a box: the account has several and
@@ -1922,18 +1967,19 @@ export class FirewallaClient {
    * totals are exact however many items match; more groups than one page
    * holds are paged, up to 20 pages. If the rows are items rather than
    * groups, the counts are those of the first page, and `exact` is false when
-   * more pages exist.
+   * more pages exist. Scoped to `box`, else FIREWALLA_BOX_ID.
    */
   private async countMatching(
     endpoint: '/v2/alarms' | '/v2/flows',
     query: string | undefined,
-    groupBy: 'status' | 'type' | 'box'
+    groupBy: 'status' | 'type' | 'box',
+    box?: string
   ): Promise<{ total: number; groups: Map<string, number>; exact: boolean }> {
     const params: Record<string, unknown> = {
       groupBy,
       limit: MAX_API_PAGE_SIZE,
     };
-    const scoped = this.addBoxFilter(query);
+    const scoped = this.addBoxFilter(query, box);
     if (scoped) {
       params.query = scoped;
     }
@@ -2986,8 +3032,8 @@ export class FirewallaClient {
    * generated or rules created each day. Measured 2026-09-25: 30 points in
    * ascending ts order, one per day, each ts the start of a day in the
    * account's time zone, the last point the current day so far. `group` (a
-   * box group ID) scopes it; the endpoint takes no box, so FIREWALLA_BOX_ID
-   * does not.
+   * box group ID) scopes it; the endpoint takes no box, so a box-scoped
+   * series is counted per day by boxDailyTrend.
    */
   private async fetchTrend(
     kind: 'flows' | 'alarms' | 'rules',
@@ -3021,33 +3067,139 @@ export class FirewallaClient {
   }
 
   /**
+   * The box a trend is scoped to: `box`, else FIREWALLA_BOX_ID unless a
+   * `group` is given (an explicit group takes precedence over the default
+   * box), else none. A box and a group together are refused: a box is in one
+   * group, so the pair is either redundant or matches nothing.
+   * @throws {BoxSelectionError} Both box and group are given, or the box is
+   * not a box gid
+   */
+  private trendBox(group?: string, box?: string): string | undefined {
+    const named = box?.trim();
+    const groupId = group?.trim();
+    if (named && groupId) {
+      throw new BoxSelectionError(
+        'box and group cannot be combined: pass box for one box or group for a box group'
+      );
+    }
+    const gid =
+      named || (groupId ? undefined : this.config.boxId?.trim() || undefined);
+    if (gid !== undefined && !isValidBoxGid(gid)) {
+      throw new BoxSelectionError(INVALID_BOX_GID);
+    }
+    return gid;
+  }
+
+  /**
    * A documented daily trend cut to `period`. The trends API has one point
    * per day, so a period shorter than a day returns the current day so far.
+   * With a box in scope (trendBox) each day is counted for that box.
    */
   private async dailyTrend(
     kind: 'flows' | 'alarms',
     period: TrendPeriod,
-    group?: string
+    group?: string,
+    box?: string
   ): Promise<TrendSeries> {
+    // Checked before any request
+    const gid = this.trendBox(group, box);
+    const validated = validTrendPeriod(period);
     const now = Math.floor(Date.now() / 1000);
-    const points = await this.fetchTrend(kind, group);
-    return selectTrendDays(points, validTrendPeriod(period), now, {
+    if (gid) {
+      return this.boxDailyTrend(kind, validated, now, gid);
+    }
+    const groupId = group?.trim() || undefined;
+    const points = await this.fetchTrend(kind, groupId);
+    return selectTrendDays(points, validated, now, {
       source: `GET /v2/trends/${kind}`,
-      scope: group?.trim() ? `box group ${group.trim()}` : 'all boxes',
+      scope: groupId ? `box group ${groupId}` : 'all boxes',
+      note:
+        groupId && this.config.boxId?.trim()
+          ? 'FIREWALLA_BOX_ID is not applied: an explicit group takes precedence over it.'
+          : undefined,
     });
   }
 
   /**
-   * Blocked flows per day from GET /v2/trends/flows. No tool calls this; it
-   * replaced client-side counting of up to 10000 flows.
+   * One box's daily series. GET /v2/trends/{kind} takes no box, so it gives
+   * only the days: the account-wide series' points, so the days match the
+   * unscoped series. Each day that overlaps `period` is then counted with one
+   * grouped GET /v2/alarms (or /v2/flows with status:blocked) over
+   * ts:<day start>-<next day start - 1>, to `now` for the current day,
+   * scoped with box.id; its row for the box is the day's count, 0 when the
+   * box has no row. Measured 2026-09-25, a trend point equals that query's
+   * rows summed over the boxes. 1 + days requests, at most
+   * BOX_TREND_CONCURRENCY at a time.
+   */
+  private async boxDailyTrend(
+    kind: 'flows' | 'alarms',
+    period: TrendPeriod,
+    now: number,
+    gid: string
+  ): Promise<TrendSeries> {
+    const days = await this.fetchTrend(kind);
+    const endpoint = kind === 'alarms' ? '/v2/alarms' : '/v2/flows';
+    // The API has no `block` qualifier; status:blocked selects blocked flows
+    const filter = kind === 'flows' ? 'status:blocked ' : '';
+    const series = selectTrendDays(days, period, now, {
+      source: `GET ${endpoint} groupBy=box per day`,
+      scope: `box ${gid}`,
+    });
+    const nextStart = new Map(
+      days.map((day, i) => [day.ts, days[i + 1]?.ts] as const)
+    );
+    const counts = await mapWithConcurrency(
+      series.results,
+      BOX_TREND_CONCURRENCY,
+      async day => {
+        const next = nextStart.get(day.ts);
+        // max: a clock behind the API's would end the current day before
+        // it starts
+        const end = Math.max(day.ts, next !== undefined ? next - 1 : now);
+        const { groups, exact } = await this.countMatching(
+          endpoint,
+          `${filter}ts:${day.ts}-${end}`,
+          'box',
+          gid
+        );
+        return { ts: day.ts, value: groups.get(gid) ?? 0, exact };
+      }
+    );
+    const inexact = counts.filter(day => !day.exact).length;
+    const notes = [
+      `GET /v2/trends/${kind} takes no box, so it gave the days and each day is counted for box ${gid} with one GET ${endpoint}?query=${filter}ts:<day start>-<next day start - 1> box.id:${gid}&groupBy=box (the current day up to now): 1 + ${counts.length} requests.`,
+    ];
+    if (inexact > 0) {
+      notes.push(
+        `On ${inexact} of the ${counts.length} days the API sent items rather than grouped counts, so those days count only the first page and are lower bounds.`
+      );
+    }
+    return {
+      ...series,
+      results: counts.map(({ ts, value }) => ({ ts, value })),
+      note: notes.join(' '),
+    };
+  }
+
+  /**
+   * Blocked flows per day from GET /v2/trends/flows, or for one box (`box`,
+   * else FIREWALLA_BOX_ID unless `group` is given) counted per day from GET
+   * /v2/flows. No tool calls this; it replaced client-side counting of up to
+   * 10000 flows.
+   * @throws {BoxSelectionError} Both box and group are given, or the box is
+   * not a box gid; nothing is requested
    */
   async getFlowTrends(
     period: TrendPeriod = '30d',
-    group?: string
+    group?: string,
+    box?: string
   ): Promise<TrendSeries> {
     try {
-      return await this.dailyTrend('flows', period, group);
+      return await this.dailyTrend('flows', period, group, box);
     } catch (error) {
+      if (error instanceof BoxSelectionError) {
+        throw error;
+      }
       logger.error(
         'Error in getFlowTrends:',
         error instanceof Error ? error : new Error(String(error))
@@ -3058,14 +3210,24 @@ export class FirewallaClient {
     }
   }
 
-  /** Alarms generated per day from GET /v2/trends/alarms */
+  /**
+   * Alarms generated per day from GET /v2/trends/alarms, or for one box
+   * (`box`, else FIREWALLA_BOX_ID unless `group` is given) counted per day
+   * from GET /v2/alarms
+   * @throws {BoxSelectionError} Both box and group are given, or the box is
+   * not a box gid; nothing is requested
+   */
   async getAlarmTrends(
     period: TrendPeriod = '30d',
-    group?: string
+    group?: string,
+    box?: string
   ): Promise<TrendSeries> {
     try {
-      return await this.dailyTrend('alarms', period, group);
+      return await this.dailyTrend('alarms', period, group, box);
     } catch (error) {
+      if (error instanceof BoxSelectionError) {
+        throw error;
+      }
       logger.error(
         'Error in getAlarmTrends:',
         error instanceof Error ? error : new Error(String(error))
@@ -5348,9 +5510,7 @@ export class FirewallaClient {
       return query;
     }
     if (!isValidBoxGid(gid)) {
-      throw new BoxSelectionError(
-        `Invalid box gid: expected letters, digits, '-' or '_' only (get_boxes lists the gids)`
-      );
+      throw new BoxSelectionError(INVALID_BOX_GID);
     }
 
     const boxFilter = `box.id:${gid}`;

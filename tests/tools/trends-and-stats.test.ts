@@ -5,7 +5,10 @@
  * the live MSP API returned on 2026-09-25; the values are invented.
  */
 
-import { FirewallaClient } from '../../src/firewalla/client.js';
+import {
+  BoxSelectionError,
+  FirewallaClient,
+} from '../../src/firewalla/client.js';
 import {
   GetAlarmTrendsHandler,
   GetBoxesHandler,
@@ -139,7 +142,7 @@ describe('getAlarmTrends', () => {
     ).toEqual([TODAY]);
   });
 
-  it('sends group and never a box filter, even with FIREWALLA_BOX_ID', async () => {
+  it('sends group, which takes precedence over FIREWALLA_BOX_ID', async () => {
     const { client, calls } = makeClient(
       { '/v2/trends/alarms': () => ALARM_TREND },
       { boxId: BOX_A }
@@ -149,7 +152,18 @@ describe('getAlarmTrends', () => {
       { url: '/v2/trends/alarms', params: { group: 'group-7' } },
     ]);
     expect(series.scope).toBe('box group group-7');
-    expect((await client.getAlarmTrends('30d')).scope).toBe('all boxes');
+    expect(series.source).toBe('GET /v2/trends/alarms');
+    expect(series.note).toContain('FIREWALLA_BOX_ID is not applied');
+  });
+
+  it('covers every box with one request when no box is in scope', async () => {
+    const { client, calls } = makeClient({
+      '/v2/trends/alarms': () => ALARM_TREND,
+    });
+    const series = await client.getAlarmTrends('7d');
+    expect(calls).toEqual([{ url: '/v2/trends/alarms', params: {} }]);
+    expect(series.scope).toBe('all boxes');
+    expect(series.note).toBeUndefined();
   });
 
   it('fails instead of inventing points when the API sends no array', async () => {
@@ -201,6 +215,299 @@ describe('get_alarm_trends', () => {
     expect(res.isError).toBe(true);
     expect(calls).toEqual([]);
   });
+});
+
+/** The index in ALARM_TREND (0 = 29 days ago) of a count query's ts range */
+function dayIndex(query: unknown): number {
+  const match = /ts:(\d+)-(\d+)/.exec(String(query));
+  if (!match) {
+    throw new Error(`no ts range in ${String(query)}`);
+  }
+  return 29 - Math.round((TODAY - Number(match[1])) / DAY);
+}
+
+/**
+ * The query that counts day `i` for `box`: from the day's start to the
+ * second before the next day's, or to now for today
+ */
+function dayQuery(i: number, box: string, filter = ''): string {
+  const start = TODAY - (29 - i) * DAY;
+  const end = i === 29 ? NOW : start + DAY - 1;
+  return `${filter}ts:${start}-${end} box.id:${box}`;
+}
+
+/** BOX_A's alarms on day `i`: none on days 24 and 25 */
+const boxAAlarms = (i: number) => (i === 24 || i === 25 ? 0 : i * 2 + 1);
+
+/**
+ * /v2/alarms answering groupBy=box for the day in the query. On day 25 the
+ * only row is another box's, which is not BOX_A's count.
+ */
+function alarmsByBox(params: Record<string, any>) {
+  const i = dayIndex(params.query);
+  const rows: Array<{ gid: string; count: number }> = [];
+  if (i === 25) {
+    rows.push({ gid: BOX_B, count: 1000 });
+  }
+  if (boxAAlarms(i) > 0) {
+    rows.push({ gid: BOX_A, count: boxAAlarms(i) });
+  }
+  return { count: rows.length, results: rows };
+}
+
+function boxRoutes(): Record<string, Route> {
+  return {
+    '/v2/trends/alarms': () => ALARM_TREND,
+    '/v2/alarms': alarmsByBox,
+  };
+}
+
+describe('box-scoped getAlarmTrends and getFlowTrends', () => {
+  it('counts each day of the period for the box, on the days of the account-wide series', async () => {
+    const { client, calls } = makeClient(boxRoutes());
+    const series = await client.getAlarmTrends('7d', undefined, BOX_A);
+    // One request for the days, then one count per day
+    expect(calls[0]).toEqual({ url: '/v2/trends/alarms', params: {} });
+    const counts = calls.slice(1);
+    expect(counts.map(call => call.url)).toEqual(Array(8).fill('/v2/alarms'));
+    expect(
+      counts
+        .map(call => call.params)
+        .sort((a, b) => a.query.localeCompare(b.query))
+    ).toEqual(
+      Array.from({ length: 8 }, (_, k) => ({
+        groupBy: 'box',
+        limit: 500,
+        query: dayQuery(22 + k, BOX_A),
+      }))
+    );
+    // The unscoped series' days, each with the box's row (0 without one)
+    expect(series.results).toEqual(
+      Array.from({ length: 8 }, (_, k) => ({
+        ts: ALARM_TREND[22 + k].ts,
+        value: boxAAlarms(22 + k),
+      }))
+    );
+    expect(series.results.map(point => point.value)).toContain(0);
+    expect(series.source).toBe('GET /v2/alarms groupBy=box per day');
+    expect(series.scope).toBe(`box ${BOX_A}`);
+    expect(series.note).toContain('1 + 8 requests');
+    expect(series.window_start).toBe(TODAY - 7 * DAY);
+    expect(series.window_end).toBe(NOW);
+    expect(series.last_point_partial).toBe(true);
+  });
+
+  it('scopes to FIREWALLA_BOX_ID when no box is named', async () => {
+    const { client, calls } = makeClient(boxRoutes(), { boxId: BOX_A });
+    const series = await client.getAlarmTrends('24h');
+    expect(calls.map(call => call.url)).toEqual([
+      '/v2/trends/alarms',
+      '/v2/alarms',
+      '/v2/alarms',
+    ]);
+    expect(calls.slice(1).map(call => call.params.query)).toEqual(
+      expect.arrayContaining([dayQuery(28, BOX_A), dayQuery(29, BOX_A)])
+    );
+    expect(series.scope).toBe(`box ${BOX_A}`);
+    expect(series.results).toEqual([
+      { ts: TODAY - DAY, value: boxAAlarms(28) },
+      { ts: TODAY, value: boxAAlarms(29) },
+    ]);
+  });
+
+  it('prefers the box named over FIREWALLA_BOX_ID', async () => {
+    const { client, calls } = makeClient(boxRoutes(), { boxId: BOX_B });
+    const series = await client.getAlarmTrends('1h', undefined, BOX_A);
+    expect(calls.slice(1)).toEqual([
+      {
+        url: '/v2/alarms',
+        params: { groupBy: 'box', limit: 500, query: dayQuery(29, BOX_A) },
+      },
+    ]);
+    expect(series.results).toEqual([{ ts: TODAY, value: boxAAlarms(29) }]);
+  });
+
+  it('counts blocked flows per day for getFlowTrends', async () => {
+    const { client, calls } = makeClient({
+      '/v2/trends/flows': () => dailyPoints(() => 5000),
+      '/v2/flows': params => ({
+        count: 1,
+        results: [
+          {
+            gid: BOX_A,
+            count: dayIndex(params.query) + 10,
+            device: {},
+            download: 0,
+            upload: 0,
+            total: 0,
+          },
+        ],
+      }),
+    });
+    const series = await client.getFlowTrends('24h', undefined, BOX_A);
+    expect(calls[0]).toEqual({ url: '/v2/trends/flows', params: {} });
+    expect(
+      calls
+        .slice(1)
+        .map(call => call.params)
+        .sort((a, b) => a.query.localeCompare(b.query))
+    ).toEqual([
+      {
+        groupBy: 'box',
+        limit: 500,
+        query: dayQuery(28, BOX_A, 'status:blocked '),
+      },
+      {
+        groupBy: 'box',
+        limit: 500,
+        query: dayQuery(29, BOX_A, 'status:blocked '),
+      },
+    ]);
+    expect(calls.slice(1).map(call => call.url)).toEqual([
+      '/v2/flows',
+      '/v2/flows',
+    ]);
+    expect(series.results).toEqual([
+      { ts: TODAY - DAY, value: 38 },
+      { ts: TODAY, value: 39 },
+    ]);
+    expect(series.source).toBe('GET /v2/flows groupBy=box per day');
+    expect(series.scope).toBe(`box ${BOX_A}`);
+    expect(series.note).toContain('status:blocked');
+  });
+
+  it.each([
+    ['box argument', {}, 'x OR box.id:*'],
+    ['FIREWALLA_BOX_ID', { boxId: 'x OR box.id:*' }, undefined],
+  ])(
+    'refuses a malformed %s before any request',
+    async (_what, config, box) => {
+      const { client, calls } = makeClient(boxRoutes(), config);
+      await expect(
+        client.getAlarmTrends('30d', undefined, box)
+      ).rejects.toBeInstanceOf(BoxSelectionError);
+      await expect(client.getFlowTrends('30d', undefined, box)).rejects.toThrow(
+        /Invalid box gid/
+      );
+      expect(calls).toEqual([]);
+    }
+  );
+
+  it('refuses a box together with a group before any request', async () => {
+    const { client, calls } = makeClient(boxRoutes());
+    await expect(
+      client.getAlarmTrends('30d', 'group-7', BOX_A)
+    ).rejects.toThrow(/box and group cannot be combined/);
+    expect(calls).toEqual([]);
+  });
+
+  it('costs 31 requests for 30d, at most 4 counts at a time', async () => {
+    const { client } = makeClient({});
+    const api = (client as any).api as { get: jest.Mock };
+    const urls: string[] = [];
+    let inFlight = 0;
+    let peak = 0;
+    api.get.mockImplementation(
+      async (url: string, options: { params?: Record<string, any> } = {}) => {
+        urls.push(url);
+        if (url === '/v2/trends/alarms') {
+          return { status: 200, data: ALARM_TREND, config: { url } };
+        }
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise(resolve => setImmediate(resolve));
+        inFlight--;
+        return {
+          status: 200,
+          data: alarmsByBox(options.params ?? {}),
+          config: { url },
+        };
+      }
+    );
+    const series = await client.getAlarmTrends('30d', undefined, BOX_A);
+    expect(urls).toHaveLength(31);
+    expect(urls.filter(url => url === '/v2/alarms')).toHaveLength(30);
+    expect(peak).toBe(4);
+    expect(series.results.map(point => point.value)).toEqual(
+      Array.from({ length: 30 }, (_, i) => boxAAlarms(i))
+    );
+    expect(series.note).toContain('1 + 30 requests');
+  });
+
+  it('starts no more counts after one fails', async () => {
+    const { client, calls } = makeClient({
+      '/v2/trends/alarms': () => ALARM_TREND,
+      '/v2/alarms': () => new HttpStatus(500),
+    });
+    await expect(
+      client.getAlarmTrends('30d', undefined, BOX_A)
+    ).rejects.toThrow(
+      /Failed to get alarm trends for period 30d: Server error/
+    );
+    expect(calls.length).toBeGreaterThan(1);
+    expect(calls.length).toBeLessThanOrEqual(1 + 4);
+  });
+
+  it('marks days counted from items rather than groups as lower bounds', async () => {
+    const { client } = makeClient({
+      '/v2/trends/alarms': () => ALARM_TREND,
+      '/v2/alarms': params =>
+        dayIndex(params.query) === 29
+          ? {
+              count: 500,
+              results: Array.from({ length: 500 }, (_, aid) => ({
+                aid,
+                gid: BOX_A,
+                ts: TODAY + aid,
+              })),
+              next_cursor: 'more',
+            }
+          : { count: 1, results: [{ gid: BOX_A, count: 7 }] },
+    });
+    const series = await client.getAlarmTrends('24h', undefined, BOX_A);
+    expect(series.results).toEqual([
+      { ts: TODAY - DAY, value: 7 },
+      { ts: TODAY, value: 500 },
+    ]);
+    expect(series.note).toContain('On 1 of the 2 days');
+    expect(series.note).toContain('lower bounds');
+  });
+});
+
+describe('get_alarm_trends for one box', () => {
+  it('passes box and reports the scope and how the days were counted', async () => {
+    const { client, calls } = makeClient(boxRoutes());
+    const { data } = parse(
+      await new GetAlarmTrendsHandler().execute(
+        { box: BOX_A, period: '24h' },
+        client
+      )
+    );
+    expect(calls).toHaveLength(3);
+    expect(data.scope).toBe(`box ${BOX_A}`);
+    expect(data.source).toBe('GET /v2/alarms groupBy=box per day');
+    expect(data.trends.map((point: any) => point.alarm_count)).toEqual([
+      boxAAlarms(28),
+      boxAAlarms(29),
+    ]);
+    expect(data.summary.total_alarms).toBe(boxAAlarms(28) + boxAAlarms(29));
+    expect(data.note).toContain('1 + 2 requests');
+  });
+
+  it.each([
+    ['a box that is not a gid', { box: 'x OR box.id:*' }, {}],
+    ['box with group', { box: BOX_A, group: 'group-7' }, {}],
+    ['a malformed FIREWALLA_BOX_ID', {}, { boxId: 'x OR box.id:*' }],
+  ])(
+    'reports %s as a validation error before any request',
+    async (_what, args, config) => {
+      const { client, calls } = makeClient(boxRoutes(), config);
+      const res = await new GetAlarmTrendsHandler().execute(args, client);
+      expect(res.isError).toBe(true);
+      expect(parse(res).errorType).toBe('validation_error');
+      expect(calls).toEqual([]);
+    }
+  );
 });
 
 describe('getRuleTrends', () => {
