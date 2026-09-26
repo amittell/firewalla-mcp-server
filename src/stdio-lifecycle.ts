@@ -24,6 +24,13 @@ export interface StdioExitOptions {
   exit: (code: number) => void;
   /** Streams whose queued writes are flushed before exit. */
   flush?: Array<Pick<Writable, 'write'>>;
+  /**
+   * The server's output streams (stdout and stderr in production). Writing to
+   * one after the client has exited fails with EPIPE, emitted as an `error`
+   * event; with no listener Node treats that as uncaught and crashes with a
+   * stack trace. Any error on one of these starts the same shutdown.
+   */
+  outputs?: Array<Pick<EventEmitter, 'on'>>;
   /** Upper bound on cleanup plus flush before exiting anyway. */
   timeoutMs?: number;
 }
@@ -55,6 +62,7 @@ export function exitWhenStdioCloses(
     cleanup,
     exit,
     flush = [],
+    outputs = [],
     timeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS,
   } = options;
   let shuttingDown = false;
@@ -97,5 +105,16 @@ export function exitWhenStdioCloses(
 
   stdin.once('end', () => shutdown('stdin ended'));
   stdin.once('close', () => shutdown('stdin closed'));
+  for (const output of outputs) {
+    // `on`, not `once`: logging during the shutdown can hit the same closed
+    // pipe again, and that error must not crash the process either
+    output.on('error', (error: NodeJS.ErrnoException) => {
+      shutdown(
+        error?.code === 'EPIPE' || error?.code === 'ERR_STREAM_DESTROYED'
+          ? 'output closed'
+          : `output failed (${error?.code ?? error?.message ?? 'unknown error'})`
+      );
+    });
+  }
   return shutdown;
 }

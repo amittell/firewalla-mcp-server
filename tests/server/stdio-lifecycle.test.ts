@@ -144,3 +144,68 @@ describe('exitWhenStdioCloses', () => {
     expect(await exitCode(exit)).toBe(0);
   });
 });
+
+describe('exitWhenStdioCloses output errors', () => {
+  beforeEach(() => {
+    jest.spyOn(logger, 'info').mockImplementation(() => undefined);
+    jest.spyOn(logger, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('shuts down cleanly when an output emits EPIPE, instead of crashing', async () => {
+    const stdin = new EventEmitter();
+    const stdout = new EventEmitter();
+    const cleanup = jest.fn().mockResolvedValue(undefined);
+    const exit = jest.fn();
+    exitWhenStdioCloses({ stdin, cleanup, exit, outputs: [stdout] });
+
+    // With no 'error' listener, emit() would throw the error
+    expect(() =>
+      stdout.emit(
+        'error',
+        Object.assign(new Error('write EPIPE'), { code: 'EPIPE' })
+      )
+    ).not.toThrow();
+    expect(await exitCode(exit)).toBe(0);
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps handling errors from the same output during the shutdown', async () => {
+    const stdin = new EventEmitter();
+    const stderr = new EventEmitter();
+    const exit = jest.fn();
+    exitWhenStdioCloses({
+      stdin,
+      cleanup: jest.fn().mockResolvedValue(undefined),
+      exit,
+      outputs: [stderr],
+    });
+    const epipe = Object.assign(new Error('write EPIPE'), { code: 'EPIPE' });
+    expect(() => stderr.emit('error', epipe)).not.toThrow();
+    expect(() => stderr.emit('error', epipe)).not.toThrow();
+    expect(await exitCode(exit)).toBe(0);
+    expect(exit).toHaveBeenCalledTimes(1);
+  });
+
+  it('shuts down on any other output error too', async () => {
+    const stdin = new EventEmitter();
+    const stdout = new EventEmitter();
+    const exit = jest.fn();
+    exitWhenStdioCloses({
+      stdin,
+      cleanup: jest.fn().mockResolvedValue(undefined),
+      exit,
+      outputs: [stdout],
+    });
+    expect(() =>
+      stdout.emit('error', Object.assign(new Error('boom'), { code: 'EIO' }))
+    ).not.toThrow();
+    expect(await exitCode(exit)).toBe(0);
+    expect(logger.info).toHaveBeenCalledWith(
+      'Stdio output failed (EIO), shutting down'
+    );
+  });
+});
