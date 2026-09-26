@@ -384,7 +384,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search conditions for filtering rules, e.g. action:block status:active. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes. A word or quoted phrase with no field is free text, matched case-insensitively in the name, notes, action, target type or value, or scope of each rule (GET /v2/rules matches no free text, so the words are not sent and every rule the other terms match is read; coverage says how many were checked and whether that was all).',
+                    'Search conditions for filtering rules, e.g. action:block status:active. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes. A word or quoted phrase with no field is free text, matched case-insensitively in the name, notes, action, target type or value, or scope of each rule (GET /v2/rules matches no free text, so the words are not sent and every rule the other terms match is read; free_text_coverage says how many were checked and whether that was all).',
                 },
               },
               required: ['limit'],
@@ -850,7 +850,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes. A word or quoted phrase with no field is free text, matched case-insensitively in the name, notes, action, target type or value, or scope of each rule (GET /v2/rules matches no free text, so the words are not sent and every rule the other terms match is read; coverage says how many were checked and whether that was all). Supported fields: action:allow/block/timelimit, target.type:domain/ip/device, target.value:*.facebook.com, status:active/paused, direction:bidirection/inbound/outbound, protocol:tcp/udp, box.id:box_gid, scope.type:device/network, notes:"description text". Examples: "action:block AND target.value:*.social.com", "status:paused", "target.type:domain AND action:block"',
+                    'Search query using Firewalla syntax. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes. A word or quoted phrase with no field is free text, matched case-insensitively in the name, notes, action, target type or value, or scope of each rule (GET /v2/rules matches no free text, so the words are not sent and every rule the other terms match is read; free_text_coverage says how many were checked and whether that was all). Supported fields: action:allow/block/timelimit, target.type:domain/ip/device, target.value:*.facebook.com, status:active/paused, direction:bidirection/inbound/outbound, protocol:tcp/udp, box.id:box_gid, scope.type:device/network, notes:"description text". Examples: "action:block AND target.value:*.social.com", "status:paused", "target.type:domain AND action:block"',
                 },
                 limit: {
                   type: 'number',

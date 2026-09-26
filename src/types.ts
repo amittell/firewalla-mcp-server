@@ -826,8 +826,11 @@ export interface SearchResult<T> {
   results: T[];
   /** Pagination cursor for next page */
   next_cursor?: string;
-  /** Rules searched with free text: what the client checked */
-  coverage?: RulesTextCoverage;
+  /**
+   * Rules searched with free text: what the client checked. Named apart
+   * from the flows' `coverage` (a PagingCoverage), which has another shape.
+   */
+  free_text_coverage?: RulesTextCoverage;
   /** Aggregation results if requested */
   aggregations?: Record<
     string,

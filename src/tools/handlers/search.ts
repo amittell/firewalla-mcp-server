@@ -1114,8 +1114,8 @@ export class SearchRulesHandler extends BaseToolHandler {
         metadata,
         // With free text: the rules checked for the words, and whether they
         // were every rule the other terms match
-        ...((result as any).rules_coverage && {
-          coverage: (result as any).rules_coverage,
+        ...(result.free_text_coverage && {
+          free_text_coverage: result.free_text_coverage,
         }),
         query_info: {
           original_query: searchArgs.query,

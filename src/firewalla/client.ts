@@ -1970,7 +1970,8 @@ export class FirewallaClient {
    *   case-insensitively, in the rule's name, notes, action, target type or
    *   value, or scope type or value.
    * @param limit - Sent as `limit`, except with words: then every rule the
-   *   other terms match is read, and `coverage` says how many were checked
+   *   other terms match is read, and `free_text_coverage` says how many
+   *   were checked
    * @throws {MspQueryError} When the query has no form the API can run
    */
   async getNetworkRules(
@@ -1980,7 +1981,7 @@ export class FirewallaClient {
     count: number;
     results: NetworkRule[];
     next_cursor?: string;
-    coverage?: RulesTextCoverage;
+    free_text_coverage?: RulesTextCoverage;
   }> {
     const { response, items, matchedWords, coverage } = await this.requestRules(
       query,
@@ -2038,7 +2039,7 @@ export class FirewallaClient {
       results: rules,
       // A read for words sends no cursor, so it has none to pass on
       next_cursor: matchedWords ? undefined : response.next_cursor,
-      ...(coverage && { coverage }),
+      ...(coverage && { free_text_coverage: coverage }),
     };
   }
 
@@ -4568,7 +4569,7 @@ export class FirewallaClient {
         count: matchedWords ? rules.length : response.count || rules.length,
         results: rules,
         next_cursor: matchedWords ? undefined : response.next_cursor,
-        ...(coverage && { coverage }),
+        ...(coverage && { free_text_coverage: coverage }),
         aggregations: response.aggregations,
         metadata: {
           execution_time: Date.now() - startTime,

@@ -10,6 +10,7 @@ import { FirewallaClient } from '../../src/firewalla/client.js';
 import { SearchRulesHandler } from '../../src/tools/handlers/search.js';
 import { GetNetworkRulesHandler } from '../../src/tools/handlers/rules.js';
 import { mspSplitText } from '../../src/utils/msp-query.js';
+import { renderMarkdown } from '../../src/utils/response-format.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -242,7 +243,7 @@ describe('free text reads every rule the other terms match', () => {
     expect(get.mock.calls[0][1].params.limit).toBeUndefined();
     const data = body(res).data;
     expect(data.rules.map((rule: any) => rule.id)).toEqual(['r251']);
-    expect(data.coverage).toEqual({
+    expect(data.free_text_coverage).toEqual({
       rules_checked: 300,
       rules_matched: 1,
       complete: true,
@@ -258,7 +259,7 @@ describe('free text reads every rule the other terms match', () => {
     expect(get.mock.calls[0][1].params.limit).toBeUndefined();
     const data = body(res).data;
     expect(data.rules.map((rule: any) => rule.id)).toEqual(['r251']);
-    expect(data.coverage.complete).toBe(true);
+    expect(data.free_text_coverage.complete).toBe(true);
   });
 
   it('says when the API answered as if it had more rules than it sent', async () => {
@@ -267,7 +268,7 @@ describe('free text reads every rule the other terms match', () => {
       { query: 'needle', limit: 10 },
       client
     );
-    const { coverage } = body(res).data;
+    const { free_text_coverage: coverage } = body(res).data;
     expect(coverage.complete).toBe(false);
     expect(coverage.note).toContain('next_cursor');
   });
@@ -278,7 +279,7 @@ describe('free text reads every rule the other terms match', () => {
       { query: 'needle' },
       client
     );
-    const { coverage } = body(res).data;
+    const { free_text_coverage: coverage } = body(res).data;
     expect(coverage).toMatchObject({
       rules_checked: 300,
       rules_matched: 1,
@@ -294,6 +295,38 @@ describe('free text reads every rule the other terms match', () => {
       client
     );
     expect(get.mock.calls[0][1].params.limit).toBe(5);
-    expect(body(res).data.coverage).toBeUndefined();
+    expect(body(res).data.free_text_coverage).toBeUndefined();
+  });
+});
+
+describe('where rule coverage goes', () => {
+  // search_rules and get_network_rules put it under data.coverage, the key
+  // search_flows and get_flow_data use for their paging coverage (oldest_ts,
+  // newest_ts, api_requests, stopped_reason); the same key held two shapes
+  it.each([
+    ['search_rules', () => new SearchRulesHandler()],
+    ['get_network_rules', () => new GetNetworkRulesHandler()],
+  ])('%s answers free_text_coverage, not coverage', async (_tool, handler) => {
+    const { client } = makeClient();
+    const res = await handler().execute({ query: 'tiktok', limit: 10 }, client);
+    const { data } = body(res);
+    expect(data.coverage).toBeUndefined();
+    expect(data.free_text_coverage).toEqual({
+      rules_checked: 3,
+      rules_matched: 1,
+      complete: true,
+    });
+  });
+
+  it('the markdown view shows it under its name', async () => {
+    const { client } = makeClient();
+    const res = await new SearchRulesHandler().execute(
+      { query: 'tiktok', limit: 10 },
+      client
+    );
+    const markdown = renderMarkdown('search_rules', body(res));
+    expect(markdown).toContain('- **free_text_coverage:**');
+    expect(markdown).toContain('  - **rules_checked:** 3');
+    expect(markdown).toContain('  - **complete:** true');
   });
 });
