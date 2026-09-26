@@ -196,6 +196,37 @@ describe('delete_rule', () => {
     expect(res.isError).toBe(true);
     expect(writes(request)).toEqual([]);
   });
+
+  it('reads the rules once before deleting', async () => {
+    const { client, request } = makeClient(BOX);
+    await new DeleteRuleHandler().execute({ rule_id: 'rule-0001' }, client);
+    const reads = request.mock.calls.filter(
+      ([method, endpoint]) => method === 'GET' && endpoint === '/v2/rules'
+    );
+    expect(reads).toHaveLength(1);
+    expect((reads[0][2] as { query?: string }).query).toContain('id:rule-0001');
+  });
+
+  it('a second delete of the same rule sends nothing and says it was not found', async () => {
+    const { client, request } = makeClient(BOX);
+    let deleted = false;
+    const stub = request.getMockImplementation()!;
+    request.mockImplementation(async (method: string, endpoint: string, ...rest: any[]) => {
+      if (method === 'GET' && endpoint === '/v2/rules' && deleted) {
+        return { count: 0, results: [] };
+      }
+      if (method === 'DELETE') deleted = true;
+      return stub(method, endpoint, ...rest);
+    });
+    const first = await new DeleteRuleHandler().execute({ rule_id: 'rule-0001' }, client);
+    const second = await new DeleteRuleHandler().execute({ rule_id: 'rule-0001' }, client);
+    expect(first.isError).toBeFalsy();
+    expect(second.isError).toBe(true);
+    expect(parse(second).message).toBe('Rule not found');
+    expect(writes(request)).toEqual([
+      { method: 'DELETE', endpoint: '/v2/rules/rule-0001', body: undefined },
+    ]);
+  });
 });
 
 describe('rename_device', () => {
