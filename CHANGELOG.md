@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- The stdio server exits cleanly when its client goes away mid-write. Writing
+  to the closed stdout or stderr pipe raised an `EPIPE` error event that
+  nothing handled, so the process crashed with a stack trace (exit code 1);
+  an error on either stream now starts the normal shutdown (exit code 0).
 
 - `pause_rule`, `resume_rule` and `delete_rule` read the rule once, by id,
   before acting. They also listed every rule first, through a 30-second

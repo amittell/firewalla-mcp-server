@@ -1321,6 +1321,7 @@ export class FirewallaMCPServer {
       cleanup: async () => this.server.close(),
       exit: code => process.exit(code),
       flush: [process.stdout, process.stderr],
+      outputs: [process.stdout, process.stderr],
     });
     // Server.connect() chains this onclose ahead of its own handler.
     transport.onclose = () => shutdown('transport closed');
