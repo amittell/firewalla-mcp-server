@@ -274,6 +274,16 @@ function parseFieldExpression(expression: string): QueryComponent | null {
 
     // Detect wildcards
     if (value.includes('*') || value.includes('?')) {
+      // A comma list of wildcards (name:*nas*,*cam*) is any of its values;
+      // each value is checked on its own. As one pattern, four `*` read as
+      // a dangerous sequence.
+      const listValues = smartSplitCommas(value).filter(Boolean);
+      if (listValues.length > 1) {
+        listValues
+          .filter(entry => /[*?]/.test(entry))
+          .forEach(entry => convertWildcardToRegex(entry));
+        return { field, operator: 'in', value: listValues };
+      }
       return {
         field,
         operator: 'regex',
