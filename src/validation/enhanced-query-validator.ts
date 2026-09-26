@@ -661,7 +661,11 @@ export class EnhancedQueryValidator {
           break;
         }
         case 'wildcard': {
-          // Handle wildcard queries - they don't need field validation
+          // A boolean field takes true or false, not a pattern
+          if (config.booleanFields.includes(node.field)) {
+            errors.push(`Field '${node.field}' expects a boolean value (true/false), got '${node.pattern}'`);
+            suggestions.push(`Use 'true' or 'false' for boolean field '${node.field}'`);
+          }
           break;
         }
         case 'logical':
@@ -714,10 +718,11 @@ export class EnhancedQueryValidator {
       }
     }
 
-    // Validate boolean field usage
+    // Validate boolean field usage; a comma list (online:true,false) is any
+    // of its values, and each must be a boolean
     if (config.booleanFields.includes(node.field)) {
-      const value = String(node.value).toLowerCase();
-      if (!['true', 'false', '1', '0', 'yes', 'no'].includes(value)) {
+      const values = String(node.value).toLowerCase().split(',');
+      if (!values.every(value => ['true', 'false', '1', '0', 'yes', 'no'].includes(value))) {
         errors.push(`Field '${node.field}' expects a boolean value (true/false), got '${node.value}'`);
         suggestions.push(`Use 'true' or 'false' for boolean field '${node.field}'`);
       }

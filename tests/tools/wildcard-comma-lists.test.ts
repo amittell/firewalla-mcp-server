@@ -133,3 +133,58 @@ describe('search_flows wildcard comma lists', () => {
     );
   });
 });
+
+describe('search_devices online:', () => {
+  // online: compared the whole value with true and false and let any other
+  // value match every device: online:yes, which the query check accepts,
+  // returned offline devices too, and online:true,false was refused
+  const DEVICES = [
+    { id: 'aa:bb:cc:dd:ee:01', gid: 'box-a', name: 'nas', ip: '192.168.1.20', online: true },
+    { id: 'aa:bb:cc:dd:ee:02', gid: 'box-a', name: 'laptop', ip: '192.168.2.30', online: false },
+    { id: 'aa:bb:cc:dd:ee:03', gid: 'box-a', name: 'camera', ip: '10.0.5.7', online: true },
+  ];
+
+  async function search(query: string) {
+    const { client } = makeClient(DEVICES);
+    const res = await new SearchDevicesHandler().execute(
+      { query, limit: 10 },
+      client
+    );
+    return {
+      res,
+      names: res.isError
+        ? undefined
+        : (body(res).data.devices as any[]).map(device => device.name),
+    };
+  }
+
+  it.each([
+    ['online:true', ['nas', 'camera']],
+    ['online:false', ['laptop']],
+    ['online:yes', ['nas', 'camera']],
+    ['online:no', ['laptop']],
+    ['online:1', ['nas', 'camera']],
+    ['online:0', ['laptop']],
+    ['online:true,false', ['nas', 'laptop', 'camera']],
+    ['online:false,false', ['laptop']],
+    ['online:TRUE,true', ['nas', 'camera']],
+    ['NOT online:false,false', ['nas', 'camera']],
+  ])('%s -> %j', async (query, expected) => {
+    expect((await search(query)).names).toEqual(expected);
+  });
+
+  it.each(['online:maybe', 'online:true,maybe', 'online:tr*'])(
+    'refuses %s',
+    async query => {
+      const { res } = await search(query);
+      expect(res.isError).toBe(true);
+      expect(body(res).message).toContain("Field 'online' expects a boolean");
+    }
+  );
+
+  it('matches no device for a value it does not know, called directly', async () => {
+    const { client } = makeClient(DEVICES);
+    const result = await client.searchDevices({ query: 'online:maybe', limit: 10 });
+    expect(result.results).toEqual([]);
+  });
+});
