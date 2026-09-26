@@ -431,6 +431,31 @@ Analytics: get_simple_statistics, get_statistics_by_region, get_statistics_by_bo
 Write (opt-in): create_rule, delete_rule, pause_rule, resume_rule, create_target_list, update_target_list, delete_target_list, rename_device, archive_alarm, mute_alarm, delete_alarm
 ```
 
+### Response format
+
+Every read-only tool (`readOnlyHint: true`) takes an optional `response_format`. `json`, the default, returns the compact JSON response. `markdown` returns the same response as markdown for reading: a heading with the tool name and the number of records in each list, the fields as bullet lists, and each list of records as a table of at most 8 columns and `DEFAULT_PAGE_SIZE` rows (default 100). Fields with one value in every record are stated once above the table, fields that are not columns are named below it, and a list of one record is shown as a list of its fields. The last line says what the view leaves out (the response's `meta` block, rows past the cap, cells cut at 120 characters); `response_format: json` returns all of it. Values and field names are escaped, since device names, domains and alarm messages come from the network: a character that could start markdown or HTML (`[`, `<`, `*`, `` ` ``, `&` before an entity, `://`, `@`, ...) gets a backslash, so a renderer shows `[a](https://...)` or `<img ...>` as text. Addresses, MACs, gids and timestamps read as they are. Omitting `response_format` or sending `null` means `json`. Errors are JSON in either format, and the tools that change state do not take `response_format`.
+
+`get_device_status` with `{"limit": 2, "response_format": "markdown"}`, shortened:
+
+```markdown
+## get_device_status (devices: 2)
+
+- **total_devices:** 2
+- **online_devices:** 1
+- **devices:** 2 records, under devices below
+
+### devices (2 records)
+
+Same in every record: gid = 00000000-0000-0000-0000-000000000000; ip_reserved = false.
+
+| name | id | last_seen | ip | online |
+| --- | --- | --- | --- | --- |
+| nas | AA:BB:CC:DD:EE:01 | 2026-09-26T10:00:00.000Z | 192.168.1.10 | true |
+| printer | AA:BB:CC:DD:EE:02 | 2026-09-25T18:30:00.000Z | 192.168.1.11 | false |
+
+_This view leaves out the meta block (request_id req_1790000000000_abc123). Call again with `response_format: json` for the full JSON response._
+```
+
 ### Write tools (opt-in)
 
 Every tool that changes something is off by default, so the server is read-only unless you turn them on. Set `FIREWALLA_ENABLE_WRITE_TOOLS=true` to register the 11 write tools: `create_rule`, `delete_rule`, `pause_rule` and `resume_rule` (rules), `create_target_list`, `update_target_list` and `delete_target_list` (target lists), `rename_device` (devices), and `archive_alarm`, `mute_alarm` and `delete_alarm` (alarms). Without it, calling one answers "Unknown tool" and sends nothing. MCP clients that honor tool annotations can ask before calling them; see [Tool annotations](#tool-annotations).
