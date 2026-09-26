@@ -14,6 +14,7 @@ import {
   SearchTargetListsHandler,
 } from '../../src/tools/handlers/search.js';
 import { validateFirewallaQuerySyntax } from '../../src/utils/query-validator.js';
+import { queryParser } from '../../src/search/parser.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -187,4 +188,34 @@ describe('search_devices online:', () => {
     const result = await client.searchDevices({ query: 'online:maybe', limit: 10 });
     expect(result.results).toEqual([]);
   });
+});
+
+describe('an unclosed quote in a comma list', () => {
+  // The parser's tokenizer throws on an unclosed quote; parse() catches it
+  // and returns it in errors[], and search_devices refuses the query
+  it.each([
+    ['name:"nas,laptop', 'Unclosed quoted string starting at position 5'],
+    ['name:nas,"laptop', 'Unclosed quoted string starting at position 9'],
+  ])('%s is a parse error, not an exception', (query, message) => {
+    let parsed: ReturnType<typeof queryParser.parse> | undefined;
+    expect(() => {
+      parsed = queryParser.parse(query, 'devices');
+    }).not.toThrow();
+    expect(parsed?.isValid).toBe(false);
+    expect(parsed?.errors).toEqual([message]);
+  });
+
+  it.each(['name:"nas,laptop', 'name:nas,"laptop'])(
+    'search_devices refuses %s without a request',
+    async query => {
+      const { client, get } = makeClient([]);
+      const res = await new SearchDevicesHandler().execute(
+        { query, limit: 10 },
+        client
+      );
+      expect(res.isError).toBe(true);
+      expect(body(res).message).toContain('Unclosed quoted string');
+      expect(get).not.toHaveBeenCalled();
+    }
+  );
 });
