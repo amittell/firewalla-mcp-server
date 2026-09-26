@@ -202,27 +202,65 @@ const COUNTRY_QUALIFIERS: ReadonlySet<string> = new Set([
   'country',
   'country_code',
   'remote_country',
+  'region',
 ]);
 
 /**
+ * The dotted qualifiers ending in `region` the API documents, by endpoint:
+ * `remote.region` on alarms (the Remote model's region); flows have their
+ * region at the top level only
+ */
+const DOTTED_REGIONS: Record<string, ReadonlySet<string>> = {
+  '/v2/alarms': new Set(['remote.region']),
+  '/v2/flows': new Set(),
+};
+
+/**
+ * Whether a qualifier is a geographic name the API does not document on
+ * `endpoint`. The check is on the last segment, so a dotted form such as
+ * `remote.country` or `destination.continent` is refused as `country` and
+ * `continent` are; a dotted `region` other than the documented one
+ * (`destination.region`) is refused too. `remote.region` stays on alarms.
+ */
+function isUndocumentedGeo(field: string, endpoint?: string): boolean {
+  const path = field.toLowerCase();
+  const last = path.slice(path.lastIndexOf('.') + 1);
+  if (UNDOCUMENTED_GEO_QUALIFIERS.has(last)) {
+    return true;
+  }
+  if (last !== 'region' || !path.includes('.')) {
+    return false;
+  }
+  const documented =
+    endpoint !== undefined
+      ? DOTTED_REGIONS[endpoint]
+      : DOTTED_REGIONS['/v2/alarms'];
+  return !documented?.has(path);
+}
+
+/**
  * Refuses a flow or alarm query with a geographic qualifier the MSP API does
- * not document, such as `country:US` or `continent:Asia`. The search tools'
- * field lists accepted them and the query was sent, but the API answers a
- * qualifier it does not know with HTTP 200 and no results (measured on
- * flows: `block:true` returned 0), so the search found nothing.
+ * not document, such as `country:US`, `continent:Asia` or
+ * `remote.country:CN`. The search tools' field lists accepted them, and
+ * dotted names go to the API unchecked, but the API answers a qualifier it
+ * does not know with HTTP 200 and no results (measured on flows:
+ * `block:true` returned 0), so the search found nothing.
  *
  * @param query - The query, in the tools' language or the API's
+ * @param endpoint - `/v2/flows` or `/v2/alarms`, for the dotted region
+ *   qualifiers each documents; without it, alarms' `remote.region` is kept
  * @throws {MspQueryError} Naming the qualifier; for country codes, with the
  *   query using `region:` as the suggestion
  */
-export function refuseUndocumentedGeoQualifiers(query: string): void {
+export function refuseUndocumentedGeoQualifiers(
+  query: string,
+  endpoint?: string
+): void {
   if (typeof query !== 'string' || !query.trim()) {
     return;
   }
   const terms = mspTerms(query);
-  const refused = terms.filter(term =>
-    UNDOCUMENTED_GEO_QUALIFIERS.has(term.field.toLowerCase())
-  );
+  const refused = terms.filter(term => isUndocumentedGeo(term.field, endpoint));
   if (refused.length === 0) {
     return;
   }
@@ -234,8 +272,9 @@ export function refuseUndocumentedGeoQualifiers(query: string): void {
     }
     const codes = term.values.map(value => value.replace(/^"(.*)"$/s, '$1'));
     const { valid, invalid } = validateCountryCodes(codes);
+    const last = term.field.toLowerCase().split('.').pop() ?? '';
     if (
-      !COUNTRY_QUALIFIERS.has(term.field.toLowerCase()) ||
+      !COUNTRY_QUALIFIERS.has(last) ||
       term.kind !== 'exact' ||
       invalid.length > 0
     ) {

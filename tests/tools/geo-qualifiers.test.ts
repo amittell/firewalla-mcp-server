@@ -17,6 +17,7 @@ import {
   SearchFlowsHandler,
 } from '../../src/tools/handlers/search.js';
 import { GetFlowDataHandler } from '../../src/tools/handlers/network.js';
+import { GetActiveAlarmsHandler } from '../../src/tools/handlers/security.js';
 import {
   isValidCountryCode,
   validateCountryCodes,
@@ -107,12 +108,12 @@ describe('refuseUndocumentedGeoQualifiers', () => {
 
 describe('geographic qualifiers typed in a query', () => {
   it.each([
-    ['search_flows', () => new SearchFlowsHandler(), 'country:US'],
-    ['search_flows', () => new SearchFlowsHandler(), 'status:blocked AND continent:Asia'],
-    ['search_flows', () => new SearchFlowsHandler(), 'asn:AS4134'],
-    ['search_alarms', () => new SearchAlarmsHandler(), 'type:1 AND country:CN'],
-    ['get_flow_data', () => new GetFlowDataHandler(), 'city:Paris'],
-  ])('%s refuses %s before a request', async (_tool, handler, query) => {
+    ['search_flows', 'country:US', () => new SearchFlowsHandler()],
+    ['search_flows', 'status:blocked AND continent:Asia', () => new SearchFlowsHandler()],
+    ['search_flows', 'asn:AS4134', () => new SearchFlowsHandler()],
+    ['search_alarms', 'type:1 AND country:CN', () => new SearchAlarmsHandler()],
+    ['get_flow_data', 'city:Paris', () => new GetFlowDataHandler()],
+  ])('%s refuses %s before a request', async (_tool, query, handler) => {
     const { client, get } = makeClient();
     const warn = jest.spyOn(logger, 'warn');
     const res = await handler().execute({ query, limit: 10 }, client);
@@ -183,5 +184,74 @@ describe('country codes', () => {
     );
     expect(res.isError).toBeFalsy();
     expect(get.mock.calls[0][1].params.query).toBe('protocol:tcp region:MT,CY');
+  });
+});
+
+describe('dotted geographic qualifiers', () => {
+  // The check matched whole names only, and dotted names go to the API
+  // unchecked, so remote.country:CN and destination.country:CN were sent
+  // and found nothing. The documented dotted qualifier, remote.region on
+  // alarms, is kept.
+  function refusalOn(query: string, endpoint: string): MspQueryError {
+    try {
+      refuseUndocumentedGeoQualifiers(query, endpoint);
+    } catch (error) {
+      return error as MspQueryError;
+    }
+    throw new Error(`${query} was not refused on ${endpoint}`);
+  }
+
+  it.each([
+    ['remote.country:CN', '/v2/alarms', ['region:CN']],
+    ['Remote.Country:CN', '/v2/alarms', ['region:CN']],
+    ['remote.geo.country:CN', '/v2/alarms', ['region:CN']],
+    ['device.country:US', '/v2/alarms', ['region:US']],
+    ['remote.continent:Asia', '/v2/alarms', []],
+    ['remote.asn:AS4134', '/v2/alarms', []],
+    ['destination.country:CN', '/v2/flows', ['region:CN']],
+    ['source.city:Paris', '/v2/flows', []],
+    ['destination.region:CN', '/v2/flows', ['region:CN']],
+    ['remote.region:CN', '/v2/flows', ['region:CN']],
+    ['device.region:CN', '/v2/alarms', ['region:CN']],
+  ])('refuses %s on %s, suggesting %j', (query, endpoint, suggestions) => {
+    const error = refusalOn(query, endpoint);
+    expect(error).toBeInstanceOf(MspQueryError);
+    expect(error.suggestions).toEqual(suggestions);
+  });
+
+  it.each([
+    ['remote.region:CN', '/v2/alarms'],
+    ['remote.region:CN,RU type:1', '/v2/alarms'],
+    ['region:CN', '/v2/flows'],
+    ['region:CN', '/v2/alarms'],
+    ['device.network.name:Guest', '/v2/alarms'],
+    ['network.name:Guest', '/v2/flows'],
+    ['remote.domain:example.com', '/v2/alarms'],
+  ])('lets %s through on %s', (query, endpoint) => {
+    expect(() => refuseUndocumentedGeoQualifiers(query, endpoint)).not.toThrow();
+  });
+
+  it.each([
+    ['search_alarms', 'type:1 AND remote.country:CN', () => new SearchAlarmsHandler()],
+    ['get_active_alarms', 'remote.country:CN', () => new GetActiveAlarmsHandler()],
+    ['search_flows', 'destination.country:CN', () => new SearchFlowsHandler()],
+    ['search_flows', 'remote.region:CN', () => new SearchFlowsHandler()],
+    ['get_flow_data', 'status:blocked destination.region:CN', () => new GetFlowDataHandler()],
+  ])('%s refuses %s before a request', async (_tool, query, handler) => {
+    const { client, get } = makeClient();
+    const res = await handler().execute({ query, limit: 10 }, client);
+    expect(res.isError).toBe(true);
+    expect(body(res).errorType).toBe('validation_error');
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('search_alarms sends remote.region, which alarms document', async () => {
+    const { client, get } = makeClient();
+    const res = await new SearchAlarmsHandler().execute(
+      { query: 'type:1 AND remote.region:CN', limit: 10 },
+      client
+    );
+    expect(res.isError).toBeFalsy();
+    expect(get.mock.calls[0][1].params.query).toBe('type:1 remote.region:CN');
   });
 });

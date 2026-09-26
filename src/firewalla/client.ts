@@ -381,7 +381,7 @@ function withMspQuery(
   const { query, ...rest } = params;
   const translated = toMspQuery(query);
   if (endpoint !== '/v2/rules') {
-    refuseUndocumentedGeoQualifiers(query);
+    refuseUndocumentedGeoQualifiers(query, endpoint);
   }
   return translated ? { ...rest, query: translated } : rest;
 }
@@ -5899,7 +5899,7 @@ export class FirewallaClient {
     }
     const translated = toMspQuery(query);
     if (path !== '/v2/rules') {
-      refuseUndocumentedGeoQualifiers(query);
+      refuseUndocumentedGeoQualifiers(query, path);
     }
     if (translated === query) {
       return endpoint;
