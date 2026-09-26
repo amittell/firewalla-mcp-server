@@ -13,6 +13,8 @@ The official docs carry their own caveat: "since Firewalla MSP is still evolving
 Authorization: Token {your_personal_access_token}
 ```
 
+**IDs in paths**: IDs that go into a request path (target-list ids, rule ids, alarm gids and aids, box gids, device ids) are checked by the client before anything is sent, and refused unless they are one path segment: no `/`, backslash, `?`, `#`, `%`, whitespace or control characters, and not `.` or `..`. A `:` is allowed and sent as it is in rule ids (`<box gid>:<n>`, sent that way when pause and resume were measured on 2026-09-25); in device ids (`PATCH /v2/boxes/{gid}/devices/{id}`) it is sent as `%3A`, as the client always did.
+
 ## Table of Contents
 
 1. [Overview](#overview)

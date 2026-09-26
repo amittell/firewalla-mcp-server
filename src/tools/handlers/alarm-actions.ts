@@ -27,16 +27,18 @@ type AlarmWriteArgs =
 
 /**
  * alarm_id and gid for an alarm write. The aid must be the numeric one that
- * get_active_alarms and search_alarms return, as a number or a string.
+ * get_active_alarms and search_alarms return, as a number or a string. Both
+ * go into the request path, so gid is checked as a path segment first.
  */
 function readAlarmWriteArgs(args: ToolArgs): AlarmWriteArgs {
   const alarmIdValidation = ParameterValidator.validateAlarmId(
     args?.alarm_id,
     'alarm_id'
   );
-  const gidValidation = ParameterValidator.validateOptionalString(
+  const gidValidation = ParameterValidator.validatePathSegment(
     args?.gid,
-    'gid'
+    'gid',
+    { required: false }
   );
   const errors = [...alarmIdValidation.errors, ...gidValidation.errors];
   const alarmId = alarmIdValidation.sanitizedValue as string | undefined;
@@ -46,7 +48,11 @@ function readAlarmWriteArgs(args: ToolArgs): AlarmWriteArgs {
     );
   }
   const gid = gidValidation.sanitizedValue as string | undefined;
-  if (gid !== undefined && !/^[a-zA-Z0-9_-]+$/.test(gid)) {
+  if (
+    gidValidation.isValid &&
+    gid !== undefined &&
+    !/^[a-zA-Z0-9_-]+$/.test(gid)
+  ) {
     errors.push(
       `gid must be a box gid such as the alarm's gid field, got '${gid}'`
     );
