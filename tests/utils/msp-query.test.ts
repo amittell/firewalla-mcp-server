@@ -336,6 +336,28 @@ describe('[low TO high] range syntax', () => {
   });
 });
 
+describe('relative times', () => {
+  const now = 1_790_000_000;
+  beforeEach(() => {
+    jest.spyOn(Date, 'now').mockReturnValue(now * 1000);
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it.each([
+    ['ts:>1h', `ts:>${now - 3600}`],
+    ['status:1 ts:>=24h', `status:1 ts:>=${now - 86400}`],
+    ['NOT ts:>1h', `ts:<=${now - 3600}`],
+    ['ts:>=24h AND ts:<=1h', `ts:${now - 86400}-${now - 3600}`],
+    ['ts:>=1700000000', 'ts:>=1700000000'],
+    ['ts:>2026-09-01', 'ts:>2026-09-01'],
+  ])('%s -> %s', (query, expected) => {
+    expect(toMspQuery(query)).toBe(expected);
+    expect(toMspQuery(toMspQuery(query))).toBe(expected);
+  });
+});
+
 describe('mspAnd', () => {
   it('ANDs parts without letting an OR in one bind to another', () => {
     expect(mspAnd('type:1 OR type:10', 'status:1')).toBe('type:1,10 status:1');

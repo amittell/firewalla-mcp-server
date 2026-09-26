@@ -23,6 +23,7 @@
  *   cannot exclude numeric terms); NOT of an OR: each term excluded
  * - a lower and an upper bound on one field: one range (`ts:>=a ts:<=b` is
  *   sent as `ts:a-b`; a range includes its ends, so a strict bound is refused)
+ * - a relative time (`ts:>1h`, `ts:<=7d`): Unix seconds
  * A query that needs an OR between different fields, NOT over an AND, the
  * exclusion of free text, a wildcard or a range, two other conditions on one
  * field (the API would read them as OR), or `[low TO high]` range syntax has
@@ -32,6 +33,8 @@
  * Lowercase `and`, `or` and `not` are words, as the API reads them. A query
  * already in API form comes back unchanged.
  */
+
+import { translateRelativeTimestamps } from './timestamp.js';
 
 /** A query, or part of one, that the MSP API cannot run */
 export class MspQueryError extends Error {
@@ -415,7 +418,12 @@ function parseTerm(text: string, query: string): Literal {
     if (comparison[2] === '') {
       throw malformed(query, `"${text}" has no value after ${comparison[1]}`);
     }
-    literal = { negated: false, field, values: [value], kind: 'comparison' };
+    // A relative time (ts:>1h) in the Unix seconds the API takes
+    const compared =
+      field.toLowerCase() === 'ts'
+        ? translateRelativeTimestamps(`ts:${value}`).slice('ts:'.length)
+        : value;
+    literal = { negated: false, field, values: [compared], kind: 'comparison' };
   } else if (RANGE.test(value)) {
     literal = { negated: false, field, values: [value], kind: 'range' };
   } else {

@@ -315,6 +315,53 @@ describe('search_rules re-checks the API answer against the whole query', () => 
   });
 });
 
+describe('relative times reach the API as Unix seconds on every path', () => {
+  const now = 1_790_000_000;
+  beforeEach(() => {
+    jest.spyOn(Date, 'now').mockReturnValue(now * 1000);
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('get_active_alarms', async () => {
+    const { client, get } = makeClient();
+    await new GetActiveAlarmsHandler().execute(
+      { query: 'ts:>24h', limit: 10 },
+      client
+    );
+    expect(sent(get)).toEqual([['/v2/alarms', `status:1 ts:>${now - 86400}`]]);
+  });
+
+  it('get_flow_data', async () => {
+    const { client, get } = makeClient();
+    await new GetFlowDataHandler().execute(
+      { query: 'ts:>1h status:blocked', limit: 10 },
+      client
+    );
+    expect(sent(get)).toEqual([
+      ['/v2/flows', `ts:>${now - 3600} status:blocked`],
+    ]);
+  });
+
+  it('search_alarms', async () => {
+    const { client, get } = makeClient();
+    await new SearchAlarmsHandler().execute(
+      { query: 'ts:>1h AND type:1', limit: 10 },
+      client
+    );
+    expect(sent(get)).toEqual([['/v2/alarms', `ts:>${now - 3600} type:1`]]);
+  });
+
+  it('the client', async () => {
+    const { client, get } = makeClient([], BOX);
+    await client.getFlowData('ts:>=7d');
+    expect(sent(get)).toEqual([
+      ['/v2/flows', `ts:>=${now - 7 * 86400} box.id:${BOX}`],
+    ]);
+  });
+});
+
 describe('[low TO high] range syntax', () => {
   it.each([
     ['search_flows', () => new SearchFlowsHandler()],
