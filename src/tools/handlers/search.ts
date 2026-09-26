@@ -522,9 +522,14 @@ export class SearchFlowsHandler extends BaseToolHandler {
         include_analytics: includeAnalyticsValidation.sanitizedValue as boolean,
       };
 
+      // One count for both attempts, so coverage.api_requests includes the
+      // requests of a failed first attempt: they counted against the API's
+      // limit too
+      const trace = { sent: 0, cached: 0 };
+
       // Use retry logic for search operations as they can be prone to timeouts
       const result = await withRetryAndTimeout(
-        async () => searchTools.search_flows(searchParams),
+        async () => searchTools.search_flows(searchParams, trace),
         this.name,
         {
           maxAttempts: 2, // Conservative retry for search operations

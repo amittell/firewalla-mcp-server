@@ -30,6 +30,7 @@ import {
   StreamingSessionError,
 } from '../../src/utils/streaming-manager.js';
 import { pagingCoverage } from '../../src/utils/paging-coverage.js';
+import { RetryManager } from '../../src/utils/retry-manager.js';
 
 const TOTAL = 1000;
 /** Flow i ends at NOW - i */
@@ -61,6 +62,8 @@ interface Call {
  * - `emptyAt`: a page asked for at that offset comes back with no flows and a
  *   cursor to the page after it
  * - `tooManyFirst`: the first request is answered 429 with retry-after 1
+ * - `timeoutAt`: the request with that number (1 for the first) fails as an
+ *   axios timeout does, after it reached the network
  * Time is a clock that moves only when the client sleeps, so a 429's pause
  * takes no real time.
  */
@@ -72,6 +75,7 @@ function makeClient(
     total?: number;
     emptyAt?: number;
     tooManyFirst?: boolean;
+    timeoutAt?: number;
   } = {}
 ) {
   let time = Date.UTC(2026, 0, 1);
@@ -114,6 +118,13 @@ function makeClient(
         config,
         request: {},
       }) as AxiosResponse;
+    if (calls.length === options.timeoutAt) {
+      throw new AxiosError(
+        'timeout of 30000ms exceeded',
+        AxiosError.ECONNABORTED,
+        config
+      );
+    }
     if (options.tooManyFirst && calls.length === 1) {
       throw new AxiosError(
         'Request failed with status code 429',
@@ -587,6 +598,47 @@ describe('api_requests counts requests sent to the API', () => {
     expect(retried.coverage).toMatchObject({
       api_requests: 2,
       cached_pages: 0,
+    });
+  });
+
+  describe('search_flows retries a failed read once, and counts both attempts', () => {
+    const search = async (limit: number, client: FirewallaClient) => {
+      const response = await new SearchFlowsHandler().execute(
+        { query: 'protocol:tcp', limit },
+        client
+      );
+      return JSON.parse(response.content[0].text).data;
+    };
+
+    beforeEach(() => {
+      // Skip the 1 to 2 s wait before the second attempt
+      jest
+        .spyOn(RetryManager.prototype as any, 'delay')
+        .mockResolvedValue(undefined);
+    });
+
+    it('a first request that timed out, then one that answered', async () => {
+      const { client, calls } = makeClient({ timeoutAt: 1 });
+      const data = await search(100, client);
+      expect(data.flows).toHaveLength(100);
+      expect(calls).toHaveLength(2);
+      expect(data.coverage).toMatchObject({
+        api_requests: 2,
+        cached_pages: 0,
+        stopped_reason: 'limit_reached',
+      });
+    });
+
+    it('a first page that answered, then a second page that timed out', async () => {
+      const { client, calls } = makeClient({ timeoutAt: 2 });
+      const data = await search(700, client);
+      expect(data.flows).toHaveLength(700);
+      // The second attempt reads the first page from the cache
+      expect(calls.map(call => call.limit)).toEqual([500, 200, 200]);
+      expect(data.coverage).toMatchObject({
+        api_requests: 3,
+        cached_pages: 1,
+      });
     });
   });
 });

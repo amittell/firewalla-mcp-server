@@ -173,6 +173,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   MUST start a new session with a new `initialize`. A request without a
   session ID, other than `initialize`, and a session ID that is not a UUID
   v4 still get 400.
+- `search_flows` counts the requests of both attempts in
+  `coverage.api_requests`. The tool tries a read again when the first attempt
+  fails with a timeout or a network error, and each attempt counted its own
+  requests, so `coverage` gave only the second attempt's, while the first
+  attempt's requests had counted against the API's 100 per 5 minutes too. A
+  first request that timed out and a second that answered reported
+  `api_requests: 1`; they now report 2. `cached_pages` counts both attempts
+  too.
 - The HTTP transport answers a request body over 1 MB with 413, and a body
   that is not JSON with 400 and a JSON-RPC parse error (-32700). Over 1 MB
   it closed the connection without an answer, and a body that is not JSON
