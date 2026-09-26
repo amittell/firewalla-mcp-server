@@ -1208,7 +1208,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. A word or quoted phrase with no field is free text, found case-insensitively in the name, IP, MAC or id, vendor, or network or group name. ip: also takes an IPv4 CIDR block. Supported fields: mac:AA:BB:CC:DD:EE:FF, ip:192.168.1.*, name:*iPhone*, online:true/false, mac_vendor:Apple, gid:box_gid, network.name:*, group.name:*. Examples: "online:false AND mac_vendor:Apple", "ip:192.168.1.* AND name:*laptop*", "mac:AA:* OR name:*phone*", "ip:192.168.1.0/24", "nas", "kids AND online:true"',
+                    'Search query using Firewalla syntax. A word or quoted phrase with no field is free text, found case-insensitively in the name, IP, MAC or id, vendor, or network or group name. ip: also takes an IPv4 CIDR block, and a comma list matches any of its values (name:tv,nas). Supported fields: mac:AA:BB:CC:DD:EE:FF, ip:192.168.1.*, name:*iPhone*, online:true/false, mac_vendor:Apple, gid:box_gid, network.name:*, group.name:*. Examples: "online:false AND mac_vendor:Apple", "ip:192.168.1.* AND name:*laptop*", "mac:AA:* OR name:*phone*", "ip:192.168.1.0/24", "nas", "kids AND online:true"',
                 },
                 limit: {
                   type: 'number',

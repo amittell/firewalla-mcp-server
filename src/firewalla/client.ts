@@ -55,6 +55,7 @@ import type {
 } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
 import {
+  commaListValues,
   ipv4InCidr,
   matchesQuery,
   unquoteQueryValue,
@@ -4641,27 +4642,40 @@ export class FirewallaClient {
               }
               const [, field, rawValue] = fieldTerm;
               const value = unquoteQueryValue(rawValue);
+              // A comma list matches any of its values, as in the MSP API
+              // grammar (name:nas,laptop); it was compared as one value
+              const values = commaListValues(rawValue);
+              const anyValue = (test: (entry: string) => boolean): boolean =>
+                values.some(test);
 
               switch (field) {
                 case 'id':
-                  return matchesPattern(id, value);
+                  return anyValue(entry => matchesPattern(id, entry));
                 case 'ip':
                   // An IPv4 CIDR block (192.168.1.0/24), else a pattern
-                  return value.includes('/')
-                    ? ipv4InCidr(ip, value) === true
-                    : matchesPattern(ip, value);
+                  return anyValue(entry =>
+                    entry.includes('/')
+                      ? ipv4InCidr(ip, entry) === true
+                      : matchesPattern(ip, entry)
+                  );
                 case 'mac':
-                  return matchesPattern(mac, value);
+                  return anyValue(entry => matchesPattern(mac, entry));
                 case 'gid':
-                  return matchesPattern(gid, value);
+                  return anyValue(entry => matchesPattern(gid, entry));
                 case 'mac_vendor':
-                  return macVendor.includes(value);
+                  return anyValue(entry => macVendor.includes(entry));
                 case 'name':
-                  return name.includes(value.replace(/\*/g, ''));
+                  return anyValue(entry =>
+                    name.includes(entry.replace(/\*/g, ''))
+                  );
                 case 'network.name':
-                  return networkName.includes(value.replace(/\*/g, ''));
+                  return anyValue(entry =>
+                    networkName.includes(entry.replace(/\*/g, ''))
+                  );
                 case 'group.name':
-                  return groupName.includes(value.replace(/\*/g, ''));
+                  return anyValue(entry =>
+                    groupName.includes(entry.replace(/\*/g, ''))
+                  );
                 case 'online':
                   if (value === 'true') {
                     return isOnline;

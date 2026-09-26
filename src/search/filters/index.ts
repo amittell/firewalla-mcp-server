@@ -6,7 +6,7 @@
 import type { QueryNode, FieldQuery, WildcardQuery } from '../types.js';
 import type { Filter, FilterContext, FilterResult } from './base.js';
 import { TimeRangeFilter } from './time.js';
-import { ipv4InCidr } from '../client-filter.js';
+import { commaListValues, ipv4InCidr } from '../client-filter.js';
 
 /**
  * Determines whether a query node is a field query.
@@ -56,7 +56,10 @@ class IpAddressFilter implements Filter {
               return false;
             }
 
-            return this.matchWildcardIp(ipString, node.pattern);
+            // A comma list matches any of its values (192.168.*,10.*)
+            return commaListValues(node.pattern).some(pattern =>
+              this.matchWildcardIp(ipString, pattern)
+            );
           }),
         cacheKeyComponent: `${this.name}:${JSON.stringify(node)}`,
       };
@@ -69,22 +72,24 @@ class IpAddressFilter implements Filter {
           items.filter(item => {
             const value = this.getNestedValue(item, node.field);
             const ipString = String(value || '');
-            const queryString = String(node.value);
 
-            // Handle CIDR notation for exact matching
-            if (queryString.includes('/')) {
-              return this.matchCidr(ipString, queryString);
-            }
+            // A comma list matches any of its values
+            return commaListValues(String(node.value)).some(queryString => {
+              // Handle CIDR notation for exact matching
+              if (queryString.includes('/')) {
+                return this.matchCidr(ipString, queryString);
+              }
 
-            // Validate both IPs for exact match
-            if (
-              !this.isValidIpAddress(ipString) ||
-              !this.isValidIpAddress(queryString)
-            ) {
-              return false;
-            }
+              // Validate both IPs for exact match
+              if (
+                !this.isValidIpAddress(ipString) ||
+                !this.isValidIpAddress(queryString)
+              ) {
+                return false;
+              }
 
-            return ipString === queryString;
+              return ipString === queryString;
+            });
           }),
         cacheKeyComponent: `${this.name}:${JSON.stringify(node)}`,
       };

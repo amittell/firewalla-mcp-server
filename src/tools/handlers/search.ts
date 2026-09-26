@@ -50,7 +50,7 @@ import {
 import { targetListEntryCount } from '../../utils/target-lists.js';
 import { bracketRangeError, findBracketRange } from '../../utils/msp-query.js';
 import { translateToMspQualifiers } from '../../utils/msp-qualifiers.js';
-import { ipv4InCidr, unquoteQueryValue } from '../../search/client-filter.js';
+import { commaListValues, ipv4InCidr } from '../../search/client-filter.js';
 
 // Base search interface to reduce duplication
 export interface BaseSearchArgs extends ToolArgs {
@@ -1145,7 +1145,7 @@ export class SearchRulesHandler extends BaseToolHandler {
 function invalidIpBlocks(query: string): string[] {
   const values = [
     ...query.matchAll(/(?:^|[\s(])-?ip:("(?:[^"\\]|\\.)*"|[^\s()]+)/gi),
-  ].map(match => unquoteQueryValue(match[1]));
+  ].flatMap(match => commaListValues(match[1]));
   return values.filter(
     value => value.includes('/') && ipv4InCidr('0.0.0.0', value) === undefined
   );
