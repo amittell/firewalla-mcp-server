@@ -32,15 +32,24 @@ describe('toMspQuery', () => {
   it.each([
     // AND, or no operator, is a space
     ['type:1 AND status:1', 'type:1 status:1'],
-    ['status:blocked AND region:US AND protocol:tcp', 'status:blocked region:US protocol:tcp'],
+    [
+      'status:blocked AND region:US AND protocol:tcp',
+      'status:blocked region:US protocol:tcp',
+    ],
     // OR between values of one field is a comma list
     ['region:US OR region:CN', 'region:US,CN'],
     ['type:1 OR type:10 OR type:1', 'type:1,10'],
     ['category:social OR category:games', 'category:social,games'],
     ['region:US,CN OR region:GB', 'region:US,CN,GB'],
-    ['domain:*.facebook.com OR domain:*.instagram.com', 'domain:*.facebook.com,*.instagram.com'],
+    [
+      'domain:*.facebook.com OR domain:*.instagram.com',
+      'domain:*.facebook.com,*.instagram.com',
+    ],
     // Parentheses group; AND distributes over a same-field OR
-    ['status:blocked AND (region:US OR region:CN)', 'status:blocked region:US,CN'],
+    [
+      'status:blocked AND (region:US OR region:CN)',
+      'status:blocked region:US,CN',
+    ],
     ['(type:1 OR type:10) box.id:gid-1', 'type:1,10 box.id:gid-1'],
     [
       '(status:blocked AND region:US) OR (status:blocked AND region:CN)',
@@ -56,22 +65,34 @@ describe('toMspQuery', () => {
     ['action:block AND NOT status:paused', 'action:block -status:paused'],
     // De Morgan: NOT of an OR excludes each term
     ['NOT (region:US OR region:CN)', '-region:US -region:CN'],
-    ['status:blocked NOT (region:US OR category:ad)', 'status:blocked -region:US -category:ad'],
+    [
+      'status:blocked NOT (region:US OR category:ad)',
+      'status:blocked -region:US -category:ad',
+    ],
     ['-(region:US OR region:CN)', '-region:US -region:CN'],
     // The API cannot exclude a numeric term: the comparison flips
     ['NOT total:>1MB', 'total:<=1MB'],
     ['-ts:>=1700000000', 'ts:<1700000000'],
     // A lower and an upper bound on one field are one range
     ['ts:>=1700000000 AND ts:<=1700086400', 'ts:1700000000-1700086400'],
-    ['total:<50MB total:>1MB', 'total:1MB-50MB'],
+    ['total:<=50MB total:>=1MB', 'total:1MB-50MB'],
     // Quoted values, wildcards, ranges and comparisons are left alone
     ['name:"living room" AND status:1', 'name:"living room" status:1'],
     ['box.name:"Gold Plus",Purple', 'box.name:"Gold Plus",Purple'],
-    ['box.name:"Firewalla,GSE" OR box.name:Purple', 'box.name:"Firewalla,GSE",Purple'],
+    [
+      'box.name:"Firewalla,GSE" OR box.name:Purple',
+      'box.name:"Firewalla,GSE",Purple',
+    ],
     ['device.name:"a AND (b)"', 'device.name:"a AND (b)"'],
-    ['ts:1695196894.395-1695604487.633 AND total:1MB-50MB', 'ts:1695196894.395-1695604487.633 total:1MB-50MB'],
+    [
+      'ts:1695196894.395-1695604487.633 AND total:1MB-50MB',
+      'ts:1695196894.395-1695604487.633 total:1MB-50MB',
+    ],
     ['total:>1MB AND ts:>=2026-09-01', 'total:>1MB ts:>=2026-09-01'],
-    ['mac:AA:BB:CC:DD:EE:FF AND device.ip:fe80::1', 'mac:AA:BB:CC:DD:EE:FF device.ip:fe80::1'],
+    [
+      'mac:AA:BB:CC:DD:EE:FF AND device.ip:fe80::1',
+      'mac:AA:BB:CC:DD:EE:FF device.ip:fe80::1',
+    ],
     // Lowercase and/or/not are words, as the API reads them
     ['type:1 and status:1', 'type:1 and status:1'],
     ['region:US or protocol:tcp', 'region:US or protocol:tcp'],
@@ -114,7 +135,9 @@ describe('toMspQuery', () => {
 
   describe('refuses what the API cannot express', () => {
     it('an OR between different fields, with a search per field', () => {
-      const error = refusal('status:blocked AND (region:US OR category:social)');
+      const error = refusal(
+        'status:blocked AND (region:US OR category:social)'
+      );
       expect(error.part).toBe('region:US OR category:social');
       expect(error.message).toContain('OR between different fields');
       expect(error.message).toContain('region:US,CN');
@@ -162,6 +185,16 @@ describe('toMspQuery', () => {
 
     it('two lower bounds on one field', () => {
       expect(refusal('ts:>=1 ts:>=2').message).toContain('one range');
+      // A range includes both ends, so strict bounds are not merged into one
+      for (const strict of [
+        'ts:>1 AND ts:<2',
+        'ts:>=1 AND ts:<2',
+        'ts:>1 AND ts:<=2',
+      ]) {
+        const error = refusal(strict);
+        expect(error.message).toContain('strict bound');
+        expect(error.suggestions).toEqual(['ts:1-2']);
+      }
     });
 
     it.each([

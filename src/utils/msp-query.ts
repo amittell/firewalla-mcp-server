@@ -22,7 +22,7 @@
  *   comparison (`NOT total:>1MB` is sent as `total:<=1MB`, since the API
  *   cannot exclude numeric terms); NOT of an OR: each term excluded
  * - a lower and an upper bound on one field: one range (`ts:>=a ts:<=b` is
- *   sent as `ts:a-b`; a range includes its ends)
+ *   sent as `ts:a-b`; a range includes its ends, so a strict bound is refused)
  * A query that needs an OR between different fields, NOT over an AND, the
  * exclusion of free text, a wildcard or a range, or two other conditions on
  * one field (the API would read them as OR) has no API form: MspQueryError
@@ -650,8 +650,15 @@ function clauseError(
   }
 }
 
-/** A lower and an upper bound on one field as one range, when they are */
-function boundsToRange(a: Literal, b: Literal): Literal | undefined {
+/**
+ * A lower and an upper bound on one field, as the range `low-high` they
+ * describe and whether both are inclusive (>= and <=), since a range
+ * includes both of its ends
+ */
+function boundsOf(
+  a: Literal,
+  b: Literal
+): { range: Literal; inclusive: boolean } | undefined {
   if (a.kind !== 'comparison' || b.kind !== 'comparison') {
     return undefined;
   }
@@ -666,10 +673,13 @@ function boundsToRange(a: Literal, b: Literal): Literal | undefined {
   }
   const [low, high] = lowerA ? [valueA, valueB] : [valueB, valueA];
   return {
-    negated: false,
-    field: a.field,
-    values: [`${low}-${high}`],
-    kind: 'range',
+    range: {
+      negated: false,
+      field: a.field,
+      values: [`${low}-${high}`],
+      kind: 'range',
+    },
+    inclusive: opA.endsWith('=') && opB.endsWith('='),
   };
 }
 
@@ -692,18 +702,32 @@ function mergeRepeatedFields(conjuncts: Literal[], query: string): Literal[] {
       continue;
     }
     const [first, second] = indexes;
-    const range =
+    const bounds =
       indexes.length === 2
-        ? boundsToRange(result[first], result[second])
+        ? boundsOf(result[first], result[second])
         : undefined;
-    if (range) {
-      result[first] = range;
+    if (bounds?.inclusive) {
+      result[first] = bounds.range;
       dropped.add(second);
       continue;
     }
     const a = result[first];
     const b = result[second];
     const part = `${renderLiteral(a)} AND ${renderLiteral(b)}`;
+    if (bounds) {
+      // A strict bound cannot be kept: a range includes both ends, and the
+      // two terms side by side would be read as OR
+      const range = renderLiteral(bounds.range);
+      throw new MspQueryError(
+        cannotSend(
+          query,
+          `"${part}" has a strict bound, and the API has no strict range: a range includes both of its ends, and two conditions on ${a.field} side by side are read as OR. Send the inclusive range ${range} if its ends may match, or use >= and <= bounds.`
+        ),
+        query,
+        part,
+        [range]
+      );
+    }
     const exact = [a, b].every(
       literal => literal.kind === 'exact' || literal.kind === 'wildcard'
     );
