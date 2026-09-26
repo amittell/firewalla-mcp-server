@@ -738,48 +738,130 @@ describe('getRuleTrends', () => {
     );
   });
 
-  it('counts rule creation times per UTC day when the endpoint answers 400', async () => {
-    const utcToday = Math.floor(NOW / DAY) * DAY;
-    const { client, calls } = makeClient(
-      {
+  it("counts rule creation times on the account's days when the endpoint answers 400", async () => {
+    const { client, calls } = makeClient({
+      '/v2/trends/rules': () => new HttpStatus(400),
+      '/v2/trends/alarms': () => ALARM_TREND,
+      '/v2/rules': () => ({
+        count: 7,
+        results: [
+          { id: 'r1', ts: TODAY + 60 },
+          // After UTC midnight but before the account's: yesterday
+          { id: 'r2', ts: TODAY - 60 },
+          { id: 'r3', ts: TODAY - DAY + 5 },
+          // Before the first day of the series
+          { id: 'r4', ts: TODAY - 29 * DAY - 1 },
+          { id: 'r5', ts: TODAY - 29 * DAY },
+          { id: 'r6', ts: NOW + 60 },
+          { id: 'r7' },
+        ],
+      }),
+    });
+    const series = await client.getRuleTrends('30d');
+    expect(calls).toHaveLength(3);
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        { url: '/v2/trends/rules', params: {} },
+        // The days come from the unscoped series
+        { url: '/v2/trends/alarms', params: {} },
+        { url: '/v2/rules', params: {} },
+      ])
+    );
+    expect(series.source).toBe('GET /v2/rules');
+    expect(series.scope).toBe('all boxes');
+    expect(series.note).toContain('answered 400');
+    expect(series.note).toContain(
+      "on the account's days as GET /v2/trends/alarms gives them"
+    );
+    expect(series.results.map(point => point.ts)).toEqual(
+      ALARM_TREND.map(point => point.ts)
+    );
+    expect(series.results[29]).toEqual({ ts: TODAY, value: 1 });
+    expect(series.results[28]).toEqual({ ts: TODAY - DAY, value: 2 });
+    expect(series.results[0]).toEqual({ ts: TODAY - 29 * DAY, value: 1 });
+    expect(series.results.reduce((sum, p) => sum + p.value, 0)).toBe(4);
+  });
+
+  it('lines rule days up with the alarm trend days', async () => {
+    const { client } = makeClient({
+      '/v2/trends/rules': () => new HttpStatus(400),
+      '/v2/trends/alarms': () => ALARM_TREND,
+      '/v2/rules': () => ({
+        count: 1,
+        results: [{ id: 'r1', ts: TODAY - 60 }],
+      }),
+    });
+    const rules = await client.getRuleTrends('24h');
+    const alarms = await client.getAlarmTrends('24h');
+    expect(rules.results.map(point => point.ts)).toEqual(
+      alarms.results.map(point => point.ts)
+    );
+    expect(rules.window_start).toBe(alarms.window_start);
+    expect(rules.results).toEqual([
+      { ts: TODAY - DAY, value: 1 },
+      { ts: TODAY, value: 0 },
+    ]);
+  });
+
+  it.each([
+    ['fails', () => new HttpStatus(500), 'failed (Server error'],
+    ['returns no points', () => [], 'failed (it returned no points)'],
+  ])(
+    'counts per UTC day, and says so, when the day read %s',
+    async (_what, alarmTrend, reason) => {
+      const utcToday = Math.floor(NOW / DAY) * DAY;
+      const { client } = makeClient({
         '/v2/trends/rules': () => new HttpStatus(400),
+        '/v2/trends/alarms': alarmTrend,
         '/v2/rules': () => ({
-          count: 5,
+          count: 3,
           results: [
             { id: 'r1', ts: utcToday + 60 },
             { id: 'r2', ts: utcToday - DAY + 5 },
             { id: 'r3', ts: utcToday - DAY + 7 },
-            { id: 'r4', ts: utcToday - 40 * DAY },
-            { id: 'r5' },
           ],
         }),
-      },
-      { boxId: BOX_A }
-    );
-    const series = await client.getRuleTrends('30d');
-    expect(calls).toEqual([
-      { url: '/v2/trends/rules', params: {} },
-      { url: '/v2/rules', params: { query: `box.id:${BOX_A}` } },
-    ]);
-    expect(series.source).toBe('GET /v2/rules');
-    expect(series.scope).toBe(`box ${BOX_A}`);
-    expect(series.note).toContain('answered 400');
-    expect(series.results).toHaveLength(30);
-    expect(series.results[29]).toEqual({ ts: utcToday, value: 1 });
-    expect(series.results[28]).toEqual({ ts: utcToday - DAY, value: 2 });
-    expect(series.results.reduce((sum, p) => sum + p.value, 0)).toBe(3);
+      });
+      const series = await client.getRuleTrends('30d');
+      expect(series.results).toHaveLength(30);
+      expect(series.results[29]).toEqual({ ts: utcToday, value: 1 });
+      expect(series.results[28]).toEqual({ ts: utcToday - DAY, value: 2 });
+      expect(series.note).toContain('by UTC day');
+      expect(series.note).toContain(reason);
+    }
+  );
+
+  it('does not count into the current day past its end when the day rolls over', async () => {
+    const later = TODAY + DAY + 60;
+    const { client } = makeClient({
+      '/v2/trends/rules': () => new HttpStatus(400),
+      '/v2/trends/alarms': () => ALARM_TREND,
+      '/v2/rules': () => ({
+        count: 2,
+        results: [
+          { id: 'r1', ts: TODAY + DAY - 1 },
+          { id: 'r2', ts: TODAY + DAY + 30 },
+        ],
+      }),
+    });
+    (Date.now as jest.Mock).mockReturnValue(later * 1000);
+    const series = await client.getRuleTrends('24h');
+    expect(series.results[series.results.length - 1]).toEqual({
+      ts: TODAY,
+      value: 1,
+    });
   });
 
   it('keeps the rules of a box group in the fallback', async () => {
-    const utcToday = Math.floor(NOW / DAY) * DAY;
     const { client, calls } = makeClient({
       '/v2/trends/rules': () => new HttpStatus(400),
+      '/v2/trends/alarms': () => ALARM_TREND,
       '/v2/rules': () => ({
         count: 3,
         results: [
-          { id: 'r1', gid: BOX_A, ts: utcToday + 1 },
-          { id: 'r2', gid: BOX_B, ts: utcToday + 2 },
-          { id: 'r3', group: 'group-7', ts: utcToday + 3 },
+          { id: 'r1', gid: BOX_A, ts: TODAY + 1 },
+          { id: 'r2', gid: BOX_B, ts: TODAY + 2 },
+          { id: 'r3', group: 'group-7', ts: TODAY + 3 },
         ],
       }),
       '/v2/boxes': () => [{ gid: BOX_A, name: 'Box A', online: true }],
@@ -789,23 +871,24 @@ describe('getRuleTrends', () => {
       url: '/v2/boxes',
       params: { group: 'group-7' },
     });
+    expect(calls).toContainEqual({ url: '/v2/trends/alarms', params: {} });
     expect(series.scope).toBe('box group group-7');
     expect(series.results[series.results.length - 1]).toEqual({
-      ts: utcToday,
+      ts: TODAY,
       value: 2,
     });
   });
 
   it('counts the group, not FIREWALLA_BOX_ID, when a group is given', async () => {
-    const utcToday = Math.floor(NOW / DAY) * DAY;
     const { client, calls } = makeClient(
       {
         '/v2/trends/rules': () => new HttpStatus(400),
+        '/v2/trends/alarms': () => ALARM_TREND,
         '/v2/rules': () => ({
           count: 2,
           results: [
-            { id: 'r1', gid: BOX_A, ts: utcToday + 1 },
-            { id: 'r2', group: 'group-7', ts: utcToday + 2 },
+            { id: 'r1', gid: BOX_A, ts: TODAY + 1 },
+            { id: 'r2', group: 'group-7', ts: TODAY + 2 },
           ],
         }),
         '/v2/boxes': () => [{ gid: BOX_A, name: 'Box A', online: true }],
@@ -813,14 +896,115 @@ describe('getRuleTrends', () => {
       { boxId: BOX_B }
     );
     const series = await client.getRuleTrends('24h', 'group-7');
+    expect(calls).toContainEqual({
+      url: '/v2/trends/rules',
+      params: { group: 'group-7' },
+    });
     expect(calls).toContainEqual({ url: '/v2/rules', params: {} });
     expect(series.scope).toBe('box group group-7');
     expect(series.note).toContain('FIREWALLA_BOX_ID is not applied');
     expect(series.results[series.results.length - 1]).toEqual({
-      ts: utcToday,
+      ts: TODAY,
       value: 2,
     });
   });
+
+  it('says FIREWALLA_BOX_ID is not applied when /v2/trends/rules answers for a group', async () => {
+    const { client, calls } = makeClient(
+      { '/v2/trends/rules': () => dailyPoints(() => 1) },
+      { boxId: BOX_B }
+    );
+    const series = await client.getRuleTrends('30d', 'group-7');
+    expect(calls).toEqual([
+      { url: '/v2/trends/rules', params: { group: 'group-7' } },
+    ]);
+    expect(series.source).toBe('GET /v2/trends/rules');
+    expect(series.note).toContain('FIREWALLA_BOX_ID is not applied');
+  });
+
+  it("counts a box's rules from /v2/rules, without the trends endpoint that takes no box", async () => {
+    const { client, calls } = makeClient(
+      {
+        '/v2/trends/rules': () => dailyPoints(() => 50),
+        '/v2/trends/alarms': () => ALARM_TREND,
+        '/v2/rules': () => ({
+          count: 2,
+          results: [
+            { id: 'r1', gid: BOX_A, ts: TODAY + 5 },
+            { id: 'r2', gid: BOX_A, ts: TODAY - 60 },
+          ],
+        }),
+      },
+      { boxId: BOX_B }
+    );
+    const series = await client.getRuleTrends('24h', undefined, BOX_A);
+    expect(calls).toHaveLength(2);
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        { url: '/v2/trends/alarms', params: {} },
+        { url: '/v2/rules', params: { query: `box.id:${BOX_A}` } },
+      ])
+    );
+    expect(series.source).toBe('GET /v2/rules');
+    expect(series.scope).toBe(`box ${BOX_A}`);
+    expect(series.note).toContain('GET /v2/trends/rules takes no box');
+    expect(series.note).toContain(`box.id:${BOX_A}`);
+    expect(series.results).toEqual([
+      { ts: TODAY - DAY, value: 1 },
+      { ts: TODAY, value: 1 },
+    ]);
+  });
+
+  it('scopes to FIREWALLA_BOX_ID when no box or group is named', async () => {
+    const { client, calls } = makeClient(
+      {
+        '/v2/trends/alarms': () => ALARM_TREND,
+        '/v2/rules': () => ({ count: 0, results: [] }),
+      },
+      { boxId: BOX_A }
+    );
+    const series = await client.getRuleTrends('7d');
+    expect(calls).toContainEqual({
+      url: '/v2/rules',
+      params: { query: `box.id:${BOX_A}` },
+    });
+    expect(calls.map(call => call.url)).not.toContain('/v2/trends/rules');
+    expect(series.scope).toBe(`box ${BOX_A}`);
+    expect(series.results).toHaveLength(8);
+  });
+
+  it.each([
+    [
+      'a box with a group',
+      {},
+      'group-7',
+      BOX_A,
+      /box and group cannot be combined/,
+    ],
+    [
+      'a box that is not a gid',
+      {},
+      undefined,
+      'x OR box.id:*',
+      /Invalid box gid/,
+    ],
+    [
+      'a malformed FIREWALLA_BOX_ID',
+      { boxId: 'x OR box.id:*' },
+      undefined,
+      undefined,
+      /Invalid box gid/,
+    ],
+  ])(
+    'refuses %s before any request',
+    async (_what, config, group, box, message) => {
+      const { client, calls } = makeClient({}, config);
+      const result = client.getRuleTrends('30d', group, box);
+      await expect(result).rejects.toBeInstanceOf(BoxSelectionError);
+      await expect(result).rejects.toThrow(message);
+      expect(calls).toEqual([]);
+    }
+  );
 
   it('does not hide other errors behind the fallback', async () => {
     const { client, calls } = makeClient({
@@ -854,6 +1038,46 @@ describe('get_rule_trends', () => {
     });
     expect(JSON.stringify(data)).not.toContain('active_rule');
   });
+
+  it('passes box and reports the scope and how the days were counted', async () => {
+    const { client, calls } = makeClient({
+      '/v2/trends/alarms': () => ALARM_TREND,
+      '/v2/rules': () => ({
+        count: 1,
+        results: [{ id: 'r1', gid: BOX_A, ts: TODAY + 5 }],
+      }),
+    });
+    const { data } = parse(
+      await new GetRuleTrendsHandler().execute(
+        { box: BOX_A, period: '24h' },
+        client
+      )
+    );
+    expect(calls).toContainEqual({
+      url: '/v2/rules',
+      params: { query: `box.id:${BOX_A}` },
+    });
+    expect(data.scope).toBe(`box ${BOX_A}`);
+    expect(data.trends.map((point: any) => point.rules_created)).toEqual([
+      0, 1,
+    ]);
+    expect(data.note).toContain('GET /v2/trends/rules takes no box');
+  });
+
+  it.each([
+    ['a box that is not a gid', { box: 'x OR box.id:*' }, {}],
+    ['box with group', { box: BOX_A, group: 'group-7' }, {}],
+    ['a malformed FIREWALLA_BOX_ID', {}, { boxId: 'x OR box.id:*' }],
+  ])(
+    'reports %s as a validation error before any request',
+    async (_what, args, config) => {
+      const { client, calls } = makeClient({}, config);
+      const res = await new GetRuleTrendsHandler().execute(args, client);
+      expect(res.isError).toBe(true);
+      expect(parse(res).errorType).toBe('validation_error');
+      expect(calls).toEqual([]);
+    }
+  );
 });
 
 /** Grouped counts, as /v2/alarms and /v2/flows answer a groupBy */
