@@ -183,6 +183,128 @@ describe('markInvisibleCharactersIn', () => {
   });
 });
 
+/**
+ * Marking can make two keys read the same: a key holding U+200B, and one
+ * holding the text <U+200B> in its place. API values are keys in places
+ * (counts by action, maps by device name or domain), so no value may be
+ * lost, whichever key comes first.
+ */
+describe('markInvisibleCharactersIn when marked keys read the same', () => {
+  const HIDDEN = 'a\u{200B}b';
+  const SHOWN = 'a<U+200B>b';
+
+  it.each([
+    ['the key with the hidden character first', [HIDDEN, SHOWN]],
+    ['the key with the marker text first', [SHOWN, HIDDEN]],
+  ])('keeps both values, %s', (_order, keys) => {
+    const input = Object.fromEntries(
+      keys.map(key => [key, key === HIDDEN ? 'hidden' : 'shown'])
+    );
+    const marked = markInvisibleCharactersIn(input);
+    // The key the API sent without invisible characters keeps its name;
+    // the marked one gets the suffix, in either order
+    expect(marked).toEqual({
+      [SHOWN]: 'shown',
+      [`${SHOWN} <duplicate 2>`]: 'hidden',
+    });
+    // Each key stays where it was
+    expect(Object.keys(marked)).toEqual(
+      keys.map(key => (key === HIDDEN ? `${SHOWN} <duplicate 2>` : SHOWN))
+    );
+  });
+
+  it.each([
+    ['in one order', ['\u{200B}<U+200B>', '<U+200B>\u{200B}']],
+    ['in the other', ['<U+200B>\u{200B}', '\u{200B}<U+200B>']],
+  ])(
+    'names two marked keys that read the same the same way %s',
+    (_order, keys) => {
+      const labels: Record<string, string> = {
+        '\u{200B}<U+200B>': 'zero-width space first',
+        '<U+200B>\u{200B}': 'marker text first',
+      };
+      const marked = markInvisibleCharactersIn(
+        Object.fromEntries(keys.map(key => [key, labels[key]]))
+      );
+      // Both become <U+200B><U+200B>. They are named in code unit order
+      // of the keys as sent, and '<' (U+003C) sorts before U+200B.
+      expect(marked).toEqual({
+        '<U+200B><U+200B>': 'marker text first',
+        '<U+200B><U+200B> <duplicate 2>': 'zero-width space first',
+      });
+    }
+  );
+
+  it('keeps arrays and objects under keys that read the same, marked', () => {
+    const marked = markInvisibleCharactersIn({
+      [HIDDEN]: [1, { ['c\u{2060}']: 'd\u{200C}' }, ['e\u{FEFF}']],
+      [SHOWN]: { nested: { deep: ['f\u{202E}'] }, n: 2 },
+    });
+    expect(marked).toEqual({
+      [`${SHOWN} <duplicate 2>`]: [
+        1,
+        { 'c<U+2060>': 'd<U+200C>' },
+        ['e<U+FEFF>'],
+      ],
+      [SHOWN]: { nested: { deep: ['f<U+202E>'] }, n: 2 },
+    });
+  });
+
+  it('skips a suffix that a key already has', () => {
+    const marked = markInvisibleCharactersIn({
+      [HIDDEN]: 1,
+      [SHOWN]: 2,
+      [`${SHOWN} <duplicate 2>`]: 3,
+    });
+    expect(marked).toEqual({
+      [`${SHOWN} <duplicate 3>`]: 1,
+      [SHOWN]: 2,
+      [`${SHOWN} <duplicate 2>`]: 3,
+    });
+  });
+
+  it.each([
+    ['the key with the hidden character first', [HIDDEN, SHOWN]],
+    ['the key with the marker text first', [SHOWN, HIDDEN]],
+  ])('keeps both values in JSON text, %s', (_order, keys) => {
+    const text = JSON.stringify({
+      by_action: Object.fromEntries(
+        keys.map(key => [key, key === HIDDEN ? 1 : 2])
+      ),
+      list: [{ [HIDDEN]: ['x'], [SHOWN]: { y: 'z' } }],
+    });
+    const marked = markInvisibleCharactersIn(text);
+    expect(marked).not.toMatch(/\u{200B}/u);
+    expect(JSON.parse(marked)).toEqual({
+      by_action: { [SHOWN]: 2, [`${SHOWN} <duplicate 2>`]: 1 },
+      list: [{ [`${SHOWN} <duplicate 2>`]: ['x'], [SHOWN]: { y: 'z' } }],
+    });
+  });
+
+  it('keeps both values in JSON text inside a string of JSON text', () => {
+    const inner = JSON.stringify({ [HIDDEN]: 1, [SHOWN]: 2 });
+    const marked = markInvisibleCharactersIn(JSON.stringify({ inner }));
+    expect(JSON.parse(JSON.parse(marked).inner)).toEqual({
+      [SHOWN]: 2,
+      [`${SHOWN} <duplicate 2>`]: 1,
+    });
+  });
+
+  it('marks JSON text in place when no key needs a suffix', () => {
+    // Pretty-printed, so rewriting it would show
+    const text = JSON.stringify({ [HIDDEN]: 1, other: 'c\u{200B}' }, null, 2);
+    expect(markInvisibleCharactersIn(text)).toBe(
+      text.split('\u{200B}').join('<U+200B>')
+    );
+  });
+
+  it('marks text that looks like JSON and is not as text', () => {
+    expect(markInvisibleCharactersIn('[a\u{200B}b] and {c')).toBe(
+      '[a<U+200B>b] and {c'
+    );
+  });
+});
+
 describe('apiDataBlock', () => {
   const OPEN = '<firewalla_api_data>';
   const CLOSE = '</firewalla_api_data>';

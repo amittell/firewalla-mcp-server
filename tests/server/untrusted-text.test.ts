@@ -35,6 +35,9 @@ const DEVICE_NAME_SHOWN = `tv<U+E0068><U+E0069> a<U+202E>b<U+200B>c ${FAMILY} ${
 const INVISIBLE =
   /[\u{200B}\u{200C}\u{2060}\u{FEFF}\u{202A}-\u{202E}\u{2066}-\u{2069}]/u;
 
+/** The message of each alarm GET /v2/alarms returns, in order */
+let alarmMessages: string[] = [];
+
 function answer(url: string): unknown {
   const now = Math.floor(Date.now() / 1000);
   const device = {
@@ -83,18 +86,16 @@ function answer(url: string): unknown {
   }
   if (url === '/v2/alarms') {
     return {
-      count: 1,
-      results: [
-        {
-          aid: 1,
-          gid: BOX,
-          type: 1,
-          status: 1,
-          ts: now,
-          message: `Alarm about ${DEVICE_NAME}`,
-          device: { id: MAC, ip: '192.168.1.10', name: DEVICE_NAME },
-        },
-      ],
+      count: alarmMessages.length,
+      results: alarmMessages.map((message, index) => ({
+        aid: index + 1,
+        gid: BOX,
+        type: 1,
+        status: 1,
+        ts: now,
+        message,
+        device: { id: MAC, ip: '192.168.1.10', name: DEVICE_NAME },
+      })),
     };
   }
   if (url === '/v2/flows') {
@@ -130,6 +131,7 @@ beforeAll(() => {
 
 beforeEach(async () => {
   process.env.FIREWALLA_ENABLE_WRITE_TOOLS = 'true';
+  alarmMessages = [`Alarm about ${DEVICE_NAME}`];
   const server = (new FirewallaMCPServer() as any).server as Server;
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   client = new Client({ name: 'untrusted-text-test', version: '0.0.0' });
@@ -149,8 +151,10 @@ afterAll(() => {
   }
 });
 
-function textOf(result: { content?: unknown }): string {
-  const content = result.content as Array<{ type: string; text: string }>;
+function textOf(result: unknown): string {
+  const { content } = result as {
+    content: Array<{ type: string; text: string }>;
+  };
   expect(content).toHaveLength(1);
   return content[0].text;
 }
@@ -243,6 +247,30 @@ describe('invisible characters are shown as markers', () => {
     expect(text).not.toContain(tags('x'));
   });
 
+  it.each([
+    ['the hidden character first', ['x\u{200B}', 'x<U+200B>', 'x<U+200B>']],
+    ['the marker text first', ['x<U+200B>', 'x<U+200B>', 'x\u{200B}']],
+  ])(
+    'in keys that read the same once marked, keeping both counts, %s',
+    async (_order, messages) => {
+      // firewalla://threats/recent counts threats by type, and an alarm's
+      // type there is its message
+      alarmMessages = messages;
+      const { contents } = await client.readResource({
+        uri: 'firewalla://threats/recent',
+      });
+      const [resource] = contents;
+      const text = 'text' in resource ? resource.text : '';
+      expect(text).not.toMatch(INVISIBLE);
+      const { statistics } = JSON.parse(text).recent_threats;
+      expect(statistics.total).toBe(3);
+      expect(statistics.by_type).toEqual({
+        'x<U+200B>': 2,
+        'x<U+200B> <duplicate 2>': 1,
+      });
+    }
+  );
+
   it('in an error result', async () => {
     const result = await client.callTool({
       name: `get_nothing${tags('x')}`,
@@ -258,7 +286,8 @@ describe('invisible characters are shown as markers', () => {
     const { contents } = await client.readResource({
       uri: 'firewalla://devices',
     });
-    const text = String(contents[0].text);
+    const [resource] = contents;
+    const text = 'text' in resource ? resource.text : '';
     expect(JSON.parse(text).device_inventory.devices[0].name).toBe(
       DEVICE_NAME_SHOWN
     );

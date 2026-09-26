@@ -81,32 +81,129 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * markInvisibleCharacters applied to every string in `value`, keys and
- * values, through arrays and plain objects. A part with nothing to mark is
- * returned as it is, so a result without such characters is the same
- * object and serializes to the same bytes.
+ * Set when marking a value took more than marking its text: a key was
+ * given a <duplicate N> suffix, or JSON text inside it was rewritten
  */
-export function markInvisibleCharactersIn<T>(value: T): T {
+interface MarkState {
+  restructured: boolean;
+}
+
+/**
+ * The object or array that `text` holds as JSON, or undefined when it holds
+ * none (markdown, prose, a JSON string or number)
+ */
+function parseJsonContainer(text: string): object | undefined {
+  const first = text.trimStart().charAt(0);
+  if (first !== '{' && first !== '[') {
+    return undefined;
+  }
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed !== null && typeof parsed === 'object' ? parsed : undefined;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+/**
+ * A string with its invisible characters marked. Marking can make two
+ * keys of a JSON object read the same (a key holding U+200B, and one
+ * holding the text <U+200B> in its place), and a client that parses the
+ * JSON then keeps only one of them. So JSON text is also marked as the
+ * object it holds: if that gives a key a <duplicate N> suffix, the JSON is
+ * written again with JSON.stringify; otherwise the marked text is
+ * returned, formatting and all.
+ */
+function markText(text: string, state: MarkState): string {
+  if (!INVISIBLE.test(text)) {
+    return text;
+  }
+  const marked = markInvisibleCharacters(text);
+  const parsed = parseJsonContainer(text);
+  if (parsed === undefined) {
+    return marked;
+  }
+  const inner: MarkState = { restructured: false };
+  const structure = markTree(parsed, inner);
+  if (!inner.restructured) {
+    return marked;
+  }
+  state.restructured = true;
+  return JSON.stringify(structure);
+}
+
+/**
+ * An object with its keys and values marked. A key with nothing to mark
+ * keeps its name. A marked key keeps its marked name unless another key has
+ * it; then it gets the first free " <duplicate N>" suffix, N from 2, so no
+ * value is lost. Marked keys are named in code unit order of the keys as
+ * the API sent them, so the names do not depend on the order of the keys.
+ */
+function markObject(
+  value: Record<string, unknown>,
+  state: MarkState
+): Record<string, unknown> {
+  const keys = Object.keys(value);
+  const taken = new Set<string>();
+  const toMark: string[] = [];
+  for (const key of keys) {
+    if (markInvisibleCharacters(key) === key) {
+      taken.add(key);
+    } else {
+      toMark.push(key);
+    }
+  }
+  const names = new Map<string, string>();
+  for (const key of toMark.sort()) {
+    const marked = markInvisibleCharacters(key);
+    let name = marked;
+    for (let n = 2; taken.has(name); n++) {
+      name = `${marked} <duplicate ${n}>`;
+    }
+    if (name !== marked) {
+      state.restructured = true;
+    }
+    taken.add(name);
+    names.set(key, name);
+  }
+
+  let changed = names.size > 0;
+  const entries = keys.map(key => {
+    const item = value[key];
+    const markedItem = markTree(item, state);
+    changed = changed || markedItem !== item;
+    return [names.get(key) ?? key, markedItem] as const;
+  });
+  return changed ? Object.fromEntries(entries) : value;
+}
+
+function markTree(value: unknown, state: MarkState): unknown {
   if (typeof value === 'string') {
-    return markInvisibleCharacters(value) as T;
+    return markText(value, state);
   }
   if (Array.isArray(value)) {
-    const marked = value.map(item => markInvisibleCharactersIn(item));
-    return marked.some((item, index) => item !== value[index])
-      ? (marked as T)
-      : value;
+    const marked = value.map(item => markTree(item, state));
+    return marked.some((item, index) => item !== value[index]) ? marked : value;
   }
   if (isPlainObject(value)) {
-    let changed = false;
-    const entries = Object.entries(value).map(([key, item]) => {
-      const markedKey = markInvisibleCharacters(key);
-      const markedItem = markInvisibleCharactersIn(item);
-      changed = changed || markedKey !== key || markedItem !== item;
-      return [markedKey, markedItem] as const;
-    });
-    return changed ? (Object.fromEntries(entries) as T) : value;
+    return markObject(value, state);
   }
   return value;
+}
+
+/**
+ * markInvisibleCharacters applied to every string in `value`, keys and
+ * values, through arrays and plain objects, and through the JSON text of a
+ * string that holds JSON. No value is dropped when two keys read the same
+ * once marked (see markObject). A part with nothing to mark is returned as
+ * it is, so a result without such characters is the same object and
+ * serializes to the same bytes.
+ */
+export function markInvisibleCharactersIn<T>(value: T): T {
+  return markTree(value, { restructured: false }) as T;
 }
 
 /** The tag that opens and closes the API data in a prompt */
