@@ -170,3 +170,25 @@ describe('get_network_rules free text', () => {
     expect(rules.map((rule: any) => rule.id)).toEqual(['r2']);
   });
 });
+
+describe('FirewallaClient.searchRules free text', () => {
+  // The client's other rule search, which its cross-reference dispatcher
+  // calls; it reads rules through the same code as getNetworkRules
+  it('finds the rule whose target value has the word, without sending the word', async () => {
+    const { client, get } = makeClient();
+    const result = await client.searchRules({ query: 'tiktok', limit: 50 });
+    expect(sentQueries(get)).toEqual([undefined]);
+    expect(result.results.map(rule => rule.id)).toEqual(['r1']);
+    expect(result.count).toBe(1);
+  });
+
+  it('sends the field terms and matches the words among their rules', async () => {
+    const { client, get } = makeClient();
+    const result = await client.searchRules({
+      query: 'homework AND action:allow',
+      limit: 50,
+    });
+    expect(sentQueries(get)).toEqual(['action:allow']);
+    expect(result.results.map(rule => rule.id)).toEqual(['r2']);
+  });
+});
