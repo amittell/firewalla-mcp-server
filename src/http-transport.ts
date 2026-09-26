@@ -87,6 +87,17 @@ function sendJsonRpcError(
 }
 
 /**
+ * Makes Node close the connection once the answer is sent. Call it before
+ * answering a request whose body is not read. Otherwise Node keeps the
+ * connection open to read and discard the rest of the body, so a client that
+ * sends a body slowly, or never, holds the connection without a token: a byte
+ * every 2 s held it for 60 s, until the request timeout and its check interval.
+ */
+function closeAfterAnswer(res: ServerResponse): void {
+  res.setHeader('Connection', 'close');
+}
+
+/**
  * Reads a JSON request body of at most maxBytes. Over the limit is a 413,
  * a body that is not JSON a 400, and an empty body undefined.
  */
@@ -195,7 +206,8 @@ export function createHttpTransportServer(
     res: ServerResponse
   ): Promise<void> => {
     // Host, Origin and token before anything else. A CORS preflight carries
-    // no credentials, so it is checked for Host and Origin only.
+    // no credentials, so it is checked for Host and Origin only. Every answer
+    // before the POST body is read closes the connection.
     const isPreflight =
       req.method === 'OPTIONS' && req.headers.origin !== undefined;
     const refusal = checkHttpRequest(req, security, !isPreflight);
@@ -204,6 +216,7 @@ export function createHttpTransportServer(
         method: req.method,
         status: refusal.status,
       });
+      closeAfterAnswer(res);
       sendJsonRpcError(
         res,
         refusal.status,
@@ -217,6 +230,7 @@ export function createHttpTransportServer(
     const origin = allowedOriginOf(req, security);
     if (origin) {
       if (isPreflight) {
+        closeAfterAnswer(res);
         res.writeHead(204, corsPreflightHeaders(origin));
         res.end();
         return;
@@ -228,6 +242,7 @@ export function createHttpTransportServer(
 
     // Only handle requests to our configured path
     if (!req.url?.startsWith(path)) {
+      closeAfterAnswer(res);
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
       return;
@@ -240,6 +255,7 @@ export function createHttpTransportServer(
 
     // Validate session ID format if present
     if (sessionId && !UUID_V4.test(sessionId)) {
+      closeAfterAnswer(res);
       sendJsonRpcError(
         res,
         400,
@@ -292,6 +308,7 @@ export function createHttpTransportServer(
     } else if (req.method === 'GET' || req.method === 'DELETE') {
       // GET opens the SSE stream, DELETE ends the session
       if (!sessionId || !transports.has(sessionId)) {
+        closeAfterAnswer(res);
         res.writeHead(400, { 'Content-Type': 'text/plain' });
         res.end('Invalid or missing session ID');
         return;
@@ -299,6 +316,7 @@ export function createHttpTransportServer(
 
       await transports.get(sessionId)!.handleRequest(req, res);
     } else {
+      closeAfterAnswer(res);
       res.writeHead(405, { 'Content-Type': 'text/plain' });
       res.end('Method Not Allowed');
     }
@@ -309,7 +327,7 @@ export function createHttpTransportServer(
       if (error instanceof HttpRequestError) {
         if (!res.headersSent) {
           // Stop reading a body that was refused, rather than drain it
-          res.setHeader('Connection', 'close');
+          closeAfterAnswer(res);
           sendJsonRpcError(res, error.status, error.code, error.message);
         }
         return;

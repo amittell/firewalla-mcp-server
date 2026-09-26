@@ -7,7 +7,7 @@
  * locally, so nothing is sent to Firewalla.
  */
 
-import { Server as NetServer, type AddressInfo } from 'node:net';
+import { connect, Server as NetServer, type AddressInfo } from 'node:net';
 import {
   request as httpRequest,
   type IncomingHttpHeaders,
@@ -135,6 +135,49 @@ function send(
     if (end) {
       req.end();
     }
+  });
+}
+
+/**
+ * Sends a request head that announces a 100 000-byte body on a raw socket and
+ * never sends the whole body: nothing more, or a byte every `trickleMs`.
+ * Resolves with the status line of the answer and the time the server took
+ * to close the connection, undefined when it was still open after `waitMs`.
+ */
+function sendWithoutBody(
+  address: AddressInfo,
+  head: string,
+  { trickleMs, waitMs = 1500 }: { trickleMs?: number; waitMs?: number } = {}
+): Promise<{ status: string; closedAfterMs?: number }> {
+  return new Promise(resolve => {
+    const started = Date.now();
+    let received = '';
+    let done = false;
+    const socket = connect(address.port, address.address, () =>
+      socket.write(`${head}Content-Length: 100000\r\n\r\n`)
+    );
+    const trickle =
+      trickleMs === undefined
+        ? undefined
+        : setInterval(() => socket.write('x'), trickleMs);
+    const finish = (closedAfterMs?: number) => {
+      if (done) {
+        return;
+      }
+      done = true;
+      clearInterval(trickle);
+      clearTimeout(timer);
+      socket.destroy();
+      resolve({ status: received.split('\r\n', 1)[0] ?? '', closedAfterMs });
+    };
+    const timer = setTimeout(() => finish(undefined), waitMs);
+    socket.setEncoding('utf8');
+    socket.on('data', chunk => {
+      received += chunk;
+    });
+    // Writing the body after the server closed fails; the close still counts
+    socket.on('error', () => undefined);
+    socket.on('close', () => finish(Date.now() - started));
   });
 }
 
@@ -424,6 +467,87 @@ describe('HTTP transport', () => {
     });
     expect(reply.status).toBe(400);
     expect(JSON.parse(reply.body).error.code).toBe(-32700);
+  });
+
+  it('closes the connection after answering without reading the body, not at the request timeout', async () => {
+    const { address, createServerInstance } = await start({
+      MCP_HTTP_BEARER_TOKEN: 's3cret',
+      MCP_HTTP_ALLOWED_ORIGINS: 'http://localhost:6274',
+    });
+    const host = `Host: localhost:${address.port}\r\n`;
+    const token = 'Authorization: Bearer s3cret\r\n';
+    const cases: Array<[string, string, number, number?]> = [
+      // name, request head, status, trickle interval in ms
+      [
+        'Host refused, body never sent',
+        'POST /mcp HTTP/1.1\r\nHost: rebound.example\r\n',
+        403,
+      ],
+      [
+        'Host refused',
+        'POST /mcp HTTP/1.1\r\nHost: rebound.example\r\n',
+        403,
+        100,
+      ],
+      [
+        'Origin refused',
+        `POST /mcp HTTP/1.1\r\n${host}Origin: http://evil.example\r\n`,
+        403,
+        100,
+      ],
+      ['no token', `POST /mcp HTTP/1.1\r\n${host}`, 401, 100],
+      [
+        'wrong token',
+        `POST /mcp HTTP/1.1\r\n${host}Authorization: Bearer nope\r\n`,
+        401,
+        100,
+      ],
+      [
+        'not the endpoint',
+        `POST /elsewhere HTTP/1.1\r\n${host}${token}`,
+        404,
+        100,
+      ],
+      [
+        'malformed session ID',
+        `POST /mcp HTTP/1.1\r\n${host}${token}Mcp-Session-Id: not-a-uuid\r\n`,
+        400,
+        100,
+      ],
+      [
+        'GET without a session',
+        `GET /mcp HTTP/1.1\r\n${host}${token}`,
+        400,
+        100,
+      ],
+      ['method not allowed', `PUT /mcp HTTP/1.1\r\n${host}${token}`, 405, 100],
+      [
+        'CORS preflight',
+        `OPTIONS /mcp HTTP/1.1\r\n${host}Origin: http://localhost:6274\r\nAccess-Control-Request-Method: POST\r\n`,
+        204,
+        100,
+      ],
+    ];
+
+    // At once: each open connection waits out the whole bound
+    const results = await Promise.all(
+      cases.map(async ([name, head, , trickleMs]) => {
+        const reply = await sendWithoutBody(address, head, { trickleMs });
+        return {
+          name,
+          status: reply.status.split(' ')[1],
+          closedWithinBound: reply.closedAfterMs !== undefined,
+        };
+      })
+    );
+    expect(results).toEqual(
+      cases.map(([name, , status]) => ({
+        name,
+        status: String(status),
+        closedWithinBound: true,
+      }))
+    );
+    expect(createServerInstance).not.toHaveBeenCalled();
   });
 });
 

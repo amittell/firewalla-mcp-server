@@ -182,7 +182,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `MCP_HTTP_ALLOWED_ORIGINS`. A request without `Origin`, which is what
     non-browser MCP clients send, is served as before;
   - gives a client 10 s to send the request headers and 30 s for the whole
-    request (Node's defaults are 60 s and 300 s).
+    request (Node's defaults are 60 s and 300 s);
+  - closes the connection after an answer given without reading the
+    request body: the 401 and 403 refusals, 404, 405, a malformed session
+    ID and CORS preflight answers. Node kept the connection open to read
+    and discard the body, so a client that sent it a byte every 2 s held
+    the connection for 60 s, without a token.
 
   Migration: the Docker image sets `MCP_HTTP_HOST=0.0.0.0`, so
   `docker run -p 3000:3000 -e MCP_TRANSPORT=http ...` serves
