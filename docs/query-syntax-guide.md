@@ -59,7 +59,7 @@ A query with no API form is refused before anything is sent. The response is a `
 | `type:1 OR -status:2` | an `OR` with an exclusion | `type:1`, `-status:2` |
 | `transfer.total:>50MB OR transfer.total:<1KB` | an `OR` between comparisons | `transfer.total:>50MB`, `transfer.total:<1KB` |
 | `NOT porn`, `-porn` | the exclusion of free text | |
-| `NOT domain:*.ads.example.com` | the exclusion of a wildcard | |
+| `NOT domain:*ads*` | the exclusion of a wildcard | |
 | `NOT transfer.total:1MB-50MB` | the exclusion of a range | `transfer.total:<1MB`, `transfer.total:>50MB` |
 | `ts:>1790208000 AND ts:<1790294400 AND status:blocked` | a strict bound; a range includes both ends | `ts:1790208000-1790294400 status:blocked` |
 | `bytes:[1000000 TO 50000000]` | `[low TO high]`; the API's ranges are `field:low-high` | `total:1000000-50000000` |
@@ -92,7 +92,7 @@ The first six then send the query through the rewrite above. When `FIREWALLA_BOX
 
 ## Values and time windows
 
-- `*` is a wildcard (`device.name:*iphone*`, `domain:*.example.com`). Quote a value with spaces, commas, `*` or `:` (`box.name:"Gold Plus"`). A comma list may hold wildcards and quoted values (`domain:*.a.example,*.b.example`, `notes:consoles,"ad servers"`); an `OR` of wildcard values is sent as such a list, and the API's handling of one was not measured.
+- `*` is a wildcard (`device.name:*iphone*`, `domain:*example*`). Quote a value with spaces, commas, `*` or `:` (`box.name:"Gold Plus"`). A comma list may hold wildcards and quoted values (`domain:*apple*,*google*`, `notes:consoles,"ad servers"`); an `OR` of wildcard values is sent as such a list, and the API reads it as any of its values (measured on flows, 2026-09-26: `domain:*apple*` matched 2,518 flows, `domain:*google*` 1,809 and `domain:*apple*,*google*` 4,327, the sum).
 - Comparisons are `>`, `>=`, `<`, `<=`, and a range is `low-high`, inclusive: `total:>50MB`, `total:1MB-50MB`. Sizes take `B`, `KB`, `MB`, `GB` and `TB`, each 1000 times the one before.
 - A word without a field is free text (`porn`, `"brute force"`); it matched on alarms and was not measured on flows. On rules the API matched none (measured 2026-09-26: a word in one of 98 rules' target value returned 0 rules), so `search_rules` and `get_network_rules` keep free text out of the query and match it themselves. `search_devices` and `search_target_lists` match it too; see [Fields](#fields) for the fields each searches. In a query sent to the API, free text can be ANDed with other terms but not ORed or excluded; `search_devices` and `search_target_lists` evaluate `OR` and `NOT` with it too.
 - `[low TO high]` and `{low TO high}` are refused everywhere, with the `field:low-high` form suggested.
@@ -135,7 +135,7 @@ From the [flow qualifier table](firewalla-api-reference.md#flow-qualifiers):
 | `device.id`, `device.name` | the device |
 | `network.id`, `network.name` | the network |
 | `category` | `ad`, `edu`, `games`, `gamble`, `intel`, `p2p`, `porn`, `private`, `social`, `shopping`, `video`, `vpn`; measured with `social` and `games` |
-| `domain` | the remote domain |
+| `domain` | the remote root domain: `apple.com` for a flow to `www.apple.com`, so `domain:*.apple.com` matched 0 flows where `domain:apple.com` matched 1,283 in the same hour (measured 2026-09-26). Use `domain:example.com` for a site, which covers its subdomains, or `domain:*word*` for any domain containing a word |
 | `region` | 2-letter country code |
 | `download`, `upload`, `total` | bytes, with units; `total` is download + upload; `bytes:` is sent as `total:` |
 | `sport`, `dport` | source and destination port; `sport:443` measured |
@@ -194,7 +194,8 @@ Firewalla-managed lists carry no `targets` and no `category` (measured), so `tar
 | `region:US OR category:social` | `search_flows` | refused: `OR` between fields | `region:US`, then `category:social` |
 | `type:1 AND type:10` | `search_alarms` | refused: two conditions on `type` | `type:1 OR type:10` |
 | `region:US region:CN` | `search_flows` | refused: a space is AND in the tools | `region:US OR region:CN` |
-| `NOT domain:*.ads.example.com` | `search_flows` | refused: excluding a wildcard; no single query is equivalent | `-domain:ads.example.com`, which excludes only that exact domain, not its subdomains |
+| `domain:*.example.com` | `search_flows` | sent; matches nothing: a flow's domain is the root domain, `example.com`, not a host name under it (measured) | `domain:example.com`, which covers its subdomains, or `domain:*example*` |
+| `NOT domain:*ads*` | `search_flows` | refused: excluding a wildcard; no single query is equivalent | `-domain:example.com` for each root domain to leave out (the exclusion of a domain was not measured) |
 | `type:1 and status:1` | `search_alarms` | sent with `and` as a word | `type:1 AND status:1` |
 | `severity:high` | `search_alarms` | sent; there is no severity, so nothing | no equivalent: MSP alarms have no severity; filter by the type meant, e.g. `type:1` for Security Activity |
 | `type:intrusion` | `search_alarms` | sent; types are the numbers 1 to 16 and none is named intrusion | the number of the type meant, e.g. `type:1` if Security Activity is meant |
@@ -257,7 +258,8 @@ Firewalla-managed lists carry no `targets` and no `category` (measured), so `tar
 | `dport:22 AND NOT status:blocked` | allowed flows to port 22 | `dport:22 -status:blocked` | no data |
 | `block:false AND category:video` | video flows that were not blocked | `-status:blocked category:video` | measured |
 | `total:1MB-50MB AND category:video` | video flows of 1 to 50 MB | `total:1MB-50MB category:video` | measured |
-| `domain:*.example.com AND NOT status:blocked` | allowed flows to subdomains of example.com | `domain:*.example.com -status:blocked` | no data |
+| `domain:example.com AND NOT status:blocked` | allowed flows to example.com and its subdomains, whose domain is the root domain | `domain:example.com -status:blocked` | no data |
+| `domain:*apple* OR domain:*google*` | flows to any domain containing "apple" or "google" | `domain:*apple*,*google*` | measured |
 | `device.name:*laptop* AND category:video` | video flows of devices named like "laptop" | `device.name:*laptop* category:video` | no data |
 | `network.name:Guest AND status:blocked` | blocked flows on the network named Guest | `network.name:Guest status:blocked` | no data |
 

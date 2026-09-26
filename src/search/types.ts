@@ -219,7 +219,7 @@ export const SEARCH_FIELDS = {
     'device_id',
     'region',
     'category',
-    'domain', // MSP flow qualifier: domain:*.example.com
+    'domain', // MSP flow qualifier: the root domain, domain:example.com (*.example.com matches nothing)
     'status', // MSP flow qualifier: status:blocked, status:ok
     'total', // MSP flow qualifier: total:>1MB (download + upload)
     'sport', // MSP flow qualifiers: source and destination port

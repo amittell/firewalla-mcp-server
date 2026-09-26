@@ -371,7 +371,7 @@ function negateLiteral(literal: Literal, part: string, query: string): Literal {
       throw new MspQueryError(
         cannotSend(
           query,
-          `"${part}" excludes a wildcard match, and the API's grammar has no exclusion of a wildcard: it excludes exact values (for example -domain:ads.example.com). Exclude exact values, or search without the exclusion.`
+          `"${part}" excludes a wildcard match, and the API's grammar has no exclusion of a wildcard: it excludes exact values (for example -domain:example.com). Exclude exact values, or search without the exclusion.`
         ),
         query,
         part
