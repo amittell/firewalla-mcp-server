@@ -216,16 +216,9 @@ status:blocked                # blocked flows (blocked:true is translated to thi
 total:>1MB                    # also download:/upload: (bytes: is translated to total:)
 ts:>1h                        # the last hour
 
-# Several values of one field: a comma list
-type:8,9,10 AND device.ip:192.168.* AND status:1
+# Complex queries
+(type:8 OR type:9 OR type:10) AND device.ip:192.168.* AND status:1
 ```
-
-Parentheses are not supported: the API answers a query that contains them
-with no results, and the search tools pass them through. A space-joined
-qualifier applies to every `OR` branch, so `type:1 OR type:5 box.id:<gid>`
-stays on that box. An unknown field is not an error either; it matches
-nothing. Measured details: "Measured Query Behavior" in
-`docs/firewalla-api-reference.md`.
 
 ### Example Search Queries
 
