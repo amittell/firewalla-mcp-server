@@ -1045,6 +1045,13 @@ export function mspTerms(query: string): MspTerm[] {
 }
 
 /**
+ * One term as toMspQuery sends it: `-region:US,CN`, `total:>1MB`, a word
+ */
+export function mspTermText(term: MspTerm): string {
+  return renderLiteral(term as Literal);
+}
+
+/**
  * A query split into its free-text words and its other terms, for an
  * endpoint whose free-text search the client does itself: GET /v2/rules
  * matched no free text (measured 2026-09-26: a word in one of 98 rules'

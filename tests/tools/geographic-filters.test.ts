@@ -17,6 +17,7 @@ import {
   GeographicFilterError,
   geographicFiltersToMspQuery,
 } from '../../src/utils/geographic-filters.js';
+import { logger } from '../../src/monitoring/logger.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -150,15 +151,19 @@ describe('search_flows geographic_filters', () => {
   );
 
   it('refuses an unknown country code as a validation error, with no request', async () => {
-    const started = Date.now();
+    const warn = jest.spyOn(logger, 'warn');
     const { res, get } = await searchFlows({ countries: ['XX'] });
     expect(res.isError).toBe(true);
     const error = body(res);
     expect(error.errorType).toBe('validation_error');
     expect(error.details.invalid_values).toEqual({ countries: ['XX'] });
     expect(get).not.toHaveBeenCalled();
-    // it used to be retried after a delay of about two seconds
-    expect(Date.now() - started).toBeLessThan(1000);
+    // it used to be retried after a delay of about two seconds; now it is
+    // not retried: a refusal fails the same way every time
+    expect(
+      warn.mock.calls.filter(([message]) => /retrying/.test(String(message)))
+    ).toEqual([]);
+    warn.mockRestore();
   });
 
   it('refuses a country the query already limits to another, as the API would read both as either', async () => {
