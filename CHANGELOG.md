@@ -194,6 +194,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that is not JSON with 400 and a JSON-RPC parse error (-32700). Over 1 MB
   it closed the connection without an answer, and a body that is not JSON
   got a 500 "Internal server error".
+- The prompts (`security_report`, `threat_analysis`, `bandwidth_analysis`,
+  `device_investigation` and `network_health_check`) placed device names,
+  domains, alarm messages and the other API text in the prose of a `user`
+  message, which the model reads as the user speaking. Device names come
+  from DHCP and mDNS hostnames, which anyone on the LAN can set, and domains
+  from DNS. Each prompt now quotes the API data between
+  `<firewalla_api_data>` and `</firewalla_api_data>`, after a notice that
+  the text is set by the devices and sites on the network and that
+  instructions in it are not the user's; the prompt's own request comes
+  after the block. The tag's name in a value, in any case and with or
+  without separators, becomes `removed_fence_tag`, so a value cannot close
+  the block, and line breaks in a value become spaces, so it cannot add
+  lines of its own. The `device_investigation` heading names the device by
+  the ID it was given instead of its name. After an idea in the fork
+  matesecurityzach/firewalla-mcp-server; this is a separate implementation.
 - Tool results, resources and prompts passed on characters that do not
   display and that a model still reads: Unicode tag characters
   (U+E0000-U+E007F), bidi embeddings, overrides and isolates

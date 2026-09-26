@@ -11,6 +11,7 @@ import type {
   SecurityMetricsSummary,
 } from '../types.js';
 import { unixToISOString, safeUnixToISOString } from '../utils/timestamp.js';
+import { apiDataBlock, oneLine } from '../utils/untrusted-text.js';
 
 // Type definitions for health score calculation
 
@@ -189,7 +190,7 @@ export function setupPrompts(server: Server, firewalla: FirewallaClient): void {
 ## Executive Summary
 Generate a comprehensive security report based on the following data:
 
-**Firewall Status:** ${summary.status} (${summary.boxes_online} of ${summary.boxes_total} boxes online)
+${apiDataBlock(`**Firewall Status:** ${summary.status} (${summary.boxes_online} of ${summary.boxes_total} boxes online)
 ${formatBoxStatusLines(summary)}
 - Blocked in the ${summary.recent_flows_sampled} most recent flows: ${summary.blocked_in_sample}
 
@@ -204,7 +205,8 @@ ${formatBoxStatusLines(summary)}
 ${alarms.results
   .slice(0, 10)
   .map(
-    alarm => `- ${alarm.type}: ${alarm.message} (${unixToISOString(alarm.ts)})`
+    alarm =>
+      `- ${oneLine(alarm.type)}: ${oneLine(alarm.message)} (${unixToISOString(alarm.ts)})`
   )
   .join('\n')}
 
@@ -213,9 +215,9 @@ ${threats
   .slice(0, 10)
   .map(
     threat =>
-      `- ${threat.type}: ${threat.source_ip} → ${threat.destination_ip} (${threat.action_taken})`
+      `- ${oneLine(threat.type)}: ${oneLine(threat.source_ip)} → ${oneLine(threat.destination_ip)} (${oneLine(threat.action_taken)})`
   )
-  .join('\n')}
+  .join('\n')}`)}
 
 Please analyze this data and provide:
 1. Overall security status assessment
@@ -256,12 +258,12 @@ Please analyze this data and provide:
 ## Current Threat Landscape
 Analyze the following security data to identify patterns, trends, and recommend defensive actions:
 
-**Active Alarms (the ${Array.isArray(alarms.results) ? alarms.results.length : 0} most recent):**
+${apiDataBlock(`**Active Alarms (the ${Array.isArray(alarms.results) ? alarms.results.length : 0} most recent):**
 ${(Array.isArray(alarms.results) ? alarms.results : [])
   .map(
     alarm =>
-      `- [${alarm.type}] ${alarm.message}
-    Source: ${alarm.device?.ip || 'N/A'} → Destination: ${alarm.remote?.ip || 'N/A'}
+      `- [${oneLine(alarm.type)}] ${oneLine(alarm.message)}
+    Source: ${oneLine(alarm.device?.ip || 'N/A')} → Destination: ${oneLine(alarm.remote?.ip || 'N/A')}
     Time: ${unixToISOString(alarm.ts)}`
   )
   .join('\n\n')}
@@ -270,14 +272,14 @@ ${(Array.isArray(alarms.results) ? alarms.results : [])
 - Total threats in ${period}: ${threats.length}
 - Unique source IPs: ${new Set(threats.map(t => t.source_ip)).size}
 - Most common threat types: ${Object.entries(threatPatterns.byType)
-            .slice(0, 3)
-            .map(([type, count]) => `${type} (${count})`)
-            .join(', ')}
+  .slice(0, 3)
+  .map(([type, count]) => `${oneLine(type)} (${count})`)
+  .join(', ')}
 - Attack time distribution: ${JSON.stringify(threatPatterns.timeDistribution)}
 
 **Current Rule Status:**
 - Active rules: ${rules.results.filter(r => r.status === 'active').length}
-- Paused rules: ${rules.results.filter(r => r.status === 'paused').length}
+- Paused rules: ${rules.results.filter(r => r.status === 'paused').length}`)}
 
 Please provide:
 1. Threat pattern analysis and significance
@@ -337,11 +339,11 @@ Please provide:
 ## Network Usage Overview
 Analyze bandwidth consumption patterns and identify optimization opportunities:
 
-**Top Bandwidth Consumers (>${thresholdMb}MB):**
+${apiDataBlock(`**Top Bandwidth Consumers (>${thresholdMb}MB):**
 ${highUsageDevices
   .map(
     device =>
-      `- ${device.device_name} (${device.ip})
+      `- ${oneLine(device.device_name)} (${oneLine(device.ip)})
     Total: ${Math.round(device.total_bytes / (1024 * 1024))}MB
     Upload: ${Math.round(device.bytes_uploaded / (1024 * 1024))}MB
     Download: ${Math.round(device.bytes_downloaded / (1024 * 1024))}MB
@@ -352,14 +354,14 @@ ${highUsageDevices
 **Network Flow Analysis:**
 - Total flows analyzed: ${flows.count}
 - Unique protocols: ${flowAnalysis.protocols.length}
-- Top protocols: ${flowAnalysis.protocols.slice(0, 5).join(', ')}
+- Top protocols: ${flowAnalysis.protocols.slice(0, 5).map(oneLine).join(', ')}
 - Average flow duration: ${flowAnalysis.avgDuration}s
 - Peak bandwidth periods: ${JSON.stringify(flowAnalysis.peakPeriods)}
 
 **Device Status Context:**
 - Total devices: ${devices.count}
 - Online devices: ${devices.results.filter(d => d.online).length}
-- Devices with high usage: ${highUsageDevices.length}
+- Devices with high usage: ${highUsageDevices.length}`)}
 
 Please analyze and provide:
 1. Bandwidth usage patterns and trends
@@ -418,18 +420,19 @@ Please analyze and provide:
               a.remote?.ip === targetDevice.ip
           );
 
+          // The device's name goes in the data block, not the heading
           const prompt = `# Device Investigation Report
-## Target Device: ${targetDevice.name} (${targetDevice.ip})
+## Target Device: ${deviceId}
 
 Investigate potential security issues and unusual behavior for this device:
 
-**Device Information:**
-- Device ID: ${targetDevice.id}
-- Name: ${targetDevice.name}
-- IP Address: ${targetDevice.ip}
-- MAC Vendor: ${targetDevice.macVendor || 'Unknown'}
+${apiDataBlock(`**Device Information:**
+- Device ID: ${oneLine(targetDevice.id)}
+- Name: ${oneLine(targetDevice.name)}
+- IP Address: ${oneLine(targetDevice.ip)}
+- MAC Vendor: ${oneLine(targetDevice.macVendor || 'Unknown')}
 - Status: ${targetDevice.online ? 'online' : 'offline'}
-- Network: ${targetDevice.network.name}
+- Network: ${oneLine(targetDevice.network.name)}
 - Last Seen: ${safeUnixToISOString(targetDevice.lastSeen, 'Never')}
 
 **Network Activity (${lookbackHours}h lookback):**
@@ -438,16 +441,14 @@ Investigate potential security issues and unusual behavior for this device:
 - Inbound connections: ${deviceFlows.filter(f => f.destination?.ip === targetDevice.ip).length}
 - Data transferred: ${deviceFlows.reduce((sum, f) => sum + ((f.download || 0) + (f.upload || 0)), 0)} bytes
 - Unique remote IPs: ${
-            new Set(
-              deviceFlows
-                .map(f =>
-                  f.source?.ip === targetDevice.ip
-                    ? f.destination?.ip
-                    : f.source?.ip
-                )
-                .filter(Boolean)
-            ).size
-          }
+  new Set(
+    deviceFlows
+      .map(f =>
+        f.source?.ip === targetDevice.ip ? f.destination?.ip : f.source?.ip
+      )
+      .filter(Boolean)
+  ).size
+}
 
 **Security Alerts:**
 ${
@@ -455,7 +456,7 @@ ${
     ? deviceAlarms
         .map(
           alarm =>
-            `- [${alarm.type}] ${alarm.message} (${unixToISOString(alarm.ts)})`
+            `- [${oneLine(alarm.type)}] ${oneLine(alarm.message)} (${unixToISOString(alarm.ts)})`
         )
         .join('\n')
     : 'No security alerts found for this device'
@@ -466,10 +467,10 @@ ${deviceFlows
   .slice(0, 10)
   .map(
     flow =>
-      `- ${flow.source?.ip || 'N/A'} → ${flow.destination?.ip || 'N/A'} (${flow.protocol})
+      `- ${oneLine(flow.source?.ip || 'N/A')} → ${oneLine(flow.destination?.ip || 'N/A')} (${oneLine(flow.protocol)})
     ${(flow.download || 0) + (flow.upload || 0)} bytes, ${flow.count} packets, ${flow.duration || 0}s duration`
   )
-  .join('\n')}
+  .join('\n')}`)}
 
 Please investigate and provide:
 1. Device behavior assessment (normal/suspicious)
@@ -515,7 +516,7 @@ Please investigate and provide:
 ## Comprehensive Network Status Check
 Evaluate overall network health and performance:
 
-**System Health:**
+${apiDataBlock(`**System Health:**
 - Firewall Status: ${summary.status}, ${summary.boxes_online} of ${summary.boxes_total} boxes online (${summary.status === 'online' ? '✅' : '⚠️'})
 ${formatBoxStatusLines(summary)}
 
@@ -533,7 +534,7 @@ ${formatBoxStatusLines(summary)}
 - Active Rules: ${rules.results.filter(r => r.status === 'active' || !r.status).length}
 - Security Score: ${calculateSecurityScore(metrics)}/100
 
-**Overall Health Score: ${healthScore}/100**
+**Overall Health Score: ${healthScore}/100**`)}
 
 Please assess and provide:
 1. Overall network health evaluation
@@ -655,7 +656,7 @@ function formatBoxStatusLines(summary: FirewallSummary): string {
       const state = box.online
         ? 'online'
         : `offline, last seen ${safeUnixToISOString(box.last_seen, 'unknown')}`;
-      return `- ${box.name} (${box.model}, ${box.gid}): ${state}; ${box.device_count} devices, ${box.alarm_count} alarms, ${box.rule_count} rules`;
+      return `- ${oneLine(box.name)} (${oneLine(box.model)}, ${oneLine(box.gid)}): ${state}; ${box.device_count} devices, ${box.alarm_count} alarms, ${box.rule_count} rules`;
     })
     .join('\n');
 }
