@@ -8,7 +8,8 @@
  * request to this server can spend the Firewalla MSP token, so this module
  * reads the MCP_HTTP_* variables into these checks:
  *
- * - MCP_HTTP_HOST: the address to listen on (default 127.0.0.1)
+ * - MCP_HTTP_HOST: the address to listen on (default 127.0.0.1), without a
+ *   port; an IPv6 address with or without brackets
  * - MCP_HTTP_ALLOWED_HOSTS: host names to accept in the Host header, besides
  *   localhost, 127.0.0.1, [::1] and MCP_HTTP_HOST (comma-separated)
  * - MCP_HTTP_ALLOWED_ORIGINS: browser origins to accept (comma-separated,
@@ -20,6 +21,7 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
+import { isIP } from 'node:net';
 
 /** Address the HTTP transport listens on when MCP_HTTP_HOST is not set */
 export const DEFAULT_HTTP_HOST = '127.0.0.1';
@@ -32,6 +34,9 @@ const WILDCARD_ADDRESSES = new Set(['0.0.0.0', '::']);
 
 /** host or [ipv6], then an optional :port, and nothing else */
 const HOST_HEADER = /^(\[[0-9a-f:.]+\]|[a-z0-9._-]+)(?::\d{1,5})?$/i;
+
+/** A host name or an IPv4 address, as the Host header check accepts one */
+const HOST_NAME = /^[a-z0-9._-]+$/i;
 
 /** Request headers a browser client may send, for CORS preflight answers */
 const CORS_ALLOW_HEADERS =
@@ -104,16 +109,56 @@ function hostEntry(value: string, variable: string): string {
   return name;
 }
 
+/** A host name, an IPv4 address or a bracketed IPv6 address, unbracketed */
+function addressOf(value: string): string | undefined {
+  const bracketed = /^\[(.*)\]$/.exec(value);
+  if (bracketed) {
+    return isIP(bracketed[1]) === 6 ? bracketed[1] : undefined;
+  }
+  return HOST_NAME.test(value) ? value : undefined;
+}
+
+/**
+ * The address MCP_HTTP_HOST names, as server.listen takes it: a host name, an
+ * IPv4 address or a bare IPv6 address. [::1] loses its brackets. A port is
+ * refused: server.listen would look the whole value up as a host name and
+ * fail with ENOTFOUND, and the port is MCP_HTTP_PORT.
+ *
+ * @throws {Error} If the value has a port or is not a host name or address
+ */
+export function parseListenAddress(value: string): string {
+  if (isIP(value) === 6) {
+    return value;
+  }
+  const address = addressOf(value);
+  if (address !== undefined) {
+    return address;
+  }
+  const withPort = /^(.+):(\d+)$/.exec(value);
+  const beforePort = withPort ? addressOf(withPort[1]) : undefined;
+  if (withPort && beforePort !== undefined) {
+    throw new Error(
+      `MCP_HTTP_HOST: "${value}" includes a port. Give the address in MCP_HTTP_HOST and the port in MCP_HTTP_PORT: MCP_HTTP_HOST=${beforePort} MCP_HTTP_PORT=${withPort[2]}`
+    );
+  }
+  throw new Error(
+    `MCP_HTTP_HOST: "${value}" is not a host name or IP address to listen on, e.g. 127.0.0.1, 0.0.0.0 or ::1`
+  );
+}
+
 /**
  * Reads the HTTP transport's access settings from the environment.
  *
- * @throws {Error} If MCP_HTTP_HOST, MCP_HTTP_ALLOWED_HOSTS or
- * MCP_HTTP_ALLOWED_ORIGINS holds something that is not a host or an origin
+ * @throws {Error} If MCP_HTTP_HOST is not an address to listen on, or
+ * MCP_HTTP_ALLOWED_HOSTS or MCP_HTTP_ALLOWED_ORIGINS holds something that is
+ * not a host or an origin
  */
 export function parseHttpSecurityConfig(
   env: typeof process.env = process.env
 ): HttpSecurityConfig {
-  const host = env.MCP_HTTP_HOST?.trim() || DEFAULT_HTTP_HOST;
+  const host = parseListenAddress(
+    env.MCP_HTTP_HOST?.trim() || DEFAULT_HTTP_HOST
+  );
 
   const allowedHosts = new Set(LOOPBACK_HOST_NAMES);
   if (!WILDCARD_ADDRESSES.has(host)) {
