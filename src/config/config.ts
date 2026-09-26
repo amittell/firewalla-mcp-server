@@ -22,6 +22,8 @@
  * - MCP_TRANSPORT: Transport type (stdio or http, default: stdio)
  * - MCP_HTTP_PORT: HTTP server port (default: 3000)
  * - MCP_HTTP_PATH: HTTP server path (default: /mcp)
+ * - MCP_TEST_MODE: 'true' starts with the dummy settings of test-mode-config.ts;
+ *   refused, with exit code 1, when NODE_ENV is production
  *
  * @version 1.0.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
@@ -29,6 +31,7 @@
  */
 
 import * as dotenv from 'dotenv';
+import { writeSync } from 'node:fs';
 import type { FirewallaConfig } from '../types';
 import {
   getRequiredEnvVar,
@@ -39,6 +42,14 @@ import { getTestConfig } from './test-mode-config.js';
 import { logger } from '../monitoring/logger.js';
 
 dotenv.config();
+
+/** What the server prints to stderr before it exits when test mode is refused */
+const TEST_MODE_PRODUCTION_REFUSAL =
+  'firewalla-mcp-server: refusing to start: MCP_TEST_MODE=true replaces the ' +
+  'Firewalla credentials with dummy ones and is not allowed with ' +
+  'NODE_ENV=production. Unset MCP_TEST_MODE to use FIREWALLA_MSP_TOKEN and ' +
+  'FIREWALLA_MSP_ID, or set NODE_ENV to another value, such as development, ' +
+  'to run in test mode.';
 
 /**
  * Creates and validates the complete Firewalla configuration
@@ -64,6 +75,13 @@ export function getConfig(): FirewallaConfig {
     (process.env.MCP_TEST_MODE || 'false').toLowerCase() === 'true';
 
   if (testMode) {
+    if ((process.env.NODE_ENV ?? '').trim().toLowerCase() === 'production') {
+      // One plain line on stderr, not through the logger, which prints
+      // nothing when LOG_LEVEL is not one of its levels. writeSync because
+      // process.exit does not wait for a pending write to process.stderr.
+      writeSync(2, `${TEST_MODE_PRODUCTION_REFUSAL}\n`);
+      process.exit(1);
+    }
     // Through the logger, which writes to stderr: stdout carries the stdio
     // transport's JSON-RPC, and a line of text there breaks the client.
     logger.warn('Running in test mode - using dummy credentials');

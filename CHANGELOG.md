@@ -241,6 +241,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `MCP_HTTP_ALLOWED_ORIGINS=http://localhost:6274`. The idea came from the
   HTTP hardening in the fork github.com/matesecurityzach/firewalla-mcp-server;
   this is a separate implementation.
+- The server refuses `MCP_TEST_MODE=true` when `NODE_ENV` is `production`
+  (in any case, with surrounding spaces ignored): it exits with code 1 and
+  one line on stderr that names both variables and how to fix it, and
+  writes nothing to stdout. Test mode replaces the credentials with dummies
+  (token `test-token`, API `https://test.firewalla.net`, box `test-box-id`)
+  and ignores `FIREWALLA_MSP_TOKEN`, `FIREWALLA_MSP_ID`, `FIREWALLA_BOX_ID`,
+  `FIREWALLA_DEFAULT_BOX_ID`, `MCP_TRANSPORT` (it always runs on stdio) and
+  the timeout, rate-limit, cache and page-size settings. It has no mock
+  data, so a production server left in test mode started cleanly and sent
+  every tool call's request to that dummy API. Any other `NODE_ENV`, or none,
+  starts as before. The Docker image sets `NODE_ENV=production`, so
+  `docker run -e MCP_TEST_MODE=true ...` is now refused; add
+  `-e NODE_ENV=development` to run the image in test mode.
 
 ### Added
 

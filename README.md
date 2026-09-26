@@ -185,6 +185,8 @@ FIREWALLA_MSP_ID=yourdomain.firewalla.net
 
 **Box ID is optional.** Without `FIREWALLA_BOX_ID`, queries cover every box on the account. The few operations that act on one box (`get_specific_alarm`, `archive_alarm`, `mute_alarm`, `delete_alarm`, `create_rule`, `rename_device`) take a `gid` argument, and without one they use `FIREWALLA_BOX_ID`, then `FIREWALLA_DEFAULT_BOX_ID`, then the account's only box. On an account with several boxes and none of those set, `get_specific_alarm`, `archive_alarm`, `mute_alarm` and `delete_alarm` check each box, and `create_rule` and `rename_device` refuse and list the boxes.
 
+**Test mode.** `MCP_TEST_MODE=true` starts the server without credentials, to check that it starts: it uses a dummy token, API (`https://test.firewalla.net`) and box instead of your settings, always runs on stdio, and cannot read your Firewalla data. With `NODE_ENV=production` the server refuses test mode and exits with code 1. The Docker image sets `NODE_ENV=production`, so pass `-e NODE_ENV=development` along with `-e MCP_TEST_MODE=true`.
+
 #### Transport Configuration
 
 The MCP server supports two transport modes:
