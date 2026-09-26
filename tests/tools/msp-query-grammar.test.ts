@@ -315,6 +315,40 @@ describe('search_rules re-checks the API answer against the whole query', () => 
   });
 });
 
+describe('[low TO high] range syntax', () => {
+  it.each([
+    ['search_flows', () => new SearchFlowsHandler()],
+    ['get_flow_data', () => new GetFlowDataHandler()],
+  ])(
+    '%s refuses bytes:[1000000 TO 50000000], suggesting total:1000000-50000000',
+    async (_tool, handler) => {
+      const { client, get } = makeClient();
+      const res = await handler().execute(
+        { query: 'bytes:[1000000 TO 50000000]', limit: 10 },
+        client
+      );
+      const error = errorOf(res);
+      expect(error.errorType).toBe('validation_error');
+      expect(error.details.suggested_queries).toEqual([
+        'total:1000000-50000000',
+      ]);
+      expect(get).not.toHaveBeenCalled();
+    }
+  );
+
+  it('search_alarms keeps the rest of the query in the suggestion', async () => {
+    const { client, get } = makeClient();
+    const res = await new SearchAlarmsHandler().execute(
+      { query: 'type:3 AND transfer.total:[10MB TO *]', limit: 10 },
+      client
+    );
+    expect(errorOf(res).details.suggested_queries).toEqual([
+      'type:3 AND transfer.total:>=10MB',
+    ]);
+    expect(get).not.toHaveBeenCalled();
+  });
+});
+
 describe('suggestions name every disjunct', () => {
   it('search_flows keeps both terms of an AND inside an OR', async () => {
     const { client, get } = makeClient();

@@ -45,6 +45,8 @@ import type { ScoringCorrelationParams } from '../../validation/field-mapper.js'
 // ResponseStandardizer import removed - using direct response creation
 import { validateCountryCodes } from '../../utils/geographic.js';
 import { targetListEntryCount } from '../../utils/target-lists.js';
+import { bracketRangeError, findBracketRange } from '../../utils/msp-query.js';
+import { translateToMspQualifiers } from '../../utils/msp-qualifiers.js';
 
 // Base search interface to reduce duplication
 export interface BaseSearchArgs extends ToolArgs {
@@ -208,6 +210,23 @@ function validateCommonSearchParameters(
         undefined,
         queryValidation.errors
       ),
+    };
+  }
+
+  // [low TO high] ranges: the API's are field:low-high. The suggestion has
+  // the qualifiers the client sends (bytes: goes out as total: on flows).
+  const bracketRange = findBracketRange(args.query);
+  if (bracketRange) {
+    return {
+      isValid: false,
+      response: mspQueryErrorResponse(
+        toolName,
+        bracketRangeError(
+          args.query,
+          bracketRange,
+          translateToMspQualifiers(bracketRange.query, entityType)
+        )
+      )!,
     };
   }
 

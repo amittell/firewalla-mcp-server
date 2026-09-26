@@ -9,6 +9,7 @@
  */
 
 import type { ValidationResult } from '../types.js';
+import { findBracketRange } from './msp-query.js';
 
 /**
  * Firewalla query syntax patterns
@@ -209,6 +210,15 @@ export function validateFirewallaQuerySyntax(query: string): ValidationResult {
 
   const errors: string[] = [];
   const tokens = tokenizeQuery(trimmedQuery);
+
+  // [low TO high] reads as a term and two free-text words; the API's
+  // ranges are field:low-high
+  const bracketRange = findBracketRange(trimmedQuery);
+  if (bracketRange) {
+    errors.push(
+      `Range syntax '${bracketRange.part}' is not supported: write field:low-high${bracketRange.replacement ? ` (${bracketRange.replacement})` : ''}; a range includes both ends`
+    );
+  }
 
   // Check for balanced parentheses
   let parenCount = 0;

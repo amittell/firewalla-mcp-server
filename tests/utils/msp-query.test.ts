@@ -9,6 +9,7 @@
 
 import {
   MspQueryError,
+  findBracketRange,
   findMspQueryError,
   mspAnd,
   toMspQuery,
@@ -293,6 +294,45 @@ describe('suggestions for an OR the API cannot run', () => {
     const error = refusal(query);
     expect(error.message).toContain('OR between different fields');
     expect(error.suggestions).toEqual([]);
+  });
+});
+
+describe('[low TO high] range syntax', () => {
+  it.each([
+    ['bytes:[1000000 TO 50000000]', 'bytes:1000000-50000000'],
+    ['total:[1MB TO *]', 'total:>=1MB'],
+    ['total:{1MB TO *]', 'total:>1MB'],
+    ['ts:[* TO 1700000000]', 'ts:<=1700000000'],
+    ['ts:[* TO 1700000000}', 'ts:<1700000000'],
+    ['type:1 AND total:[1 TO 2]', 'type:1 AND total:1-2'],
+    ['-total:[1 TO 2]', '-total:1-2'],
+  ])('%s is refused, suggesting %s', (query, suggestion) => {
+    const error = refusal(query);
+    expect(error.message).toContain('[low TO high] range syntax');
+    expect(error.suggestions).toEqual([suggestion]);
+  });
+
+  it('says a braced range was widened to include its ends', () => {
+    const error = refusal('total:{1 TO 5}');
+    expect(error.suggestions).toEqual(['total:1-5']);
+    expect(error.message).toContain('Braces exclude an end');
+  });
+
+  it('suggests leaving out a range open at both ends', () => {
+    const error = refusal('total:[* TO *]');
+    expect(error.suggestions).toEqual([]);
+    expect(error.message).toContain('matches any value');
+  });
+
+  it('leaves a quoted value alone', () => {
+    expect(findBracketRange('name:"[1 TO 2]"')).toBeUndefined();
+    expect(toMspQuery('name:"[1 TO 2]"')).toBe('name:"[1 TO 2]"');
+  });
+
+  it('is refused by the syntax check the search tools run', () => {
+    const result = validateFirewallaQuerySyntax('bytes:[1000000 TO 50000000]');
+    expect(result.isValid).toBe(false);
+    expect(result.errors.join(' ')).toContain('bytes:1000000-50000000');
   });
 });
 

@@ -24,13 +24,13 @@
  * - a lower and an upper bound on one field: one range (`ts:>=a ts:<=b` is
  *   sent as `ts:a-b`; a range includes its ends, so a strict bound is refused)
  * A query that needs an OR between different fields, NOT over an AND, the
- * exclusion of free text, a wildcard or a range, or two other conditions on
- * one field (the API would read them as OR) has no API form: MspQueryError
- * names the part and says what to send instead, where there is something:
- * for an OR, one query per disjunct of the query's disjunctive normal form,
- * whose results together are the query's. Lowercase `and`, `or` and `not`
- * are words, as the API reads them. A query already in API form comes back
- * unchanged.
+ * exclusion of free text, a wildcard or a range, two other conditions on one
+ * field (the API would read them as OR), or `[low TO high]` range syntax has
+ * no API form: MspQueryError names the part and says what to send instead,
+ * where there is something: for an OR, one query per disjunct of the
+ * query's disjunctive normal form, whose results together are the query's.
+ * Lowercase `and`, `or` and `not` are words, as the API reads them. A query
+ * already in API form comes back unchanged.
  */
 
 /** A query, or part of one, that the MSP API cannot run */
@@ -126,6 +126,9 @@ const NUMBER = /^\d+(?:\.\d+)?(?:[KMGT]?B)?$/i;
 const RANGE = /^\d+(?:\.\d+)?(?:[KMGT]?B)?-\d+(?:\.\d+)?(?:[KMGT]?B)?$/i;
 const COMPARISON = /^(>=|<=|>|<)(.*)$/s;
 const FIELD_TERM = /^([A-Za-z_][\w.]*):(.*)$/s;
+// field:[low TO high], or with braces for excluded ends (Lucene syntax)
+const BRACKET_RANGE =
+  /(^|[\s(])(-?)([A-Za-z_][\w.]*):([[{])\s*([^\s\]}]+)\s+TO\s+([^\s\]}]+)\s*([\]}])/;
 
 const OPPOSITE: Record<string, string> = {
   '>': '<=',
@@ -154,6 +157,98 @@ function runInstead(suggestions: string[], otherwise: string): string {
   return suggestions.length > 0
     ? `Run one search for each of these and combine the results: ${suggestions.map(q => `"${q}"`).join(', ')}.`
     : otherwise;
+}
+
+/** A `[low TO high]` range in a query, and the query with it in API form */
+export interface BracketRange {
+  /** The range as written: `bytes:[1000000 TO 50000000]` */
+  part: string;
+  /**
+   * The same condition in the API's grammar (`bytes:1000000-50000000`,
+   * `bytes:>=1000` for `[1000 TO *]`); empty when both ends are `*`
+   */
+  replacement: string;
+  /** Whether a brace (an excluded end) became an end the range includes */
+  widened: boolean;
+  /** The whole query with the range replaced */
+  query: string;
+}
+
+/**
+ * The first Lucene-style range in a query (`field:[low TO high]`, or with
+ * braces), outside double quotes. The API's grammar has none: its ranges are
+ * `field:low-high`, which include both ends.
+ *
+ * @param query - A query as the caller wrote it
+ * @returns The range and its API form, or undefined when there is none
+ */
+export function findBracketRange(query: string): BracketRange | undefined {
+  if (!query || typeof query !== 'string') {
+    return undefined;
+  }
+  const pieces = query.split(/("(?:[^"\\]|\\.)*")/);
+  for (let i = 0; i < pieces.length; i += 2) {
+    const match = BRACKET_RANGE.exec(pieces[i]);
+    if (!match) {
+      continue;
+    }
+    const [whole, lead, minus, field, open, low, high, close] = match;
+    const term = (condition: string) => `${minus}${field}:${condition}`;
+    let replacement: string;
+    let widened = false;
+    if (low === '*' && high === '*') {
+      replacement = '';
+    } else if (low === '*') {
+      replacement = term(`${close === ']' ? '<=' : '<'}${high}`);
+    } else if (high === '*') {
+      replacement = term(`${open === '[' ? '>=' : '>'}${low}`);
+    } else {
+      replacement = term(`${low}-${high}`);
+      widened = open === '{' || close === '}';
+    }
+    pieces[i] =
+      pieces[i].slice(0, match.index + lead.length) +
+      replacement +
+      pieces[i].slice(match.index + whole.length);
+    return {
+      part: whole.slice(lead.length),
+      replacement,
+      widened,
+      query: pieces.join(''),
+    };
+  }
+  return undefined;
+}
+
+/**
+ * The refusal of a `[low TO high]` range
+ *
+ * @param query - The query as the caller wrote it
+ * @param range - The range findBracketRange found in it
+ * @param suggestion - The query to send instead; the query with the range
+ *   in API form unless given (a caller may rename qualifiers in it)
+ */
+export function bracketRangeError(
+  query: string,
+  range: BracketRange,
+  suggestion: string = range.query
+): MspQueryError {
+  const trimmed = query.trim();
+  const ends = range.widened
+    ? ' Braces exclude an end, and no API range does: the query below includes the ends.'
+    : '';
+  const send = range.replacement
+    ? ` Send "${suggestion.trim()}".`
+    : ' It matches any value: leave it out.';
+  return new MspQueryError(
+    cannotSend(
+      trimmed,
+      `"${range.part}" is [low TO high] range syntax, which the API does not have: its ranges are field:low-high and include both ends.${ends}${send}`
+    ),
+    trimmed,
+    range.part,
+    range.replacement ? [suggestion.trim()] : []
+  );
 }
 
 /**
@@ -880,6 +975,10 @@ function mergeRepeatedFields(conjuncts: Literal[], query: string): Literal[] {
 /** The terms of the conjunction a query translates to */
 function translate(query: string): Literal[] {
   const trimmed = query.trim();
+  const range = findBracketRange(trimmed);
+  if (range) {
+    throw bracketRangeError(trimmed, range);
+  }
   const tree = new Parser(tokenize(trimmed), trimmed).parse();
   if (!tree) {
     return [];
