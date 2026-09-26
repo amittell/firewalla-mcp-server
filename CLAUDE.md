@@ -153,6 +153,7 @@ DEFAULT_PAGE_SIZE=100                     # Default page size (default: 100)
 MAX_PAGE_SIZE=10000                       # Page size ceiling (default: 10000)
 LOG_LEVEL=info                            # error, warn, info or debug (default: info)
 DEBUG=firewalla:*                         # Debug logging; see Debugging below (default: off)
+MCP_TEST_MODE=false                       # "true" (any case) starts with dummy credentials, on stdio; refused, exit code 1, when NODE_ENV=production, which the Docker image sets
 ```
 
 ### Tool Configuration
