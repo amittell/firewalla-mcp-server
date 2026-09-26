@@ -149,7 +149,7 @@ The [rule qualifiers](firewalla-api-reference.md#rule-qualifiers) are `status` (
 
 After the API answers, `search_rules` checks each rule's `action`, `status` and target value against every term of the sent query: a comma list is any of its values, `-` excludes, and `target.value` (or `target_value`) matches as a substring or `*` pattern. `target.value`, `target.type`, `direction`, `protocol`, `notes` and `scope.type` are sent too, but they are not rule qualifiers and the API's handling of them was not measured.
 
-Free text is not sent: `/v2/rules` matched none (measured 2026-09-26: of 98 rules, one had a given word in its target value, and `query=<that word>` returned 0). `search_rules` and `get_network_rules` send the other terms, or no query, and keep the rules that have every word, case-insensitively, in their name, notes, action, target type or value, or scope type or value: `tiktok AND action:block` is sent as `action:block` and keeps the block rules with "tiktok" in one of those.
+Free text is not sent: `/v2/rules` matched none (measured 2026-09-26: of 98 rules, one had a given word in its target value, and `query=<that word>` returned 0). `search_rules` and `get_network_rules` send the other terms, or no query, and keep the rules that have every word, case-insensitively, in their name, notes, action, target type or value, or scope type or value: `tiktok AND action:block` is sent as `action:block` and keeps the block rules with "tiktok" in one of those. With words no `limit` is sent, so every rule the other terms match is checked (the endpoint documents no limit or cursor and "returns all matched rules for now"), and `coverage` in the answer gives the rules checked and matched and whether that was all of them.
 
 ### Devices
 
