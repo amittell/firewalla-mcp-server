@@ -1327,6 +1327,7 @@ The official docs do not cover the points below. Each was measured against a liv
 - Lowercase `and`, `or` and `not` stay words, as the API reads them. A query already in this form (spaces, commas, `-`) is sent unchanged.
 - search_flows' `geographic_filters` become flow qualifiers only where one is documented: `countries`, and `regions` holding country codes, are sent as one `region:` comma list (`{countries: ["US", "CN"]}` as `region:US,CN`). Continents, cities, ASNs, hosting providers, the VPN and cloud exclusions and risk scores have no flow qualifier and are refused with a validation error naming them; they used to be sent as `continent:`, `city:`, `asn:` and the like, which the API answers with no results.
 - Free text is not sent to `/v2/rules`, which matches none (see above): `search_rules` and `get_network_rules` send the other terms and keep the rules that have every word, case-insensitively, in their name, notes, action, target type or value, or scope type or value.
+- On `/v2/alarms` and `/v2/flows`, a geographic name that is not a qualifier (`country`, `continent`, `city`, `asn`, `isp`, `is_vpn` and the like) is refused before a request, with `region:<codes>` as the suggestion for country codes.
 
 ### Pagination Support
 

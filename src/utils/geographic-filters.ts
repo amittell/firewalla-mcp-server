@@ -17,6 +17,7 @@
  */
 
 import { validateCountryCodes } from './geographic.js';
+import { MspQueryError, mspTerms, mspTermText } from './msp-query.js';
 
 /** The filters that map to the documented `region` qualifier */
 const REGION_FILTERS = new Set(['countries', 'regions']);
@@ -104,7 +105,7 @@ export function geographicFiltersToMspQuery(
     if (!Array.isArray(value) || bad.length > 0) {
       invalid[name] = Array.isArray(value) ? bad : [JSON.stringify(value)];
       problems.push(
-        `geographic_filters.${name} takes a list of ISO 3166-1 alpha-2 country codes (the API's region qualifier), such as ["US", "CN"]; ${invalid[name].join(', ')} ${invalid[name].length === 1 ? 'is not a code' : 'are not codes'} this server knows. To send a code anyway, put region:<code> in the query.`
+        `geographic_filters.${name} takes a list of ISO 3166-1 alpha-2 country codes (the API's region qualifier), such as ["US", "CN"]; ${invalid[name].join(', ')} ${invalid[name].length === 1 ? 'is not an assigned code' : 'are not assigned codes'}. To send another code anyway (such as XK), put region:<code> in the query.`
       );
       continue;
     }
@@ -123,4 +124,89 @@ export function geographicFiltersToMspQuery(
 
   const unique = [...new Set(codes)];
   return unique.length > 0 ? `region:${unique.join(',')}` : undefined;
+}
+
+/**
+ * Geographic names the flow and alarm field lists accepted as qualifiers,
+ * which the MSP API does not document (its one geographic qualifier is
+ * `region`, `remote.region` on alarms, an ISO 3166 country code)
+ */
+const UNDOCUMENTED_GEO_QUALIFIERS: ReadonlySet<string> = new Set([
+  'country',
+  'country_code',
+  'remote_country',
+  'continent',
+  'remote_continent',
+  'city',
+  'timezone',
+  'isp',
+  'organization',
+  'hosting_provider',
+  'asn',
+  'is_cloud_provider',
+  'is_cloud',
+  'is_proxy',
+  'is_vpn',
+  'geographic_risk_score',
+  'geo_risk_score',
+  'geo_location',
+]);
+
+/** Qualifiers whose values are country codes, as `region` takes them */
+const COUNTRY_QUALIFIERS: ReadonlySet<string> = new Set([
+  'country',
+  'country_code',
+  'remote_country',
+]);
+
+/**
+ * Refuses a flow or alarm query with a geographic qualifier the MSP API does
+ * not document, such as `country:US` or `continent:Asia`. The search tools'
+ * field lists accepted them and the query was sent, but the API answers a
+ * qualifier it does not know with HTTP 200 and no results (measured on
+ * flows: `block:true` returned 0), so the search found nothing.
+ *
+ * @param query - The query, in the tools' language or the API's
+ * @throws {MspQueryError} Naming the qualifier; for country codes, with the
+ *   query using `region:` as the suggestion
+ */
+export function refuseUndocumentedGeoQualifiers(query: string): void {
+  if (typeof query !== 'string' || !query.trim()) {
+    return;
+  }
+  const terms = mspTerms(query);
+  const refused = terms.filter(term =>
+    UNDOCUMENTED_GEO_QUALIFIERS.has(term.field.toLowerCase())
+  );
+  if (refused.length === 0) {
+    return;
+  }
+  const part = refused.map(mspTermText).join(' ');
+  // The whole query with region: for each qualifier of country codes
+  const asRegion = terms.map(term => {
+    if (!refused.includes(term)) {
+      return mspTermText(term);
+    }
+    const codes = term.values.map(value => value.replace(/^"(.*)"$/s, '$1'));
+    const { valid, invalid } = validateCountryCodes(codes);
+    if (
+      !COUNTRY_QUALIFIERS.has(term.field.toLowerCase()) ||
+      term.kind !== 'exact' ||
+      invalid.length > 0
+    ) {
+      return undefined;
+    }
+    return `${term.negated ? '-' : ''}region:${valid.join(',')}`;
+  });
+  const suggestion = asRegion.every(text => text !== undefined)
+    ? asRegion.join(' ')
+    : undefined;
+  const names = [...new Set(refused.map(term => term.field))];
+  const trimmed = query.trim();
+  throw new MspQueryError(
+    `Query "${trimmed}" cannot be sent to the MSP API: ${names.join(', ')} ${names.length === 1 ? 'is not a qualifier' : 'are not qualifiers'} the API documents, and it answers a qualifier it does not know with no results rather than an error. Its one geographic qualifier is region, an ISO 3166 country code: region:US, or region:US,CN for either country.${suggestion ? ` Send ${suggestion}.` : ''}`,
+    trimmed,
+    part,
+    suggestion ? [suggestion] : []
+  );
 }
