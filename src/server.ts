@@ -787,6 +787,50 @@ export class FirewallaMCPServer {
                   type: 'string',
                   description: 'Pagination cursor from previous response',
                 },
+                geographic_filters: {
+                  type: 'object',
+                  description:
+                    'Countries to limit the flows to, sent as one region: comma list ANDed with the query ({"countries": ["US", "CN"]} is sent as region:US,CN, either country). region, an ISO 3166 country code, is the one geographic flow qualifier the MSP API documents; other geographic filters (continents, cities, ASNs, hosting providers, risk scores) and names not listed here are refused as a validation error before any request.',
+                  properties: {
+                    countries: {
+                      type: 'array',
+                      items: { type: 'string', pattern: '^[A-Za-z]{2}$' },
+                      description:
+                        'ISO 3166-1 alpha-2 country codes, any of which may match, e.g. ["US", "CN"]; a code that is not assigned is refused (put region:<code> in the query to send one anyway). An empty list asks for nothing.',
+                    },
+                    regions: {
+                      type: 'array',
+                      items: { type: 'string', pattern: '^[A-Za-z]{2}$' },
+                      description:
+                        "Country codes too, merged with countries: the API's region is a country code",
+                    },
+                    exclude_vpn: {
+                      type: 'boolean',
+                      description:
+                        'Only false, which asks for nothing: the MSP API has no qualifier for VPN traffic, so true is refused',
+                    },
+                    exclude_cloud: {
+                      type: 'boolean',
+                      description:
+                        'Only false, which asks for nothing: the MSP API has no qualifier for cloud providers, so true is refused',
+                    },
+                    high_risk_countries: {
+                      type: 'boolean',
+                      description:
+                        'Only false, which asks for nothing: the MSP API has no qualifier for country risk, so true is refused',
+                    },
+                    exclude_known_providers: {
+                      type: 'boolean',
+                      description:
+                        'Only false, which asks for nothing: the MSP API has no qualifier for hosting providers, so true is refused',
+                    },
+                    threat_analysis: {
+                      type: 'boolean',
+                      description:
+                        'Only false, which asks for nothing: the flow search has no threat analysis, so true is refused',
+                    },
+                  },
+                },
               },
               // the shared search validator requires query -- advertise it
               required: ['query'],

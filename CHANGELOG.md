@@ -251,6 +251,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for nothing; a name the server does not know (`contintents`) and a list
   filter set to anything but a list (`countries: false`) are refused, and the
   response says geographic filters were applied only when they added a term.
+  The `search_flows` schema lists `geographic_filters`, with `countries`,
+  `regions` and the yes-or-no filters that ask for nothing when false; it
+  listed no such argument, so a client that builds calls from the schema
+  could not send one.
 - `search_flows`, `search_alarms`, `get_flow_data` and `get_active_alarms`
   refuse a geographic name typed in the query that is not an API qualifier
   (`country:`, `continent:`, `city:`, `asn:`, `isp:`, `is_vpn:` and the
