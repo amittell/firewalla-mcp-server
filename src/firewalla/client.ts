@@ -2034,9 +2034,13 @@ export class FirewallaClient {
     }));
 
     return {
-      // The API's count does not know the words matched here
+      // The API's count does not know the words matched here, so count
+      // gives every rule that matched them
       count: matchedWords ? rules.length : response.count || rules.length,
-      results: rules,
+      // With words the limit was not sent, so it is applied here: at most
+      // `limit` of the rules that matched
+      results:
+        matchedWords && limit !== undefined ? rules.slice(0, limit) : rules,
       // A read for words sends no cursor, so it has none to pass on
       next_cursor: matchedWords ? undefined : response.next_cursor,
       ...(coverage && { free_text_coverage: coverage }),
@@ -4565,9 +4569,11 @@ export class FirewallaClient {
         ); // Filter out invalid rules
 
       return {
-        // The API's count does not know the words matched on the client
+        // The API's count does not know the words matched on the client,
+        // so count gives every rule that matched them
         count: matchedWords ? rules.length : response.count || rules.length,
-        results: rules,
+        // With words the limit was not sent, so it is applied here
+        results: matchedWords ? rules.slice(0, limit) : rules,
         next_cursor: matchedWords ? undefined : response.next_cursor,
         ...(coverage && { free_text_coverage: coverage }),
         aggregations: response.aggregations,
