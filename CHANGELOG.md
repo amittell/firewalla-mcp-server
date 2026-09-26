@@ -261,9 +261,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   answers a qualifier it does not know with no results.
 - `search_devices`, `search_target_lists` and `search_rules` accept free
   text: a query that is only a word or quoted phrase (`nas`, `"living
-  room"`), and free text beside other terms (`name:nas OR laptop`). The
-  search engine's query parser refused a term without a field ("Expected ':'
-  after field"). `search_devices` matches free text case-insensitively in the
+  room"`), or free text ANDed with other terms (`tiktok AND action:block`).
+  `search_devices` and `search_target_lists` also take it in an `OR` or
+  after `NOT` (`name:nas OR laptop`, `NOT kids`); `search_rules` refuses
+  both, as it does for alarms and flows, since the rules come from one
+  request for the query's other terms. The search engine's query parser
+  refused a term without a field ("Expected ':' after field").
+  `search_devices` matches free text case-insensitively in the
   name, IP, MAC or id, vendor, and network or group name (the network and
   group names are new), and `search_target_lists` in the name, notes and
   entries. `search_rules` and `get_network_rules` keep free text out of the
