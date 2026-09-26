@@ -1294,15 +1294,18 @@ export class FirewallaMCPServer {
       };
     };
 
-    // The read-only tools take response_format. It is added here, not to each
-    // schema above, so a read-only tool added later takes it too.
+    // Built once, when this server is set up: setupTools reads
+    // FIREWALLA_ENABLE_WRITE_TOOLS then for the tools it registers, so the
+    // list is the tools a client can call. The read-only tools take
+    // response_format; it is added here, not to each schema above, so a
+    // read-only tool added later takes it too.
+    const { tools } = listedTools();
+    const listed = tools.map(withResponseFormatProperty);
     server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: listedTools().tools.map(withResponseFormatProperty),
+      tools: listed,
     }));
     const responseFormatTools = new Set(
-      listedTools()
-        .tools.filter(acceptsResponseFormat)
-        .map(tool => tool.name)
+      tools.filter(acceptsResponseFormat).map(tool => tool.name)
     );
 
     // Set up tool handlers using the registry
