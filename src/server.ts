@@ -42,6 +42,10 @@ import { parseHttpSecurityConfig } from './http-security.js';
 import { exitWhenStdioCloses } from './stdio-lifecycle.js';
 import { PACKAGE_VERSION } from './utils/package-version.js';
 import { isWriteTool, writeToolsEnabled } from './config/write-tools.js';
+import {
+  acceptsResponseFormat,
+  withResponseFormatProperty,
+} from './utils/response-format.js';
 
 /**
  * Main MCP Server class for Firewalla integration: 24 read-only tools, plus 11
@@ -89,7 +93,7 @@ export class FirewallaMCPServer {
   private registerHandlers(server: Server): void {
     // List available tools: the write tools (WRITE_TOOL_NAMES) only with
     // FIREWALLA_ENABLE_WRITE_TOOLS=true
-    server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const listedTools = () => {
       return {
         tools: [
           // Direct API Endpoints, and the write tools
@@ -1288,10 +1292,24 @@ export class FirewallaMCPServer {
           },
         ].filter(tool => writeToolsEnabled() || !isWriteTool(tool.name)),
       };
-    });
+    };
+
+    // The read-only tools take response_format. It is added here, not to each
+    // schema above, so a read-only tool added later takes it too.
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: listedTools().tools.map(withResponseFormatProperty),
+    }));
+    const responseFormatTools = new Set(
+      listedTools()
+        .tools.filter(acceptsResponseFormat)
+        .map(tool => tool.name)
+    );
 
     // Set up tool handlers using the registry
-    setupTools(server, this.firewalla);
+    setupTools(server, this.firewalla, {
+      responseFormatTools,
+      markdownMaxRows: config.defaultPageSize,
+    });
 
     // Set up resources
     setupResources(server, this.firewalla);

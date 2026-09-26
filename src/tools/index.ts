@@ -34,8 +34,26 @@ import { createErrorResponse, ErrorType } from '../validation/error-handler.js';
 import { logger } from '../monitoring/logger.js';
 import { ToolRegistry } from './registry.js';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
+import {
+  takeResponseFormat,
+  toMarkdownResponse,
+  type ResponseFormat,
+} from '../utils/response-format.js';
 
 import { metrics } from '../monitoring/metrics.js';
+
+/** Options for setupTools */
+export interface SetupToolsOptions {
+  /**
+   * The tools that take response_format: the read-only tools src/server.ts
+   * lists. Their calls lose the argument before the tool sees it, and a
+   * markdown call's success response is rendered as markdown. Any other tool
+   * gets its arguments as sent. Default: none.
+   */
+  responseFormatTools?: ReadonlySet<string>;
+  /** Most rows a markdown table shows (default 100) */
+  markdownMaxRows?: number;
+}
 
 /**
  * Registers and configures all Firewalla MCP tools on the server using a modular registry pattern
@@ -53,6 +71,7 @@ import { metrics } from '../monitoring/metrics.js';
  *
  * @param server - The MCP server instance where tools will be registered
  * @param firewalla - Authenticated Firewalla client for API communication
+ * @param options - Which tools take response_format, and the markdown row cap
  * @returns {void}
  *
  * @example
@@ -67,13 +86,18 @@ import { metrics } from '../monitoring/metrics.js';
  *
  * @public
  */
-export function setupTools(server: Server, firewalla: FirewallaClient): void {
+export function setupTools(
+  server: Server,
+  firewalla: FirewallaClient,
+  options: SetupToolsOptions = {}
+): void {
   // The registry holds the read-only tools, and the write tools when enabled
   const toolRegistry = new ToolRegistry();
 
   // Set up the main request handler using the registry
   server.setRequestHandler(CallToolRequestSchema, async request => {
-    const { name, arguments: args } = request.params;
+    const { name } = request.params;
+    let args = request.params.arguments;
 
     const startTime = Date.now();
 
@@ -87,6 +111,23 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
         );
       }
 
+      // response_format is handled here, for every read tool, and never
+      // reaches the tool
+      let format: ResponseFormat = 'json';
+      if (options.responseFormatTools?.has(name)) {
+        const taken = takeResponseFormat(args);
+        if ('error' in taken) {
+          return createErrorResponse(
+            name,
+            taken.error,
+            ErrorType.VALIDATION_ERROR,
+            { response_format: args?.response_format },
+            [taken.error]
+          );
+        }
+        ({ format, args } = taken);
+      }
+
       // Execute the tool handler with proper error handling
       logger.debug(
         `Executing tool: ${name} with handler: ${handler.constructor.name}`
@@ -98,7 +139,11 @@ export function setupTools(server: Server, firewalla: FirewallaClient): void {
       metrics.timing('tool.latency_ms', Date.now() - startTime);
       // </add>
 
-      return response;
+      return format === 'markdown'
+        ? toMarkdownResponse(name, response, {
+            maxRows: options.markdownMaxRows,
+          })
+        : response;
     } catch (error: unknown) {
       // <add error metric>
       metrics.count('tool.error');
