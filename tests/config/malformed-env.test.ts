@@ -60,7 +60,10 @@ describe('a malformed numeric environment variable', () => {
     const warnings = stderr
       .join('')
       .split('\n')
-      .filter(line => line.trim())
+      // The logger's lines only: on a cold jest cache, the coverage
+      // transform of src/firewalla/client.ts writes a plain-text "[BABEL]
+      // Note" to stderr while the server loads
+      .filter(line => line.startsWith('{'))
       .map(line => JSON.parse(line))
       .filter(
         entry =>
