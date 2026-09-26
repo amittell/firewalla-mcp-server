@@ -43,7 +43,7 @@ The tools accept uppercase `AND`, `OR` and `NOT`, parentheses, and the API's own
 | `ts:>24h` | `ts:><now-86400>` | a relative time (`s`, `m`, `h`, `d`, `w`) becomes Unix seconds |
 | `type:1 and status:1` | `type:1 and status:1` | lowercase `and`, `or`, `not` are words, as the API reads them |
 
-`<now-86400>` stands for the Unix time 86,400 seconds before the request. A query already in the API's form is sent unchanged. `search_devices` and `search_target_lists` send no query: they evaluate `AND`, `OR`, `NOT`, `-` and parentheses themselves, across fields too.
+`<now-86400>` stands for the Unix time 86,400 seconds before the request. A query already in the API's form is sent unchanged, with one exception: a field repeated on its own (`type:1 type:10`), which the API reads as OR, is refused in favor of the comma list `type:1,10` (see the refusal table below), so that a space always means AND. `search_devices` and `search_target_lists` send no query: they evaluate `AND`, `OR`, `NOT`, `-` and parentheses themselves, across fields too.
 
 ## What is refused
 
