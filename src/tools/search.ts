@@ -31,6 +31,59 @@ import {
 } from '../utils/geographic.js';
 import { correlateResults } from '../validation/enhanced-correlation.js';
 import { targetListMatchesQuery } from '../utils/target-lists.js';
+import {
+  MspQueryError,
+  mspAnd,
+  mspTerms,
+  withNotForMinus,
+  type MspTerm,
+} from '../utils/msp-query.js';
+import { unquoteQueryValue } from '../search/client-filter.js';
+
+/**
+ * Rule fields search_rules re-checks on the client, by the names its schema
+ * uses. Terms on other fields (box.id, device.id, scope, notes, free text)
+ * are left to the API.
+ */
+const RULE_FIELDS: Record<string, (rule: any) => unknown> = {
+  action: rule => rule.action,
+  status: rule => rule.status,
+  target_value: rule => rule.target?.value,
+  'target.value': rule => rule.target?.value,
+};
+
+/**
+ * Whether a rule satisfies one term of the translated query, or undefined
+ * when the term is on a field the client does not read. A value matches
+ * case-insensitively; `*` is a wildcard, and a target value without one
+ * matches as a substring. An excluded value drops only a rule that has
+ * exactly that value.
+ */
+function ruleSatisfiesTerm(rule: any, term: MspTerm): boolean | undefined {
+  const read = RULE_FIELDS[term.field.toLowerCase()];
+  if (!read || (term.kind !== 'exact' && term.kind !== 'wildcard')) {
+    return undefined;
+  }
+  const actual = String(read(rule) ?? '').toLowerCase();
+  const values = term.values.map(value =>
+    unquoteQueryValue(value).toLowerCase()
+  );
+  if (term.negated) {
+    return !values.includes(actual);
+  }
+  const isTarget =
+    term.field.toLowerCase() !== 'action' &&
+    term.field.toLowerCase() !== 'status';
+  return values.some(value => {
+    if (value.includes('*')) {
+      const pattern = value
+        .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+        .replace(/\*/g, '.*');
+      return new RegExp(`^${pattern}$`).test(actual);
+    }
+    return isTarget ? actual.includes(value) : actual === value;
+  });
+}
 
 /**
  * Configuration interface for risk thresholds and performance settings
@@ -295,35 +348,6 @@ export class SearchEngine {
   }
 
   /**
-   * Helper function to extract and apply query filters from a query string
-   * Extracts common patterns like field:value and applies them to filter results
-   */
-  private applyQueryFilters<T>(
-    results: T[],
-    query: string,
-    fieldExtractors: Record<string, (items: T[], value: string) => T[]>
-  ): T[] {
-    if (!query || typeof query !== 'string') {
-      return results;
-    }
-
-    let filteredResults = results;
-
-    // Apply each field extractor to filter results
-    for (const [fieldPattern, filterFunction] of Object.entries(
-      fieldExtractors
-    )) {
-      const match = query.match(new RegExp(`${fieldPattern}:([^\\s]+)`, 'i'));
-      if (match) {
-        const extractedValue = match[1];
-        filteredResults = filterFunction(filteredResults, extractedValue);
-      }
-    }
-
-    return filteredResults;
-  }
-
-  /**
    * Initialize search strategies for different entity types
    */
   private initializeStrategies(): void {
@@ -348,7 +372,7 @@ export class SearchEngine {
 
           const startTs = Math.floor(startDate.getTime() / 1000);
           const endTs = Math.floor(endDate.getTime() / 1000);
-          queryString = `ts:${startTs}-${endTs} AND (${params.query})`;
+          queryString = mspAnd(`ts:${startTs}-${endTs}`, params.query);
         }
 
         // Use getFlowData which works reliably
@@ -497,38 +521,14 @@ export class SearchEngine {
         return client.getNetworkRules(params.query, searchLimit);
       },
       processResults: (results, params) => {
-        // Use the helper function to apply query filters
-        const filteredResults = this.applyQueryFilters(
-          results,
-          params.query || '',
-          {
-            action: (items, value) => {
-              const expectedAction = value.toLowerCase();
-              return items.filter(
-                rule => rule.action?.toLowerCase() === expectedAction
-              );
-            },
-            target_value: (items, value) => {
-              const expectedTarget = value.toLowerCase();
-              // Support wildcard matching
-              if (expectedTarget.includes('*')) {
-                const pattern = expectedTarget.replace(/\*/g, '.*');
-                const regex = new RegExp(pattern, 'i');
-                return items.filter(rule =>
-                  regex.test(rule.target?.value?.toLowerCase() || '')
-                );
-              }
-              return items.filter(rule =>
-                rule.target?.value?.toLowerCase().includes(expectedTarget)
-              );
-            },
-            status: (items, value) => {
-              const expectedStatus = value.toLowerCase();
-              return items.filter(
-                rule => rule.status?.toLowerCase() === expectedStatus
-              );
-            },
-          }
+        // The API applies the query (sent in its grammar, see client.ts);
+        // the rules it returns are re-checked against every term of that
+        // query the client can read. This used to check only the first
+        // action: and status: value, so action:block OR action:allow kept
+        // block rules alone.
+        const terms = mspTerms(params.query || '');
+        const filteredResults = results.filter(rule =>
+          terms.every(term => ruleSatisfiesTerm(rule, term) !== false)
         );
 
         if (params.limit) {
@@ -792,9 +792,13 @@ export class SearchEngine {
       // Use standardized parameter validation
       this.validateSearchParams(params, entityType, validationConfig);
 
+      // The validator and parser know NOT but not the API's `-` prefix
+      // (-status:paused), which the query sent to the API keeps
+      const booleanQuery = withNotForMinus(params.query);
+
       // Enhanced query validation with detailed error messages and comprehensive checks
       const enhancedValidation = EnhancedQueryValidator.validateQuery(
-        params.query,
+        booleanQuery,
         entityType as EntityType
       );
 
@@ -802,7 +806,7 @@ export class SearchEngine {
         // Try instance method for detailed position tracking if static method fails
         const enhancedValidator = new EnhancedQueryValidator();
         const detailedValidation = enhancedValidator.validateQuery(
-          params.query,
+          booleanQuery,
           entityType as EntityType
         );
 
@@ -844,7 +848,7 @@ export class SearchEngine {
       const finalQuery =
         enhancedValidation.correctedQuery ||
         (enhancedValidation.sanitizedValue as string) ||
-        params.query;
+        booleanQuery;
 
       // Validate entityType before parsing
       const validEntityTypes = [
@@ -969,6 +973,10 @@ export class SearchEngine {
 
       return result;
     } catch (error) {
+      // A query the API cannot run is reported as it is
+      if (error instanceof MspQueryError) {
+        throw error;
+      }
       throw new Error(
         `${entityType} search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
@@ -1017,8 +1025,10 @@ export class SearchEngine {
         translateBooleanQuery(params.query, 'flows')
       );
 
-      // Build query string with time range if provided
-      let queryString = translatedQuery;
+      // The query, time range and geographic filters, ANDed in the API's
+      // grammar: a space, with no parentheses (the API has neither AND nor
+      // parentheses, and answered `ts:a-b AND (query)` with HTTP 400)
+      let timeQuery: string | undefined;
       if (params.time_range?.start && params.time_range?.end) {
         const startDate = new Date(params.time_range.start);
         const endDate = new Date(params.time_range.end);
@@ -1035,23 +1045,21 @@ export class SearchEngine {
 
         const startTs = Math.floor(startDate.getTime() / 1000);
         const endTs = Math.floor(endDate.getTime() / 1000);
-        queryString = `ts:${startTs}-${endTs} AND (${translatedQuery})`;
+        timeQuery = `ts:${startTs}-${endTs}`;
       }
 
       // Add geographic filters if provided
+      let geographicQuery: string | undefined;
       if (params.geographic_filters) {
         // Validate and obtain a sanitized copy
         const sanitizedGeoFilters = this.validateGeographicFilters(
           params.geographic_filters
         );
 
-        const geographicQuery = this.buildGeographicQuery(sanitizedGeoFilters);
-        if (geographicQuery) {
-          queryString = queryString
-            ? `${queryString} AND ${geographicQuery}`
-            : geographicQuery;
-        }
+        geographicQuery = this.buildGeographicQuery(sanitizedGeoFilters);
       }
+
+      const queryString = mspAnd(timeQuery, translatedQuery, geographicQuery);
 
       // Call API directly without complex validation/parsing
       const response = await this.firewalla.getFlowData(
@@ -1128,6 +1136,10 @@ export class SearchEngine {
 
       return result;
     } catch (error) {
+      // A query the API cannot run is reported as it is
+      if (error instanceof MspQueryError) {
+        throw error;
+      }
       throw new Error(
         `search_flows failed: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -1174,14 +1186,23 @@ export class SearchEngine {
       // Apply boolean field translation before building query string
       const translatedQuery = translateBooleanQuery(params.query, 'alarms');
 
-      // Build query string with optional severity filter
-      let alarmQuery = translatedQuery;
-      if ((params as any).severity) {
-        const sev = (params as any).severity;
-        alarmQuery = alarmQuery
-          ? `${alarmQuery} AND severity:${sev}`
-          : `severity:${sev}`;
+      // The query and time range, ANDed in the API's grammar (a space, no
+      // parentheses). Alarms have no severity qualifier, so none is added.
+      let timeQuery: string | undefined;
+      if (params.time_range?.start && params.time_range?.end) {
+        const startDate = new Date(params.time_range.start);
+        const endDate = new Date(params.time_range.end);
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+          throw new Error(
+            'Parameter validation failed: time_range must contain valid ISO 8601 dates'
+          );
+        }
+        if (startDate >= endDate) {
+          throw new Error('time_range.start must be before time_range.end');
+        }
+        timeQuery = `ts:${Math.floor(startDate.getTime() / 1000)}-${Math.floor(endDate.getTime() / 1000)}`;
       }
+      const alarmQuery = mspAnd(timeQuery, translatedQuery);
 
       // Call API directly without complex validation/parsing
       const response = await this.firewalla.getActiveAlarms(
@@ -1244,6 +1265,10 @@ export class SearchEngine {
 
       return result;
     } catch (error) {
+      // A query the API cannot run is reported as it is
+      if (error instanceof MspQueryError) {
+        throw error;
+      }
       throw new Error(
         `search_alarms failed: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -1535,6 +1560,10 @@ export class SearchEngine {
         },
       };
     } catch (error) {
+      // A query the API cannot run is reported as it is
+      if (error instanceof MspQueryError) {
+        throw error;
+      }
       throw new Error(
         `Enhanced cross-reference search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
@@ -1754,6 +1783,10 @@ export class SearchEngine {
         },
       };
     } catch (error) {
+      // A query the API cannot run is reported as it is
+      if (error instanceof MspQueryError) {
+        throw error;
+      }
       throw new Error(
         `Cross-reference search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
@@ -2143,6 +2176,10 @@ export class SearchEngine {
 
       return suggestions;
     } catch (error) {
+      // A query the API cannot run is reported as it is
+      if (error instanceof MspQueryError) {
+        throw error;
+      }
       throw new Error(
         `Correlation suggestions failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
@@ -2396,6 +2433,10 @@ export class SearchEngine {
         execution_time_ms: Date.now() - startTime,
       };
     } catch (error) {
+      // A query the API cannot run is reported as it is
+      if (error instanceof MspQueryError) {
+        throw error;
+      }
       throw new Error(
         `Geographic alarms search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
@@ -2499,6 +2540,10 @@ export class SearchEngine {
         execution_time_ms: Date.now() - startTime,
       };
     } catch (error) {
+      // A query the API cannot run is reported as it is
+      if (error instanceof MspQueryError) {
+        throw error;
+      }
       throw new Error(
         `Geographic statistics failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       );

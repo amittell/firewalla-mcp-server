@@ -126,7 +126,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query for filtering alarms. Active alarms only (status:1) unless the query names a status. Use type:N where N is: 1=Security Activity, 2=Abnormal Upload, 3=Large Bandwidth Usage, 4=Monthly Data Plan, 5=New Device, 6=Device Back Online, 7=Device Offline, 8=Video Activity, 9=Gaming Activity, 10=Porn Activity, 11=VPN Activity, 12=VPN Connection Restored, 13=VPN Connection Error, 14=Open Port, 15=Internet Connectivity Update, 16=Large Upload. Examples: type:8 (video), type:10 (porn), region:US, device.ip:192.168.*',
+                    'Search query for filtering alarms. Active alarms only (status:1) unless the query names a status. Use type:N where N is: 1=Security Activity, 2=Abnormal Upload, 3=Large Bandwidth Usage, 4=Monthly Data Plan, 5=New Device, 6=Device Back Online, 7=Device Offline, 8=Video Activity, 9=Gaming Activity, 10=Porn Activity, 11=VPN Activity, 12=VPN Connection Restored, 13=VPN Connection Error, 14=Open Port, 15=Internet Connectivity Update, 16=Large Upload. Examples: type:8 (video), type:10 (porn), region:US, device.ip:192.168.*. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes.',
                 },
                 groupBy: {
                   type: 'string',
@@ -290,7 +290,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query for flows. Supports region:US for geographic filtering, protocol:tcp, status:blocked, domain:*, category:social, etc.',
+                    'Search query for flows. Supports region:US for geographic filtering, protocol:tcp, status:blocked, domain:*, category:social, etc. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes.',
                 },
                 groupBy: {
                   type: 'string',
@@ -369,7 +369,8 @@ export class FirewallaMCPServer {
                 },
                 query: {
                   type: 'string',
-                  description: 'Search conditions for filtering rules',
+                  description:
+                    'Search conditions for filtering rules, e.g. action:block status:active. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes.',
                 },
               },
               required: ['limit'],
@@ -757,7 +758,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Supported fields: protocol:tcp/udp, direction:inbound/outbound/local, status:blocked/ok, total:>1MB (download + upload in B/KB/MB/GB/TB), download:>10MB, upload:>10MB, domain:*.example.com, region:US (country code), category:social/games/porn/etc, box.id:box_gid, device.ip:192.168.*, source.ip:*, destination.ip:*, ts:>1h. Examples: "region:US AND protocol:tcp", "status:blocked AND region:CN", "category:social OR category:games"',
+                    'Search query using Firewalla syntax. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes. Supported fields: protocol:tcp/udp, direction:inbound/outbound/local, status:blocked/ok, total:>1MB (download + upload in B/KB/MB/GB/TB), download:>10MB, upload:>10MB, domain:*.example.com, region:US (country code), category:social/games/porn/etc, box.id:box_gid, device.ip:192.168.*, source.ip:*, destination.ip:*, ts:>1h. Examples: "region:US AND protocol:tcp", "status:blocked AND region:CN", "category:social OR category:games"',
                 },
                 groupBy: {
                   type: 'string',
@@ -800,7 +801,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Supported fields: type:1-16 (see alarm types above), status:1/2 (active/archived), device.ip:192.168.*, region:US (country code), box.id:box_gid, device.name:*. Examples: "type:8 AND region:US" (video from US), "type:10 AND status:1" (active porn alerts), "device.ip:192.168.* AND status:1" (active alarms from the LAN), "porn" (free text: a term without a qualifier searches alarm text)',
+                    'Search query using Firewalla syntax. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes. Supported fields: type:1-16 (see alarm types above), status:1/2 (active/archived), device.ip:192.168.*, region:US (country code), box.id:box_gid, device.name:*. Examples: "type:8 AND region:US" (video from US), "type:10 AND status:1" (active porn alerts), "device.ip:192.168.* AND status:1" (active alarms from the LAN), "porn" (free text: a term without a qualifier searches alarm text)',
                 },
                 groupBy: {
                   type: 'string',
@@ -843,7 +844,7 @@ export class FirewallaMCPServer {
                 query: {
                   type: 'string',
                   description:
-                    'Search query using Firewalla syntax. Supported fields: action:allow/block/timelimit, target.type:domain/ip/device, target.value:*.facebook.com, status:active/paused, direction:bidirection/inbound/outbound, protocol:tcp/udp, box.id:box_gid, scope.type:device/network, notes:"description text". Examples: "action:block AND target.value:*.social.com", "status:paused", "target.type:domain AND action:block"',
+                    'Search query using Firewalla syntax. Terms joined by spaces or AND must all match; OR works between values of one field (sent as a comma list, e.g. region:US,CN) and is refused across fields; NOT or a leading - excludes. Supported fields: action:allow/block/timelimit, target.type:domain/ip/device, target.value:*.facebook.com, status:active/paused, direction:bidirection/inbound/outbound, protocol:tcp/udp, box.id:box_gid, scope.type:device/network, notes:"description text". Examples: "action:block AND target.value:*.social.com", "status:paused", "target.type:domain AND action:block"',
                 },
                 limit: {
                   type: 'number',

@@ -2,7 +2,12 @@
  * Firewall rule management tool handlers
  */
 
-import { BaseToolHandler, type ToolArgs, type ToolResponse } from './base.js';
+import {
+  BaseToolHandler,
+  mspQueryErrorResponse,
+  type ToolArgs,
+  type ToolResponse,
+} from './base.js';
 import {
   BoxSelectionError,
   type FirewallaClient,
@@ -285,6 +290,11 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
         executionTimeMs: executionTime,
       });
     } catch (error: unknown) {
+      // A query the MSP API cannot run was refused before any request
+      const queryError = mspQueryErrorResponse(this.name, error);
+      if (queryError) {
+        return queryError;
+      }
       if (error instanceof TimeoutError) {
         return createTimeoutErrorResponse(
           this.name,

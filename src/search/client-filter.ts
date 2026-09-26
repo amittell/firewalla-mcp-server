@@ -5,6 +5,8 @@
  * `matchesQuery` evaluates AND, OR, NOT and parentheses; the caller decides
  * what each `field:value` term matches. NOT binds tightest, then AND, then OR,
  * and terms with no operator between them are ANDed, as in the MSP syntax.
+ * The MSP API's exclusion prefix works too: `-field:value` and `-(...)` are
+ * NOT.
  */
 
 // A term runs to the next space or parenthesis outside quotes, so colons in a
@@ -52,7 +54,10 @@ export function matchesQuery(
   };
 
   const parseNot = (): boolean => {
-    if (peek() === 'NOT') {
+    if (
+      peek() === 'NOT' ||
+      (tokens[position] === '-' && tokens[position + 1] === '(')
+    ) {
       position++;
       return !parseNot();
     }
@@ -70,6 +75,9 @@ export function matchesQuery(
         position++;
       }
       return result;
+    }
+    if (/^-[\w.]+:/.test(token)) {
+      return !matchesTerm(token.slice(1));
     }
     return matchesTerm(token);
   };
