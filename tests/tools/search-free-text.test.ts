@@ -4,15 +4,13 @@
  * search_rules (`facebook`) each refused a query that was only free text
  * with "Expected ':' after field", from the search engine's query parser,
  * and `name:nas OR laptop` the same way. search_devices and
- * search_target_lists match free text on the client; search_rules sends it
- * to GET /v2/rules and leaves it to the API, whose free-text fields the
- * official docs do not list.
+ * search_target_lists match free text on the client; for search_rules see
+ * rules-free-text.test.ts.
  */
 
 import { FirewallaClient } from '../../src/firewalla/client.js';
 import {
   SearchDevicesHandler,
-  SearchRulesHandler,
   SearchTargetListsHandler,
 } from '../../src/tools/handlers/search.js';
 import { queryParser } from '../../src/search/parser.js';
@@ -174,48 +172,5 @@ describe('search_target_lists free text', () => {
     ['nothing-like-this', []],
   ])('%s -> %j', async (query, expected) => {
     expect(await ids(query)).toEqual(expected);
-  });
-});
-
-describe('search_rules free text', () => {
-  const RULES = [
-    { id: 'r1', action: 'block', status: 'active', target: { type: 'domain', value: 'facebook.com' } },
-    { id: 'r2', action: 'allow', status: 'active', target: { type: 'domain', value: 'example.com' }, notes: 'facebook exception' },
-  ];
-
-  it('sends a free-text query to the API and keeps the rules it returns', async () => {
-    // The stub answers with both rules, as the API would if its free text
-    // matched the target of one and the notes of the other
-    const { client, get } = makeClient({ count: 2, results: RULES });
-    const res = await new SearchRulesHandler().execute(
-      { query: 'facebook', limit: 10 },
-      client
-    );
-    expect(body(res).message).toBeUndefined();
-    expect(get.mock.calls.map(([endpoint, config]) => [endpoint, config?.params?.query])).toEqual([
-      ['/v2/rules', 'facebook'],
-    ]);
-    expect((body(res).data.rules as any[]).map(rule => rule.id)).toEqual(['r1', 'r2']);
-  });
-
-  it('re-checks the field terms beside it on the client', async () => {
-    const { client, get } = makeClient({ count: 2, results: RULES });
-    const res = await new SearchRulesHandler().execute(
-      { query: 'facebook AND action:block', limit: 10 },
-      client
-    );
-    expect(get.mock.calls[0][1].params.query).toBe('facebook action:block');
-    expect((body(res).data.rules as any[]).map(rule => rule.id)).toEqual(['r1']);
-  });
-
-  it('refuses an OR with free text, which the API cannot express', async () => {
-    const { client, get } = makeClient({ count: 0, results: [] });
-    const res = await new SearchRulesHandler().execute(
-      { query: 'facebook OR twitter', limit: 10 },
-      client
-    );
-    expect(res.isError).toBe(true);
-    expect(body(res).errorType).toBe('validation_error');
-    expect(get).not.toHaveBeenCalled();
   });
 });

@@ -47,11 +47,8 @@ import {
 /**
  * Rule fields search_rules re-checks on the client, by the names its schema
  * uses. Terms on other fields (box.id, device.id, scope, notes) are left to
- * the API, and so is free text: GET /v2/rules is sent the words and matches
- * them over fields of its own choosing, which the official docs do not list
- * ("a subset of properties (varies by resource type)"), so a client check
- * on the target value and notes could only drop rules the API matched on
- * another field.
+ * the API. Free text is not sent to the API, which matched none; the
+ * client's getNetworkRules matches it against the rules' text instead.
  */
 const RULE_FIELDS: Record<string, (rule: any) => unknown> = {
   action: rule => rule.action,
