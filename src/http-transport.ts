@@ -307,7 +307,24 @@ export function createHttpTransportServer(
     }
 
     if (req.method === 'POST') {
-      const parsedBody = await readJsonBody(req);
+      let parsedBody: unknown;
+      try {
+        parsedBody = await readJsonBody(req);
+      } catch (error) {
+        // The session was closed while the body arrived: a body that is not
+        // JSON or is over the limit gets 404 too, not 400 or 413, since 404
+        // is what tells the client to start a new session
+        if (
+          error instanceof HttpRequestError &&
+          sessionId &&
+          !transports.has(sessionId)
+        ) {
+          closeAfterAnswer(res);
+          sendSessionNotFound(res);
+          return;
+        }
+        throw error;
+      }
 
       let transport: StreamableHTTPServerTransport;
 

@@ -23,6 +23,7 @@ import {
   HEADERS_TIMEOUT_MS,
   isEndpointPath,
   listenHttpTransport,
+  MAX_BODY_BYTES,
   REQUEST_TIMEOUT_MS,
 } from '../../src/http-transport';
 import { FirewallaMCPServer } from '../../src/server';
@@ -99,7 +100,8 @@ async function start(
 /**
  * Sends one request to the server at `address`. The Host header defaults to
  * localhost:<port>, what a client connecting to http://localhost sends.
- * With `endAfterMs`, the request is ended that long after its body is sent.
+ * With `later`, `later.body` is written `later.afterMs` after `body`, and
+ * only then is the request ended (unless `end` is false).
  */
 function send(
   address: AddressInfo,
@@ -109,14 +111,14 @@ function send(
     headers = {},
     body,
     end = true,
-    endAfterMs,
+    later,
   }: {
     method?: string;
     path?: string;
     headers?: Record<string, string>;
     body?: string;
     end?: boolean;
-    endAfterMs?: number;
+    later?: { afterMs: number; body?: string };
   } = {}
 ): Promise<Reply> {
   return new Promise((resolve, reject) => {
@@ -149,10 +151,18 @@ function send(
     if (body !== undefined) {
       req.write(body);
     }
-    if (end && endAfterMs !== undefined) {
-      setTimeout(() => req.end(), endAfterMs);
-    } else if (end) {
-      req.end();
+    const finish = () => {
+      if (later?.body !== undefined) {
+        req.write(later.body);
+      }
+      if (end) {
+        req.end();
+      }
+    };
+    if (later) {
+      setTimeout(finish, later.afterMs);
+    } else {
+      finish();
     }
   });
 }
@@ -842,10 +852,89 @@ describe('HTTP transport sessions', () => {
     const reply = await send(address, {
       headers: { ...MCP_HEADERS, 'mcp-session-id': sessionId },
       body: TOOLS_LIST,
-      endAfterMs: 500,
+      later: { afterMs: 500 },
     });
     expect(reply.status).toBe(404);
     expect(JSON.parse(reply.body).error.code).toBe(-32001);
+  });
+
+  /**
+   * POST bodies that fail to read: one that is not JSON, and one that passes
+   * 1 MB, sent with no Content-Length (chunked), so the limit is found only
+   * as it arrives. The rest of each body is sent `afterMs` after the start.
+   */
+  const badBodies = (afterMs: number) => [
+    {
+      name: 'not JSON',
+      body: '{"jsonrpc": "2.0", ',
+      later: { afterMs },
+    },
+    {
+      name: 'over 1 MB',
+      body: '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"x":"',
+      later: { afterMs, body: 'x'.repeat(MAX_BODY_BYTES) },
+      end: false,
+    },
+  ];
+
+  it('answers 404, not 400 or 413, to a bad body whose session closed while it arrived', async () => {
+    const { address } = await start(
+      { MCP_HTTP_ALLOWED_ORIGINS: 'http://localhost:6274' },
+      { idleTimeoutMs: 100 }
+    );
+    const outcomes: Array<Record<string, unknown>> = [];
+    for (const { name, ...request } of badBodies(500)) {
+      const sessionId = (await initialize(address)).headers[
+        'mcp-session-id'
+      ] as string;
+      const reply = await send(address, {
+        ...request,
+        headers: {
+          ...MCP_HEADERS,
+          origin: 'http://localhost:6274',
+          'mcp-session-id': sessionId,
+        },
+      });
+      outcomes.push({
+        name,
+        status: reply.status,
+        error: JSON.parse(reply.body).error,
+        connection: reply.headers.connection,
+        allowOrigin: reply.headers['access-control-allow-origin'],
+      });
+    }
+    expect(outcomes).toEqual(
+      badBodies(500).map(({ name }) => ({
+        name,
+        status: 404,
+        error: { code: -32001, message: 'Session not found' },
+        connection: 'close',
+        allowOrigin: 'http://localhost:6274',
+      }))
+    );
+  });
+
+  it('keeps 400 and 413 for a bad body whose session is still open', async () => {
+    const { address } = await start();
+    const sessionId = (await initialize(address)).headers[
+      'mcp-session-id'
+    ] as string;
+    const outcomes: Array<Record<string, unknown>> = [];
+    for (const { name, ...request } of badBodies(50)) {
+      const reply = await send(address, {
+        ...request,
+        headers: { ...MCP_HEADERS, 'mcp-session-id': sessionId },
+      });
+      outcomes.push({
+        name,
+        status: reply.status,
+        code: JSON.parse(reply.body).error.code,
+      });
+    }
+    expect(outcomes).toEqual([
+      { name: 'not JSON', status: 400, code: -32700 },
+      { name: 'over 1 MB', status: 413, code: -32000 },
+    ]);
   });
 
   it('keeps 400 for a request with no session ID other than initialize', async () => {
