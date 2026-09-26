@@ -207,8 +207,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without separators, becomes `removed_fence_tag`, so a value cannot close
   the block, and line breaks in a value become spaces, so it cannot add
   lines of its own. The `device_investigation` heading names the device by
-  the ID it was given instead of its name. After an idea in the fork
-  matesecurityzach/firewalla-mcp-server; this is a separate implementation.
+  the ID it was given instead of its name. The idea came from the fork
+  github.com/matesecurityzach/firewalla-mcp-server; this is a separate
+  implementation.
 - Tool results, resources and prompts passed on characters that do not
   display and that a model still reads: Unicode tag characters
   (U+E0000-U+E007F), bidi embeddings, overrides and isolates
