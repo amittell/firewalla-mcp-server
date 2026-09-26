@@ -207,6 +207,19 @@ describe('invisible characters are shown as markers', () => {
     expect(text).toContain(ENGLAND);
   });
 
+  it('in a markdown tool result, after it is rendered', async () => {
+    const text = textOf(
+      await client.callTool({
+        name: 'get_device_status',
+        arguments: { limit: 10, response_format: 'markdown' },
+      })
+    );
+    expect(text.startsWith('#')).toBe(true);
+    expect(text).toContain(DEVICE_NAME_SHOWN);
+    expect(text).not.toMatch(INVISIBLE);
+    expect(text).not.toContain(tags('hi'));
+  });
+
   it('in the values of a tool result', async () => {
     const text = textOf(
       await client.callTool({
