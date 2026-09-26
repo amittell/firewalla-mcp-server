@@ -199,6 +199,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   word>` returned 0), and keep the rules that have every word,
   case-insensitively, in their name, notes, action, target type or value, or
   scope type or value.
+- `search_devices`, `search_target_lists` and `search_rules` check every
+  term of a query whose terms are side by side with no operator
+  (`name:nas online:maybe`, `nas online:maybe`). The search engine's query
+  parser read such terms as AND only with an explicit `AND`, stopped after
+  the first term and reported the rest of the query as nothing, so
+  `online:maybe` passed its checks. It also refuses a token it cannot read,
+  such as a stray `)`, instead of dropping it, and the error for a refused
+  query no longer says a free-text word lacks a colon.
 - `search_target_lists` reads a comma list as any of its values, as the API
   grammar does. It compared the list as one value, so `category:social,games`
   found no list. A quoted value keeps its commas (`name:"Block, Social"`), and

@@ -43,6 +43,14 @@ export class QueryParser {
       this.tokens = this.tokenize(query);
       const ast = this.parseExpression();
 
+      // The whole query must be read: a token left over (a stray `)`, or a
+      // term after an error) would otherwise be dropped without a word
+      if (this.errors.length === 0 && !this.isAtEnd()) {
+        this.errors.push(
+          `Unexpected token '${this.peek().value}' at position ${this.peek().position}`
+        );
+      }
+
       // Validate fields if entity type is provided
       if (entityType && ast) {
         this.validateFields(ast, entityType);
@@ -396,7 +404,10 @@ export class QueryParser {
   private parseAndExpression(): QueryNode | undefined {
     let left = this.parseNotExpression();
 
-    while (this.matchLogical('AND')) {
+    // Terms with no operator between them are ANDed, as in the MSP
+    // grammar (nas online:true). Without this, the parse ended at the first
+    // term and reported the rest of the query as nothing.
+    while (this.matchLogical('AND') || this.startsImplicitAnd()) {
       const right = this.parseNotExpression();
       if (!right) {
         break;
@@ -681,6 +692,18 @@ export class QueryParser {
     }
 
     return suggestions;
+  }
+
+  /**
+   * Whether the next token starts another term ANDed without an operator:
+   * anything but the end, OR, or a closing parenthesis
+   */
+  private startsImplicitAnd(): boolean {
+    return (
+      !this.isAtEnd() &&
+      !this.check(TokenType.RPAREN) &&
+      !(this.check(TokenType.LOGICAL) && this.peek().value === 'OR')
+    );
   }
 
   // Utility methods for token management

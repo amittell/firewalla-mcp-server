@@ -426,26 +426,10 @@ export class EnhancedQueryValidator {
         continue;
       }
       
-      // Check for missing colon
-      if (operator === '' && value !== '') {
-        const context = this.getErrorContext(query, position);
-        errors.push({
-          message: `Expected ':' after field '${field}' at position ${position + field.length}`,
-          position: position + field.length,
-          errorType: 'syntax',
-          context,
-          suggestion: `Use '${field}:${value}' instead of '${field} ${value}'`
-        });
-        
-        quickFixes.push({
-          description: `Add colon after field '${field}'`,
-          action: 'fix_syntax',
-          position: position + field.length,
-          original: `${field  } ${  value}`,
-          replacement: `${field  }:${  value}`
-        });
-      }
-      
+      // A word with no colon is free text, which the parser accepts, so
+      // there is no missing colon to report: `nas online:maybe` was reported
+      // as "Expected ':' after field 'nas'", hiding its real error
+
       // Check for invalid equals operator
       if (operator === '=') {
         const context = this.getErrorContext(query, position);
