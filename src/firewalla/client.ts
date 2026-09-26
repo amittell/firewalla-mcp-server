@@ -385,6 +385,16 @@ function withMspQuery(
   return translated ? { ...rest, query: translated } : rest;
 }
 
+/** The values search_devices reads for `online:`, lowercase */
+const ONLINE_VALUES: ReadonlyMap<string, boolean> = new Map([
+  ['true', true],
+  ['1', true],
+  ['yes', true],
+  ['false', false],
+  ['0', false],
+  ['no', false],
+]);
+
 /**
  * Whether a rule, as GET /v2/rules returns it, has every free-text word
  * (lowercase) in its name, notes, action, target type or value, or scope
@@ -4653,7 +4663,6 @@ export class FirewallaClient {
                 return matchesText(unquoteQueryValue(term));
               }
               const [, field, rawValue] = fieldTerm;
-              const value = unquoteQueryValue(rawValue);
               // A comma list matches any of its values, as in the MSP API
               // grammar (name:nas,laptop); it was compared as one value
               const values = commaListValues(rawValue);
@@ -4688,13 +4697,17 @@ export class FirewallaClient {
                   return anyValue(entry =>
                     groupName.includes(entry.replace(/\*/g, ''))
                   );
-                case 'online':
-                  if (value === 'true') {
-                    return isOnline;
-                  } else if (value === 'false') {
-                    return !isOnline;
-                  }
-                  return true; // Unknown online value, let it pass
+                case 'online': {
+                  // true or false, or 1/0 and yes/no as the query validator
+                  // accepts; a comma list is any of its values. A value
+                  // that is none of these matches no device: it matched
+                  // every one (online:yes and online:true,true did)
+                  const wanted = values.map(entry => ONLINE_VALUES.get(entry));
+                  return (
+                    wanted.every(entry => entry !== undefined) &&
+                    wanted.includes(isOnline)
+                  );
+                }
                 default:
                   // Fallback: search the whole term in all text fields
                   return matchesText(term);

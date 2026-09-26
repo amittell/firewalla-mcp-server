@@ -213,7 +213,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a list may hold quoted values (`notes:consoles,"ad servers"`), which the
   search engine's parser refused as an unclosed quote. `search_devices` reads
   comma lists the same way (`name:nas,laptop`, `ip:192.168.1.0/24,10.0.0.0/8`);
-  it compared them as one value too.
+  it compared them as one value too. `online:` takes a list of booleans
+  (`online:true,false`), and `yes`, `no`, `1` and `0` as the query check
+  already did; any other value is refused (`online:maybe`, `online:tr*`) and
+  matches no device. `online:yes` and `online:true,true` matched every
+  device, offline ones included, and `online:true,false` was refused.
 - A comma list may hold wildcards (`name:*Block*,Ads`,
   `domain:*apple*,*google*`). The shared query validator refused one
   as an invalid wildcard pattern, although an `OR` of wildcard values is sent
