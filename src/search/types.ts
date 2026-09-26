@@ -209,6 +209,9 @@ export const SEARCH_FIELDS = {
     'domain', // MSP flow qualifier: domain:*.example.com
     'status', // MSP flow qualifier: status:blocked, status:ok
     'total', // MSP flow qualifier: total:>1MB (download + upload)
+    'sport', // MSP flow qualifiers: source and destination port
+    'dport',
+    'block', // block:true and block:false are sent as status:blocked
     // Enhanced geographic fields
     'country',
     'country_code',
@@ -304,8 +307,10 @@ export const SEARCH_FIELDS = {
     'enabled',
     'created_at',
     'updated_at',
-    // MSP rule qualifier and Rule model property paths
+    // MSP rule qualifiers and Rule model property paths
     'box.id',
+    'box.group.id',
+    'device.id',
     'protocol',
     'notes',
     'scope.type',
