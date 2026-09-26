@@ -1164,7 +1164,7 @@ box.name:FirewallaGold
 ```bash
 # Use * for fuzzy matching
 device.name:*iphone*     # Matches "iphone-12", "joe-iphone", etc.
-domain:*.facebook.com    # Matches any Facebook subdomain
+domain:*.facebook.com    # Matches any Facebook subdomain (official example; on flows it matches nothing, use domain:facebook.com, see below)
 device.ip:192.168.*      # Matches any IP in 192.168.x.x range (measured on alarms, 2026-09-25)
 ```
 
