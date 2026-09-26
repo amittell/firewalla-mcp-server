@@ -291,7 +291,8 @@ export class RenameDeviceHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      const deviceIdValidation = ParameterValidator.validateRequiredString(
+      // device_id and gid go into the request path
+      const deviceIdValidation = ParameterValidator.validatePathSegment(
         args?.device_id,
         'device_id'
       );
@@ -299,9 +300,10 @@ export class RenameDeviceHandler extends BaseToolHandler {
         args?.name,
         'name'
       );
-      const gidValidation = ParameterValidator.validateOptionalString(
+      const gidValidation = ParameterValidator.validatePathSegment(
         args?.gid,
-        'gid'
+        'gid',
+        { required: false }
       );
 
       const validationResult = ParameterValidator.combineValidationResults([

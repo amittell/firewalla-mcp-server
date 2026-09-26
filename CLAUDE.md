@@ -327,6 +327,7 @@ This file contains the complete, official Firewalla MSP API v2 documentation inc
 - `src/server.ts`: Main MCP server with 29-tool TOOL_SCHEMAS architecture
 - `src/tools/registry.ts`: Tool registry with 29 handler definitions
 - `src/firewalla/client.ts`: Firewalla API client with caching
+- `src/validation/path-segment.ts`: the check every ID goes through before it is put into a request path
 - `src/validation/`: Parameter validation and error handling
 
 ### Data Flow
@@ -408,6 +409,9 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
 - New tools that change state go in `WRITE_TOOL_NAMES`, so they stay off by default
   (`pause_rule`, `resume_rule` and the target-list create/update/delete tools
   predate the switch and are always registered)
+- An ID that goes into a request path goes through `pathSegment()` in
+  `src/validation/path-segment.ts` (and the handler checks it with
+  `ParameterValidator.validatePathSegment`), never straight into a template string
 - Include proper input validation and error handling
 - Follow the 29-tool architecture constraints
 - Implement direct API execution in the server

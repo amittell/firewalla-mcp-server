@@ -41,6 +41,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cursor, reading the same page again until it had `limit` items. The repeat
   in martin2110/firewalla-mcp-server#3 came from `get_flow_data`, not the
   API; this is a guard.
+- IDs are now checked before they go into request paths. Target-list ids,
+  rule ids, alarm ids, box gids and device ids were put into the path as
+  given (a target-list id only had to be non-empty), so an ID could change
+  which endpoint a request reached. Every such ID is refused, as a validation
+  error naming the argument and before any request, when it holds `/`, a
+  backslash, `?`, `#`, `%`, whitespace or a control character, or is `.` or
+  `..`. `:` is still allowed, for rule ids (`<box gid>:<n>`), MAC device ids
+  and `ovpn:` ids. Path segments are also percent-encoded, which changes
+  nothing for the ids the API returns: a rule id's `:` is sent as it is, and
+  a device id's as `%3A`, as before.
 - `pause_rule`, `resume_rule` and `delete_rule` read the rule once, by id,
   before acting. They also listed every rule first, through a 30-second
   existence cache that writes never cleared, so each call cost an extra

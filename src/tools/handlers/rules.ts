@@ -1487,7 +1487,8 @@ export class GetSpecificTargetListHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      const idValidation = ParameterValidator.validateRequiredString(
+      // The id goes into the request path
+      const idValidation = ParameterValidator.validatePathSegment(
         args?.id,
         'id'
       );
@@ -1674,7 +1675,8 @@ export class UpdateTargetListHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      const idValidation = ParameterValidator.validateRequiredString(
+      // The id goes into the request path
+      const idValidation = ParameterValidator.validatePathSegment(
         args?.id,
         'id'
       );
@@ -1798,7 +1800,8 @@ export class DeleteTargetListHandler extends BaseToolHandler {
     firewalla: FirewallaClient
   ): Promise<ToolResponse> {
     try {
-      const idValidation = ParameterValidator.validateRequiredString(
+      // The id goes into the request path
+      const idValidation = ParameterValidator.validatePathSegment(
         args?.id,
         'id'
       );

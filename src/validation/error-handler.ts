@@ -4,6 +4,7 @@
  */
 
 import { FieldValidator } from './field-validator.js';
+import { pathSegmentProblem } from './path-segment.js';
 import type { ValidationResult } from '../types.js';
 
 /**
@@ -679,6 +680,35 @@ export class ParameterValidator {
       errors: [],
       sanitizedValue: trimmedValue
     };
+  }
+
+  /**
+   * Validate an ID that goes into a request path as one segment: a
+   * target-list id, rule id, alarm id, box gid or device id. The trimmed
+   * string is refused when it holds `/`, a backslash, `?`, `#`, `%`, whitespace or
+   * a control character, or is `.` or `..` (see path-segment.ts); `:` is
+   * allowed. With `required` false, a missing or empty value is valid and
+   * gives undefined.
+   */
+  static validatePathSegment(
+    value: unknown,
+    paramName: string,
+    { required = true }: { required?: boolean } = {}
+  ): ValidationResult {
+    const stringValidation = required
+      ? this.validateRequiredString(value, paramName)
+      : this.validateOptionalString(value, paramName);
+    if (
+      !stringValidation.isValid ||
+      stringValidation.sanitizedValue === undefined
+    ) {
+      return { ...stringValidation, errors: stringValidation.errors ?? [] };
+    }
+    const problem = pathSegmentProblem(stringValidation.sanitizedValue);
+    if (problem) {
+      return { isValid: false, errors: [`${paramName} ${problem}`] };
+    }
+    return { ...stringValidation, errors: [] };
   }
 
   /**

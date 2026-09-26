@@ -86,6 +86,7 @@ import {
   checkMuteRequest,
   type AlarmMuteRequest,
 } from '../validation/alarm-mute.js';
+import { pathSegment } from '../validation/path-segment.js';
 import {
   DEFAULT_RATE_LIMIT,
   MAX_RATE_LIMIT_RETRIES,
@@ -2009,7 +2010,10 @@ export class FirewallaClient {
    * Get a specific target list by ID
    */
   async getSpecificTargetList(id: string): Promise<TargetList> {
-    return this.request<TargetList>('GET', `/v2/target-lists/${id}`);
+    return this.request<TargetList>(
+      'GET',
+      `/v2/target-lists/${pathSegment(id, 'id')}`
+    );
   }
 
   /**
@@ -2044,7 +2048,7 @@ export class FirewallaClient {
   ): Promise<TargetList> {
     return this.request<TargetList>(
       'PATCH',
-      `/v2/target-lists/${id}`,
+      `/v2/target-lists/${pathSegment(id, 'id')}`,
       {},
       updateData
     );
@@ -2058,7 +2062,7 @@ export class FirewallaClient {
   ): Promise<{ success: boolean; message: string }> {
     return this.request<{ success: boolean; message: string }>(
       'DELETE',
-      `/v2/target-lists/${id}`
+      `/v2/target-lists/${pathSegment(id, 'id')}`
     );
   }
 
@@ -2161,7 +2165,7 @@ export class FirewallaClient {
 
     return this.request<{ success: boolean; message: string }>(
       'DELETE',
-      `/v2/rules/${validatedRuleId}`,
+      `/v2/rules/${pathSegment(validatedRuleId, 'rule_id')}`,
       {},
       undefined,
       false
@@ -2191,7 +2195,8 @@ export class FirewallaClient {
 
     return this.request<Device>(
       'PATCH',
-      `/v2/boxes/${encodeURIComponent(gid)}/devices/${encodeURIComponent(validatedDeviceId)}`,
+      // The device id's colons stay percent-encoded, as they always were here
+      `/v2/boxes/${pathSegment(gid, 'gid', { encodeColons: true })}/devices/${pathSegment(validatedDeviceId, 'device_id', { encodeColons: true })}`,
       {},
       { name },
       false
@@ -2640,7 +2645,7 @@ export class FirewallaClient {
 
             response = await this.request<any>(
               'GET',
-              `/v2/alarms/${validatedGid}/${validatedAlarmId}`
+              `/v2/alarms/${pathSegment(validatedGid, 'gid')}/${pathSegment(validatedAlarmId, 'alarm_id')}`
             );
 
             // If we get here, the request succeeded
@@ -2889,7 +2894,7 @@ export class FirewallaClient {
             status?: string;
           }>(
             'DELETE',
-            `/v2/alarms/${validatedGid}/${validatedAlarmId}`,
+            `/v2/alarms/${pathSegment(validatedGid, 'gid')}/${pathSegment(validatedAlarmId, 'alarm_id')}`,
             undefined,
             false
           );
@@ -3167,7 +3172,7 @@ export class FirewallaClient {
     try {
       const alarm = await this.request<Record<string, any>>(
         'GET',
-        `/v2/alarms/${gid}/${aid}`,
+        `/v2/alarms/${pathSegment(gid, 'gid')}/${pathSegment(aid, 'alarm_id')}`,
         undefined,
         undefined,
         false
@@ -3190,7 +3195,7 @@ export class FirewallaClient {
     action: 'archive' | 'mute',
     body?: Record<string, unknown>
   ): Promise<unknown> {
-    const endpoint = `/v2/alarms/${located.gid}/${located.aid}/${action}`;
+    const endpoint = `/v2/alarms/${pathSegment(located.gid, 'gid')}/${pathSegment(located.aid, 'alarm_id')}/${action}`;
     let response: unknown;
     try {
       response = await this.request<unknown>(
@@ -5748,7 +5753,13 @@ export class FirewallaClient {
       const response = await this.request<{
         success?: boolean;
         message?: string;
-      }>('POST', `/v2/rules/${validatedRuleId}/pause`, {}, undefined, false);
+      }>(
+        'POST',
+        `/v2/rules/${pathSegment(validatedRuleId, 'rule_id')}/pause`,
+        {},
+        undefined,
+        false
+      );
       this.invalidateRuleCache();
 
       return {
@@ -5793,7 +5804,13 @@ export class FirewallaClient {
       const response = await this.request<{
         success?: boolean;
         message?: string;
-      }>('POST', `/v2/rules/${validatedRuleId}/resume`, {}, undefined, false);
+      }>(
+        'POST',
+        `/v2/rules/${pathSegment(validatedRuleId, 'rule_id')}/resume`,
+        {},
+        undefined,
+        false
+      );
       this.invalidateRuleCache();
 
       return {

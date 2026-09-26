@@ -533,9 +533,11 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
         );
       }
 
-      const gidValidation = ParameterValidator.validateOptionalString(
+      // gid goes into the request path
+      const gidValidation = ParameterValidator.validatePathSegment(
         args?.gid,
-        'gid'
+        'gid',
+        { required: false }
       );
       if (!gidValidation.isValid) {
         return this.createErrorResponse(
