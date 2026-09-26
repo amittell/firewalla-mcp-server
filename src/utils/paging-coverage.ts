@@ -22,8 +22,14 @@ export type PagingStopReason =
 
 /** The paging facts of one read, as the client's requestPages reports them */
 export interface PagingOutcome {
-  /** GET requests the read made */
+  /**
+   * Requests sent to the API (what counts against its 100 per 5 minutes),
+   * 429 retries included; a page answered from the client's response cache
+   * sends none
+   */
   api_requests: number;
+  /** Pages answered from the client's response cache */
+  cached_pages: number;
   stopped_reason: PagingStopReason;
 }
 
@@ -83,6 +89,7 @@ export function pagingCoverage(
     oldest: iso(oldest),
     newest: iso(newest),
     api_requests: outcome.api_requests,
+    cached_pages: outcome.cached_pages,
     stopped_reason: outcome.stopped_reason,
   };
 }
