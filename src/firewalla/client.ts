@@ -1036,8 +1036,9 @@ export class FirewallaClient {
         throw new Error(errorMessage);
       }
 
-      // A 403 from the response interceptor carries its own explanation
-      if (error instanceof ForbiddenError) {
+      // A 403 from the response interceptor carries its own explanation, and
+      // a rate-limit refusal says when capacity returns
+      if (error instanceof ForbiddenError || error instanceof RateLimitError) {
         throw error;
       }
 
