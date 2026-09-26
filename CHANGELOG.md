@@ -13,6 +13,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before acting. They also listed every rule first, through a 30-second
   existence cache that writes never cleared, so each call cost an extra
   request.
+- The client paces its requests and handles the API's rate limit. The MSP
+  API accepts 100 requests per token in each fixed 5-minute window (measured
+  2026-09-26) and answers 429 over that, with `retry-after` and
+  `x-ratelimit-reset` giving the window's end, up to about 300 seconds away.
+  The client did not count its requests and turned every 429 into an error,
+  so two runs of a 55-call test harness within about two minutes made about
+  15 unrelated tools fail at once. `API_RATE_LIMIT` (default 100) was
+  range-checked and never applied, and was described as requests per minute;
+  it is now requests per 5 minutes, which changes nothing that worked before.
+  At most `API_RATE_LIMIT` requests start in any rolling 5 minutes. A request
+  waits for the rate limit at most 20 seconds in all, less than the 30
+  seconds tools wait: within that it queues, in order, and otherwise it fails
+  at once with an error saying the API allows that many requests per 5
+  minutes and when capacity returns, in seconds and as a UTC time. A 429
+  pauses every request of the client until `x-ratelimit-reset` (else for
+  `retry-after`, else for 300 seconds), and a GET is sent again, at most
+  twice, only when the pause ends within its 20 seconds. A write that gets a
+  429 is not sent again. Successful responses carry no rate-limit headers,
+  so the client counts its own requests.
+- `docs/rate-limiting-guide.md` describes the measured limit and what the
+  client does. It gave per-endpoint quotas and rate-limit headers that were
+  never measured, and request spacing, concurrency caps, priority queues and
+  backoff settings that the code does not have.
 
 ### Changed
 

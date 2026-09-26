@@ -37,7 +37,7 @@ A Model Context Protocol server providing Claude with real-time access to Firewa
 ### Base Configuration
 - **Base URL**: `https://{msp_domain}/v2/`
 - **Authentication**: Token-based authentication
-- **Rate Limit**: 100 requests per minute
+- **Rate Limit**: 100 requests per token in each fixed 5-minute window (measured 2026-09-26; see `docs/firewalla-api-reference.md`)
 - **Timeout**: 30 seconds per request
 
 ### API Endpoints

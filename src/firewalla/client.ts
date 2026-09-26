@@ -4,7 +4,8 @@
  * Provides comprehensive access to Firewalla MSP APIs with enterprise-grade features:
  * - **Authentication**: Token-based MSP API authentication with error handling
  * - **Caching**: Intelligent response caching with configurable TTL
- * - **Rate Limiting**: Built-in protection against API rate limits
+ * - **Rate Limiting**: Paces requests to `API_RATE_LIMIT` per 5 minutes and
+ *   fails fast, or retries a GET, when the API refuses one with HTTP 429
  * - **Error Handling**: Comprehensive error mapping and recovery strategies
  * - **Monitoring**: Request/response logging and performance tracking
  *
@@ -17,7 +18,12 @@
  * @since 2025-06-21
  */
 
-import axios, { type AxiosInstance, type AxiosResponse } from 'axios';
+import axios, {
+  type AxiosError,
+  type AxiosInstance,
+  type AxiosResponse,
+  type InternalAxiosRequestConfig,
+} from 'axios';
 import { createHash } from 'crypto';
 import { getCurrentTimestamp } from '../utils/timestamp.js';
 import type {
@@ -67,6 +73,17 @@ import {
   checkMuteRequest,
   type AlarmMuteRequest,
 } from '../validation/alarm-mute.js';
+import {
+  DEFAULT_RATE_LIMIT,
+  MAX_RATE_LIMIT_RETRIES,
+  RATE_LIMIT_MAX_WAIT_MS,
+  RateLimitError,
+  RequestRateLimiter,
+  rateLimitError,
+  rateLimitPauseMs,
+  systemClock,
+  type Clock,
+} from './rate-limit.js';
 
 /**
  * Standard API response wrapper for Firewalla MSP endpoints
@@ -362,6 +379,20 @@ export class ForbiddenError extends Error {
 }
 
 /**
+ * An axios request config carrying the request's rate-limit state from one
+ * attempt to the next
+ */
+interface RateLimitedConfig extends InternalAxiosRequestConfig {
+  /**
+   * When the request stops waiting for the rate limit: RATE_LIMIT_MAX_WAIT_MS
+   * after it was first made
+   */
+  rateLimitDeadline?: number;
+  /** 429 retries sent so far */
+  rateLimitRetries?: number;
+}
+
+/**
  * Whether a request names a box: a `box` parameter, a `box` or `gid` in
  * its body, or a gid in an /v2/alarms/{gid}/... or /v2/boxes/{gid}/... path
  */
@@ -427,7 +458,8 @@ export function forbiddenMessage(error: {
  * Features:
  * - Automatic token-based authentication with the MSP API
  * - Intelligent caching with configurable TTL policies
- * - Built-in rate limiting and retry mechanisms
+ * - Paces requests to `rateLimit` per 5 minutes; after a 429, pauses and
+ *   retries a GET when the wait is short
  * - Comprehensive error handling with meaningful error messages
  * - Request/response logging for debugging and monitoring
  *
@@ -459,13 +491,27 @@ export class FirewallaClient {
   /** @private Geographic cache for IP geolocation lookups */
   private geoCache: GeographicCache;
 
+  /** @private Paces every request through `api` to `config.rateLimit` per 5 minutes */
+  private readonly rateLimiter: RequestRateLimiter;
+
   /**
    * Creates a new Firewalla API client instance
    *
    * @param config - Configuration object containing MSP credentials and settings
+   * @param clock - Time and waiting for rate limiting; tests pass their own
    * @throws {Error} If configuration is invalid or authentication fails
    */
-  constructor(private config: FirewallaConfig) {
+  constructor(
+    private config: FirewallaConfig,
+    private readonly clock: Clock = systemClock
+  ) {
+    const { rateLimit } = config;
+    this.rateLimiter = new RequestRateLimiter(
+      Number.isFinite(rateLimit) && rateLimit >= 1
+        ? Math.floor(rateLimit)
+        : DEFAULT_RATE_LIMIT,
+      clock
+    );
     this.cache = new Map();
     this.geoCache = new GeographicCache({
       maxSize: 10000,
@@ -503,7 +549,10 @@ export class FirewallaClient {
    * Sets up Axios request and response interceptors for logging and error handling
    *
    * Configures interceptors to:
+   * - Hold each request until the rate limiter has a slot for it, or refuse
+   *   it when the slot is more than RATE_LIMIT_MAX_WAIT_MS away
    * - Log all API requests and responses for debugging
+   * - Pause on a 429 and retry a GET (see retryRateLimited)
    * - Transform HTTP error codes into meaningful error messages
    * - Handle authentication and authorization failures
    * - Provide specific guidance for common error scenarios
@@ -513,11 +562,41 @@ export class FirewallaClient {
    */
   private setupInterceptors(): void {
     this.api.interceptors.request.use(
-      config => {
-        process.stderr.write(
-          `API Request: ${config.method?.toUpperCase()} ${config.url}\n`
-        );
-        return config;
+      (
+        config
+      ): InternalAxiosRequestConfig | Promise<InternalAxiosRequestConfig> => {
+        const request = config as RateLimitedConfig;
+        const deadline = (request.rateLimitDeadline ??=
+          this.clock.now() + RATE_LIMIT_MAX_WAIT_MS);
+        const name = `${config.method?.toUpperCase()} ${config.url}`;
+        const send = () => {
+          process.stderr.write(`API Request: ${name}\n`);
+          return config;
+        };
+        const refuse = (error: RateLimitError) => {
+          process.stderr.write(
+            `API Request refused for the rate limit: ${name}; capacity returns in ${Math.max(0, Math.ceil((error.availableAt - this.clock.now()) / 1000))} s\n`
+          );
+          return error;
+        };
+        // A free slot is taken at once, so an unthrottled request goes out
+        // without waiting a tick
+        if (this.rateLimiter.tryAcquire()) {
+          return send();
+        }
+        const startAt = this.rateLimiter.nextStartAt();
+        if (startAt > deadline) {
+          throw refuse(this.rateLimiter.unavailable(startAt));
+        }
+        // A retry's wait was logged when its 429 came back
+        if (request.rateLimitRetries === undefined) {
+          process.stderr.write(
+            `API Request queued for the rate limit: ${name}\n`
+          );
+        }
+        return this.rateLimiter.acquire(deadline).then(send, error => {
+          throw error instanceof RateLimitError ? refuse(error) : error;
+        });
       },
       async error => {
         process.stderr.write(`API Request Error: ${error.message}\n`);
@@ -533,6 +612,10 @@ export class FirewallaClient {
         return response;
       },
       async error => {
+        // Refused before it was sent; the request interceptor logged it
+        if (error instanceof RateLimitError) {
+          throw error;
+        }
         process.stderr.write(
           `API Response Error: ${error.response?.status} ${error.message}\n`
         );
@@ -549,12 +632,67 @@ export class FirewallaClient {
           throw new Error('Resource not found. Please check your Box ID.');
         }
         if (error.response?.status === 429) {
-          throw new Error('Rate limit exceeded. Please retry later.');
+          return this.retryRateLimited(error);
         }
 
         return Promise.reject(error);
       }
     );
+  }
+
+  /**
+   * Answers a 429. The API's quota is per token, so every request of this
+   * client is paused until the API's window ends (see rateLimitPauseMs). A
+   * GET is then sent again through the rate limiter, at most
+   * MAX_RATE_LIMIT_RETRIES times, and only when the pause ends before the
+   * request's deadline (RATE_LIMIT_MAX_WAIT_MS after it was first made). A
+   * write is never sent again. Otherwise the 429 is thrown as a
+   * RateLimitError saying when capacity returns.
+   *
+   * @private
+   */
+  private async retryRateLimited(error: AxiosError): Promise<AxiosResponse> {
+    const config = error.config as RateLimitedConfig | undefined;
+    const method = config?.method?.toUpperCase() ?? 'request';
+    const now = this.clock.now();
+    const resumeAt = now + rateLimitPauseMs(error.response?.headers, now);
+    this.rateLimiter.pauseUntil(resumeAt);
+
+    const retries = config?.rateLimitRetries ?? 0;
+    const giveUp = (detail: string) =>
+      rateLimitError({
+        limit: this.rateLimiter.limit,
+        windowMs: this.rateLimiter.windowMs,
+        now,
+        availableAt: resumeAt,
+        detail,
+        status: 429,
+      });
+    if (!config || method !== 'GET') {
+      throw giveUp(`A ${method} is not retried.`);
+    }
+    if (retries >= MAX_RATE_LIMIT_RETRIES) {
+      throw giveUp(`Gave up after ${retries} retries.`);
+    }
+    const deadline = config.rateLimitDeadline ?? now + RATE_LIMIT_MAX_WAIT_MS;
+    if (resumeAt > deadline) {
+      const notRetried =
+        retries === 0
+          ? 'Not retried'
+          : `Not retried again after ${retries} ${retries === 1 ? 'retry' : 'retries'}`;
+      throw giveUp(
+        `${notRetried}, as a request waits at most ${RATE_LIMIT_MAX_WAIT_MS / 1000} s for the rate limit.`
+      );
+    }
+
+    process.stderr.write(
+      `API Rate Limited: 429 ${method} ${config.url}; retrying in ${Math.ceil((resumeAt - now) / 1000)} s (retry ${retries + 1} of ${MAX_RATE_LIMIT_RETRIES})\n`
+    );
+    const retry: RateLimitedConfig = {
+      ...config,
+      rateLimitRetries: retries + 1,
+    };
+    return this.api.request(retry);
   }
 
   /**

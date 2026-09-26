@@ -635,9 +635,9 @@ Tool descriptions now include specific performance guidance:
   - High-volume automation: 10+ requests (monitor performance)
 
   Rate Limiting:
-  - API rate limits: 100 requests per minute
-  - Burst capacity: Up to 20 requests per 10 seconds
-  - Automatic retry with exponential backoff on rate limit errors`
+  - API rate limit: 100 requests per token in each 5-minute window
+  - A request that cannot start within 20 s fails at once, saying when capacity returns
+  - A GET refused with HTTP 429 is retried only when the pause ends within 20 s`
 }
 ```
 

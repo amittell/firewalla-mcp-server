@@ -1519,13 +1519,28 @@ The official docs do not document an error body format. Measured 2026-09-25, a l
 
 ### Rate Limiting
 
-The official docs do not document rate limits. Measured 2026-09-25 on a live account:
-- An exhausted quota returns HTTP 429 with the body `{"error":{"message":"Too Many Requests"}}`.
-- The 429 response carries `retry-after` (seconds), `x-ratelimit-reset` (Unix seconds) and `x-ratelimit-remaining: 0`.
-- The window reset within about 60 seconds.
-- The exact per-minute quota was not measured.
+The official docs do not document rate limits. Measured 2026-09-26 on `GET /v2/boxes` with one token, in three bursts:
 
-Honour `retry-after` (or wait until `x-ratelimit-reset`) before retrying.
+- **Burst 1.** 99 requests in 29.9 s were answered 200. The next was answered 429 with the body `{"error":{"message":"Too Many Requests"}}`, `retry-after: 190`, `x-ratelimit-reset` in epoch seconds (189.9 s ahead) and `x-ratelimit-remaining: 0`.
+- A request right after that was answered 429 with `retry-after: 189` and the same `x-ratelimit-reset`: a refused request is not counted and does not extend the block.
+- A request at exactly `retry-after` was answered 200, and so was a single request 42 s later, so the window does not slide over the last 300 s.
+- **Burst 2**, starting 70 s after that reset: 98 requests were answered 200, then 429 with `x-ratelimit-reset` 301 s after the previous reset and `retry-after: 203`. With the 2 requests made since the reset, that is exactly 100 accepted in the window.
+- A successful response carries no rate-limit headers (`GET /v2/boxes` answered with `date` only), so a client cannot see how much of the quota is left before it gets a 429.
+
+So the API accepts 100 requests per token in each fixed 5-minute (300 s) window, and a window starts with the first request after the previous one ends. A 429's `retry-after` and `x-ratelimit-reset` both give the window's end, which can be up to about 300 s away. The waits of 40 to 60 s seen on 2026-09-25 were the tail of such a window.
+
+Wait until `x-ratelimit-reset` (or for `retry-after`) before retrying.
+
+#### What this server's client does
+
+`FirewallaClient` (`src/firewalla/client.ts`, with `src/firewalla/rate-limit.ts`) counts its own requests, since the API does not report the quota:
+
+- **Pacing.** At most `API_RATE_LIMIT` requests (default 100, range 1 to 1000) start in any rolling 5 minutes. A rolling count never lets through more than the API's fixed window of the same length accepts. It covers every request the client sends; the server has one client, which its HTTP sessions share. Answers from the response cache are not requests and are not counted. `API_RATE_LIMIT` used to be described as requests per minute, but nothing applied it, so giving it a 5-minute window changes nothing that worked before.
+- **Waiting.** A request waits at most 20 s for the rate limit (`RATE_LIMIT_MAX_WAIT_MS`), in the queue and on 429 pauses together, counted from when it was first made. Tool handlers give up after 30 s by default (`PERFORMANCE_THRESHOLDS.TIMEOUT_MS` in `src/config/limits.ts`), so a longer wait would only end in a timeout. A request whose slot frees within that waits for it, in the order requests were made. Otherwise it is not sent, and fails at once with `Rate limit exceeded: the Firewalla API allows 100 requests per 5 minutes (API_RATE_LIMIT); capacity returns in <n> s, at <UTC time>. Not sent: ...`.
+- **HTTP 429.** The client pauses all its requests until the window ends: until `x-ratelimit-reset` when that is epoch seconds within 10 minutes from now, else for `retry-after` (seconds or an HTTP date), else for 300 s. The pause is rounded up to whole seconds, and is at least 1 s and at most 10 minutes. A local clock far off the API's makes `x-ratelimit-reset` fall outside that range, and `retry-after` is used instead.
+- **Retries.** A GET is sent again when the pause ends within its 20 s, at most twice, with one line on stderr: `API Rate Limited: 429 GET <path>; retrying in <n> s (retry <k> of 2)`. Otherwise it fails at once with `Rate limit exceeded (HTTP 429): the Firewalla API allows 100 requests per 5 minutes (API_RATE_LIMIT); capacity returns in <n> s, at <UTC time>.` followed by the reason, for example `Not retried, as a request waits at most 20 s for the rate limit.` A POST, PATCH, PUT or DELETE that gets a 429 is never sent again (`A POST is not retried.`).
+- **While paused**, a new request whose wait would pass 20 s fails the same way without being sent (`Not sent: the API refused an earlier request with HTTP 429, ...`).
+- The count is per process. Two servers or other API clients on the same token share the API's quota but not the count, so give each a lower `API_RATE_LIMIT`.
 
 ### Best Practices
 
@@ -1539,8 +1554,9 @@ Honour `retry-after` (or wait until `x-ratelimit-reset`) before retrying.
        // Handle authentication error
        throw new Error('Authentication failed');
      } else if (error.response?.status === 429) {
-       // Handle rate limiting: wait for the time the server asks for
-       const retryAfter = Number(error.response.headers['retry-after']) || 60;
+       // Handle rate limiting: wait for the time the server asks for (up to
+       // the end of a 5-minute window)
+       const retryAfter = Number(error.response.headers['retry-after']) || 300;
        await delay(retryAfter * 1000);
        return retryRequest();
      }
