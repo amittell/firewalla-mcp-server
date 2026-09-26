@@ -38,6 +38,7 @@ import {
   MUTE_SCOPE_TYPES,
   MUTE_TARGET_TYPES,
 } from '../../src/validation/alarm-mute.js';
+import { USER_REQUEST_ONLY } from '../../src/utils/untrusted-text.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -789,6 +790,9 @@ describe('delete_alarm tool', () => {
   });
 });
 
+/** The constants src/server.ts puts in its descriptions */
+const DESCRIPTION_CONSTANTS: Record<string, string> = { USER_REQUEST_ONLY };
+
 /** The ListTools entry for a tool in src/server.ts, as plain data */
 function toolSchema(tool: string): any {
   const file = path.join(process.cwd(), 'src', 'server.ts');
@@ -801,6 +805,15 @@ function toolSchema(tool: string): any {
   const toValue = (node: ts.Expression): any => {
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       return node.text;
+    }
+    if (ts.isTemplateExpression(node)) {
+      return node.templateSpans.reduce(
+        (text, span) =>
+          text +
+          DESCRIPTION_CONSTANTS[span.expression.getText(source)] +
+          span.literal.text,
+        node.head.text
+      );
     }
     if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
     if (node.kind === ts.SyntaxKind.FalseKeyword) return false;

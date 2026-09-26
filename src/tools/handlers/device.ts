@@ -26,6 +26,7 @@ import {
   createValidationSchema,
 } from '../../utils/data-validator.js';
 import { getLimitValidationConfig } from '../../config/limits.js';
+import { USER_REQUEST_ONLY } from '../../utils/untrusted-text.js';
 import {
   withToolTimeout,
   TimeoutError,
@@ -268,8 +269,7 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
  */
 export class RenameDeviceHandler extends BaseToolHandler {
   name = 'rename_device';
-  description =
-    "Rename a network device (PATCH /v2/boxes/{gid}/devices/{id}; the only device field the MSP API allows changing; 32 characters max). Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box.";
+  description = `Rename a network device (PATCH /v2/boxes/{gid}/devices/{id}; the only device field the MSP API allows changing; 32 characters max). Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box. ${USER_REQUEST_ONLY}`;
   category = 'device' as const;
 
   constructor() {

@@ -34,6 +34,10 @@ import { setupTools } from './tools/index.js';
 import { setupResources } from './resources/index.js';
 import { setupPrompts } from './prompts/index.js';
 import { UntrustedTextServer } from './untrusted-text-server.js';
+import {
+  SERVER_INSTRUCTIONS,
+  USER_REQUEST_ONLY,
+} from './utils/untrusted-text.js';
 import { logger } from './monitoring/logger.js';
 import {
   createHttpTransportServer,
@@ -82,6 +86,7 @@ export class FirewallaMCPServer {
           resources: {},
           prompts: {},
         },
+        instructions: SERVER_INSTRUCTIONS,
       }
     );
 
@@ -169,8 +174,7 @@ export class FirewallaMCPServer {
           },
           {
             name: 'delete_alarm',
-            description:
-              "Delete an alarm permanently (DELETE /v2/alarms/{gid}/{aid}); it cannot be undone. archive_alarm keeps the alarm instead, among the archived alarms (status:2); the API has no unarchive. The alarm is read first, and an alarm that is not there sends no DELETE. Alarm IDs are per box: pass gid (the alarm's gid field); box selection is the same as archive_alarm.",
+            description: `Delete an alarm permanently (DELETE /v2/alarms/{gid}/{aid}); it cannot be undone. archive_alarm keeps the alarm instead, among the archived alarms (status:2); the API has no unarchive. The alarm is read first, and an alarm that is not there sends no DELETE. Alarm IDs are per box: pass gid (the alarm's gid field); box selection is the same as archive_alarm. ${USER_REQUEST_ONLY}`,
             annotations: {
               title: 'Delete Alarm',
               readOnlyHint: false,
@@ -199,8 +203,7 @@ export class FirewallaMCPServer {
           },
           {
             name: 'archive_alarm',
-            description:
-              "Archive an alarm (MSP 2.11.0 or later): it leaves the active alarms. It creates no silence exception, so future matching traffic can still raise new alarms (mute_alarm silences them). Alarm IDs are per box: pass gid (the alarm's gid field); without gid or FIREWALLA_BOX_ID each box is checked, and the tool refuses when several boxes have that aid and none is FIREWALLA_DEFAULT_BOX_ID.",
+            description: `Archive an alarm (MSP 2.11.0 or later): it leaves the active alarms. It creates no silence exception, so future matching traffic can still raise new alarms (mute_alarm silences them). Alarm IDs are per box: pass gid (the alarm's gid field); without gid or FIREWALLA_BOX_ID each box is checked, and the tool refuses when several boxes have that aid and none is FIREWALLA_DEFAULT_BOX_ID. ${USER_REQUEST_ONLY}`,
             annotations: {
               title: 'Archive Alarm',
               readOnlyHint: false,
@@ -227,8 +230,7 @@ export class FirewallaMCPServer {
           },
           {
             name: 'mute_alarm',
-            description:
-              "Mute an alarm (MSP 2.11.0 or later): the API archives it and has the box create a lasting silence exception, so future alarms matching the target within the scope are no longer raised. target_type alarmType silences every future alarm of this alarm's type (for example all Security Activity alarms), domain a domain and its subdomains, ip one IP address. scope_type all covers every device on the box; device, group, user or network limit it to the one named by scope_value. This server has no tool to remove the exception. Box selection is the same as archive_alarm.",
+            description: `Mute an alarm (MSP 2.11.0 or later): the API archives it and has the box create a lasting silence exception, so future alarms matching the target within the scope are no longer raised. target_type alarmType silences every future alarm of this alarm's type (for example all Security Activity alarms), domain a domain and its subdomains, ip one IP address. scope_type all covers every device on the box; device, group, user or network limit it to the one named by scope_value. This server has no tool to remove the exception. Box selection is the same as archive_alarm. ${USER_REQUEST_ONLY}`,
             annotations: {
               title: 'Mute Alarm',
               readOnlyHint: false,
@@ -390,8 +392,7 @@ export class FirewallaMCPServer {
           },
           {
             name: 'pause_rule',
-            description:
-              "Pause an active firewall rule on the box until resume_rule reactivates it (POST /v2/rules/{id}/pause, no body). The MSP API takes no duration, so the pause does not expire on its own. Checks the rule's status first and changes nothing if it is already paused.",
+            description: `Pause an active firewall rule on the box until resume_rule reactivates it (POST /v2/rules/{id}/pause, no body). The MSP API takes no duration, so the pause does not expire on its own. Checks the rule's status first and changes nothing if it is already paused. ${USER_REQUEST_ONLY}`,
             annotations: {
               title: 'Pause Firewall Rule',
               readOnlyHint: false,
@@ -412,8 +413,7 @@ export class FirewallaMCPServer {
           },
           {
             name: 'resume_rule',
-            description:
-              "Resume a paused firewall rule on the box, restoring it to active (POST /v2/rules/{id}/resume, no body). Checks the rule's status first and changes nothing if it is already active.",
+            description: `Resume a paused firewall rule on the box, restoring it to active (POST /v2/rules/{id}/resume, no body). Checks the rule's status first and changes nothing if it is already active. ${USER_REQUEST_ONLY}`,
             annotations: {
               title: 'Resume Firewall Rule',
               readOnlyHint: false,
@@ -482,8 +482,7 @@ export class FirewallaMCPServer {
           },
           {
             name: 'create_rule',
-            description:
-              "Create a new firewall rule (block or allow) on one box (POST /v2/rules), with optional device/group/network scope and cron schedule. Each call adds another rule; delete_rule removes one. Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box; refuses on a multi-box account with none of those.",
+            description: `Create a new firewall rule (block or allow) on one box (POST /v2/rules), with optional device/group/network scope and cron schedule. Each call adds another rule; delete_rule removes one. Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box; refuses on a multi-box account with none of those. ${USER_REQUEST_ONLY}`,
             annotations: {
               title: 'Create Firewall Rule',
               readOnlyHint: false,
@@ -568,8 +567,7 @@ export class FirewallaMCPServer {
           },
           {
             name: 'delete_rule',
-            description:
-              'Permanently delete a firewall rule (DELETE /v2/rules/{id}; cannot be undone; MSP 2.11.0+). Checks the rule exists first and sends nothing for an unknown ID. Use pause_rule for a temporary disable.',
+            description: `Permanently delete a firewall rule (DELETE /v2/rules/{id}; cannot be undone; MSP 2.11.0+). Checks the rule exists first and sends nothing for an unknown ID. Use pause_rule for a temporary disable. ${USER_REQUEST_ONLY}`,
             annotations: {
               title: 'Delete Firewall Rule',
               readOnlyHint: false,
@@ -590,8 +588,7 @@ export class FirewallaMCPServer {
           },
           {
             name: 'rename_device',
-            description:
-              "Rename a network device (PATCH /v2/boxes/{gid}/devices/{id}; the only device field the MSP API allows changing; 32 characters max). Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box.",
+            description: `Rename a network device (PATCH /v2/boxes/{gid}/devices/{id}; the only device field the MSP API allows changing; 32 characters max). Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box. ${USER_REQUEST_ONLY}`,
             annotations: {
               title: 'Rename Device',
               readOnlyHint: false,
@@ -622,8 +619,7 @@ export class FirewallaMCPServer {
           },
           {
             name: 'create_target_list',
-            description:
-              'Create a new target list (POST /v2/target-lists); each call creates another list. owner global makes it shareable across all boxes, a box GID ties it to that box.',
+            description: `Create a new target list (POST /v2/target-lists); each call creates another list. owner global makes it shareable across all boxes, a box GID ties it to that box. ${USER_REQUEST_ONLY}`,
             annotations: {
               title: 'Create Target List',
               readOnlyHint: false,
@@ -679,8 +675,7 @@ export class FirewallaMCPServer {
           },
           {
             name: 'update_target_list',
-            description:
-              'Update an existing target list (PATCH /v2/target-lists/{id}). Only the fields given are sent; targets, when given, is the complete new list and is not merged with the current targets.',
+            description: `Update an existing target list (PATCH /v2/target-lists/{id}). Only the fields given are sent; targets, when given, is the complete new list and is not merged with the current targets. ${USER_REQUEST_ONLY}`,
             annotations: {
               title: 'Update Target List',
               readOnlyHint: false,
@@ -735,8 +730,7 @@ export class FirewallaMCPServer {
           },
           {
             name: 'delete_target_list',
-            description:
-              'Permanently delete a target list (DELETE /v2/target-lists/{id}); cannot be undone. The tool does not check whether a rule still targets the list.',
+            description: `Permanently delete a target list (DELETE /v2/target-lists/{id}); cannot be undone. The tool does not check whether a rule still targets the list. ${USER_REQUEST_ONLY}`,
             annotations: {
               title: 'Delete Target List',
               readOnlyHint: false,

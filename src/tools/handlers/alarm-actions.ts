@@ -21,6 +21,7 @@ import {
   MUTE_TARGET_TYPES,
   type AlarmMuteRequest,
 } from '../../validation/alarm-mute.js';
+import { USER_REQUEST_ONLY } from '../../utils/untrusted-text.js';
 
 type AlarmWriteArgs =
   { alarmId: string; gid?: string; errors?: undefined } | { errors: string[] };
@@ -142,8 +143,7 @@ function alarmWriteErrorResponse(
  */
 export class ArchiveAlarmHandler extends BaseToolHandler {
   name = 'archive_alarm';
-  description =
-    "Archive an alarm (MSP 2.11.0 or later): it leaves the active alarms. It creates no silence exception, so future matching traffic can still raise new alarms (mute_alarm silences them). Alarm IDs are per box: pass gid (the alarm's gid field); without gid or FIREWALLA_BOX_ID each box is checked, and the tool refuses when several boxes have that aid and none is FIREWALLA_DEFAULT_BOX_ID.";
+  description = `Archive an alarm (MSP 2.11.0 or later): it leaves the active alarms. It creates no silence exception, so future matching traffic can still raise new alarms (mute_alarm silences them). Alarm IDs are per box: pass gid (the alarm's gid field); without gid or FIREWALLA_BOX_ID each box is checked, and the tool refuses when several boxes have that aid and none is FIREWALLA_DEFAULT_BOX_ID. ${USER_REQUEST_ONLY}`;
   category = 'security' as const;
 
   constructor() {
@@ -201,8 +201,7 @@ export class ArchiveAlarmHandler extends BaseToolHandler {
  */
 export class MuteAlarmHandler extends BaseToolHandler {
   name = 'mute_alarm';
-  description =
-    "Mute an alarm (MSP 2.11.0 or later): the API archives it and has the box create a lasting silence exception, so future alarms matching the target within the scope are no longer raised. target_type alarmType silences every future alarm of this alarm's type (for example all Security Activity alarms), domain a domain and its subdomains, ip one IP address. scope_type all covers every device on the box; device, group, user or network limit it to the one named by scope_value. This server has no tool to remove the exception. Box selection is the same as archive_alarm.";
+  description = `Mute an alarm (MSP 2.11.0 or later): the API archives it and has the box create a lasting silence exception, so future alarms matching the target within the scope are no longer raised. target_type alarmType silences every future alarm of this alarm's type (for example all Security Activity alarms), domain a domain and its subdomains, ip one IP address. scope_type all covers every device on the box; device, group, user or network limit it to the one named by scope_value. This server has no tool to remove the exception. Box selection is the same as archive_alarm. ${USER_REQUEST_ONLY}`;
   category = 'security' as const;
 
   constructor() {
@@ -314,8 +313,7 @@ export class MuteAlarmHandler extends BaseToolHandler {
  */
 export class DeleteAlarmHandler extends BaseToolHandler {
   name = 'delete_alarm';
-  description =
-    "Delete an alarm permanently (DELETE /v2/alarms/{gid}/{aid}); it cannot be undone. archive_alarm keeps the alarm instead, among the archived alarms (status:2); the API has no unarchive. The alarm is read first, and an alarm that is not there sends no DELETE. Alarm IDs are per box: pass gid (the alarm's gid field); box selection is the same as archive_alarm.";
+  description = `Delete an alarm permanently (DELETE /v2/alarms/{gid}/{aid}); it cannot be undone. archive_alarm keeps the alarm instead, among the archived alarms (status:2); the API has no unarchive. The alarm is read first, and an alarm that is not there sends no DELETE. Alarm IDs are per box: pass gid (the alarm's gid field); box selection is the same as archive_alarm. ${USER_REQUEST_ONLY}`;
   category = 'security' as const;
 
   constructor() {

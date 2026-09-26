@@ -34,6 +34,7 @@ import {
 } from '../../utils/timeout-manager.js';
 import { ResourceValidator } from '../../validation/resource-validator.js';
 import { logger } from '../../monitoring/logger.js';
+import { USER_REQUEST_ONLY } from '../../utils/untrusted-text.js';
 import {
   targetListEntries,
   targetListEntryCount,
@@ -322,8 +323,7 @@ const PAUSE_DURATION_IGNORED_NOTE =
 
 export class PauseRuleHandler extends BaseToolHandler {
   name = 'pause_rule';
-  description =
-    "Pause an active firewall rule on the box until resume_rule reactivates it (POST /v2/rules/{id}/pause, no body). The MSP API takes no duration, so the pause does not expire on its own. Checks the rule's status first and changes nothing if it is already paused.";
+  description = `Pause an active firewall rule on the box until resume_rule reactivates it (POST /v2/rules/{id}/pause, no body). The MSP API takes no duration, so the pause does not expire on its own. Checks the rule's status first and changes nothing if it is already paused. ${USER_REQUEST_ONLY}`;
   category = 'rule' as const;
 
   constructor() {
@@ -510,8 +510,7 @@ export class PauseRuleHandler extends BaseToolHandler {
 
 export class ResumeRuleHandler extends BaseToolHandler {
   name = 'resume_rule';
-  description =
-    "Resume a paused firewall rule on the box, restoring it to active (POST /v2/rules/{id}/resume, no body). Checks the rule's status first and changes nothing if it is already active.";
+  description = `Resume a paused firewall rule on the box, restoring it to active (POST /v2/rules/{id}/resume, no body). Checks the rule's status first and changes nothing if it is already active. ${USER_REQUEST_ONLY}`;
   category = 'rule' as const;
 
   constructor() {
@@ -1533,8 +1532,7 @@ export class GetSpecificTargetListHandler extends BaseToolHandler {
  */
 export class CreateTargetListHandler extends BaseToolHandler {
   name = 'create_target_list';
-  description =
-    'Create a new target list (POST /v2/target-lists); each call creates another list. owner global makes it shareable across all boxes, a box GID ties it to that box.';
+  description = `Create a new target list (POST /v2/target-lists); each call creates another list. owner global makes it shareable across all boxes, a box GID ties it to that box. ${USER_REQUEST_ONLY}`;
   category = 'rule' as const;
 
   constructor() {
@@ -1652,8 +1650,7 @@ export class CreateTargetListHandler extends BaseToolHandler {
  */
 export class UpdateTargetListHandler extends BaseToolHandler {
   name = 'update_target_list';
-  description =
-    'Update an existing target list (PATCH /v2/target-lists/{id}). Only the fields given are sent; targets, when given, is the complete new list and is not merged with the current targets.';
+  description = `Update an existing target list (PATCH /v2/target-lists/{id}). Only the fields given are sent; targets, when given, is the complete new list and is not merged with the current targets. ${USER_REQUEST_ONLY}`;
   category = 'rule' as const;
 
   constructor() {
@@ -1777,8 +1774,7 @@ export class UpdateTargetListHandler extends BaseToolHandler {
  */
 export class DeleteTargetListHandler extends BaseToolHandler {
   name = 'delete_target_list';
-  description =
-    'Permanently delete a target list (DELETE /v2/target-lists/{id}); cannot be undone. The tool does not check whether a rule still targets the list.';
+  description = `Permanently delete a target list (DELETE /v2/target-lists/{id}); cannot be undone. The tool does not check whether a rule still targets the list. ${USER_REQUEST_ONLY}`;
   category = 'rule' as const;
 
   constructor() {
@@ -1846,8 +1842,7 @@ export class DeleteTargetListHandler extends BaseToolHandler {
  */
 export class CreateRuleHandler extends BaseToolHandler {
   name = 'create_rule';
-  description =
-    "Create a new firewall rule (block or allow) on one box (POST /v2/rules), with optional device/group/network scope and cron schedule. Each call adds another rule; delete_rule removes one. Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box; refuses on a multi-box account with none of those.";
+  description = `Create a new firewall rule (block or allow) on one box (POST /v2/rules), with optional device/group/network scope and cron schedule. Each call adds another rule; delete_rule removes one. Uses gid, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box; refuses on a multi-box account with none of those. ${USER_REQUEST_ONLY}`;
   category = 'rule' as const;
 
   constructor() {
@@ -2098,8 +2093,7 @@ export class CreateRuleHandler extends BaseToolHandler {
  */
 export class DeleteRuleHandler extends BaseToolHandler {
   name = 'delete_rule';
-  description =
-    'Permanently delete a firewall rule (DELETE /v2/rules/{id}; cannot be undone; MSP 2.11.0+). Checks the rule exists first and sends nothing for an unknown ID. Use pause_rule for a temporary disable.';
+  description = `Permanently delete a firewall rule (DELETE /v2/rules/{id}; cannot be undone; MSP 2.11.0+). Checks the rule exists first and sends nothing for an unknown ID. Use pause_rule for a temporary disable. ${USER_REQUEST_ONLY}`;
   category = 'rule' as const;
 
   constructor() {
