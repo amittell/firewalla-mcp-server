@@ -978,8 +978,8 @@ function validateTrendArgs(args: ToolArgs): {
 }
 
 /**
- * Validate get_alarm_trends' optional `box`: a box gid, and not together
- * with `group`
+ * Validate the trend tools' optional `box`: a box gid, and not together with
+ * `group`
  */
 function validateTrendBox(
   args: ToolArgs,
@@ -1057,6 +1057,93 @@ function summarizeValues(points: Array<{ value: number }>) {
     nonZeroPercent:
       values.length > 0 ? Math.round((nonZero / values.length) * 100) : 0,
   };
+}
+
+export class GetFlowTrendsHandler extends BaseToolHandler {
+  name = 'get_flow_trends';
+  description =
+    'Blocked flows per day for the last 30 days, one point per day, the last being today so far; period (default 30d) returns the days that overlap it. Without a box it is one GET /v2/trends/flows covering every box, or the box group. That endpoint takes no box, so with box (else FIREWALLA_BOX_ID, unless group is given) each day is counted with one GET /v2/flows status:blocked groupBy=box scoped to the box: 1 request plus 1 per day, ~31 for 30d, of the 100 requests the API allows per 5 minutes. box and group cannot be combined.';
+  category = 'analytics' as const;
+
+  constructor() {
+    super({
+      enableGeoEnrichment: false, // No IP fields in flow trends
+      enableFieldNormalization: true,
+      additionalMeta: {
+        data_source: 'flow_trends',
+        entity_type: 'historical_flow_data',
+        supports_geographic_enrichment: false,
+        supports_field_normalization: true,
+        standardization_version: '2.0.0',
+      },
+    });
+  }
+
+  async execute(
+    _args: ToolArgs,
+    firewalla: FirewallaClient
+  ): Promise<ToolResponse> {
+    try {
+      const { errors, period, group } = validateTrendArgs(_args);
+      const boxCheck = validateTrendBox(_args, group);
+      errors.push(...boxCheck.errors);
+      if (errors.length > 0) {
+        return this.createErrorResponse(
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          errors
+        );
+      }
+
+      const startTime = Date.now();
+      const series = await withToolTimeout(
+        async () => firewalla.getFlowTrends(period, group, boxCheck.box),
+        this.name
+      );
+      const points = Array.isArray(series?.results) ? series.results : [];
+      const stats = summarizeValues(points);
+
+      const unifiedResponseData = {
+        period,
+        data_points: points.length,
+        trends: points.map(point => ({
+          timestamp: point.ts,
+          timestamp_iso: unixToISOString(point.ts),
+          blocked_flow_count: point.value,
+        })),
+        summary: {
+          total_blocked_flows: stats.total,
+          avg_blocked_flows_per_interval: stats.mean,
+          peak_blocked_flow_count: stats.peak,
+          intervals_with_blocked_flows: stats.nonZero,
+          blocked_flow_frequency: stats.nonZeroPercent,
+        },
+        ...describeTrend(series, period),
+      };
+
+      return this.createUnifiedResponse(unifiedResponseData, {
+        executionTimeMs: Date.now() - startTime,
+      });
+    } catch (error: unknown) {
+      // A malformed FIREWALLA_BOX_ID, refused before any request
+      const selectionError = boxSelectionError(error);
+      if (selectionError) {
+        return this.createErrorResponse(
+          'Parameter validation failed',
+          ErrorType.VALIDATION_ERROR,
+          undefined,
+          [selectionError.message]
+        );
+      }
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return this.createErrorResponse(
+        `Failed to get flow trends: ${errorMessage}`,
+        ErrorType.API_ERROR
+      );
+    }
+  }
 }
 
 export class GetAlarmTrendsHandler extends BaseToolHandler {

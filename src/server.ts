@@ -4,12 +4,12 @@
  * @fileoverview Firewalla MCP Server
  *
  * This file implements the primary MCP server class that provides Claude with access to
- * Firewalla firewall data through 28 tools that map to Firewalla API endpoints,
+ * Firewalla firewall data through 29 tools that map to Firewalla API endpoints,
  * plus 5 opt-in write tools (FIREWALLA_ENABLE_WRITE_TOOLS=true).
  * Tools include parameter validation and error handling.
  *
  * Architecture:
- * - 23 Direct API Endpoints
+ * - 24 Direct API Endpoints
  * - 5 Convenience Wrappers
  * - Limits set to API maximum (500)
  * - Required parameters for proper API calls
@@ -64,7 +64,7 @@ function isValidUUID(value: string): boolean {
 }
 
 /**
- * Main MCP Server class for Firewalla integration with 28-tool architecture
+ * Main MCP Server class for Firewalla integration with 29-tool architecture
  */
 export class FirewallaMCPServer {
   private static signalHandlersRegistered = false;
@@ -106,7 +106,7 @@ export class FirewallaMCPServer {
    * Registers all MCP protocol request handlers on a Server instance
    */
   private registerHandlers(server: Server): void {
-    // List available tools - 28-Tool Complete API Coverage
+    // List available tools - 29-Tool Complete API Coverage
     server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
@@ -1017,6 +1017,39 @@ export class FirewallaMCPServer {
                   description:
                     'Include blocked traffic analysis (default: false)',
                   default: false,
+                },
+              },
+              required: [],
+            },
+          },
+          {
+            name: 'get_flow_trends',
+            description:
+              'Blocked flows per day for the last 30 days, one point per day, the last being today so far; period (default 30d) returns the days that overlap it. Without a box it is one GET /v2/trends/flows covering every box, or the box group. That endpoint takes no box, so with box (else FIREWALLA_BOX_ID, unless group is given) each day is counted with one GET /v2/flows status:blocked groupBy=box scoped to the box: 1 request plus 1 per day, ~31 for 30d, of the 100 requests the API allows per 5 minutes. box and group cannot be combined.',
+            annotations: {
+              title: 'Blocked Flow Trends',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
+            inputSchema: {
+              type: 'object',
+              properties: {
+                period: {
+                  type: 'string',
+                  enum: ['1h', '24h', '7d', '30d'],
+                  description:
+                    'Return the days that overlap this period (default: 30d). The API has no finer resolution than a day, so 1h returns today so far and 24h returns yesterday and today',
+                  default: '30d',
+                },
+                group: {
+                  type: 'string',
+                  description:
+                    'Get trends for a specific box group. Takes precedence over FIREWALLA_BOX_ID; not with box',
+                },
+                box: {
+                  type: 'string',
+                  description:
+                    'Only blocked flows of this box (box gid), counted per day: 1 request plus 1 per day (~31 for 30d). Defaults to FIREWALLA_BOX_ID unless group is given; without either, every box. Not with group',
                 },
               },
               required: [],

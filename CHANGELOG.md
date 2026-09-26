@@ -120,6 +120,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   request count. A `box` that is not a box gid, and `box` with `group`, are
   refused before any request. The client's `getFlowTrends` takes the same
   `box` and counts `status:blocked` flows per day the same way.
+- `get_flow_trends` reports blocked flows per day from
+  `GET /v2/trends/flows`. The client's `getFlowTrends` had no tool. It takes
+  the same `period`, `group` and `box` as `get_alarm_trends`, with the same
+  validation and refusals, and answers in the same shape, with
+  `blocked_flow_count` per day and `total_blocked_flows`,
+  `avg_blocked_flows_per_interval`, `peak_blocked_flow_count`,
+  `intervals_with_blocked_flows` and `blocked_flow_frequency` in `summary`.
+  With a box in scope it counts each day with one
+  `GET /v2/flows?query=status:blocked ts:<day start>-<next day start - 1> box.id:<gid>&groupBy=box`:
+  1 request plus 1 per day, 31 for `30d`, of the 100 requests the API allows
+  per 5 minutes. It is read-only, so the server lists 29 tools by default and
+  34 with the write tools.
 
 ### Changed
 

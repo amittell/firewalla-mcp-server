@@ -1,12 +1,12 @@
 /**
  * @fileoverview Tool Registry
  *
- * Implements a registry pattern for managing 28 MCP tool handlers with clean
+ * Implements a registry pattern for managing 29 MCP tool handlers with clean
  * organization and easy discovery. Each tool maps to Firewalla API endpoints
  * with parameter validation.
  *
  * Registry Features:
- * - **Automatic Registration**: All 28 handlers are auto-registered during construction
+ * - **Automatic Registration**: All 29 handlers are auto-registered during construction
  * - **API Mapping**: Direct mapping to verified Firewalla API endpoints
  * - **Type Safety**: Full TypeScript support with proper handler interfaces
  * - **Easy Discovery**: Methods to find tools by name, category, or list all tools
@@ -73,6 +73,7 @@ import {
   GetStatisticsByBoxHandler,
   GetRecentFlowActivityHandler,
   GetFlowInsightsHandler,
+  GetFlowTrendsHandler,
   GetAlarmTrendsHandler,
   GetRuleTrendsHandler,
 } from './handlers/analytics.js';
@@ -108,7 +109,7 @@ import {
  * // Get tools by category
  * const searchTools = registry.getToolsByCategory('search');
  *
- * // List all available tools (28, or 33 with write tools enabled)
+ * // List all available tools (29, or 34 with write tools enabled)
  * const allTools = registry.getToolNames();
  * ```
  *
@@ -132,9 +133,9 @@ export class ToolRegistry {
   }
 
   /**
-   * Automatically registers 28 tool handlers for complete API coverage
+   * Automatically registers 29 tool handlers for complete API coverage
    *
-   * Registers handlers for the 28-tool architecture: 23 direct API endpoints
+   * Registers handlers for the 29-tool architecture: 24 direct API endpoints
    * and 5 convenience wrappers. Each handler implements the ToolHandler interface
    * and maps to actual Firewalla API endpoints.
    *
@@ -142,7 +143,7 @@ export class ToolRegistry {
    * @returns {void}
    */
   private registerHandlers(enableWriteTools: boolean): void {
-    // Direct API Endpoints (23 handlers)
+    // Direct API Endpoints (24 handlers)
 
     // Security tools (2 handlers - delete_alarm disabled)
     this.register(new GetActiveAlarmsHandler());
@@ -183,13 +184,14 @@ export class ToolRegistry {
     this.register(new SearchAlarmsHandler());
     this.register(new SearchRulesHandler());
 
-    // Analytics tools (6 handlers)
+    // Analytics tools (9 handlers)
     this.register(new GetBoxesHandler());
     this.register(new GetSimpleStatisticsHandler());
     this.register(new GetStatisticsByRegionHandler());
     this.register(new GetStatisticsByBoxHandler());
     this.register(new GetRecentFlowActivityHandler());
     this.register(new GetFlowInsightsHandler());
+    this.register(new GetFlowTrendsHandler());
     this.register(new GetAlarmTrendsHandler());
     this.register(new GetRuleTrendsHandler());
 

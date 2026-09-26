@@ -155,6 +155,7 @@ const CALLS: Record<
   get_statistics_by_box: { args: {} },
   get_recent_flow_activity: { args: {} },
   get_flow_insights: { args: {} },
+  get_flow_trends: { args: {} },
   get_alarm_trends: { args: {} },
   get_rule_trends: { args: {} },
   get_bandwidth_usage: { args: { period: '24h' } },
@@ -215,7 +216,7 @@ describe('tools/list', () => {
           .getToolNames()
           .sort();
         expect(listed).toEqual(registered);
-        expect(listed.length).toBeGreaterThanOrEqual(28);
+        expect(listed.length).toBeGreaterThanOrEqual(29);
       } finally {
         process.env.FIREWALLA_ENABLE_WRITE_TOOLS = 'true';
       }

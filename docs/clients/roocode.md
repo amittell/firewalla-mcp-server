@@ -122,7 +122,7 @@ In Roocode, test the connection:
 
 ## Advanced Features
 
-- **28 specialized tools** for comprehensive network security analysis
+- **29 specialized tools** for comprehensive network security analysis
 - **Geographic threat analysis** with country-level filtering
 - **Advanced search syntax** supporting complex queries with logical operators
 - **Real-time monitoring** with intelligent caching for optimal performance

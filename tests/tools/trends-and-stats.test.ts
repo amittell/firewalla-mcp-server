@@ -12,6 +12,7 @@ import {
 import {
   GetAlarmTrendsHandler,
   GetBoxesHandler,
+  GetFlowTrendsHandler,
   GetRuleTrendsHandler,
   GetSimpleStatisticsHandler,
   GetStatisticsByBoxHandler,
@@ -546,6 +547,180 @@ describe('get_alarm_trends for one box', () => {
       expect(calls).toEqual([]);
     }
   );
+});
+
+const FLOW_TREND = dailyPoints(i => (i === 5 ? 0 : 4000 + i));
+
+/**
+ * /v2/flows answering groupBy=box for the day in the query: BOX_A blocked
+ * 10 + the day's index flows, none on day 28
+ */
+function blockedFlowsByBox(params: Record<string, any>) {
+  const i = dayIndex(params.query);
+  const rows =
+    i === 28 ? [{ gid: BOX_B, count: 900 }] : [{ gid: BOX_A, count: 10 + i }];
+  return {
+    count: rows.length,
+    results: rows.map(row => ({ ...row, download: 0, upload: 0, total: 0 })),
+  };
+}
+
+function flowRoutes(): Record<string, Route> {
+  return {
+    '/v2/trends/flows': () => FLOW_TREND,
+    '/v2/flows': blockedFlowsByBox,
+  };
+}
+
+describe('get_flow_trends', () => {
+  it('reads /v2/trends/flows once and reports blocked flows per day', async () => {
+    const { client, calls } = makeClient(flowRoutes());
+    const res = await new GetFlowTrendsHandler().execute({}, client);
+    const { data } = parse(res);
+    expect(calls).toEqual([{ url: '/v2/trends/flows', params: {} }]);
+    expect(data.period).toBe('30d');
+    expect(data.data_points).toBe(30);
+    expect(data.trends[29]).toEqual({
+      ts: TODAY,
+      timestamp_iso: '2026-09-25T04:00:00.000Z',
+      blocked_flow_count: FLOW_TREND[29].value,
+    });
+    const total = FLOW_TREND.reduce((sum, point) => sum + point.value, 0);
+    expect(data.summary).toEqual({
+      total_blocked_flows: total,
+      avg_blocked_flows_per_interval: Math.round((total / 30) * 100) / 100,
+      peak_blocked_flow_count: 4029,
+      intervals_with_blocked_flows: 29,
+      blocked_flow_frequency: 97,
+    });
+    expect(data.interval).toBe('day');
+    expect(data.source).toBe('GET /v2/trends/flows');
+    expect(data.scope).toBe('all boxes');
+    expect(data.window).toEqual({
+      from: '2026-08-27T04:00:00.000Z',
+      to: '2026-09-25T16:00:00.000Z',
+    });
+    expect(data.note).toContain('The last point is the current day so far.');
+  });
+
+  it('returns the days that overlap the period', async () => {
+    const { client } = makeClient(flowRoutes());
+    const { data } = parse(
+      await new GetFlowTrendsHandler().execute({ period: '7d' }, client)
+    );
+    expect(data.trends.map((point: any) => point.ts)).toEqual(
+      Array.from({ length: 8 }, (_, i) => TODAY - (7 - i) * DAY)
+    );
+  });
+
+  it('sends group, which takes precedence over FIREWALLA_BOX_ID', async () => {
+    const { client, calls } = makeClient(flowRoutes(), { boxId: BOX_A });
+    const { data } = parse(
+      await new GetFlowTrendsHandler().execute({ group: 'group-7' }, client)
+    );
+    expect(calls).toEqual([
+      { url: '/v2/trends/flows', params: { group: 'group-7' } },
+    ]);
+    expect(data.scope).toBe('box group group-7');
+    expect(data.note).toContain('FIREWALLA_BOX_ID is not applied');
+  });
+
+  it('passes box and counts the blocked flows of each day for it', async () => {
+    const { client, calls } = makeClient(flowRoutes(), { boxId: BOX_B });
+    const { data } = parse(
+      await new GetFlowTrendsHandler().execute(
+        { box: BOX_A, period: '24h' },
+        client
+      )
+    );
+    expect(calls[0]).toEqual({ url: '/v2/trends/flows', params: {} });
+    expect(
+      calls
+        .slice(1)
+        .map(call => [call.url, call.params])
+        .sort((a, b) => a[1].query.localeCompare(b[1].query))
+    ).toEqual([
+      [
+        '/v2/flows',
+        {
+          groupBy: 'box',
+          limit: 500,
+          query: dayQuery(28, BOX_A, 'status:blocked '),
+        },
+      ],
+      [
+        '/v2/flows',
+        {
+          groupBy: 'box',
+          limit: 500,
+          query: dayQuery(29, BOX_A, 'status:blocked '),
+        },
+      ],
+    ]);
+    expect(data.scope).toBe(`box ${BOX_A}`);
+    expect(data.source).toBe('GET /v2/flows groupBy=box per day');
+    // Day 28 has only another box's row: 0 for this box
+    expect(data.trends.map((point: any) => point.blocked_flow_count)).toEqual([
+      0, 39,
+    ]);
+    expect(data.summary.total_blocked_flows).toBe(39);
+    expect(data.note).toContain('1 + 2 requests');
+  });
+
+  it('scopes to FIREWALLA_BOX_ID when no box is named', async () => {
+    const { client, calls } = makeClient(flowRoutes(), { boxId: BOX_A });
+    const { data } = parse(
+      await new GetFlowTrendsHandler().execute({ period: '1h' }, client)
+    );
+    expect(calls).toEqual([
+      { url: '/v2/trends/flows', params: {} },
+      {
+        url: '/v2/flows',
+        params: {
+          groupBy: 'box',
+          limit: 500,
+          query: dayQuery(29, BOX_A, 'status:blocked '),
+        },
+      },
+    ]);
+    expect(data.scope).toBe(`box ${BOX_A}`);
+    expect(data.trends).toEqual([
+      {
+        ts: TODAY,
+        timestamp_iso: '2026-09-25T04:00:00.000Z',
+        blocked_flow_count: 39,
+      },
+    ]);
+  });
+
+  it.each([
+    ['a period it does not know', { period: '90d' }, {}],
+    ['a box that is not a gid', { box: 'x OR box.id:*' }, {}],
+    ['box with group', { box: BOX_A, group: 'group-7' }, {}],
+    ['a malformed FIREWALLA_BOX_ID', {}, { boxId: 'x OR box.id:*' }],
+  ])(
+    'reports %s as a validation error before any request',
+    async (_what, args, config) => {
+      const { client, calls } = makeClient(flowRoutes(), config);
+      const res = await new GetFlowTrendsHandler().execute(args, client);
+      expect(res.isError).toBe(true);
+      expect(parse(res).errorType).toBe('validation_error');
+      expect(calls).toEqual([]);
+    }
+  );
+
+  it('reports an API failure as an API error', async () => {
+    const { client } = makeClient({
+      '/v2/trends/flows': () => new HttpStatus(500),
+    });
+    const res = await new GetFlowTrendsHandler().execute({}, client);
+    expect(res.isError).toBe(true);
+    const body = parse(res);
+    expect(body.errorType).toBe('api_error');
+    expect(body.message).toMatch(
+      /^Failed to get flow trends: .*Failed to get flow trends for period 30d: Server error/
+    );
+  });
 });
 
 describe('getRuleTrends', () => {
