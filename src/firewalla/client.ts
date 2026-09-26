@@ -76,6 +76,7 @@ import {
   type PagingCoverage,
   type PagingStopReason,
 } from '../utils/paging-coverage.js';
+import { refuseUndocumentedGeoQualifiers } from '../utils/geographic-filters.js';
 import { logger } from '../monitoring/logger.js';
 import {
   GeographicCache,
@@ -377,6 +378,9 @@ function withMspQuery(
   }
   const { query, ...rest } = params;
   const translated = toMspQuery(query);
+  if (endpoint !== '/v2/rules') {
+    refuseUndocumentedGeoQualifiers(query);
+  }
   return translated ? { ...rest, query: translated } : rest;
 }
 
@@ -5803,6 +5807,9 @@ export class FirewallaClient {
       return endpoint;
     }
     const translated = toMspQuery(query);
+    if (path !== '/v2/rules') {
+      refuseUndocumentedGeoQualifiers(query);
+    }
     if (translated === query) {
       return endpoint;
     }

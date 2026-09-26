@@ -175,7 +175,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `exclude_vpn`, `exclude_cloud`, `min_risk_score` and unknown filter names
   are refused as a validation error that names them, before any request. An
   unknown country code is a validation error too; it was reported as a search
-  error, after a retry two seconds later.
+  error, after a retry two seconds later. Country codes are checked against
+  the 249 assigned ISO 3166-1 alpha-2 codes; the table used before had 187,
+  and refused real codes such as CY, MT, MC, LI and AD.
+- `search_flows`, `search_alarms`, `get_flow_data` and `get_active_alarms`
+  refuse a geographic name typed in the query that is not an API qualifier
+  (`country:`, `continent:`, `city:`, `asn:`, `isp:`, `is_vpn:` and the
+  others in the tools' field lists), naming it, before any request; for
+  country codes the suggestion is the query with `region:` in their place
+  (`status:blocked AND country:CN` suggests `status:blocked region:CN`). The
+  field lists accepted these names and the query was sent, and the API
+  answers a qualifier it does not know with no results.
 - `search_devices`, `search_target_lists` and `search_rules` accept free
   text: a query that is only a word or quoted phrase (`nas`, `"living
   room"`), and free text beside other terms (`name:nas OR laptop`). The
