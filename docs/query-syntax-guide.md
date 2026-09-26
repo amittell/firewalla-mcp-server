@@ -43,7 +43,7 @@ The tools accept uppercase `AND`, `OR` and `NOT`, parentheses, and the API's own
 | `ts:>24h` | `ts:><now-86400>` | a relative time (`s`, `m`, `h`, `d`, `w`) becomes Unix seconds |
 | `type:1 and status:1` | `type:1 and status:1` | lowercase `and`, `or`, `not` are words, as the API reads them |
 
-`<now-86400>` stands for the Unix time 86,400 seconds before the request. A query already in the API's form is sent unchanged, with one exception: a field repeated on its own (`type:1 type:10`), which the API reads as OR, is refused in favor of the comma list `type:1,10` (see the refusal table below), so that a space always means AND. `search_devices` and `search_target_lists` send no query: they evaluate `AND`, `OR`, `NOT`, `-` and parentheses themselves, across fields too.
+`<now-86400>` stands for the Unix time 86,400 seconds before the request. A query already in the API's form is sent unchanged, with one exception: a field repeated on its own (`type:1 type:10`), which the API reads as OR, is refused in favor of the comma list `type:1,10` (see the refusal table below), so that a space always means AND. `search_devices` and `search_target_lists` send no query: they evaluate `AND`, `OR`, `NOT`, `-` and parentheses themselves, across fields too. `search_rules` and `get_network_rules` send no free text: `/v2/rules` matched none (see [Rules](#rules)).
 
 ## What is refused
 
@@ -66,10 +66,14 @@ A query with no API form is refused before anything is sent. The response is a `
 | `transfer.total:[1000 TO *]` | the same, with an open end | `transfer.total:>=1000` |
 | `box.id:<another gid> AND type:1` | with `FIREWALLA_BOX_ID` set, a second box; the API would read the two as either | `type:1` |
 | `(box.id:<gid> OR box.id:<another gid>) AND type:1` | the same, with `FIREWALLA_BOX_ID=<gid>`: the list adds another box | `type:1` |
+| `status:blocked AND country:CN` | on flows and alarms, a geographic name that is not a qualifier; the API would return nothing | `status:blocked region:CN` |
+| `continent:Asia`, `city:Paris`, `asn:AS4134`, `is_vpn:true` | the same, with no country code to put in `region:` | |
 
 For strict bounds and for `[low TO high]`, the suggestion is the whole query with the range rewritten; for strict bounds it includes the ends the query excluded. An open end becomes a comparison (`{1000 TO *]` suggests `>1000`, `[* TO 5000]` `<=5000`); a closed range becomes `low-high`, which includes both ends even where `{` or `}` excluded one, and `[* TO *]` is to be left out.
 
-The search tools also check field names before this. They refuse `resolved:` and `message:` on alarms, the qualifier aliases listed there, a bare MAC address in `search_devices`, and, in `search_rules`, `search_devices` and `search_target_lists`, a query that is only free text (see [Fields](#fields)).
+The geographic names refused on flows and alarms are `country`, `country_code`, `remote_country`, `continent`, `remote_continent`, `city`, `timezone`, `isp`, `organization`, `hosting_provider`, `asn`, `is_cloud_provider`, `is_cloud`, `is_proxy`, `is_vpn`, `geographic_risk_score`, `geo_risk_score` and `geo_location`. `region` is the one geographic qualifier the API documents; for `country`, `country_code` and `remote_country` with ISO 3166 codes the suggestion is the query with `region:` in their place.
+
+The search tools also check field names before this. They refuse `resolved:` and `message:` on alarms, the qualifier aliases listed there, and a bare MAC address in `search_devices` (see [Fields](#fields)).
 
 ## Where the query goes
 
@@ -77,10 +81,10 @@ The search tools also check field names before this. They refuse `resolved:` and
 |------|----------|-------------------|----------------|
 | `search_alarms` | `GET /v2/alarms` | the API | field check; `source_ip:` becomes `device.ip:`; `time_range` is ANDed as `ts:<start>-<end>` |
 | `search_flows` | `GET /v2/flows` | the API | field check; `blocked:` or `block:` `true`/`false` become `status:blocked`/`-status:blocked`, `bytes:` becomes `total:`; `time_range` is ANDed |
-| `search_rules` | `GET /v2/rules` | the API, then the client checks each rule's `action`, `status` and `target.value` against every term | field check |
+| `search_rules` | `GET /v2/rules` | the API, then the client checks each rule's `action`, `status` and `target.value` against every term, and matches the free text | field check; free-text words are not sent |
 | `get_active_alarms` | `GET /v2/alarms` | the API | `status:1` is ANDed unless the query names a status; `source_ip:` becomes `device.ip:` |
 | `get_flow_data` | `GET /v2/flows` | the API | `blocked:` and `bytes:` as above; `start_time`/`end_time` are ANDed as `ts:<start>-<end>` |
-| `get_network_rules` | `GET /v2/rules` | the API | |
+| `get_network_rules` | `GET /v2/rules` | the API, then the client matches the free text | free-text words are not sent |
 | `search_devices` | `GET /v2/devices` | the client; the endpoint ignores `query` | field check |
 | `search_target_lists` | `GET /v2/target-lists` | the client; the endpoint has no `query` | field check |
 
@@ -88,16 +92,16 @@ The first six then send the query through the rewrite above. When `FIREWALLA_BOX
 
 ## Values and time windows
 
-- `*` is a wildcard (`device.name:*iphone*`, `domain:*.example.com`). Quote a value with spaces, commas, `*` or `:` (`box.name:"Gold Plus"`).
+- `*` is a wildcard (`device.name:*iphone*`, `domain:*.example.com`). Quote a value with spaces, commas, `*` or `:` (`box.name:"Gold Plus"`). A comma list may hold wildcards and quoted values (`domain:*.a.example,*.b.example`, `notes:consoles,"ad servers"`); an `OR` of wildcard values is sent as such a list, and the API's handling of one was not measured.
 - Comparisons are `>`, `>=`, `<`, `<=`, and a range is `low-high`, inclusive: `total:>50MB`, `total:1MB-50MB`. Sizes take `B`, `KB`, `MB`, `GB` and `TB`, each 1000 times the one before.
-- A word without a field is free text (`porn`, `"brute force"`); it matched on alarms and was not measured on flows. `search_rules`, `search_devices` and `search_target_lists` refuse a query that is only free text.
+- A word without a field is free text (`porn`, `"brute force"`); it matched on alarms and was not measured on flows. On rules the API matched none (measured 2026-09-26: a word in one of 98 rules' target value returned 0 rules), so `search_rules` and `get_network_rules` keep free text out of the query and match it themselves. `search_devices` and `search_target_lists` match it too; see [Fields](#fields) for the fields each searches. In a query sent to the API, free text can be ANDed with other terms but not ORed or excluded; `search_devices` and `search_target_lists` evaluate `OR` and `NOT` with it too.
 - `[low TO high]` and `{low TO high}` are refused everywhere, with the `field:low-high` form suggested.
 - With no `ts` term, `/v2/alarms` covers the last 30 days and `/v2/flows` the last 24 hours. `ts` takes Unix seconds, `ts:1790208000-1790294400` (2026-09-24, UTC) or `ts:>=1790208000`, or a relative time, `ts:>1h`, `ts:>=24h` or `ts:<7d` (units `s`, `m`, `h`, `d`, `w`), which `search_alarms`, `search_flows`, `get_active_alarms` and `get_flow_data` send as Unix seconds. `search_rules`, `search_devices` and `search_target_lists` do not accept `ts` (`Invalid field(s) in query: ts`).
 - The search tools refuse a query with more than 10 `*`, 15 `field:value` terms or 20 `AND`/`OR`.
 
 ## Fields
 
-The search tools check each flat field name (one with no dot) against a list of their own. `search_alarms` and `search_flows` pass every dotted name to the API unchecked; `search_rules`, `search_devices` and `search_target_lists` check dotted names against their lists too and refuse one they do not know (`Invalid field 'target.foo' for rules`). The lists include names that are not API qualifiers, such as `severity` on alarms and `country` and `source_ip` on flows. Those are sent, and the API answers a field it does not know with no results rather than an error (measured). Use the qualifiers below.
+The search tools check each flat field name (one with no dot) against a list of their own. `search_alarms` and `search_flows` pass every dotted name to the API unchecked; `search_rules`, `search_devices` and `search_target_lists` check dotted names against their lists too and refuse one they do not know (`Invalid field 'target.foo' for rules`). The lists include names that are not API qualifiers, such as `severity` on alarms and `source_ip` on flows. Those are sent, and the API answers a field it does not know with no results rather than an error (measured). The geographic ones (`country`, `continent`, `city`, `asn` and the others listed under [What is refused](#what-is-refused)) are refused on flows and alarms instead, with `region:` as the suggestion. Use the qualifiers below.
 
 ### Alarms
 
@@ -137,13 +141,15 @@ From the [flow qualifier table](firewalla-api-reference.md#flow-qualifiers):
 | `sport`, `dport` | source and destination port; `sport:443` measured |
 | `protocol` | `tcp`, `udp`; not in the table, measured (`region:US protocol:tcp` 465,213 of 737,886) |
 
-`search_flows` refuses the aliases `Box`, `Mac`, `Device`, `Network`, `SourcePort` and `DestinationPort`; the lower-case `category`, `domain`, `region`, `download`, `upload` and `total` are the qualifiers themselves. `country`, `source_ip` and `device.ip` are sent but are not in the table; use `region`, and `device.name` or `device.id`.
+`search_flows` refuses the aliases `Box`, `Mac`, `Device`, `Network`, `SourcePort` and `DestinationPort`; the lower-case `category`, `domain`, `region`, `download`, `upload` and `total` are the qualifiers themselves. `country` and the other geographic names are refused; use `region`. `source_ip` and `device.ip` are sent but are not in the table; use `device.name` or `device.id`.
 
 ### Rules
 
 The [rule qualifiers](firewalla-api-reference.md#rule-qualifiers) are `status` (`active`, `paused`), `action` (`allow`, `block`, `timelimit`), `box.id`, `box.group.id` and `device.id`, and `id:<box gid>:<n>` works too (measured). `search_rules` and `get_network_rules` accept all of them, and the API applies the same grammar to rules as to alarms and flows (measured: `action:block` 91 rules, `action:allow` 7, `action:block,allow` 98).
 
 After the API answers, `search_rules` checks each rule's `action`, `status` and target value against every term of the sent query: a comma list is any of its values, `-` excludes, and `target.value` (or `target_value`) matches as a substring or `*` pattern. `target.value`, `target.type`, `direction`, `protocol`, `notes` and `scope.type` are sent too, but they are not rule qualifiers and the API's handling of them was not measured.
+
+Free text is not sent: `/v2/rules` matched none (measured 2026-09-26: of 98 rules, one had a given word in its target value, and `query=<that word>` returned 0). `search_rules` and `get_network_rules` send the other terms, or no query, and keep the rules that have every word, case-insensitively, in their name, notes, action, target type or value, or scope type or value: `tiktok AND action:block` is sent as `action:block` and keeps the block rules with "tiktok" in one of those.
 
 ### Devices
 
@@ -152,7 +158,7 @@ After the API answers, `search_rules` checks each rule's `action`, `status` and 
 | Field | Matches |
 |-------|---------|
 | `name:` | names containing the value; `*` is ignored |
-| `ip:` | the exact address, or a `*` pattern: `192.168.*`, `192.168.1.*`, `10.*`. CIDR (`192.168.1.0/24`) matches nothing |
+| `ip:` | the exact address, a `*` pattern (`192.168.*`, `192.168.1.*`, `10.*`) or an IPv4 CIDR block (`192.168.1.0/24`); a value with `/` that is not an IPv4 block is refused |
 | `mac:` | the MAC address, a plain-MAC device id, exactly or with `*` |
 | `id:` | the device id (a MAC address, or `ovpn:` / `wg_peer:` for VPN clients), exactly or with `*` |
 | `mac_vendor:` | vendors containing the value |
@@ -160,7 +166,7 @@ After the API answers, `search_rules` checks each rule's `action`, `status` and 
 | `gid:` | the box gid, exactly or with `*` |
 | `network.name:`, `group.name:` | names containing the value |
 
-`AND`, `OR`, `NOT`, `-`, a space and parentheses are evaluated. Free text is refused, and so is a bare MAC address, with the hint to write `mac:<address>`. Other names in the tool's field list, such as `device_type` and `os`, pass the check and match nothing.
+A comma list is any of its values (`name:nas,laptop`, `ip:192.168.1.0/24,10.0.0.0/8`). `AND`, `OR`, `NOT`, `-`, a space and parentheses are evaluated. Free text (a word or quoted phrase with no field) matches the name, IP, MAC or id, vendor, and network or group name. A bare MAC address is refused, with the hint to write `mac:<address>`. Other names in the tool's field list, such as `device_type` and `os`, pass the check and match nothing.
 
 ### Target lists
 
@@ -175,7 +181,7 @@ After the API answers, `search_rules` checks each rule's `action`, `status` and 
 | `target_count:` | the number of entries: `n`, `>n`, `>=n`, `<n`, `<=n` or `a-b` |
 | `last_updated:` | Unix seconds or a date such as `2026-09-01`, with the same comparisons |
 
-Firewalla-managed lists carry no `targets` and no `category` (measured), so `targets:` and `category:` never match them; `target_count:` reads their `count`. `AND`, `OR`, `NOT`, `-`, a space and parentheses are evaluated. A comma list is compared as one value and matches nothing (use `OR`), and free text is refused.
+Firewalla-managed lists carry no `targets` and no `category` (measured), so `targets:` and `category:` never match them; `target_count:` reads their `count`. `AND`, `OR`, `NOT`, `-`, a space and parentheses are evaluated. On `name:`, `notes:`, `owner:`, `category:` and `targets:` a comma list is any of its values (`category:social,games`); a quoted value keeps its commas. Free text matches the name, the notes or an entry.
 
 ## Pitfalls
 
@@ -195,12 +201,12 @@ Firewalla-managed lists carry no `targets` and no `category` (measured), so `tar
 | `resolved:false` | `search_alarms` | refused | `status:1` |
 | `message:porn` | `search_alarms` | refused | `porn` |
 | `bytes:[1000000 TO 50000000]` | `search_flows` | refused: `[low TO high]` | `total:1MB-50MB` |
-| `country:CN` | `search_flows` | sent; not in the qualifier table | `region:CN` |
+| `country:CN` | `search_flows` | refused: not a qualifier; `region:CN` is suggested | `region:CN` |
+| `continent:Asia` | `search_flows` | refused: the API has no continent qualifier | the countries' codes, e.g. `region:CN,JP,KR` |
 | `category:*` | `search_flows` | sent; matches nothing: `field:*` is not an existence test on `status`, `category` or `action` (measured), though `device.name:*` returns results | leave the term out |
 | `AA:BB:CC:DD:EE:01` | `search_devices` | refused, with a hint | `mac:AA:BB:CC:DD:EE:01` |
-| `laptop` | `search_devices` | refused: free text only | `name:laptop` |
-| `ip:192.168.1.0/24` | `search_devices` | nothing: no CIDR | `ip:192.168.1.*` |
-| `category:social,games` | `search_target_lists` | nothing | `category:social OR category:games` |
+| `tiktok OR action:allow` | `search_rules` | refused: an `OR` with free text | two searches, `tiktok` and `action:allow` |
+| `ip:fe80::/64` | `search_devices` | refused: `ip:` takes IPv4 blocks only | `ip:fe80:*` |
 
 ## Worked examples
 
@@ -257,7 +263,7 @@ Firewalla-managed lists carry no `targets` and no `category` (measured), so `tar
 
 ### search_rules
 
-The API applies the query; `search_rules` then checks the rules it returns as described under [Rules](#rules).
+The API applies the query; `search_rules` then checks the rules it returns as described under [Rules](#rules). A free-text word is matched by the client and not sent, so `tiktok AND action:block` is sent as `action:block`.
 
 | Query | Finds | Sent as | Basis |
 |-------|-------|---------|-------|
@@ -281,6 +287,9 @@ The query is not sent; the server filters the device list.
 | `online:false AND mac_vendor:samsung` | offline devices whose vendor contains "samsung" |
 | `mac_vendor:apple OR mac_vendor:samsung` | Apple or Samsung devices |
 | `ip:192.168.*` | devices in 192.168.x.x |
+| `ip:192.168.1.0/24` | devices in 192.168.1.0/24 |
+| `nas` | devices with "nas" in the name, IP, MAC, vendor, or network or group name |
+| `name:tv,nas` | devices named like "tv" or "nas" |
 | `online:true AND ip:192.168.1.*` | online devices in 192.168.1.x |
 | `mac:AA:BB:CC:DD:EE:01` | the device with that MAC address |
 | `id:ovpn:*` | OpenVPN clients |
@@ -299,6 +308,8 @@ The query is not sent; the server filters the lists the API returns for `owner`.
 |-------|---------|
 | `category:social` | lists in the social category |
 | `category:social OR category:games` | social or games lists |
+| `category:social,games` | the same |
+| `facebook` | lists with "facebook" in the name, the notes or an entry |
 | `owner:global AND category:social` | MSP-wide social lists |
 | `NOT owner:firewalla` | lists that are not Firewalla-managed |
 | `name:*social*` | lists named like "social" |
