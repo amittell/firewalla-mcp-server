@@ -12,7 +12,7 @@
  * - **firewalla://topology**: Network structure and device relationships
  * - **firewalla://threats/recent**: Latest security events and blocked attempts
  *
- * Each resource returns formatted JSON with contextual metadata, performance
+ * Each resource returns compact JSON with contextual metadata, performance
  * indicators, and actionable insights for Claude's analysis and reporting.
  *
  * @version 1.0.0
@@ -32,7 +32,7 @@ import { safeUnixToISOString } from '../utils/timestamp.js';
  * Registers MCP resource handlers on the server to provide structured Firewalla firewall data via URI-based endpoints
  *
  * Sets up read-only resource endpoints that respond to MCP ReadResourceRequest messages.
- * Each URI maps to a specific Firewalla data source and returns formatted JSON responses
+ * Each URI maps to a specific Firewalla data source and returns compact JSON responses
  * with enriched metadata for analytical purposes.
  *
  * Resource responses include:
@@ -109,27 +109,23 @@ export function setupResources(
               {
                 uri,
                 mimeType: 'application/json',
-                text: JSON.stringify(
-                  {
-                    firewall_status: {
-                      status: summary.status,
-                      boxes_online: summary.boxes_online,
-                      boxes_total: summary.boxes_total,
-                      boxes: summary.boxes,
-                      recent_flows_sampled: summary.recent_flows_sampled,
-                      blocked_in_sample: summary.blocked_in_sample,
-                      last_updated: summary.last_updated,
-                    },
-                    health_indicators: {
-                      status_ok: summary.status === 'online',
-                      offline_boxes: summary.boxes
-                        .filter(box => !box.online)
-                        .map(box => box.name),
-                    },
+                text: JSON.stringify({
+                  firewall_status: {
+                    status: summary.status,
+                    boxes_online: summary.boxes_online,
+                    boxes_total: summary.boxes_total,
+                    boxes: summary.boxes,
+                    recent_flows_sampled: summary.recent_flows_sampled,
+                    blocked_in_sample: summary.blocked_in_sample,
+                    last_updated: summary.last_updated,
                   },
-                  null,
-                  2
-                ),
+                  health_indicators: {
+                    status_ok: summary.status === 'online',
+                    offline_boxes: summary.boxes
+                      .filter(box => !box.online)
+                      .map(box => box.name),
+                  },
+                }),
               },
             ],
           };
@@ -152,44 +148,37 @@ export function setupResources(
               {
                 uri,
                 mimeType: 'application/json',
-                text: JSON.stringify(
-                  {
-                    device_inventory: {
-                      statistics: deviceStats,
-                      availability_percentage:
-                        deviceStats.total > 0
-                          ? Math.round(
-                              (deviceStats.online / deviceStats.total) * 100
-                            )
-                          : 0,
-                      devices: safeResults.map(device => ({
-                        id:
-                          device?.id !== null && device?.id !== undefined
-                            ? String(device.id)
-                            : 'unknown',
-                        name: device?.name || 'Unknown Device',
-                        ip_address: device?.ip || 'N/A',
-                        mac_vendor: device?.macVendor || 'Unknown',
-                        status: device?.online ? 'online' : 'offline',
-                        last_seen: safeUnixToISOString(
-                          device?.lastSeen,
-                          'Never'
-                        ),
-                        network: device?.network || {
-                          id: 'unknown',
-                          name: 'Unknown Network',
-                        },
-                        group: device?.group || {
-                          id: 'unknown',
-                          name: 'Default Group',
-                        },
-                        status_indicator: device?.online ? '🟢' : '🔴',
-                      })),
-                    },
+                text: JSON.stringify({
+                  device_inventory: {
+                    statistics: deviceStats,
+                    availability_percentage:
+                      deviceStats.total > 0
+                        ? Math.round(
+                            (deviceStats.online / deviceStats.total) * 100
+                          )
+                        : 0,
+                    devices: safeResults.map(device => ({
+                      id:
+                        device?.id !== null && device?.id !== undefined
+                          ? String(device.id)
+                          : 'unknown',
+                      name: device?.name || 'Unknown Device',
+                      ip_address: device?.ip || 'N/A',
+                      mac_vendor: device?.macVendor || 'Unknown',
+                      status: device?.online ? 'online' : 'offline',
+                      last_seen: safeUnixToISOString(device?.lastSeen, 'Never'),
+                      network: device?.network || {
+                        id: 'unknown',
+                        name: 'Unknown Network',
+                      },
+                      group: device?.group || {
+                        id: 'unknown',
+                        name: 'Default Group',
+                      },
+                      status_indicator: device?.online ? '🟢' : '🔴',
+                    })),
                   },
-                  null,
-                  2
-                ),
+                }),
               },
             ],
           };
@@ -203,38 +192,34 @@ export function setupResources(
               {
                 uri,
                 mimeType: 'application/json',
-                text: JSON.stringify(
-                  {
-                    security_metrics: {
-                      overview: {
-                        total_alarms: metrics.total_alarms,
-                        active_alarms: metrics.active_alarms,
-                        resolved_alarms:
-                          metrics.total_alarms - metrics.active_alarms,
-                        blocked_connections: metrics.blocked_connections,
-                        suspicious_activities: metrics.suspicious_activities,
-                        security_alarms: metrics.security_alarms,
-                        threat_level: metrics.threat_level,
-                        last_threat_detected: metrics.last_threat_detected,
-                        windows: metrics.windows,
-                        lower_bounds: metrics.lower_bounds,
-                      },
-                      threat_indicators: {
-                        level_emoji: getThreatLevelEmoji(metrics.threat_level),
-                        active_threat_ratio:
-                          metrics.active_alarms /
-                          Math.max(metrics.total_alarms, 1),
-                        security_effectiveness: calculateSecurityScore(metrics),
-                        recommendation: getSecurityRecommendation(
-                          metrics.threat_level,
-                          metrics.security_alarms
-                        ),
-                      },
+                text: JSON.stringify({
+                  security_metrics: {
+                    overview: {
+                      total_alarms: metrics.total_alarms,
+                      active_alarms: metrics.active_alarms,
+                      resolved_alarms:
+                        metrics.total_alarms - metrics.active_alarms,
+                      blocked_connections: metrics.blocked_connections,
+                      suspicious_activities: metrics.suspicious_activities,
+                      security_alarms: metrics.security_alarms,
+                      threat_level: metrics.threat_level,
+                      last_threat_detected: metrics.last_threat_detected,
+                      windows: metrics.windows,
+                      lower_bounds: metrics.lower_bounds,
+                    },
+                    threat_indicators: {
+                      level_emoji: getThreatLevelEmoji(metrics.threat_level),
+                      active_threat_ratio:
+                        metrics.active_alarms /
+                        Math.max(metrics.total_alarms, 1),
+                      security_effectiveness: calculateSecurityScore(metrics),
+                      recommendation: getSecurityRecommendation(
+                        metrics.threat_level,
+                        metrics.security_alarms
+                      ),
                     },
                   },
-                  null,
-                  2
-                ),
+                }),
               },
             ],
           };
@@ -248,45 +233,38 @@ export function setupResources(
               {
                 uri,
                 mimeType: 'application/json',
-                text: JSON.stringify(
-                  {
-                    network_topology: {
-                      overview: {
-                        total_subnets: topology.subnets.length,
-                        total_devices: topology.subnets.reduce(
-                          (sum, subnet) => sum + subnet.device_count,
-                          0
-                        ),
-                        total_connections: topology.connections.length,
-                      },
-                      subnets: topology.subnets.map(subnet => ({
-                        id: subnet.id,
-                        name: subnet.name,
-                        cidr: subnet.cidr,
-                        device_count: subnet.device_count,
-                        subnet_size: calculateSubnetSize(subnet.cidr),
-                      })),
-                      connections: topology.connections.map(conn => ({
-                        source: conn.source,
-                        destination: conn.destination,
-                        type: conn.type,
-                        bandwidth_mbps: Math.round(
-                          conn.bandwidth / (1024 * 1024)
-                        ),
-                        connection_strength: categorizeConnection(
-                          conn.bandwidth
-                        ),
-                      })),
-                      network_health: {
-                        connectivity_score:
-                          calculateConnectivityScore(topology),
-                        bottlenecks: identifyBottlenecks(topology.connections),
-                      },
+                text: JSON.stringify({
+                  network_topology: {
+                    overview: {
+                      total_subnets: topology.subnets.length,
+                      total_devices: topology.subnets.reduce(
+                        (sum, subnet) => sum + subnet.device_count,
+                        0
+                      ),
+                      total_connections: topology.connections.length,
+                    },
+                    subnets: topology.subnets.map(subnet => ({
+                      id: subnet.id,
+                      name: subnet.name,
+                      cidr: subnet.cidr,
+                      device_count: subnet.device_count,
+                      subnet_size: calculateSubnetSize(subnet.cidr),
+                    })),
+                    connections: topology.connections.map(conn => ({
+                      source: conn.source,
+                      destination: conn.destination,
+                      type: conn.type,
+                      bandwidth_mbps: Math.round(
+                        conn.bandwidth / (1024 * 1024)
+                      ),
+                      connection_strength: categorizeConnection(conn.bandwidth),
+                    })),
+                    network_health: {
+                      connectivity_score: calculateConnectivityScore(topology),
+                      bottlenecks: identifyBottlenecks(topology.connections),
                     },
                   },
-                  null,
-                  2
-                ),
+                }),
               },
             ],
           };
@@ -318,29 +296,24 @@ export function setupResources(
               {
                 uri,
                 mimeType: 'application/json',
-                text: JSON.stringify(
-                  {
-                    recent_threats: {
-                      time_period: '24 hours',
-                      statistics: threatStats,
-                      threat_trend: categorizeThreatLevel(threats.length),
-                      threats: threats.map(threat => ({
-                        timestamp: threat.timestamp,
-                        type: threat.type,
-                        source_ip: threat.source_ip,
-                        destination_ip: threat.destination_ip,
-                        action_taken: threat.action_taken,
-                        severity: threat.severity,
-                        severity_emoji: getSeverityEmoji(threat.severity),
-                        time_ago: getTimeAgo(threat.timestamp),
-                      })),
-                      recommendations:
-                        generateThreatRecommendations(threatStats),
-                    },
+                text: JSON.stringify({
+                  recent_threats: {
+                    time_period: '24 hours',
+                    statistics: threatStats,
+                    threat_trend: categorizeThreatLevel(threats.length),
+                    threats: threats.map(threat => ({
+                      timestamp: threat.timestamp,
+                      type: threat.type,
+                      source_ip: threat.source_ip,
+                      destination_ip: threat.destination_ip,
+                      action_taken: threat.action_taken,
+                      severity: threat.severity,
+                      severity_emoji: getSeverityEmoji(threat.severity),
+                      time_ago: getTimeAgo(threat.timestamp),
+                    })),
+                    recommendations: generateThreatRecommendations(threatStats),
                   },
-                  null,
-                  2
-                ),
+                }),
               },
             ],
           };
@@ -357,15 +330,11 @@ export function setupResources(
           {
             uri,
             mimeType: 'application/json',
-            text: JSON.stringify(
-              {
-                error: true,
-                message: errorMessage,
-                uri,
-              },
-              null,
-              2
-            ),
+            text: JSON.stringify({
+              error: true,
+              message: errorMessage,
+              uri,
+            }),
           },
         ],
       };

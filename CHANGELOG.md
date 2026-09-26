@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   existence cache that writes never cleared, so each call cost an extra
   request.
 
+### Changed
+
+- Tool responses and the `firewalla://` resources are compact JSON, the
+  same JSON without the indentation. On large stubbed answers (400 devices,
+  500 flows, 500 alarms, 400 rules) the text is 34% smaller in bytes.
+
 ## [1.5.0] - 2026-09-25
 
 ### Added

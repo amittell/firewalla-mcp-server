@@ -364,15 +364,11 @@ export function createBulkOperationResponse(
     content: [
       {
         type: 'text',
-        text: JSON.stringify(
-          {
-            operation: operationName,
-            ...result,
-            timestamp: new Date().toISOString(),
-          },
-          null,
-          2
-        ),
+        text: JSON.stringify({
+          operation: operationName,
+          ...result,
+          timestamp: new Date().toISOString(),
+        }),
       },
     ],
     isError: false,

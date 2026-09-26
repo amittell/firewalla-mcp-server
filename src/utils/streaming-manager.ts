@@ -556,7 +556,7 @@ export function createStreamingResponse(
     content: [
       {
         type: 'text',
-        text: JSON.stringify(response, null, 2),
+        text: JSON.stringify(response),
       },
     ],
     isError: false,

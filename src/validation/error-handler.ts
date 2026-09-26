@@ -98,7 +98,7 @@ export function createErrorResponse(
     content: [
       {
         type: 'text',
-        text: JSON.stringify(errorResponse, null, 2),
+        text: JSON.stringify(errorResponse),
       },
     ],
     isError: true,
