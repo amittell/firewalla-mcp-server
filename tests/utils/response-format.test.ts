@@ -181,6 +181,53 @@ describe('renderMarkdown', () => {
     );
   });
 
+  it('caps a short list at maxRows too', () => {
+    const text = renderMarkdown(
+      'demo_tool',
+      { hosts: ['a.example', 'b.example', 'c.example', 'd.example'] },
+      { maxRows: 2 }
+    );
+    expect(text).toBe(
+      [
+        '## demo_tool',
+        '',
+        '- **hosts:** 4 items',
+        '  - a.example',
+        '  - b.example',
+        '  - … and 2 more',
+        '',
+        '_This view leaves out items past the first 2 in hosts. Call again with `response_format: json` for the full JSON response._',
+      ].join('\n')
+    );
+  });
+
+  it('keeps an empty object or list field of every record', () => {
+    const text = renderMarkdown('demo_tool', {
+      rows: [
+        { id: 1, metadata: {}, tags: [] },
+        { id: 2, metadata: {}, tags: [] },
+      ],
+    });
+    expect(text.split('\n')).toContain(
+      'Empty in every record: metadata, tags.'
+    );
+  });
+
+  it('shows an empty object as blank cells of the fields other records have', () => {
+    const text = renderMarkdown('demo_tool', {
+      rows: [
+        { id: 1, metadata: {} },
+        { id: 2, metadata: { a: 1 } },
+      ],
+    });
+    expect(text).toContain(
+      ['| id | metadata.a |', '| --- | --- |', '| 1 |  |', '| 2 | 1 |'].join(
+        '\n'
+      )
+    );
+    expect(text).not.toContain('Empty in every record');
+  });
+
   it('lists the fields of a single record, with its lists as sections', () => {
     const text = renderMarkdown('demo_tool', {
       alarm: {
