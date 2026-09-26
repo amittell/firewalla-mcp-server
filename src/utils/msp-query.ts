@@ -26,9 +26,11 @@
  * A query that needs an OR between different fields, NOT over an AND, the
  * exclusion of free text, a wildcard or a range, or two other conditions on
  * one field (the API would read them as OR) has no API form: MspQueryError
- * names the part and says what to send instead. Lowercase `and`, `or` and
- * `not` are words, as the API reads them. A query already in API form
- * comes back unchanged.
+ * names the part and says what to send instead, where there is something:
+ * for an OR, one query per disjunct of the query's disjunctive normal form,
+ * whose results together are the query's. Lowercase `and`, `or` and `not`
+ * are words, as the API reads them. A query already in API form comes back
+ * unchanged.
  */
 
 /** A query, or part of one, that the MSP API cannot run */
@@ -138,6 +140,20 @@ function cannotSend(query: string, reason: string): string {
 
 function malformed(query: string, detail: string): MspQueryError {
   return new MspQueryError(`Query "${query}" is malformed: ${detail}.`, query);
+}
+
+function tooComplex(query: string): MspQueryError {
+  return new MspQueryError(
+    `Query "${query}" expands to more than ${MAX_CLAUSES} combinations of its OR terms; simplify it or split it into several searches.`,
+    query
+  );
+}
+
+/** What to run instead of a query, when there is something */
+function runInstead(suggestions: string[], otherwise: string): string {
+  return suggestions.length > 0
+    ? `Run one search for each of these and combine the results: ${suggestions.map(q => `"${q}"`).join(', ')}.`
+    : otherwise;
 }
 
 /**
@@ -416,8 +432,18 @@ class Parser {
   }
 }
 
-/** Pushes NOT down to the terms (negation normal form) */
-function toNnf(node: Node, negate: boolean, query: string): Node {
+/**
+ * Pushes NOT down to the terms (negation normal form). NOT over an AND has
+ * no API form and is refused, unless `deMorgan` (for suggestions): then it
+ * becomes an OR of the excluded terms.
+ */
+function toNnf(
+  node: Node,
+  negate: boolean,
+  query: string,
+  root: Node,
+  deMorgan = false
+): Node {
   switch (node.type) {
     case 'term':
       return negate
@@ -427,27 +453,29 @@ function toNnf(node: Node, negate: boolean, query: string): Node {
           }
         : node;
     case 'not':
-      return toNnf(node.item, !negate, query);
+      return toNnf(node.item, !negate, query, root, deMorgan);
     case 'and':
-      if (negate) {
+      if (negate && !deMorgan) {
         const part = `NOT (${render(node)})`;
+        const suggestions = suggestionsFor(root, query);
         throw new MspQueryError(
           cannotSend(
             query,
-            `"${part}" excludes a combination of conditions, and the API can exclude single field values only (-field:value, each of which must hold). Exclude single values instead, or search without the exclusion.`
+            `"${part}" excludes a combination of conditions, and the API can exclude single field values only (-field:value, each of which must hold). ${runInstead(suggestions, 'Exclude single values instead, or search without the exclusion.')}`
           ),
           query,
-          part
+          part,
+          suggestions
         );
       }
       return {
-        type: 'and',
-        items: node.items.map(i => toNnf(i, false, query)),
+        type: negate ? 'or' : 'and',
+        items: node.items.map(i => toNnf(i, negate, query, root, deMorgan)),
       };
     case 'or':
       return {
         type: negate ? 'and' : 'or',
-        items: node.items.map(i => toNnf(i, negate, query)),
+        items: node.items.map(i => toNnf(i, negate, query, root, deMorgan)),
       };
   }
 }
@@ -525,10 +553,7 @@ function toCnf(node: Node, query: string): Clause[] {
         }
         result = simplify(product);
         if (result.length > MAX_CLAUSES) {
-          throw new MspQueryError(
-            `Query "${query}" expands to more than ${MAX_CLAUSES} combinations of its OR terms; simplify it or split it into several searches.`,
-            query
-          );
+          throw tooComplex(query);
         }
       }
       return result;
@@ -536,6 +561,148 @@ function toCnf(node: Node, query: string): Clause[] {
     case 'not':
       // toNnf leaves no NOT above a term
       throw new Error('toCnf: NOT left in the query tree');
+  }
+}
+
+/** A conjunction of literals; the disjunctive normal form is a list of them */
+type Conjunction = Literal[];
+
+/**
+ * The query as a disjunction of conjunctions (disjunctive normal form).
+ * simplify() also applies here: a OR (a AND b) is a.
+ */
+function toDnf(node: Node, query: string): Conjunction[] {
+  switch (node.type) {
+    case 'term': {
+      const { literal } = node;
+      // A comma list is an OR of its values
+      if (
+        !literal.negated &&
+        (literal.kind === 'exact' || literal.kind === 'wildcard') &&
+        literal.values.length > 1
+      ) {
+        return literal.values.map(value => [
+          {
+            ...literal,
+            values: [value],
+            kind: hasWildcard(value) ? 'wildcard' : 'exact',
+          },
+        ]);
+      }
+      return [[literal]];
+    }
+    case 'or': {
+      const result = simplify(node.items.flatMap(item => toDnf(item, query)));
+      if (result.length > MAX_CLAUSES) {
+        throw tooComplex(query);
+      }
+      return result;
+    }
+    case 'and': {
+      let result = toDnf(node.items[0], query);
+      for (const item of node.items.slice(1)) {
+        const right = toDnf(item, query);
+        const product: Conjunction[] = [];
+        for (const left of result) {
+          for (const other of right) {
+            product.push([...left, ...other]);
+          }
+        }
+        result = simplify(product);
+        if (result.length > MAX_CLAUSES) {
+          throw tooComplex(query);
+        }
+      }
+      return result;
+    }
+    case 'not':
+      // toNnf leaves no NOT above a term
+      throw new Error('toDnf: NOT left in the query tree');
+  }
+}
+
+/**
+ * The two literals by which two conjunctions differ, when that is one
+ * value each of the same field, so that they merge into one comma list
+ */
+function mergeablePair(
+  a: Conjunction,
+  b: Conjunction
+): [Literal, Literal] | undefined {
+  if (a.length !== b.length) {
+    return undefined;
+  }
+  const keysA = new Set(a.map(literalKey));
+  const keysB = new Set(b.map(literalKey));
+  const onlyA = a.filter(literal => !keysB.has(literalKey(literal)));
+  const onlyB = b.filter(literal => !keysA.has(literalKey(literal)));
+  if (onlyA.length !== 1 || onlyB.length !== 1) {
+    return undefined;
+  }
+  const [x] = onlyA;
+  const [y] = onlyB;
+  const listable = (literal: Literal) =>
+    !literal.negated &&
+    (literal.kind === 'exact' || literal.kind === 'wildcard');
+  return listable(x) &&
+    listable(y) &&
+    x.field.toLowerCase() === y.field.toLowerCase()
+    ? [x, y]
+    : undefined;
+}
+
+/**
+ * Conjunctions that differ only in one field's value, merged into one with
+ * a comma list: (a AND region:US) OR (a AND region:CN) is a region:US,CN
+ */
+function mergeDisjuncts(conjunctions: Conjunction[]): Conjunction[] {
+  const result = [...conjunctions];
+  const findPair = (): [number, number, Literal, Literal] | undefined => {
+    for (let i = 0; i < result.length; i++) {
+      for (let j = i + 1; j < result.length; j++) {
+        const pair = mergeablePair(result[i], result[j]);
+        if (pair) {
+          return [i, j, ...pair];
+        }
+      }
+    }
+    return undefined;
+  };
+  for (let found = findPair(); found; found = findPair()) {
+    const [i, j, x, y] = found;
+    result[i] = result[i].map(literal =>
+      literal === x ? mergeClause([x, y]) : literal
+    );
+    result.splice(j, 1);
+  }
+  return result;
+}
+
+/**
+ * Queries the API can run whose results together are the query's: one per
+ * disjunct of its disjunctive normal form, in API form, with disjuncts that
+ * differ only in one field's value merged into a comma list. Empty when the
+ * query has one disjunct, when a disjunct has no API form either, and past
+ * MAX_CLAUSES disjuncts.
+ */
+function suggestionsFor(tree: Node, query: string): string[] {
+  try {
+    const disjuncts = mergeDisjuncts(
+      toDnf(toNnf(tree, false, query, tree, true), query)
+    );
+    if (disjuncts.length < 2) {
+      return [];
+    }
+    return disjuncts.map(conjunction =>
+      mergeRepeatedFields(conjunction, query).map(renderLiteral).join(' ')
+    );
+  } catch (error) {
+    // A disjunct with no API form of its own, or too many disjuncts: the
+    // refusal is still reported, without suggestions
+    if (error instanceof MspQueryError) {
+      return [];
+    }
+    throw error;
   }
 }
 
@@ -581,73 +748,36 @@ function clauseProblem(
   return undefined;
 }
 
-function renderClause(clause: Clause): string {
-  return clause.length === 1 || clauseProblem(clause)
-    ? clause.map(renderLiteral).join(' OR ')
-    : renderLiteral(mergeClause(clause));
-}
-
 function clauseError(
-  clauses: Clause[],
-  index: number,
+  clause: Clause,
   problem: NonNullable<ReturnType<typeof clauseProblem>>,
-  query: string
+  query: string,
+  suggestions: string[]
 ): MspQueryError {
-  const clause = clauses[index];
   const part = clause.map(renderLiteral).join(' OR ');
+  const instead = runInstead(suggestions, 'Split it into separate searches.');
+  let reason: string;
   switch (problem) {
     case 'fields': {
-      // One search per field, each with the rest of the query
-      const rest = clauses
-        .filter((other, j) => j !== index && !clauseProblem(other))
-        .map(renderClause);
-      const groups = new Map<string, Clause>();
-      for (const literal of clause) {
-        const key = literal.field.toLowerCase();
-        groups.set(key, [...(groups.get(key) ?? []), literal]);
-      }
-      const suggestions = [...groups.values()].map(group =>
-        [...rest, renderClause(group)].join(' ')
-      );
-      const fields = [...groups.values()].map(group => group[0].field);
-      return new MspQueryError(
-        cannotSend(
-          query,
-          `"${part}" is an OR between different fields (${fields.join(', ')}), and the API has no OR between fields: terms on different fields must all match, and OR works only between values of one field (region:US OR region:CN is sent as region:US,CN). Run one search per field instead: ${suggestions.map(s => `"${s}"`).join(', ')}.`
-        ),
-        query,
-        part,
-        suggestions
-      );
+      const fields = [
+        ...new Map(
+          clause.map(literal => [literal.field.toLowerCase(), literal.field])
+        ).values(),
+      ];
+      reason = `"${part}" is an OR between different fields (${fields.join(', ')}), and the API has no OR between fields: terms on different fields must all match, and OR works only between values of one field (region:US OR region:CN is sent as region:US,CN). ${instead}`;
+      break;
     }
     case 'exclusion':
-      return new MspQueryError(
-        cannotSend(
-          query,
-          `"${part}" is an OR that includes an excluded term, and the API cannot express it: OR works only between values of one field, and every exclusion (-field:value) must hold. Run one search per side of the OR.`
-        ),
-        query,
-        part
-      );
+      reason = `"${part}" is an OR that includes an excluded term, and the API cannot express it: OR works only between values of one field, and every exclusion (-field:value) must hold. ${instead}`;
+      break;
     case 'text':
-      return new MspQueryError(
-        cannotSend(
-          query,
-          `"${part}" is an OR with free text, and the API cannot express it: every free-text word and every field term must match. Run one search per side of the OR.`
-        ),
-        query,
-        part
-      );
+      reason = `"${part}" is an OR with free text, and the API cannot express it: every free-text word and every field term must match. ${instead}`;
+      break;
     case 'numeric':
-      return new MspQueryError(
-        cannotSend(
-          query,
-          `"${part}" is an OR between comparisons or ranges, and the API's comma list takes exact or wildcard values only. Run one search per condition.`
-        ),
-        query,
-        part
-      );
+      reason = `"${part}" is an OR between comparisons or ranges, and the API's comma list takes exact or wildcard values only. ${instead}`;
+      break;
   }
+  return new MspQueryError(cannotSend(query, reason), query, part, suggestions);
 }
 
 /**
@@ -754,11 +884,16 @@ function translate(query: string): Literal[] {
   if (!tree) {
     return [];
   }
-  const clauses = toCnf(toNnf(tree, false, trimmed), trimmed);
-  const conjuncts = clauses.map((clause, index) => {
+  const clauses = toCnf(toNnf(tree, false, trimmed, tree), trimmed);
+  const conjuncts = clauses.map(clause => {
     const problem = clauseProblem(clause);
     if (problem) {
-      throw clauseError(clauses, index, problem, trimmed);
+      throw clauseError(
+        clause,
+        problem,
+        trimmed,
+        suggestionsFor(tree, trimmed)
+      );
     }
     return clause.length === 1 ? clause[0] : mergeClause(clause);
   });
