@@ -5,13 +5,13 @@
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@amittell/firewalla-mcp-server/badge" alt="Glama MCP Server" />
 </a>
 
-A Model Context Protocol (MCP) server that provides real-time access to Firewalla firewall data through 28 specialized tools, compatible with any MCP client.
+A Model Context Protocol (MCP) server that provides real-time access to Firewalla firewall data through 29 specialized tools, compatible with any MCP client.
 
 ## Why Firewalla MCP Server?
 
 ### Simple Network Security Integration
-- **28 Tools** for network monitoring and analysis
-- **23 Direct API Endpoints** + **5 Convenience Wrappers**
+- **29 Tools** for network monitoring and analysis
+- **24 Direct API Endpoints** + **5 Convenience Wrappers**
 - **Advanced Search** with query syntax and filters
 - **Clean, Verified Architecture** with corrected API schemas
 
@@ -382,7 +382,7 @@ If responses are slow:
 2. Use more specific time ranges
 3. Check your network connection to the MSP API
 
-## Available Tools (28 total)
+## Available Tools (29 total)
 
 ### Core Tools
 - **Security**: Get alarms, analyze threats
@@ -401,7 +401,7 @@ Devices: get_device_status, get_offline_devices, get_boxes
 Rules: get_network_rules, get_network_rules_summary, pause_rule, resume_rule
 Target lists: get_target_lists, get_specific_target_list, create_target_list, update_target_list, delete_target_list
 Search: search_flows, search_alarms, search_rules, search_devices, search_target_lists
-Analytics: get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_insights, get_alarm_trends, get_rule_trends
+Analytics: get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_flow_insights, get_flow_trends, get_alarm_trends, get_rule_trends
 Write (opt-in): create_rule, delete_rule, rename_device, archive_alarm, mute_alarm
 ```
 

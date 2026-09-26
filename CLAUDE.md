@@ -16,25 +16,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Model Context Protocol (MCP) server that provides Claude with access to Firewalla firewall data. Features a **28-tool architecture** with advanced search capabilities.
+A Model Context Protocol (MCP) server that provides Claude with access to Firewalla firewall data. Features a **29-tool architecture** with advanced search capabilities.
 
 ## Architecture Overview
 
-### 28-Tool Architecture
-- **23 Direct API Tools**: Mapping to Firewalla MSP API endpoints
+### 29-Tool Architecture
+- **24 Direct API Tools**: Mapping to Firewalla MSP API endpoints
 - **5 Convenience Wrapper Tools**: Client-side enhanced functionality for common operations
 - **CRUD Operations**: Create, Read, Update, Delete operations for all resources
 
-### Tool Categories (28 total)
+### Tool Categories (29 total)
 The groups are each handler's `category`, which `ToolRegistry.getToolsByCategory()` filters on.
 - **Security (2 tools)**: get_active_alarms, get_specific_alarm
 - **Network (3 tools)**: get_flow_data, get_bandwidth_usage, get_offline_devices
 - **Device (1 tool)**: get_device_status
 - **Rules (9 tools)**: get_network_rules, get_network_rules_summary, pause_rule, resume_rule, get_target_lists, get_specific_target_list, create_target_list, update_target_list, delete_target_list
 - **Search (5 tools)**: search_flows, search_alarms, search_rules, search_devices, search_target_lists
-- **Analytics (8 tools)**: get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_recent_flow_activity, get_flow_insights, get_alarm_trends, get_rule_trends
+- **Analytics (9 tools)**: get_boxes, get_simple_statistics, get_statistics_by_region, get_statistics_by_box, get_recent_flow_activity, get_flow_insights, get_flow_trends, get_alarm_trends, get_rule_trends
 - **Convenience wrappers** (client-side processing; counted in the groups above): get_bandwidth_usage, get_offline_devices, search_devices, search_target_lists, get_network_rules_summary
-- **Write tools (5, opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)**: create_rule and delete_rule (rules), rename_device (device), archive_alarm and mute_alarm (security). Not counted in the 28.
+- **Write tools (5, opt-in with `FIREWALLA_ENABLE_WRITE_TOOLS=true`)**: create_rule and delete_rule (rules), rename_device (device), archive_alarm and mute_alarm (security). Not counted in the 29.
 
 ## Development Commands
 
@@ -149,7 +149,7 @@ DEBUG=firewalla:*                         # Debug logging; see Debugging below (
 ```
 
 ### Tool Configuration
-- The 28 tools are always registered. There is no switch to disable one.
+- The 29 tools are always registered. There is no switch to disable one.
 - `FIREWALLA_ENABLE_WRITE_TOOLS=true` (any case) also registers and lists the
   write tools named in `WRITE_TOOL_NAMES` in `src/config/write-tools.ts`.
 - There is no read-only mode, safe mode or cache switch: `MCP_WAVE0_ENABLED`,
@@ -310,15 +310,15 @@ This file contains the complete, official Firewalla MSP API v2 documentation inc
 
 ## Architecture Notes
 
-### Clean 28-Tool Design
-- **Direct Implementation**: All 28 tools defined directly in TOOL_SCHEMAS
+### Clean 29-Tool Design
+- **Direct Implementation**: All 29 tools defined directly in TOOL_SCHEMAS
 - **API Mapping**: Mapping to all Firewalla MSP API endpoints
 - **Type Safety**: Full TypeScript implementation with strict validation
 - **Registry Pattern**: Clean tool registration with handler-based architecture
 
 ### Key Files
-- `src/server.ts`: Main MCP server with 28-tool TOOL_SCHEMAS architecture
-- `src/tools/registry.ts`: Tool registry with 28 handler definitions
+- `src/server.ts`: Main MCP server with 29-tool TOOL_SCHEMAS architecture
+- `src/tools/registry.ts`: Tool registry with 29 handler definitions
 - `src/firewalla/client.ts`: Firewalla API client with caching
 - `src/validation/`: Parameter validation and error handling
 
@@ -402,7 +402,7 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
   (`pause_rule`, `resume_rule` and the target-list create/update/delete tools
   predate the switch and are always registered)
 - Include proper input validation and error handling
-- Follow the 28-tool architecture constraints
+- Follow the 29-tool architecture constraints
 - Implement direct API execution in the server
 
 ## Performance Considerations
@@ -451,7 +451,7 @@ DEBUG=cache npm run mcp:start
 ## Version Information
 
 - **Version**: see `package.json`; `CHANGELOG.md` has the history
-- **Architecture**: 28-tool design (23 direct API + 5 convenience), plus 5 opt-in write tools
+- **Architecture**: 29-tool design (24 direct API + 5 convenience), plus 5 opt-in write tools
 - **API Support**: Firewalla MSP API v2 with CRUD operations
 - **Node.js**: Requires 18+
 - **TypeScript**: ES2020 target with strict mode

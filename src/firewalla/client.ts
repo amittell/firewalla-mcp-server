@@ -3375,8 +3375,7 @@ export class FirewallaClient {
   /**
    * Blocked flows per day from GET /v2/trends/flows, or for one box (`box`,
    * else FIREWALLA_BOX_ID unless `group` is given) counted per day from GET
-   * /v2/flows. No tool calls this; it replaced client-side counting of up to
-   * 10000 flows.
+   * /v2/flows. get_flow_trends calls this.
    * @throws {BoxSelectionError} Both box and group are given, or the box is
    * not a box gid; nothing is requested
    */
