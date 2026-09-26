@@ -288,6 +288,38 @@ describe('free text reads every rule the other terms match', () => {
     expect(coverage.note).toContain('counted 5000 rules');
   });
 
+  it.each([
+    ['search_rules', () => new SearchRulesHandler(), 'rules'],
+    ['get_network_rules', () => new GetNetworkRulesHandler(), 'rules'],
+  ])(
+    '%s returns at most its limit of the rules that match',
+    async (_tool, handler, key) => {
+      const { client } = cappedClient();
+      const res = await handler().execute(
+        { query: 'example', limit: 5 },
+        client
+      );
+      const data = body(res).data;
+      expect(data[key]).toHaveLength(5);
+      expect(data.free_text_coverage).toMatchObject({
+        rules_checked: 300,
+        rules_matched: 300,
+      });
+    }
+  );
+
+  it('the client methods apply the limit to the result too', async () => {
+    // With words no limit is sent, so it was not applied at all: both
+    // returned all 300 matches for a limit of 5 or 7
+    const { client } = cappedClient();
+    const rules = await client.getNetworkRules('example', 5);
+    expect(rules.results).toHaveLength(5);
+    expect(rules.count).toBe(300);
+    const searched = await client.searchRules({ query: 'example', limit: 7 });
+    expect(searched.results).toHaveLength(7);
+    expect(searched.count).toBe(300);
+  });
+
   it('sends the limit, and reports no coverage, without free text', async () => {
     const { client, get } = cappedClient();
     const res = await new GetNetworkRulesHandler().execute(
