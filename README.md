@@ -34,6 +34,7 @@ A Model Context Protocol (MCP) server that provides real-time access to Firewall
 | **Cursor** | Install Claude Code → VSIX method | [Setup Guide](docs/clients/cursor.md) |
 | **Roocode** | Install MCP support → Configure server | [Setup Guide](docs/clients/roocode.md) |
 | **Cline** | Configure in VS Code → Enable MCP | [Setup Guide](docs/clients/cline.md) |
+| **Open WebUI** | mcpo, or a native MCP connection over HTTP | [Setup Guide](docs/clients/open-webui.md) |
   
 
 ## How It Works

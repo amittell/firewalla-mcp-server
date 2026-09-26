@@ -2,6 +2,8 @@
 
 This guide helps you set up the Firewalla MCP Server with Ollama using MCPO (MCP Proxy for Ollama).
 
+> The tested guide is [clients/open-webui.md](clients/open-webui.md). The "MCPO server won't start" failure below came from firewalla-mcp-server releases before 1.4.0, which did not start under `npx`; that guide's troubleshooting section has the details.
+
 ## Prerequisites
 
 - Ollama installed and running
