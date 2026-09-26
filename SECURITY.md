@@ -85,7 +85,8 @@ delete alarms. The server:
   overrides and isolates (U+202A-U+202E, U+2066-U+2069), zero-width
   characters (U+200B-U+200D, U+2060) and U+FEFF. Emoji built with them, such
   as the family and profession emoji and the flags of England, Scotland and
-  Wales, are kept.
+  Wales, are kept. A marked key that then reads the same as another key of
+  its object gets ` <duplicate 2>`, so no value is lost.
 - puts the API data that a prompt quotes between `<firewalla_api_data>` and
   `</firewalla_api_data>`, after a notice that the text is set on the
   network and that instructions in it are not the user's. The prompts reach

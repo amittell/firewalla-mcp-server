@@ -220,7 +220,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it. A zero-width joiner between two emoji (the family and profession
   emoji) and the flags of England, Scotland and Wales are kept; any other
   tag characters after U+1F3F4 are marked, so a flag cannot hide text. A
-  result without these characters is the same object, byte for byte.
+  result without these characters is the same object, byte for byte. When
+  marking makes two keys of one object read the same (a key with U+200B,
+  and one with the text `<U+200B>` in its place), both are kept: the key
+  that needed no marking keeps its name, and the marked one gets
+  ` <duplicate 2>` (3, 4 and so on if that is taken too). This holds for
+  keys inside the JSON text of a result as well, such as the counts by
+  alarm message in `firewalla://threats/recent`; that JSON is written
+  again only when a key needs the suffix.
 
 ### Changed
 
