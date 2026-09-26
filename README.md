@@ -217,6 +217,7 @@ MCP_HTTP_ALLOWED_ORIGINS=   # Browser origins to accept, comma-separated, e.g. h
 - A request with an `Origin` header, which browsers send, gets 403 unless the origin is in `MCP_HTTP_ALLOWED_ORIGINS`. Non-browser MCP clients send no `Origin` and are not affected. An allowed origin gets CORS headers on every answer, refusals such as a 401 for a missing token included, so a web page on it can call the server and read why a request was refused.
 - The MCP endpoint is the `MCP_HTTP_PATH` path exactly: `/mcp`, `/mcp/` and either with a query string. Any other path, such as `/mcpx` or `/mcp/x`, gets 404, CORS preflight requests included.
 - A request body may be at most 1 MB, and a client has 10 seconds to send the headers and 30 seconds for the whole request. An answer given without reading the body (401, 403, 404, 405, a malformed session ID, a CORS preflight) closes the connection, so a client cannot hold one open by sending the body slowly.
+- A session ends when the client sends DELETE, after `MCP_SESSION_IDLE_TIMEOUT_MS` without a request (default 30 minutes), or when the server restarts. A request with the ID of a session the server does not hold gets 404, and the transport specification has the client start a new session with a new `initialize`. A request with no session ID, other than `initialize`, gets 400.
 
 **When to use HTTP transport:**
 - Running in Docker containers independently
