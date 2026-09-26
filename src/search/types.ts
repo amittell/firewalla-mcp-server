@@ -4,6 +4,7 @@
  */
 
 import type { AlarmGroup, FlowGroup } from '../types.js';
+import type { PagingCoverage } from '../utils/paging-coverage.js';
 
 /**
  * Query AST node types for complex search parsing
@@ -118,6 +119,7 @@ export interface SearchResult<T = any> {
   limit: number;
   offset: number; // Deprecated: use next_cursor for new implementations
   next_cursor?: string; // Cursor-based pagination (preferred)
+  coverage?: PagingCoverage; // Flows: oldest and newest ts returned, and why paging stopped
   groups?: FlowGroup[] | AlarmGroup[]; // Grouped flows or alarms; results is empty then
   group_by?: string; // The groupBy the groups were requested with
   query: string;

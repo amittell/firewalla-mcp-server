@@ -230,7 +230,8 @@ describe('a large flow response', () => {
     const flows = body(response).data;
     expect(flows).toHaveLength(500);
     flows.forEach((got: any, i: number) => {
-      expect(second(got.timestamp)).toBe(Math.floor(FLOWS[i].ts));
+      // ts, as on a plain page (a streamed chunk had timestamp)
+      expect(second(got.ts)).toBe(Math.floor(FLOWS[i].ts));
       expect(got.source_ip).toBe(FLOWS[i].source.ip);
       expect(got.destination_ip).toBe(FLOWS[i].destination.ip);
       expect(got.device.id).toBe(FLOWS[i].device.id);

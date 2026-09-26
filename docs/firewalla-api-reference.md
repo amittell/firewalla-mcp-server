@@ -1339,6 +1339,10 @@ while (1) {
 - Use `limit` parameter to control page size (default: 200, max: 500). A `limit` above 500 returns HTTP 400 (measured 2026-09-25).
 - Always check for `next_cursor` in response to determine if more pages exist
 
+**Client**: `requestPages` in `src/firewalla/client.ts` asks for at most 500 items per request and follows `next_cursor` up to the limit. It stops at a response with no `next_cursor`, at a page with no items, and at a `next_cursor` it has already sent in the same read: the page at that cursor would come back again, so it returns no cursor. `get_flow_data` and `search_flows` return `coverage` with their flows: `oldest_ts` and `newest_ts`, the oldest and newest `ts` among the flows the API returned (Unix seconds, as sent; ISO strings in `oldest` and `newest`), `api_requests`, and `stopped_reason`: `limit_reached`, `no_more_pages`, `repeated_cursor` or `empty_page`. Without a `ts` qualifier the flows cover only the last 24 hours, newest first, so `oldest_ts` shows how far back a read got.
+
+`get_flow_data` streams a limit over 50 (or any limit, with `stream: true`): the page comes back as the first chunk of a session, with `sessionId`, `nextContinuationToken` (the API's `next_cursor`) and `isFinalChunk`, and its flows have the fields of a plain page's (`ts` as an ISO string). `streaming_session_id: <sessionId>` returns the next chunk, of the same size and with the session's query, for 10 minutes after the last chunk, from the server process that started it. A `cursor` (`pagination.cursor`, or a `nextContinuationToken`) returns the page at that cursor, not streamed, and `stream: false` returns plain pages at any limit.
+
 ---
 
 ## Code Examples

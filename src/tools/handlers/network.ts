@@ -39,11 +39,63 @@ import {
   type StreamingOperation,
 } from '../../utils/streaming-manager.js';
 import { mspAnd } from '../../utils/msp-query.js';
+import type { PagingCoverage } from '../../utils/paging-coverage.js';
+
+/**
+ * One get_flow_data record from a client Flow. A plain page and a streamed
+ * chunk both use it, and both then have their field names normalized as
+ * createUnifiedResponse does (timestamp becomes ts), so a listing whose first
+ * page is streamed and whose next pages are read by cursor has one shape.
+ */
+function toFlowRecord(flow: any) {
+  return {
+    timestamp: unixToISOStringOrNow(flow.ts),
+    source_ip: SafeAccess.getNestedValue(
+      flow,
+      'source.ip',
+      SafeAccess.getNestedValue(flow, 'device.ip', 'unknown')
+    ),
+    destination_ip: SafeAccess.getNestedValue(
+      flow,
+      'destination.ip',
+      'unknown'
+    ),
+    protocol: SafeAccess.getNestedValue(flow, 'protocol', 'unknown'),
+    bytes:
+      (SafeAccess.getNestedValue(flow, 'download', 0) as number) +
+      (SafeAccess.getNestedValue(flow, 'upload', 0) as number),
+    download: SafeAccess.getNestedValue(flow, 'download', 0),
+    upload: SafeAccess.getNestedValue(flow, 'upload', 0),
+    packets: SafeAccess.getNestedValue(flow, 'count', 0),
+    duration: SafeAccess.getNestedValue(flow, 'duration', 0),
+    direction: SafeAccess.getNestedValue(flow, 'direction', 'unknown'),
+    blocked: SafeAccess.getNestedValue(flow, 'block', false),
+    block_type: SafeAccess.getNestedValue(flow, 'blockType', null),
+    device: SafeAccess.getNestedValue(flow, 'device', {}),
+    source: SafeAccess.getNestedValue(flow, 'source', {}),
+    destination: SafeAccess.getNestedValue(flow, 'destination', {}),
+    region: SafeAccess.getNestedValue(flow, 'region', null),
+    category: SafeAccess.getNestedValue(flow, 'category', null),
+    domain: SafeAccess.getNestedValue(flow, 'domain', null),
+    network: SafeAccess.getNestedValue(flow, 'network', null),
+  };
+}
+
+/** A tool's `stream` argument: true, false, or not given */
+function streamArgument(value: unknown): boolean | undefined {
+  if (value === true || value === 'true') {
+    return true;
+  }
+  if (value === false || value === 'false') {
+    return false;
+  }
+  return undefined;
+}
 
 export class GetFlowDataHandler extends BaseToolHandler {
   name = 'get_flow_data';
   description =
-    'Query network traffic flows from the Firewalla MSP API (GET /v2/flows). Without a ts: qualifier the API covers the last 24 hours. Returns up to limit flows and a cursor for the next page, or groups with groupBy. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
+    'Query network traffic flows from the Firewalla MSP API (GET /v2/flows). Without a ts: qualifier the API covers the last 24 hours. Returns up to limit flows and a cursor for the next page, or groups with groupBy; coverage gives the oldest and newest ts returned and why paging stopped. A limit over 50 is streamed: pass nextContinuationToken back as cursor, or sessionId as streaming_session_id. Scoped to FIREWALLA_BOX_ID when set, otherwise every box.';
   category = 'network' as const;
 
   constructor() {
@@ -108,13 +160,26 @@ export class GetFlowDataHandler extends BaseToolHandler {
       const limit = limitValidation.sanitizedValue! as number;
       const cursor = args?.cursor;
 
-      // Check if streaming is requested or should be automatically enabled.
-      // A grouped request is not streamed: it returns groups, not flows.
+      // stream: true streams any limit and stream: false none; without it a
+      // limit over 50 is streamed. A request with a cursor returns the page
+      // at that cursor and is not streamed: a stream started a new session
+      // from the first page, so a client that passed nextContinuationToken
+      // back as cursor got the first page again. A grouped request is not
+      // streamed: it returns groups, not flows.
+      const stream = streamArgument(args?.stream);
+      const streamingSessionId =
+        typeof args?.streaming_session_id === 'string' &&
+        args.streaming_session_id.trim() !== ''
+          ? args.streaming_session_id.trim()
+          : undefined;
+      const continueSession =
+        streamingSessionId !== undefined && cursor === undefined;
       const enableStreaming =
-        !groupBy &&
-        (Boolean(args?.stream) || shouldUseStreaming(this.name, limit));
-      const streamingSessionId = args?.streaming_session_id as
-        string | undefined;
+        continueSession ||
+        (!groupBy &&
+          cursor === undefined &&
+          stream !== false &&
+          (stream === true || shouldUseStreaming(this.name, limit)));
 
       // Validate individual date parameters before building query
       const startTimeArg = args?.start_time as string | undefined;
@@ -221,60 +286,36 @@ export class GetFlowDataHandler extends BaseToolHandler {
 
       // Handle streaming mode if enabled
       if (enableStreaming) {
-        const streamingManager = StreamingManager.forTool(this.name);
+        // One manager per client for the life of the client, so a session
+        // started by one call is there for the next
+        const streamingManager = StreamingManager.forTool(this.name, firewalla);
+        let coverage: PagingCoverage | undefined;
 
-        // Define the streaming operation
+        // Define the streaming operation. Its parameters are the session's:
+        // the saved query and sort, the chunk size and the session's cursor,
+        // so a continued session reads the query it was started with.
         const streamingOperation: StreamingOperation = async params => {
+          const saved = params as typeof params & {
+            query?: string;
+            sortBy?: string;
+          };
           const response = await withToolTimeout(
             async () =>
               firewalla.getFlowData(
-                finalQuery,
-                groupBy,
-                sortBy,
-                params.limit || 100,
+                saved.query,
+                undefined,
+                saved.sortBy,
+                params.limit || limit,
                 params.cursor
               ),
             this.name
           );
+          ({ coverage } = response);
 
-          // Process flows for this chunk
-          const processedFlows = SafeAccess.safeArrayMap(
-            response.results,
-            (flow: any) => ({
-              timestamp: unixToISOStringOrNow(flow.ts),
-              source_ip: SafeAccess.getNestedValue(
-                flow,
-                'source.ip',
-                SafeAccess.getNestedValue(flow, 'device.ip', 'unknown')
-              ),
-              destination_ip: SafeAccess.getNestedValue(
-                flow,
-                'destination.ip',
-                'unknown'
-              ),
-              protocol: SafeAccess.getNestedValue(flow, 'protocol', 'unknown'),
-              bytes:
-                (SafeAccess.getNestedValue(flow, 'download', 0) as number) +
-                (SafeAccess.getNestedValue(flow, 'upload', 0) as number),
-              download: SafeAccess.getNestedValue(flow, 'download', 0),
-              upload: SafeAccess.getNestedValue(flow, 'upload', 0),
-              packets: SafeAccess.getNestedValue(flow, 'count', 0),
-              duration: SafeAccess.getNestedValue(flow, 'duration', 0),
-              direction: SafeAccess.getNestedValue(
-                flow,
-                'direction',
-                'unknown'
-              ),
-              blocked: SafeAccess.getNestedValue(flow, 'block', false),
-              block_type: SafeAccess.getNestedValue(flow, 'blockType', null),
-              device: SafeAccess.getNestedValue(flow, 'device', {}),
-              source: SafeAccess.getNestedValue(flow, 'source', {}),
-              destination: SafeAccess.getNestedValue(flow, 'destination', {}),
-              region: SafeAccess.getNestedValue(flow, 'region', null),
-              category: SafeAccess.getNestedValue(flow, 'category', null),
-              domain: SafeAccess.getNestedValue(flow, 'domain', null),
-              network: SafeAccess.getNestedValue(flow, 'network', null),
-            })
+          // The records of a plain page, with the field names
+          // createUnifiedResponse would give them
+          const processedFlows = this.normalizeFields(
+            await this.flowRecords(response.results)
           );
 
           return {
@@ -285,8 +326,22 @@ export class GetFlowDataHandler extends BaseToolHandler {
           };
         };
 
-        if (streamingSessionId) {
+        if (continueSession) {
           // Continue existing streaming session
+          const session = streamingManager.getSessionInfo(streamingSessionId);
+          if (!session || session.isComplete) {
+            return this.createErrorResponse(
+              session
+                ? `Streaming session ${streamingSessionId} is complete: its last chunk had isFinalChunk true`
+                : `Streaming session ${streamingSessionId} not found or expired`,
+              ErrorType.VALIDATION_ERROR,
+              { streaming_session_id: streamingSessionId },
+              [
+                'A session lasts 10 minutes after its last chunk, in the server process that started it',
+                'To read on without a session, pass the nextContinuationToken of the last response as cursor',
+              ]
+            );
+          }
           const chunk = await streamingManager.continueStreaming(
             streamingSessionId,
             streamingOperation
@@ -299,9 +354,11 @@ export class GetFlowDataHandler extends BaseToolHandler {
             );
           }
 
-          return createStreamingResponse(chunk);
+          return createStreamingResponse(chunk, true, { coverage });
         }
-        // Start new streaming session
+        // Start new streaming session. Each chunk is limit flows, as a page
+        // without streaming is: the tool's 50-flow chunk size would make a
+        // 500-flow request take ten calls and ten API requests.
         const { firstChunk } = await streamingManager.startStreaming(
           this.name,
           streamingOperation,
@@ -312,10 +369,11 @@ export class GetFlowDataHandler extends BaseToolHandler {
             limit,
             start_time: startTimeArg,
             end_time: endTime,
-          }
+          },
+          { chunkSize: limit }
         );
 
-        return createStreamingResponse(firstChunk);
+        return createStreamingResponse(firstChunk, true, { coverage });
       }
 
       const response = await withToolTimeout(
@@ -339,47 +397,8 @@ export class GetFlowDataHandler extends BaseToolHandler {
         );
       }
 
-      // Process flow data
-      let processedFlows = SafeAccess.safeArrayMap(
-        response.results,
-        (flow: any) => ({
-          timestamp: unixToISOStringOrNow(flow.ts),
-          source_ip: SafeAccess.getNestedValue(
-            flow,
-            'source.ip',
-            SafeAccess.getNestedValue(flow, 'device.ip', 'unknown')
-          ),
-          destination_ip: SafeAccess.getNestedValue(
-            flow,
-            'destination.ip',
-            'unknown'
-          ),
-          protocol: SafeAccess.getNestedValue(flow, 'protocol', 'unknown'),
-          bytes:
-            (SafeAccess.getNestedValue(flow, 'download', 0) as number) +
-            (SafeAccess.getNestedValue(flow, 'upload', 0) as number),
-          download: SafeAccess.getNestedValue(flow, 'download', 0),
-          upload: SafeAccess.getNestedValue(flow, 'upload', 0),
-          packets: SafeAccess.getNestedValue(flow, 'count', 0),
-          duration: SafeAccess.getNestedValue(flow, 'duration', 0),
-          direction: SafeAccess.getNestedValue(flow, 'direction', 'unknown'),
-          blocked: SafeAccess.getNestedValue(flow, 'block', false),
-          block_type: SafeAccess.getNestedValue(flow, 'blockType', null),
-          device: SafeAccess.getNestedValue(flow, 'device', {}),
-          source: SafeAccess.getNestedValue(flow, 'source', {}),
-          destination: SafeAccess.getNestedValue(flow, 'destination', {}),
-          region: SafeAccess.getNestedValue(flow, 'region', null),
-          category: SafeAccess.getNestedValue(flow, 'category', null),
-          domain: SafeAccess.getNestedValue(flow, 'domain', null),
-          network: SafeAccess.getNestedValue(flow, 'network', null),
-        })
-      );
-
-      // Apply geographic enrichment for IP addresses
-      processedFlows = await this.enrichGeoIfNeeded(processedFlows, [
-        'source_ip',
-        'destination_ip',
-      ]);
+      // Process flow data; createUnifiedResponse normalizes the field names
+      const processedFlows = await this.flowRecords(response.results);
 
       // Create metadata for standardized response
       const metadata: PaginationMetadata = {
@@ -407,9 +426,10 @@ export class GetFlowDataHandler extends BaseToolHandler {
         metadata
       );
 
-      return this.createUnifiedResponse(standardResponse, {
-        executionTimeMs: executionTime,
-      });
+      return this.createUnifiedResponse(
+        { ...standardResponse, coverage: response.coverage },
+        { executionTimeMs: executionTime }
+      );
     } catch (error: unknown) {
       // A query the MSP API cannot run was refused before any request
       const queryError = mspQueryErrorResponse(this.name, error);
@@ -433,6 +453,14 @@ export class GetFlowDataHandler extends BaseToolHandler {
         { originalError: errorMessage }
       );
     }
+  }
+
+  /** The records of a page or chunk, with geographic enrichment */
+  private async flowRecords(flows: unknown) {
+    return this.enrichGeoIfNeeded(
+      SafeAccess.safeArrayMap(flows, toFlowRecord),
+      ['source_ip', 'destination_ip']
+    );
   }
 }
 

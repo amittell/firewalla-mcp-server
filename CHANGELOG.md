@@ -13,6 +13,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nothing handled, so the process crashed with a stack trace (exit code 1);
   an error on either stream now starts the normal shutdown (exit code 0).
 
+- `get_flow_data` reads past its first page at every limit (reported in
+  martin2110/firewalla-mcp-server#3: at limit 500 the next page repeated
+  cursor `b2Zmc2V0IDUwMA==` while limit 50 paged). Over limit 50 the tool
+  streams, and there it ignored the `cursor` it was given and returned the
+  first page again; it created a new streaming manager on every call, so
+  every `streaming_session_id` was "not found or expired"; the saved request
+  parameters replaced each chunk's size; and `stream: false` still streamed.
+  A request with a `cursor` now returns the page at that cursor, not
+  streamed. Streaming sessions last as long as the client, so
+  `streaming_session_id` returns the session's next chunk, of the size of the
+  first and with the query the session started with. `stream: false` returns
+  plain pages at any limit. The schema lists `stream` and
+  `streaming_session_id`. Each streamed call also left its manager's
+  one-minute cleanup timer running for the life of the process; the timer now
+  runs only while a session exists.
+- The client stops paging when the API returns a `next_cursor` it has
+  already sent in the same read, and returns no cursor. It followed such a
+  cursor, reading the same page again until it had `limit` items. The repeat
+  in martin2110/firewalla-mcp-server#3 came from `get_flow_data`, not the
+  API; this is a guard.
 - `pause_rule`, `resume_rule` and `delete_rule` read the rule once, by id,
   before acting. They also listed every rule first, through a 30-second
   existence cache that writes never cleared, so each call cost an extra
@@ -100,6 +120,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A streamed `get_flow_data` chunk's flows have the fields and values of a
+  plain page's: the flow's time is `ts`, an ISO string, where a chunk had
+  `timestamp`. A listing whose first page is streamed (a limit over 50) and
+  whose next pages are read by cursor, not streamed, now has one record shape.
 - Tool responses and the `firewalla://` resources are compact JSON, the
   same JSON without the indentation. On large stubbed answers (400 devices,
   500 flows, 500 alarms, 400 rules) the text is 34% smaller in bytes.
@@ -117,6 +141,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `get_flow_data` and `search_flows` return `coverage` with their flows:
+  `oldest_ts` and `newest_ts`, the oldest and newest `ts` among the flows the
+  API returned (Unix seconds; `oldest` and `newest` give them as ISO
+  strings), `api_requests`, and why paging stopped, `stopped_reason`:
+  `limit_reached`, `no_more_pages`, `repeated_cursor` or `empty_page`.
+  Without a `ts:` qualifier the API covers only the last 24 hours, newest
+  first, so a client can tell how far back a read looked and whether it saw
+  every match. After an idea in the fork martin2110/firewalla-mcp-server.
 - `get_alarm_trends` takes an optional `box` (a box gid) and, with it or
   with `FIREWALLA_BOX_ID`, reports that box's alarms per day.
   `GET /v2/trends/alarms` takes no box, so the tool reads it once for the

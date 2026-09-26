@@ -1115,6 +1115,7 @@ export class SearchEngine {
         query: queryString,
         execution_time_ms: Date.now() - startTime,
         next_cursor: response.next_cursor,
+        coverage: response.coverage,
       };
 
       // Add boolean translation debug info if translation was applied
