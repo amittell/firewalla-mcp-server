@@ -237,6 +237,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   transport; before, every preflight got 405.
 - `SECURITY.md`: which releases get security fixes, how to report a
   vulnerability privately, what is in scope, and the server's defaults.
+- CI runs `npm audit --audit-level=high --omit=dev` and fails on a high or
+  critical advisory in a production dependency. On 2026-09-26 it reports
+  0 advisories across 124 production dependencies.
 
 ### Changed
 
