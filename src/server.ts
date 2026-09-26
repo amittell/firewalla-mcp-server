@@ -23,45 +23,23 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import {
-  ListToolsRequestSchema,
-  isInitializeRequest,
-} from '@modelcontextprotocol/sdk/types.js';
-import { randomUUID } from 'node:crypto';
+import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import {
-  createServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from 'node:http';
 import { config } from './config/config.js';
 import { FirewallaClient } from './firewalla/client.js';
 import { setupTools } from './tools/index.js';
 import { setupResources } from './resources/index.js';
 import { setupPrompts } from './prompts/index.js';
 import { logger } from './monitoring/logger.js';
-import { initializeHttpSession } from './http-session.js';
+import {
+  createHttpTransportServer,
+  listenHttpTransport,
+} from './http-transport.js';
+import { parseHttpSecurityConfig } from './http-security.js';
 import { exitWhenStdioCloses } from './stdio-lifecycle.js';
 import { PACKAGE_VERSION } from './utils/package-version.js';
 import { isWriteTool, writeToolsEnabled } from './config/write-tools.js';
-
-/**
- * UUID v4 validation regex pattern
- */
-const UUID_V4_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-/**
- * Validates that a string is a properly formatted UUID v4
- *
- * @param value - The string to validate
- * @returns True if the value is a valid UUID v4, false otherwise
- */
-function isValidUUID(value: string): boolean {
-  return UUID_V4_REGEX.test(value);
-}
 
 /**
  * Main MCP Server class for Firewalla integration with 29-tool architecture
@@ -1341,209 +1319,20 @@ export class FirewallaMCPServer {
   }
 
   /**
-   * Starts the MCP server using HTTP transport with StreamableHTTP
+   * Starts the MCP server using HTTP transport with StreamableHTTP. Listens
+   * on MCP_HTTP_HOST (default 127.0.0.1) and checks every request's Host,
+   * Origin and bearer token; see http-security.ts.
    */
   private async startHttpTransport(): Promise<void> {
     const { port, path } = config.transport;
+    const security = parseHttpSecurityConfig();
 
-    // Map to store transports and their associated server instances by session ID
-    const transports = new Map<string, StreamableHTTPServerTransport>();
-    const servers = new Map<string, Server>();
-
-    // Abandoned-session reaper: transport.onclose only fires on an explicit
-    // client DELETE or shutdown, so clients that crash / lose network would pin
-    // their Server + transport in the maps forever. Stamp activity per request
-    // and close sessions idle past MCP_SESSION_IDLE_TIMEOUT_MS (default 30 min).
-    const lastActivity = new Map<string, number>();
-    const idleTimeoutMs =
-      Number(process.env.MCP_SESSION_IDLE_TIMEOUT_MS) || 30 * 60 * 1000;
-    const reapEveryMs = Math.min(60_000, idleTimeoutMs); // sweep at least as often as the timeout
-    const reaper = setInterval(() => {
-      const now = Date.now();
-      for (const [sid, seen] of lastActivity.entries()) {
-        if (!transports.has(sid)) {
-          lastActivity.delete(sid); // closed elsewhere; drop the stamp
-        } else if (now - seen > idleTimeoutMs) {
-          logger.info(`Reaping idle HTTP session: ${sid}`);
-          lastActivity.delete(sid);
-          void transports.get(sid)?.close(); // onclose cleans transports/servers
-        }
-      }
-    }, reapEveryMs);
-    reaper.unref();
-
-    // Helper function to parse JSON body from request with size limit
-    const parseJsonBody = async (req: IncomingMessage): Promise<unknown> => {
-      const MAX_BODY_SIZE = 1024 * 1024; // 1MB limit to prevent memory exhaustion
-      return new Promise((resolve, reject) => {
-        let body = '';
-        let size = 0;
-        req.on('data', chunk => {
-          size += chunk.length;
-          if (size > MAX_BODY_SIZE) {
-            req.destroy();
-            reject(new Error('Request body too large (max 1MB)'));
-            return;
-          }
-          body += chunk.toString();
-        });
-        req.on('end', () => {
-          try {
-            resolve(body ? JSON.parse(body) : null);
-          } catch (_error) {
-            reject(new Error('Invalid JSON in request body'));
-          }
-        });
-        req.on('error', reject);
-      });
-    };
-
-    // Create HTTP server
-    const httpServer = createServer(
-      (req: IncomingMessage, res: ServerResponse) => {
-        void (async () => {
-          // Only handle requests to our configured path
-          if (!req.url?.startsWith(path)) {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Not found' }));
-            return;
-          }
-
-          const sessionId = req.headers['mcp-session-id'] as string | undefined;
-          if (sessionId && transports.has(sessionId)) {
-            lastActivity.set(sessionId, Date.now());
-          }
-
-          // Validate session ID format if present
-          if (sessionId && !isValidUUID(sessionId)) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(
-              JSON.stringify({
-                jsonrpc: '2.0',
-                error: {
-                  code: -32000,
-                  message: 'Invalid session ID format (must be UUID v4)',
-                },
-                id: null,
-              })
-            );
-            return;
-          }
-
-          try {
-            if (req.method === 'POST') {
-              // Handle POST requests for MCP messages
-              const parsedBody = await parseJsonBody(req);
-
-              let transport: StreamableHTTPServerTransport;
-
-              if (sessionId && transports.has(sessionId)) {
-                // Reuse existing transport for this session
-                transport = transports.get(sessionId)!;
-              } else if (!sessionId && isInitializeRequest(parsedBody)) {
-                // New initialization request - create new transport
-                // Generate session ID immediately to prevent race condition
-                const newSessionId = randomUUID();
-                transport = new StreamableHTTPServerTransport({
-                  sessionIdGenerator: () => newSessionId,
-                  onsessioninitialized: (initializedSessionId: string) => {
-                    logger.info(
-                      `HTTP session initialized: ${initializedSessionId}`
-                    );
-                    // Transport already in map, no need to add again
-                  },
-                });
-
-                lastActivity.set(newSessionId, Date.now());
-                await initializeHttpSession({
-                  sessionId: newSessionId,
-                  transport,
-                  transports,
-                  servers,
-                  createServerInstance: () => this.createServerInstance(),
-                });
-              } else {
-                // Invalid request - no session ID or not initialization request
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(
-                  JSON.stringify({
-                    jsonrpc: '2.0',
-                    error: {
-                      code: -32000,
-                      message: 'Bad Request: No valid session ID provided',
-                    },
-                    id: null,
-                  })
-                );
-                return;
-              }
-
-              // Handle the request
-              await transport.handleRequest(req, res, parsedBody);
-            } else if (req.method === 'GET') {
-              // Handle GET requests for SSE streams
-              if (!sessionId || !transports.has(sessionId)) {
-                res.writeHead(400, { 'Content-Type': 'text/plain' });
-                res.end('Invalid or missing session ID');
-                return;
-              }
-
-              const transport = transports.get(sessionId)!;
-              await transport.handleRequest(req, res);
-            } else if (req.method === 'DELETE') {
-              // Handle DELETE requests for session termination
-              if (!sessionId || !transports.has(sessionId)) {
-                res.writeHead(400, { 'Content-Type': 'text/plain' });
-                res.end('Invalid or missing session ID');
-                return;
-              }
-
-              const transport = transports.get(sessionId)!;
-              await transport.handleRequest(req, res);
-            } else {
-              // Unsupported method
-              res.writeHead(405, { 'Content-Type': 'text/plain' });
-              res.end('Method Not Allowed');
-            }
-          } catch (error) {
-            logger.error(
-              'Error handling HTTP request:',
-              error instanceof Error ? error : new Error(String(error))
-            );
-            if (!res.headersSent) {
-              res.writeHead(500, { 'Content-Type': 'application/json' });
-              res.end(
-                JSON.stringify({
-                  jsonrpc: '2.0',
-                  error: {
-                    code: -32603,
-                    message: 'Internal server error',
-                  },
-                  id: null,
-                })
-              );
-            }
-          }
-        })();
-      }
-    );
-
-    // Start listening with error handling
-    await new Promise<void>((resolve, reject) => {
-      httpServer.on('error', err => {
-        logger.error(
-          'HTTP server error (port conflict or permission issue):',
-          err instanceof Error ? err : new Error(String(err))
-        );
-        reject(err);
-      });
-
-      httpServer.listen(port, () => {
-        logger.info(`Firewalla MCP Server running on HTTP transport`);
-        logger.info(`HTTP server listening on http://localhost:${port}${path}`);
-        resolve();
-      });
+    const { httpServer, closeSessions } = createHttpTransportServer({
+      path,
+      security,
+      createServerInstance: () => this.createServerInstance(),
     });
+    await listenHttpTransport(httpServer, port, path, security);
 
     // Handle graceful shutdown
     let isShuttingDown = false;
@@ -1557,21 +1346,9 @@ export class FirewallaMCPServer {
 
       void (async () => {
         logger.info('Shutting down HTTP server...');
-        clearInterval(reaper);
 
         // Close all active transports and their server instances
-        for (const [sessionId, transport] of transports.entries()) {
-          try {
-            await transport.close();
-            transports.delete(sessionId);
-            servers.delete(sessionId);
-          } catch (error) {
-            logger.error(
-              `Error closing transport for session ${sessionId}:`,
-              error instanceof Error ? error : new Error(String(error))
-            );
-          }
-        }
+        await closeSessions();
 
         // Close HTTP server with error handling and timeout
         const shutdownTimeout = setTimeout(() => {
