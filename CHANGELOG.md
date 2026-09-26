@@ -58,7 +58,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   trailing whitespace is refused instead of trimmed. Path segments are also
   percent-encoded (quotes and angle brackets included, where they used to be
   removed), which changes nothing for the ids the API returns: a rule id's
-  `:` is sent as it is, and a device id's as `%3A`, as before.
+  `:` is sent as it is, and a device id's as `%3A`, as before. After an
+  idea in the fork matesecurityzach/firewalla-mcp-server; this is a separate
+  implementation.
 - `pause_rule`, `resume_rule` and `delete_rule` read the rule once, by id,
   before acting. They also listed every rule first, through a 30-second
   existence cache that writes never cleared, so each call cost an extra
