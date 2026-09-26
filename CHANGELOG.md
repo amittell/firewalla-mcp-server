@@ -174,7 +174,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   user opened could send it requests, directly or by pointing its own DNS
   name at the user's machine, and spend the MSP token. It now:
   - listens on 127.0.0.1 unless `MCP_HTTP_HOST` names another address
-    (`0.0.0.0` for every interface);
+    (`0.0.0.0` for every interface). An IPv6 address may be given with or
+    without brackets (`[::1]` or `::1`). An address with a port, such as
+    `localhost:3000`, stops startup with a message that the port goes in
+    `MCP_HTTP_PORT`: passed to `listen` whole, it failed with
+    `getaddrinfo ENOTFOUND`, as `[::1]` did;
   - answers 403 to a request whose `Host` header is not `localhost`,
     `127.0.0.1`, `[::1]`, the `MCP_HTTP_HOST` address or a name in
     `MCP_HTTP_ALLOWED_HOSTS`;

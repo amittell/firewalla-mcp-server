@@ -237,10 +237,47 @@ describe('parseHttpSecurityConfig', () => {
   });
 
   it('does not add a wildcard listen address to the Host names', () => {
-    for (const host of ['0.0.0.0', '::']) {
+    for (const host of ['0.0.0.0', '::', '[::]']) {
       const security = parseHttpSecurityConfig({ MCP_HTTP_HOST: host });
-      expect(security.host).toBe(host);
+      expect(security.host).toBe(host.replace(/[[\]]/g, ''));
       expect(security.allowedHosts.size).toBe(3);
+    }
+  });
+
+  it('listens on an IPv6 MCP_HTTP_HOST without its brackets, and accepts it in brackets as Host', () => {
+    for (const host of ['[::1]', '::1']) {
+      const security = parseHttpSecurityConfig({ MCP_HTTP_HOST: host });
+      expect(security.host).toBe('::1');
+      expect(security.allowedHosts.has('[::1]')).toBe(true);
+    }
+    const security = parseHttpSecurityConfig({ MCP_HTTP_HOST: '[FD00::10]' });
+    expect(security.host).toBe('FD00::10');
+    expect(security.allowedHosts.has('[fd00::10]')).toBe(true);
+  });
+
+  it('refuses an MCP_HTTP_HOST with a port, naming MCP_HTTP_PORT', () => {
+    const cases: Array<[string, string]> = [
+      ['localhost:3000', 'MCP_HTTP_HOST=localhost MCP_HTTP_PORT=3000'],
+      ['0.0.0.0:3000', 'MCP_HTTP_HOST=0.0.0.0 MCP_HTTP_PORT=3000'],
+      ['[::1]:3000', 'MCP_HTTP_HOST=::1 MCP_HTTP_PORT=3000'],
+    ];
+    for (const [host, advice] of cases) {
+      expect(() => parseHttpSecurityConfig({ MCP_HTTP_HOST: host })).toThrow(
+        `MCP_HTTP_HOST: "${host}" includes a port. Give the address in MCP_HTTP_HOST and the port in MCP_HTTP_PORT: ${advice}`
+      );
+    }
+  });
+
+  it('refuses an MCP_HTTP_HOST that is not a host name or address', () => {
+    for (const host of [
+      '[localhost]',
+      'http://localhost',
+      'localhost:',
+      '[::1',
+    ]) {
+      expect(() => parseHttpSecurityConfig({ MCP_HTTP_HOST: host })).toThrow(
+        `MCP_HTTP_HOST: "${host}" is not a host name or IP address to listen on`
+      );
     }
   });
 
@@ -295,6 +332,13 @@ describe('HTTP transport', () => {
   it('listens on 127.0.0.1 by default', async () => {
     const { address } = await start();
     expect(address.address).toBe('127.0.0.1');
+  });
+
+  it('listens on ::1 for MCP_HTTP_HOST=[::1] and serves Host [::1]', async () => {
+    const { address } = await start({ MCP_HTTP_HOST: '[::1]' });
+    expect(address.address).toBe('::1');
+    const reply = await initialize(address, { host: `[::1]:${address.port}` });
+    expect(reply.status).toBe(200);
   });
 
   it('bounds how long a client may take to send a request', async () => {
