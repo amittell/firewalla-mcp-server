@@ -531,6 +531,8 @@ firewalla-mcp-server/
 
 ## Security
 
+See [SECURITY.md](SECURITY.md) to report a vulnerability. For the HTTP transport, see [HTTP transport security](#http-transport-security).
+
 - MSP tokens are stored securely in environment variables
 - No credentials are logged or stored in code
 - Requests are paced to `API_RATE_LIMIT` per 5 minutes (default 100, the MSP API's quota per token). A request that cannot start within 20 s fails at once, saying when capacity returns
