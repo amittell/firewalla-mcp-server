@@ -3153,9 +3153,13 @@ export class FirewallaClient {
       BOX_TREND_CONCURRENCY,
       async day => {
         const next = nextStart.get(day.ts);
-        // max: a clock behind the API's would end the current day before
-        // it starts
-        const end = Math.max(day.ts, next !== undefined ? next - 1 : now);
+        // The current day ends when its count is requested, not when the
+        // series started, so alarms raised meanwhile are counted. max: a clock
+        // behind the API's would end the current day before it starts
+        const end = Math.max(
+          day.ts,
+          next !== undefined ? next - 1 : Math.floor(Date.now() / 1000)
+        );
         const { groups, exact } = await this.countMatching(
           endpoint,
           `${filter}ts:${day.ts}-${end}`,
