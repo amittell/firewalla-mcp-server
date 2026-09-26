@@ -413,6 +413,85 @@ describe('HTTP transport', () => {
     expect(reply.headers.vary).toContain('Origin');
   });
 
+  it('sends an allowed origin its CORS headers with every refusal, and a disallowed origin none', async () => {
+    const { address, createServerInstance } = await start({
+      MCP_HTTP_BEARER_TOKEN: 's3cret',
+      MCP_HTTP_ALLOWED_ORIGINS: 'http://localhost:6274',
+    });
+    const allowed = { origin: 'http://localhost:6274' };
+    const token = { authorization: 'Bearer s3cret' };
+    const cases: Array<
+      [string, Parameters<typeof send>[1], number, string | undefined]
+    > = [
+      // name, request, status, Access-Control-Allow-Origin
+      ['no token', { headers: allowed }, 401, allowed.origin],
+      [
+        'wrong token',
+        { headers: { ...allowed, authorization: 'Bearer nope' } },
+        401,
+        allowed.origin,
+      ],
+      [
+        'Host refused',
+        { headers: { ...allowed, ...token, host: 'rebound.example' } },
+        403,
+        allowed.origin,
+      ],
+      [
+        'not the endpoint',
+        { path: '/mcpx', headers: { ...allowed, ...token } },
+        404,
+        allowed.origin,
+      ],
+      [
+        'method not allowed',
+        { method: 'PUT', headers: { ...allowed, ...token } },
+        405,
+        allowed.origin,
+      ],
+      [
+        'Origin refused',
+        { headers: { origin: 'http://evil.example', ...token } },
+        403,
+        undefined,
+      ],
+      [
+        'Origin refused, no token',
+        { headers: { origin: 'http://evil.example' } },
+        403,
+        undefined,
+      ],
+    ];
+
+    const replies: Array<{ name: string; reply: Reply }> = [];
+    for (const [name, request] of cases) {
+      replies.push({ name, reply: await send(address, request) });
+    }
+    expect(
+      replies.map(({ name, reply }) => ({
+        name,
+        status: reply.status,
+        allowOrigin: reply.headers['access-control-allow-origin'],
+        connection: reply.headers.connection,
+      }))
+    ).toEqual(
+      cases.map(([name, , status, allowOrigin]) => ({
+        name,
+        status,
+        allowOrigin,
+        connection: 'close',
+      }))
+    );
+    // A browser client may read the challenge of a 401
+    for (const { reply } of replies.slice(0, 2)) {
+      expect(reply.headers['www-authenticate']).toBe('Bearer');
+      expect(reply.headers['access-control-expose-headers']).toContain(
+        'WWW-Authenticate'
+      );
+    }
+    expect(createServerInstance).not.toHaveBeenCalled();
+  });
+
   it('does not answer a preflight from an Origin that is not allowed', async () => {
     const { address } = await start({
       MCP_HTTP_ALLOWED_ORIGINS: 'http://localhost:6274',

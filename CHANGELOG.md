@@ -259,7 +259,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The server logs a warning when it listens beyond loopback without one.
 - `MCP_HTTP_ALLOWED_ORIGINS` origins get CORS headers, and answers to their
   preflight requests for the MCP endpoint, so a web page on an allowed
-  origin can call the HTTP transport; before, every preflight got 405.
+  origin can call the HTTP transport; before, every preflight got 405. The
+  headers come with every answer to an allowed origin, the 401, 403, 404
+  and 405 refusals included, and expose `WWW-Authenticate`, so the page
+  reads a 401 for a missing token as a 401, not as a network error. A
+  disallowed origin gets none.
 - `SECURITY.md`: which releases get security fixes, how to report a
   vulnerability privately, what is in scope, and the server's defaults.
 - CI runs `npm audit --audit-level=high --omit=dev` and fails on a high or

@@ -225,6 +225,17 @@ export function createHttpTransportServer(
     // before the POST body is read closes the connection.
     const isPreflight =
       req.method === 'OPTIONS' && req.headers.origin !== undefined;
+
+    // An allowed origin gets its CORS headers on every answer, refusals
+    // included: without them a browser hides a 401 for a missing token as a
+    // network error. A disallowed origin gets none.
+    const origin = allowedOriginOf(req, security);
+    if (origin) {
+      for (const [name, value] of Object.entries(corsResponseHeaders(origin))) {
+        res.setHeader(name, value);
+      }
+    }
+
     const refusal = checkHttpRequest(req, security, !isPreflight);
     if (refusal) {
       logger.warn(`Refused HTTP request: ${refusal.message}`, {
@@ -240,14 +251,6 @@ export function createHttpTransportServer(
         refusal.headers
       );
       return;
-    }
-
-    // Set when the request has an Origin: checkHttpRequest refused any other
-    const origin = allowedOriginOf(req, security);
-    if (origin) {
-      for (const [name, value] of Object.entries(corsResponseHeaders(origin))) {
-        res.setHeader(name, value);
-      }
     }
 
     // The endpoint path only, before a preflight is answered for it

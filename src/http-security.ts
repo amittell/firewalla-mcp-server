@@ -43,7 +43,8 @@ const CORS_ALLOW_HEADERS =
   'Authorization, Content-Type, Accept, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID';
 
 /** Response headers a browser client needs to read */
-const CORS_EXPOSE_HEADERS = 'Mcp-Session-Id, Mcp-Protocol-Version';
+const CORS_EXPOSE_HEADERS =
+  'Mcp-Session-Id, Mcp-Protocol-Version, WWW-Authenticate';
 
 export interface HttpSecurityConfig {
   /** Address the server listens on */
@@ -212,7 +213,7 @@ export function bearerTokenMatches(
 
 /**
  * The Origin of a request when it is present and allowed, for the CORS
- * headers; undefined when there is none. Call after checkHttpRequest.
+ * headers; undefined when there is none or it is not allowed.
  */
 export function allowedOriginOf(
   req: IncomingMessage,
