@@ -693,16 +693,13 @@ const errorResponseTimes = {
 ### Configuration Errors
 
 #### Missing Environment Variables
-```json
-{
-  "error": true,
-  "message": "Missing required configuration: FIREWALLA_MSP_TOKEN",
-  "tool": "firewalla_client",
-  "errorType": "authentication_error",
-  "details": {
-    "requiredVars": ["FIREWALLA_MSP_TOKEN", "FIREWALLA_MSP_ID"]
-  }
-}
+
+A missing `FIREWALLA_MSP_TOKEN` or `FIREWALLA_MSP_ID` is not a tool error:
+the server does not start. It exits with code 1 and writes the variable's
+name to stderr:
+
+```text
+Error: Required environment variable FIREWALLA_MSP_TOKEN is not set
 ```
 
 #### Invalid Box Configuration
@@ -1296,23 +1293,30 @@ The following section documents specific fix scenarios that have been implemente
 
 **After Fix**:
 ```javascript
-// Multiple countries with OR logic
-{ countries: ["China", "Russia", "Iran"] }
-// Generates: (country:China OR country:Russia OR country:Iran)
+// Several countries, as ISO 3166-1 alpha-2 codes: any of them
+{ countries: ["CN", "RU", "IR"] }
+// search_flows sends: region:CN,RU,IR
 ```
 
-**Error Prevention**:
+**Error Prevention** (`search_flows` with `geographic_filters: { countries: "CN" }`,
+refused before any request):
 ```json
 {
   "error": true,
-  "message": "Invalid geographic filter: countries must be an array of strings",
-  "tool": "search_flows_by_geography",
+  "message": "geographic_filters.countries takes a list of ISO 3166-1 alpha-2 country codes (the API's region qualifier), such as [\"US\", \"CN\"], not \"CN\".",
+  "tool": "search_flows",
   "errorType": "validation_error",
   "details": {
-    "received_type": "string",
-    "expected_type": "array",
-    "suggestion": "Use array format: { countries: [\"China\", \"Russia\"] }"
-  }
+    "geographic_filters": { "countries": "CN" },
+    "invalid_values": { "countries": ["\"CN\""] },
+    "supported_filters": {
+      "countries": "ISO 3166-1 alpha-2 country codes, sent as region:US,CN (any of them)",
+      "regions": "country codes too, merged with countries (the API's region is a country)"
+    }
+  },
+  "validation_errors": [
+    "geographic_filters.countries takes a list of ISO 3166-1 alpha-2 country codes (the API's region qualifier), such as [\"US\", \"CN\"], not \"CN\"."
+  ]
 }
 ```
 

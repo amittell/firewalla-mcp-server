@@ -343,23 +343,28 @@ get_bandwidth_usage({ period: "24h", limit: 100 })
 ```
 
 #### 2. Geographic Search Optimization
-```javascript
-// ❌ Too broad geographic search
-search_flows_by_geography({
-  query: "bytes:>1000000",
-  geographic_filters: {
-    continents: ["Asia", "Europe", "Africa", "North America"]
-  },
-  limit: 2000
-})
 
-// ✅ More focused geographic search
-search_flows_by_geography({
-  query: "bytes:>1000000 AND timestamp:>NOW-6h",
+`search_flows` takes `geographic_filters.countries` as ISO 3166-1 alpha-2
+codes and sends them as the API's `region:` qualifier. Continents, cities and
+country names are refused before any request.
+
+```javascript
+// ❌ Broad: every flow over 1 MB from four countries, at the maximum limit
+search_flows({
+  query: "total:>1MB",
   geographic_filters: {
-    countries: ["China", "Russia"]
+    countries: ["CN", "RU", "IR", "KP"]
   },
   limit: 500
+})
+
+// ✅ Narrower: the last 6 hours, two countries, a smaller page
+search_flows({
+  query: "total:>1MB ts:>6h",
+  geographic_filters: {
+    countries: ["CN", "RU"]
+  },
+  limit: 100
 })
 ```
 

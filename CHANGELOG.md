@@ -597,7 +597,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `src/config/security.ts` as enforced, along with RBAC, audit logging and
   `RBAC_ENABLED`, `AUDIT_LOGGING_ENABLED` and `MAX_RISK_SCORE`, none of which
   the code has or reads. The sections of the other docs that described the
-  removed tools or the performance tiers are gone too.
+  removed tools or the performance tiers are gone too. The examples for
+  `search_flows_by_geography`, never a tool, now use `search_flows` with
+  country codes, and the missing-credentials example shows what the server
+  does: it exits with code 1 and names the variable on stderr.
+- `scripts/deploy.sh` and `scripts/dev-setup.sh`. No npm script, workflow or
+  doc runs either one, and neither set `FIREWALLA_MSP_ID`: with the
+  environment of the compose file `deploy.sh` wrote, or of the `.env.test`
+  `dev-setup.sh` wrote, the server exits with code 1 and "Required
+  environment variable FIREWALLA_MSP_ID is not set". Both also set
+  `FIREWALLA_MSP_BASE_URL`, and `deploy.sh` `ENABLE_METRICS` and
+  `ENABLE_HEALTH_CHECKS`, which nothing reads. The README's npm, Docker and
+  source setups and `.env.example` remain.
 - What the server lists is unchanged: `tools/list` from the built server is
   the same JSON before and after, 24 tools and 35 with
   `FIREWALLA_ENABLE_WRITE_TOOLS=true`, and the same handlers are registered.
