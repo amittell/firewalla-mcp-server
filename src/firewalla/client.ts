@@ -1724,11 +1724,14 @@ export class FirewallaClient {
 
     // Apply box filter through the query parameter
     params.query = this.addBoxFilter(params.query as string | undefined);
-    // What request() sends, as withMspQuery translates it
+    // Translated once, so a relative ts:>1h is resolved once: every page
+    // sends this query (request()'s toMspQuery leaves it as it is), and it
+    // is the query reported
     const sentQuery =
       typeof params.query === 'string'
         ? toMspQuery(params.query) || undefined
         : undefined;
+    params.query = sentQuery;
 
     const response = await this.requestPages<any>(
       '/v2/alarms',
@@ -1869,11 +1872,14 @@ export class FirewallaClient {
 
     // Apply box filter through the query parameter
     params.query = this.addBoxFilter(params.query as string | undefined);
-    // What request() sends, as withMspQuery translates it
+    // Translated once, so a relative ts:>1h is resolved once: every page
+    // sends this query (request()'s toMspQuery leaves it as it is), and it
+    // is the query reported
     const sentQuery =
       typeof params.query === 'string'
         ? toMspQuery(params.query) || undefined
         : undefined;
+    params.query = sentQuery;
 
     const response = await this.requestPages<any>(
       '/v2/flows',
@@ -2499,8 +2505,10 @@ export class FirewallaClient {
       words.length > 0 ? unbounded : { ...params };
     // Apply box filter through the query parameter
     request.query = this.addBoxFilter(sent || undefined);
+    // Translated once: the query sent and the one reported are the same
     const sentQuery =
       typeof request.query === 'string' ? toMspQuery(request.query) : '';
+    request.query = sentQuery || undefined;
 
     const response = await this.request<{
       count: number;
