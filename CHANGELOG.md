@@ -630,19 +630,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   marker text keeps its text. An object with its own `constructor` key had
   none of its keys renamed; it is renamed like any other now.
 - `search_devices` and `search_target_lists` read lowercase `and`, `or` and
-  `not` as words, as the other search tools and the API do. They read them
-  as operators, so on a stub `nas or laptop` found every device named nas or
-  laptop, where `search_rules` found the one rule holding all three words
-  and `search_flows` sent the three words. Every search tool also refused a
-  query that starts or ends with one of them (`nas or`, `or nas`,
-  `status:blocked or`) as an operator with no term; they are words there
-  too now. `search_devices` also checks each query with an older parser,
-  which split on them in any case and refused `a or b or c or d` as too
-  complex; it reads them as words too, and the count behind "Too many
-  logical operators" counts uppercase ones only. Uppercase `AND`, `OR` and
-  `NOT` are operators as before.
-- The search parser reads `to` outside `[low TO high]` as a word. It read
-  it in any case as the range keyword, so `search_devices`,
+  `not` as words, as the other search tools and the API do. They used to
+  read them as operators, so on a stub `nas or laptop` found every device
+  named nas or laptop, where `search_rules` found the one rule holding all
+  three words and `search_flows` sent the three words. Every search tool
+  also refused a query that starts or ends with one of them (`nas or`,
+  `or nas`, `status:blocked or`) as an operator with no term; they are
+  words there too now. `search_devices` also checks each query with an
+  older parser, which split on them in any case and refused
+  `a or b or c or d` as too complex; it reads them as words too, and the
+  count behind "Too many logical operators" counts uppercase ones only.
+  Uppercase `AND`, `OR` and `NOT` are operators as before.
+- The search parser reads `to` outside `[low TO high]` as a word. It used
+  to read it in any case as the range keyword, so `search_devices`,
   `search_target_lists` and `search_rules` refused free text such as
   `go to school` ("Unexpected token 'TO' at position 3").
 - A single quote right after a letter, digit or underscore is an
@@ -687,8 +687,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `query_parameters.query` had neither the qualifier renames nor the box
   scope; and `get_active_alarms` gave no query at all. `search_alarms` and
   `search_rules` also give it as `query_info.final_query`, and
-  `get_active_alarms` and the grouped answers of `get_flow_data` as
-  `query_executed`. `search_rules` reports the terms it sent to
+  `get_active_alarms`, the grouped answers of `get_flow_data` and each
+  streamed chunk of `get_flow_data` as `query_executed`. `search_rules` reports the terms it sent to
   `GET /v2/rules`: its free text is not sent but matched on the client, as
   `free_text_coverage` says, so a query of free text alone reports `""`.
 - `get_flow_data` sends one time window on every page of a read and in

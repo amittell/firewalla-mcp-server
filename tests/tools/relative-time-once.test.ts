@@ -163,5 +163,8 @@ describe('a relative time is resolved once per read', () => {
     expect(sent).toHaveLength(2);
     expect(sent[0]).toMatch(WINDOW);
     expect(sent[1]).toBe(sent[0]);
+    // Each chunk reports the query it sent, as a plain page does
+    expect(first.query_executed).toBe(sent[0]);
+    expect(second.query_executed).toBe(sent[1]);
   });
 });

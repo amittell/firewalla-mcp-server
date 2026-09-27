@@ -308,6 +308,9 @@ export class GetFlowDataHandler extends BaseToolHandler {
         // started by one call is there for the next
         const streamingManager = StreamingManager.forTool(this.name, firewalla);
         let coverage: PagingCoverage | undefined;
+        // The query the chunk's request sent, as the plain and grouped
+        // answers report it
+        let queryExecuted: string | undefined;
 
         // Define the streaming operation. Its parameters are the session's:
         // the saved query and sort, the chunk size and the session's cursor,
@@ -328,7 +331,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
               ),
             this.name
           );
-          ({ coverage } = response);
+          ({ coverage, query: queryExecuted } = response);
 
           // The records of a plain page, with the field names
           // createUnifiedResponse would give them
@@ -380,7 +383,10 @@ export class GetFlowDataHandler extends BaseToolHandler {
             );
           }
 
-          return createStreamingResponse(chunk, true, { coverage });
+          return createStreamingResponse(chunk, true, {
+            coverage,
+            query_executed: queryExecuted,
+          });
         }
         // Start new streaming session. Each chunk is limit flows, as a page
         // without streaming is: the tool's 50-flow chunk size would make a
@@ -402,7 +408,10 @@ export class GetFlowDataHandler extends BaseToolHandler {
           { chunkSize: limit }
         );
 
-        return createStreamingResponse(firstChunk, true, { coverage });
+        return createStreamingResponse(firstChunk, true, {
+          coverage,
+          query_executed: queryExecuted,
+        });
       }
 
       const response = await withToolTimeout(
