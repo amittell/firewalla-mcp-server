@@ -699,6 +699,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   chunk's cursor. It is resolved once per read, and once per stream, and
   that string is sent on every page and reported. `get_active_alarms` and
   `search_flows` resolved it once already.
+- `search_devices` and `search_target_lists` report the query they matched,
+  as written, in `query_executed` and `query_info.final_query`, as the
+  tools that call the API report the query they sent. `query_executed` held
+  the query validator's rewrite of it, which the matcher did not read:
+  `-name:plain` was reported as `NOT name:plain`, and `name:  plain` as
+  `name:plain`.
 - The search parser reads a word in any script, holding any character the
   query grammar does not use. `search_devices`, `search_target_lists` and
   `search_rules` refused free text such as `Alex’s` (with the U+2019
