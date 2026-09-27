@@ -655,6 +655,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to read it in any case as the range keyword, so `search_devices`,
   `search_target_lists` and `search_rules` refused free text such as
   `go to school` ("Unexpected token 'TO' at position 3").
+- `[low to high]` with a lowercase `to` is refused as `[low TO high]` is,
+  with the `field:low-high` form as the suggestion. The check found only an
+  uppercase `TO`, so `search_flows` sent `ts:[1 to 2]` to the API as it
+  was, and `search_target_lists` refused `target_count:[1 to 5]` as
+  "Expected TO in range query" with the suggestion
+  `target_count:"[1 to" 5]`. Inside brackets the search parser reads `to` in
+  any case as the keyword; outside them it stays a word.
 - A single quote right after a letter, digit or underscore is an
   apostrophe, not the start of a quoted value. `search_devices`,
   `search_target_lists` and `search_rules` refused `name:Alex's`, `don't`

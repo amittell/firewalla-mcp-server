@@ -20,7 +20,11 @@ import {
   SearchTargetListsHandler,
 } from '../../src/tools/handlers/search.js';
 import { queryParser } from '../../src/search/parser.js';
-import { mspTerms, toMspQuery } from '../../src/utils/msp-query.js';
+import {
+  findBracketRange,
+  mspTerms,
+  toMspQuery,
+} from '../../src/utils/msp-query.js';
 import { QuerySanitizer } from '../../src/validation/error-handler.js';
 import { ResponseStandardizer } from '../../src/utils/response-standardizer.js';
 
@@ -163,6 +167,71 @@ describe('ranges, numbers and addresses', () => {
       operator: '>=',
       value: '1MB',
     });
+  });
+});
+
+describe('[low TO high] with TO in any case', () => {
+  // The range check found only an uppercase TO: ts:[1 to 2] went to the
+  // API from search_flows as it was, and search_devices and
+  // search_target_lists refused it as "Expected TO in range query" rather
+  // than with the field:low-high form
+  it.each(['ts:[1 TO 2]', 'ts:[1 to 2]', 'ts:[1 To 2]'])(
+    'findBracketRange reads %s',
+    query => {
+      expect(findBracketRange(query)?.replacement).toBe('ts:1-2');
+    }
+  );
+
+  it.each([
+    {
+      name: 'search_flows',
+      Handler: SearchFlowsHandler,
+      query: 'ts:[1 to 2]',
+      suggestion: 'ts:1-2',
+    },
+    {
+      name: 'search_alarms',
+      Handler: SearchAlarmsHandler,
+      query: 'ts:[1 to 2]',
+      suggestion: 'ts:1-2',
+    },
+    {
+      name: 'search_target_lists',
+      Handler: SearchTargetListsHandler,
+      query: 'target_count:[1 to 5]',
+      suggestion: 'target_count:1-5',
+    },
+    {
+      name: 'search_devices',
+      Handler: SearchDevicesHandler,
+      query: 'ts:[1 to 2]',
+      suggestion: 'ts:1-2',
+    },
+  ] as const)(
+    '$name refuses $query as it refuses TO, with $suggestion',
+    async ({ Handler, query, suggestion }) => {
+      const { client, get } = makeClient();
+      const res = await new Handler().execute({ query, limit: 10 }, client);
+      expect(res.isError).toBe(true);
+      const error = body(res);
+      expect(error.message).toContain('[low TO high] range syntax');
+      expect(error.details.suggested_queries).toEqual([suggestion]);
+      expect(sentQueries(get)).toEqual([]);
+    }
+  );
+
+  it('the parser reads to inside brackets as TO, and outside as a word', () => {
+    const range = {
+      type: 'range',
+      field: 'ts',
+      min: 1,
+      max: 2,
+      inclusive: true,
+    };
+    expect(queryParser.parse('ts:[1 to 2]').ast).toEqual(range);
+    expect(queryParser.parse('ts:[1 TO 2]').ast).toEqual(range);
+    expect(queryParser.parse('go TO school').errors).toEqual([]);
+    expect(queryParser.parse('go to school').errors).toEqual([]);
   });
 });
 
