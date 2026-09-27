@@ -18,6 +18,12 @@ import type {
 } from 'axios';
 import { FirewallaClient } from '../../src/firewalla/client.js';
 import { getConfig } from '../../src/config/config.js';
+import {
+  SearchAlarmsHandler,
+  SearchFlowsHandler,
+} from '../../src/tools/handlers/search.js';
+import { GetActiveAlarmsHandler } from '../../src/tools/handlers/security.js';
+import { GetNetworkRulesHandler } from '../../src/tools/handlers/rules.js';
 
 let now = Date.UTC(2026, 8, 26, 12);
 
@@ -133,6 +139,49 @@ describe('the response cache', () => {
     expect(sent).toHaveLength(3);
     expect(cacheSize(client)).toBe(1);
   });
+
+  it('does not cache a relative time that search_flows turned into seconds', async () => {
+    // Twice in the same second: the same seconds, so the same key, but the
+    // caller asked for a relative time
+    const { client, sent } = makeClient();
+    const search = (query: string) =>
+      new SearchFlowsHandler().execute({ query, limit: 10 }, client);
+    await search('ts:>1h');
+    await search('ts:>1h');
+    expect(sent).toEqual([
+      `ts:>${Math.floor(now / 1000) - 3600}`,
+      `ts:>${Math.floor(now / 1000) - 3600}`,
+    ]);
+    expect(cacheSize(client)).toBe(0);
+
+    // An absolute time is cached as before
+    await search('ts:>1790000000');
+    await search('ts:>1790000000');
+    expect(sent).toHaveLength(3);
+  });
+
+  // Each turns the caller's relative time into seconds before the client
+  // sees it: search_flows and search_alarms, get_active_alarms when it adds
+  // status:1, and the client's rule read
+  it.each([
+    { name: 'search_flows', handler: new SearchFlowsHandler() },
+    { name: 'search_alarms', handler: new SearchAlarmsHandler() },
+    { name: 'get_active_alarms', handler: new GetActiveAlarmsHandler() },
+    { name: 'get_network_rules', handler: new GetNetworkRulesHandler() },
+  ])(
+    '$name: ts:>1h twice in one second sends two requests',
+    async ({ handler }) => {
+      const { client, sent } = makeClient();
+      const args = { query: 'ts:>1h', limit: 10 };
+      const first = await handler.execute(args, client);
+      const second = await handler.execute(args, client);
+      expect(first.isError).toBeFalsy();
+      expect(second.isError).toBeFalsy();
+      expect(sent).toHaveLength(2);
+      expect(sent[1]).toBe(sent[0]);
+      expect(cacheSize(client)).toBe(0);
+    }
+  );
 });
 
 describe('CACHE_MAX_ENTRIES', () => {

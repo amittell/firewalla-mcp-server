@@ -10,6 +10,7 @@ import {
 } from './base.js';
 import {
   BoxSelectionError,
+  readTrace,
   type FirewallaClient,
 } from '../../firewalla/client.js';
 import {
@@ -252,6 +253,9 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
       // Active alarms unless the query names a status. /v2/alarms returns
       // archived alarms too (status 2) when no status is given.
       let sanitizedQuery = queryValidation.sanitizedValue as string | undefined;
+      // The query as given: mspAnd turns a relative time (ts:>1h) into
+      // seconds, and a relative read is not cached (see readTrace)
+      const givenQuery = sanitizedQuery;
       if (!/(^|[\s(,])-?status[:=]/i.test(sanitizedQuery ?? '')) {
         // ANDed in the API's grammar: prepended as text, status:1 would
         // bind to the first branch of an OR
@@ -289,7 +293,8 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
             (sortByValidation.sanitizedValue as string) || 'timestamp:desc',
             limitValidation.sanitizedValue as number,
             cursorValidation.sanitizedValue as string | undefined,
-            forceRefreshValidation.sanitizedValue as boolean
+            forceRefreshValidation.sanitizedValue as boolean,
+            readTrace(givenQuery)
           ),
         'get_active_alarms'
       );
@@ -328,7 +333,9 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
             undefined,
             'timestamp:desc',
             pageSize,
-            cursor
+            cursor,
+            false,
+            readTrace(givenQuery)
           );
 
           const pageCount = SafeAccess.getNestedValue(

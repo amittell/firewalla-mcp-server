@@ -8,9 +8,16 @@ import { filterFactory } from '../search/filters/index.js';
 import type { FilterContext } from '../search/filters/base.js';
 import type { SearchParams, SearchResult } from '../search/types.js';
 import type { RulesTextCoverage, SearchOptions } from '../types.js';
-import type { FirewallaClient } from '../firewalla/client.js';
+import {
+  readTrace,
+  type FirewallaClient,
+  type RequestTrace,
+} from '../firewalla/client.js';
 import { translateBooleanQuery } from '../utils/simple-boolean-translator.js';
-import { translateRelativeTimestamps } from '../utils/timestamp.js';
+import {
+  hasRelativeTimestamp,
+  translateRelativeTimestamps,
+} from '../utils/timestamp.js';
 import { ParameterValidator, SafeAccess } from '../validation/error-handler.js';
 import { EnhancedQueryValidator } from '../validation/enhanced-query-validator.js';
 import { getFieldValue, type EntityType } from '../validation/field-mapper.js';
@@ -815,7 +822,7 @@ export class SearchEngine {
    */
   async searchFlows(
     params: SearchParams,
-    trace?: { sent: number; cached: number }
+    trace: RequestTrace = { sent: 0, cached: 0 }
   ): Promise<SearchResult> {
     const startTime = Date.now();
 
@@ -848,7 +855,12 @@ export class SearchEngine {
         );
       }
 
-      // Apply boolean and relative-time translation before building query string
+      // Apply boolean and relative-time translation before building query
+      // string. The client sees only the seconds, so it is told the query
+      // was relative, and does not cache its pages.
+      if (hasRelativeTimestamp(params.query)) {
+        trace.relativeTime = true;
+      }
       const translatedQuery = translateRelativeTimestamps(
         translateBooleanQuery(params.query, 'flows')
       );
@@ -1035,12 +1047,16 @@ export class SearchEngine {
       const alarmQuery = mspAnd(timeQuery, translatedQuery);
 
       // Call API directly without complex validation/parsing
+      // mspAnd turned a relative time into seconds; the trace says it was
+      // relative, so the alarms are not cached
       const response = await this.firewalla.getActiveAlarms(
         alarmQuery,
         params.group_by,
         params.sort_by || 'timestamp:desc',
         params.limit,
-        params.cursor
+        params.cursor,
+        false,
+        readTrace(params.query)
       );
 
       // Grouped: the API returned groups, not alarms

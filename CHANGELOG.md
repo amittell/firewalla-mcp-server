@@ -397,27 +397,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   minutes: with the defaults (`API_TIMEOUT` and the tool timeout both 30 s),
   a GET that ran out its timeout, or a 503 that took 20 s, is not sent again,
   while a 503 or a reset that comes back at once is. When a tool gives up,
-  its request in flight is cancelled and a request not yet sent is not sent.
-  A write tool that gives up says what became of its write, where it said
-  only that it timed out: a write still waiting for the rate limiter "was not
-  sent, so nothing was changed"; one sent and not answered may have reached
-  Firewalla, since cancelling it does not undo it, so the error says "The
-  outcome is unknown: Firewalla may have applied the change" and names the
-  read to check with before trying again (`get_network_rules` for the rule
-  tools, `get_target_lists` for the target-list tools, `get_device_status`
-  for `rename_device`). A POST, PATCH, PUT or DELETE is never sent again, as
-  the API may have applied it. A 429 keeps its own wait; `search_flows` also
-  tried again a 429 the client had given up on, and reported the rate
-  limiter's refusal of that attempt in place of the 429. A failed request's
-  error now says what the API answered and how many attempts were made:
-  `Firewalla API answered 503 Service Unavailable after 2 attempts: the
-  Firewalla API is temporarily down`, or `Firewalla API sent no answer after
-  2 attempts (ECONNABORTED: timeout of 5000ms exceeded)` with
-  `API_TIMEOUT=5000`; a 400 says `Firewalla API answered 400 Bad Request`,
-  where it said `Bad Request: Invalid parameters sent to ...`. Tools no
-  longer wrap a failure in "This is an immediate parameter or configuration
-  error, not a timeout" or "This appears to be a processing error, not a
-  timeout".
+  its request in flight is cancelled, and a request not yet sent is not sent
+  and takes no slot of the rate limit. A write tool that gives up says what
+  became of its write, where it said only that it timed out: a write still
+  waiting for the rate limiter "was not sent, so nothing was changed"; one
+  sent and not answered may have reached Firewalla, since cancelling it does
+  not undo it, so the error says "The outcome is unknown: Firewalla may have
+  applied the change" and names the read to check with before trying again
+  (`get_network_rules` for the rule tools, `get_target_lists` for the
+  target-list tools, `get_device_status` for `rename_device`). A POST, PATCH,
+  PUT or DELETE is never sent again, as the API may have applied it. A 429
+  keeps its own wait; `search_flows` also tried again a 429 the client had
+  given up on, and reported the rate limiter's refusal of that attempt in
+  place of the 429. A failed request's error now says what the API answered
+  and how many attempts were made, counting every request sent, a 429's
+  retries included, as `coverage.api_requests` does: `Firewalla API answered
+  503 Service Unavailable after 2 attempts: the Firewalla API is temporarily
+  down`, or `Firewalla API sent no answer after 2 attempts (ECONNABORTED:
+  timeout of 5000ms exceeded)` with `API_TIMEOUT=5000`; a 400 says `Firewalla
+  API answered 400 Bad Request`, where it said `Bad Request: Invalid
+  parameters sent to ...`. Tools no longer wrap a failure in "This is an
+  immediate parameter or configuration error, not a timeout" or "This appears
+  to be a processing error, not a timeout".
 - The client's response cache holds at most `CACHE_MAX_ENTRIES` responses
   (default 1000); when it is full, expired entries go first, then the least
   recently used. It had no limit, and an entry was removed only when its own
@@ -426,7 +427,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   session: with the API stubbed, 200 distinct reads and one more after the
   TTL left 201 entries. They now leave 1, as a cache write drops every
   expired entry once a minute has passed since the last sweep. A query with a
-  relative time such as `ts:>1h` is no longer cached: it is sent as Unix
+  relative time such as `ts:>1h` is no longer cached, also when
+  `search_flows`, `search_alarms`, `get_active_alarms` or a rule read has
+  turned it into seconds before the client sees it: it is sent as Unix
   seconds counted from now, so each read was a new key (`ts:>1790420701`,
   then `ts:>1790420702` 1.1 s later) that nothing read again. A page read
   from the cache still counts in `coverage.cached_pages`, not `api_requests`.

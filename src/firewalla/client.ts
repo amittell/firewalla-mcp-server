@@ -93,6 +93,7 @@ import { validateAlarmId } from '../utils/alarm-id-validation.js';
 import { currentToolBudget, type ToolWrite } from '../utils/timeout-manager.js';
 import { PERFORMANCE_THRESHOLDS } from '../config/limits.js';
 import { normalizeTimestamps } from '../utils/data-validator.js';
+import { hasRelativeTimestamp } from '../utils/timestamp.js';
 import {
   checkMuteRequest,
   type AlarmMuteRequest,
@@ -233,13 +234,6 @@ export const DEFAULT_CACHE_MAX_ENTRIES = 1000;
 
 /** A cache write drops every expired entry when this long has passed since the last sweep */
 const CACHE_SWEEP_INTERVAL_MS = 60_000;
-
-/**
- * A relative time comparison such as `ts:>1h`. request() sends it as Unix
- * seconds counted back from now, so the same query is a new cache key every
- * second and its entry is never read again.
- */
-const RELATIVE_TIME_QUERY = /\bts:(?:>=|<=|>|<)\d+[smhdw]\b/i;
 
 const DAY_SECONDS = 24 * 60 * 60;
 
@@ -525,9 +519,10 @@ export class ForbiddenError extends Error {
  * A request to the MSP API failed. `status` is the HTTP status the API
  * answered, undefined when no answer came; `code` is axios's error code
  * (ECONNABORTED for a request whose timeout ran out, ECONNRESET, ...);
- * `attempts` is how many times the request was sent, 2 when a GET was tried
- * again (see retryTransient). Code that reacts to a failure reads these, not
- * the message.
+ * `attempts` is how many times the request went to the API, a 429's
+ * retries and a transient failure's retry included (0 when it was never
+ * sent), as counted in coverage.api_requests. Code that reacts to a failure
+ * reads these, not the message.
  */
 export class ApiRequestError extends Error {
   constructor(
@@ -670,11 +665,18 @@ interface RateLimitedConfig extends InternalAxiosRequestConfig {
   /**
    * When the tool the request serves gives up, in Date.now() milliseconds
    * (ToolBudget in timeout-manager.ts); outside a tool,
-   * PERFORMANCE_THRESHOLDS.TIMEOUT_MS after the request was first made
+   * PERFORMANCE_THRESHOLDS.TIMEOUT_MS after its first send, so time queued
+   * for the rate limiter is not taken from it
    */
   toolDeadline?: number;
   /** When this attempt was sent, in Date.now() milliseconds */
   sentAt?: number;
+  /**
+   * Times the request has gone to the API, 429 retries and transient
+   * retries included; `attempts` of its ApiRequestError, and what it added
+   * to coverage.api_requests
+   */
+  sends?: number;
   /** A write's record in its tool's budget (see ToolWrite) */
   toolWrite?: ToolWrite;
   /**
@@ -686,13 +688,32 @@ interface RateLimitedConfig extends InternalAxiosRequestConfig {
 }
 
 /**
- * One read's requests: sent to the API, and answered from the cache. A
- * caller that retries a read passes one trace to every attempt, so the
- * count includes the requests of an attempt that failed.
+ * One read's requests: sent to the API (a 429's retries and a transient
+ * failure's retry included), and answered from the cache
  */
 export interface RequestTrace {
   sent: number;
   cached: number;
+  /**
+   * The read's query, as its caller gave it, compares `ts` with a time
+   * relative to now (`ts:>1h`), so its pages are not cached (see request).
+   * A caller that turns the relative time into seconds before calling sets
+   * this, since the client then sees only seconds.
+   */
+  relativeTime?: boolean;
+}
+
+/**
+ * A RequestTrace for a read of `query` as its caller gave it, before any
+ * translation: it notes a relative time (`ts:>1h`), which mspAnd and
+ * translateRelativeTimestamps turn into seconds before the client sees it
+ */
+export function readTrace(query?: string): RequestTrace {
+  return {
+    sent: 0,
+    cached: 0,
+    ...(hasRelativeTimestamp(query) && { relativeTime: true }),
+  };
 }
 
 /**
@@ -915,9 +936,8 @@ export class FirewallaClient {
         const budget = currentToolBudget();
         if (budget) {
           request.signal ??= budget.signal;
+          request.toolDeadline ??= budget.deadline;
         }
-        request.toolDeadline ??=
-          budget?.deadline ?? Date.now() + PERFORMANCE_THRESHOLDS.TIMEOUT_MS;
         const name = `${config.method?.toUpperCase()} ${config.url}`;
         // A write is recorded in the tool's budget, so a tool that gives up
         // can say whether it was sent (see describeWrites)
@@ -946,6 +966,10 @@ export class FirewallaClient {
           }
           process.stderr.write(`API Request: ${name}\n`);
           request.sentAt = Date.now();
+          // Outside a tool, the budget starts at the first send
+          request.toolDeadline ??=
+            request.sentAt + PERFORMANCE_THRESHOLDS.TIMEOUT_MS;
+          request.sends = (request.sends ?? 0) + 1;
           if (request.toolWrite) {
             request.toolWrite.state = 'sent';
           }
@@ -976,9 +1000,15 @@ export class FirewallaClient {
             `API Request queued for the rate limit: ${name}\n`
           );
         }
-        return this.rateLimiter.acquire(deadline).then(send, error => {
-          throw error instanceof RateLimitError ? refuse(error) : error;
-        });
+        return this.rateLimiter
+          .acquire(deadline, request.signal as AbortSignal | undefined)
+          .then(send, error => {
+            // The tool gave up while it waited: no slot was taken
+            if (request.signal?.aborted) {
+              throw cancelled();
+            }
+            throw error instanceof RateLimitError ? refuse(error) : error;
+          });
       },
       async error => {
         process.stderr.write(`API Request Error: ${error.message}\n`);
@@ -1451,14 +1481,14 @@ export class FirewallaClient {
       this.filterParametersForDataEndpoints(method, endpoint, params)
     );
     const cacheKey = this.getCacheKey(endpoint, filteredParams, method);
-    // A relative time is sent as seconds from now, a new key every second
+    // A relative time is sent as seconds from now: a new key every second,
+    // and "the last hour" should be read when it is asked. Known from the
+    // caller's query, here or on the trace when the caller translated it.
     const useCache =
       cacheable &&
       method === 'GET' &&
-      !(
-        typeof params?.query === 'string' &&
-        RELATIVE_TIME_QUERY.test(params.query)
-      );
+      !trace?.relativeTime &&
+      !hasRelativeTimestamp(params?.query);
 
     if (useCache) {
       const cached = this.getFromCache<T>(cacheKey);
@@ -1569,9 +1599,9 @@ export class FirewallaClient {
             response: error.response?.data,
           });
         }
+        // Every time it went to the API, a 429's retries included
         const attempts =
-          ((error.config as RateLimitedConfig | undefined)?.transientRetries ??
-            0) + 1;
+          (error.config as RateLimitedConfig | undefined)?.sends ?? 0;
         throw new ApiRequestError(
           apiFailureMessage(error, attempts),
           status,
@@ -1644,7 +1674,8 @@ export class FirewallaClient {
     sortBy = 'ts:desc',
     limit = 200,
     cursor?: string,
-    force_refresh = false
+    force_refresh = false,
+    trace?: RequestTrace
   ): Promise<{
     count: number;
     results: Alarm[];
@@ -1678,7 +1709,8 @@ export class FirewallaClient {
       '/v2/alarms',
       params,
       Number(limit),
-      !force_refresh
+      !force_refresh,
+      trace
     );
 
     // Basic response validation
@@ -2433,7 +2465,7 @@ export class FirewallaClient {
       results: any[];
       next_cursor?: string;
       aggregations?: any;
-    }>('GET', `/v2/rules`, request);
+    }>('GET', `/v2/rules`, request, undefined, true, readTrace(query));
 
     // API returns {count, results[]} format
     const results = Array.isArray(response?.results) ? response.results : [];
@@ -4281,7 +4313,9 @@ export class FirewallaClient {
     const response = await this.requestPages<any>(
       '/v2/flows',
       params,
-      Number(params.limit)
+      Number(params.limit),
+      true,
+      readTrace(searchQuery.query)
     );
 
     // Defensive programming: ensure results is an array before mapping
@@ -4486,7 +4520,9 @@ export class FirewallaClient {
         response = await this.requestPages<any>(
           '/v2/alarms',
           requestParams,
-          Number(requestParams.limit)
+          Number(requestParams.limit),
+          true,
+          readTrace(searchQuery.query)
         );
       } catch (apiError) {
         if (apiError instanceof Error) {
