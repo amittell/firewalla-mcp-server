@@ -874,6 +874,8 @@ export class SearchAlarmsHandler extends BaseToolHandler {
         schema_harmonization: schemaNote,
         query_info: {
           original_query: searchArgs.query,
+          // The query sent to the API
+          final_query: metadata.query,
           applied_filters: {
             time_range: !!searchArgs.time_range,
             force_refresh: !!searchArgs.force_refresh,
@@ -1025,6 +1027,10 @@ export class SearchRulesHandler extends BaseToolHandler {
         }),
         query_info: {
           original_query: searchArgs.query,
+          // The terms sent to the API; free text is not sent (GET
+          // /v2/rules matches none) but matched here, and
+          // free_text_coverage says how many rules were checked
+          final_query: metadata.query,
           applied_filters: {
             grouping: !!searchArgs.group_by,
             sorting: !!searchArgs.sort_by,

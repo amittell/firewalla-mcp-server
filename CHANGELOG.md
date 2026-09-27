@@ -670,6 +670,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   set the `box.id` term was sent but not reported. All three give the query
   as sent now. `applied_filters.geographic` was already true only when
   `geographic_filters` added a region term.
+- `search_alarms`, `get_active_alarms`, `get_flow_data` and `search_rules`
+  report the query they sent, as `search_flows` does. Measured live,
+  `search_alarms` sent `'MacBook Air'` as `"MacBook Air" box.id:<gid>` and
+  reported `'MacBook Air'` as `metadata.query`; `get_flow_data`'s
+  `query_parameters.query` had neither the qualifier renames nor the box
+  scope; and `get_active_alarms` gave no query at all. `search_alarms` and
+  `search_rules` also give it as `query_info.final_query`, and
+  `get_active_alarms` and the grouped answers of `get_flow_data` as
+  `query_executed`. `search_rules` reports the terms it sent to
+  `GET /v2/rules`: its free text is not sent but matched on the client, as
+  `free_text_coverage` says, so a query of free text alone reports `""`.
 - The search tools no longer refuse ordinary words as "potentially dangerous
   content". The query sanitizer matched patterns for shell commands and
   network tools, SQL, script, templates, file paths and URL schemes, so

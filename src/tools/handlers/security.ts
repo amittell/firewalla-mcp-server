@@ -307,6 +307,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
           groups: response.groups,
           next_cursor: response.next_cursor,
           has_more: !!response.next_cursor,
+          query_executed: response.query,
         });
       }
 
@@ -461,6 +462,9 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         total_count: totalCount,
         pages_traversed: pagesTraversed,
         has_more: !!response.next_cursor,
+        // The query sent: status:1 unless the query names a status, the
+        // qualifier renames and the box scope included
+        query_executed: response.query,
         validation_warnings:
           alarmValidationResult.warnings &&
           alarmValidationResult.warnings.length > 0
