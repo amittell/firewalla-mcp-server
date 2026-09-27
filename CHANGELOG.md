@@ -660,12 +660,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AND` as an operator and sent `'rock roll'`, so `search_rules` found no
   rule with the phrase. A single quote that opens a phrase and is never
   closed is refused, as the parser already refused it. The check for
-  `[low TO high]` range syntax skipped only double-quoted text, so
-  `'show ts:[1 TO 2]'` was refused as a range; it skips single-quoted text
-  too now, and goes out as `"show ts:[1 TO 2]"`. So do the `-` to `NOT`
-  rewrite for the validators and the qualifier renames, which also took an
-  apostrophe for a quote: in `Alex's bytes:>1MB it's` the `bytes:` was not
-  renamed to `total:`.
+  `[low TO high]` range syntax, the `-` to `NOT` rewrite for the validators
+  and the qualifier renames skipped only double-quoted text, so
+  `'show ts:[1 TO 2]'` was refused as a range; they skip single-quoted
+  text too now, and `search_rules` matches that phrase on the client. The
+  renames also took an apostrophe for a quote: in `Alex's bytes:>1MB it's`
+  the `bytes:` was not renamed to `total:`.
 - An empty phrase (`""`) is refused before a request. It has no text to
   find: `search_devices`, `search_target_lists` and `search_rules` matched
   every device, list and rule, and `search_flows` and `search_alarms` sent
@@ -699,6 +699,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   chunk's cursor. It is resolved once per read, and once per stream, and
   that string is sent on every page and reported. `get_active_alarms` and
   `search_flows` resolved it once already.
+- `search_flows`, `search_alarms`, `get_flow_data` and `get_active_alarms`
+  refuse a quoted free-text phrase with a colon (`"a:b"`, `'a:b'`,
+  `'show ts:[1 TO 2]'`) before any request, with the phrase without its
+  colon as the suggested query. The MSP API answers one with HTTP 400,
+  while it takes a quoted colon in a field value (measured 2026-09-27:
+  `"a:b"` on flows and alarms answered 400, `domain:"a:b"` and
+  `device.name:"x:y"` 200), so the error names the phrase and suggests
+  putting it in a field, as in `domain:"a:b"`, or dropping the colon.
+  `search_rules`, `search_devices` and `search_target_lists` match free
+  text themselves and take a colon in it.
 - The search tools no longer refuse ordinary words as "potentially dangerous
   content". The query sanitizer matched patterns for shell commands and
   network tools, SQL, script, templates, file paths and URL schemes, so

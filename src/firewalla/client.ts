@@ -73,6 +73,7 @@ import {
   mspSplitText,
   mspValue,
   toMspQuery,
+  refuseColonInQuotedText,
 } from '../utils/msp-query.js';
 import { createPaginatedResponse } from '../utils/pagination.js';
 import {
@@ -397,6 +398,7 @@ function withMspQuery(
   const translated = toMspQuery(query);
   if (endpoint !== '/v2/rules') {
     refuseUndocumentedGeoQualifiers(query, endpoint);
+    refuseColonInQuotedText(query);
   }
   return translated ? { ...rest, query: translated } : rest;
 }
@@ -6341,6 +6343,7 @@ export class FirewallaClient {
     const translated = toMspQuery(query);
     if (path !== '/v2/rules') {
       refuseUndocumentedGeoQualifiers(query, path);
+      refuseColonInQuotedText(query);
     }
     if (translated === query) {
       return endpoint;

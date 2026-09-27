@@ -1,17 +1,20 @@
 /**
  * Single-quoted text is quoted wherever double-quoted text is. toMspQuery
- * sends 'show ts:[1 TO 2]' as one phrase, but findBracketRange, which
+ * reads 'show ts:[1 TO 2]' as one phrase, but findBracketRange, which
  * toMspQuery and the search tools' first check run before it, skipped only
  * double-quoted text: it read [1 TO 2] as range syntax and refused the
  * query. withNotForMinus had the same gap, and the qualifier renames took
  * an apostrophe (Alex's) for a quote, so a bytes: after one was not
- * renamed. The API is stubbed; nothing leaves the process.
+ * renamed. search_rules matches the phrase on the client; for flows and
+ * alarms the phrase is refused for its colon, which the MSP API answers
+ * with 400 (quoted-colon.test.ts), not as a range. The API is stubbed;
+ * nothing leaves the process.
  */
-
 import { FirewallaClient } from '../../src/firewalla/client.js';
 import {
   SearchAlarmsHandler,
   SearchFlowsHandler,
+  SearchRulesHandler,
 } from '../../src/tools/handlers/search.js';
 import {
   findBracketRange,
@@ -45,7 +48,25 @@ function makeClient() {
   } as any);
   const get = (client as any).api.get as jest.Mock;
   get.mockReset();
-  get.mockResolvedValue({ status: 200, data: { count: 0, results: [] } });
+  get.mockImplementation(async (url: string) => ({
+    status: 200,
+    data:
+      url === '/v2/rules'
+        ? {
+            count: 1,
+            results: [
+              {
+                id: 'r1',
+                action: 'block',
+                status: 'active',
+                direction: 'bidirection',
+                target: { type: 'domain', value: 'example.com' },
+                notes: 'show ts:[1 TO 2]',
+              },
+            ],
+          }
+        : { count: 0, results: [] },
+  }));
   return { client, get };
 }
 
@@ -64,18 +85,38 @@ describe('single-quoted text is shielded where double-quoted text is', () => {
     expect(toMspQuery("'show ts:[1 TO 2]'")).toBe('"show ts:[1 TO 2]"');
   });
 
-  it.each([
-    ['search_flows', SearchFlowsHandler],
-    ['search_alarms', SearchAlarmsHandler],
-  ])('%s sends it as one quoted phrase', async (_name, Handler) => {
+  it('search_rules matches it as one phrase on the client', async () => {
     const { client, get } = makeClient();
-    const res = await new Handler().execute(
+    const res = await new SearchRulesHandler().execute(
       { query: "'show ts:[1 TO 2]'", limit: 10 },
       client
     );
     expect(res.isError).toBeFalsy();
-    expect(sentQueries(get)).toEqual(['"show ts:[1 TO 2]"']);
+    expect(
+      JSON.parse(res.content[0].text).data.rules.map((rule: any) => rule.id)
+    ).toEqual(['r1']);
+    // Free text is not sent to /v2/rules
+    expect(sentQueries(get)).toEqual([undefined]);
   });
+
+  it.each([
+    ['search_flows', SearchFlowsHandler],
+    ['search_alarms', SearchAlarmsHandler],
+  ])(
+    '%s reads it as one phrase, and refuses it for its colon',
+    async (_name, Handler) => {
+      const { client, get } = makeClient();
+      const res = await new Handler().execute(
+        { query: "'show ts:[1 TO 2]'", limit: 10 },
+        client
+      );
+      expect(res.isError).toBe(true);
+      const { message } = JSON.parse(res.content[0].text);
+      expect(message).toContain('"show ts:[1 TO 2]" is a quoted phrase');
+      expect(message).not.toContain('range syntax');
+      expect(sentQueries(get)).toEqual([]);
+    }
+  );
 
   it('withNotForMinus leaves a - inside single quotes', () => {
     expect(withNotForMinus("'a -b:c' -d:e")).toBe("'a -b:c' NOT d:e");
