@@ -175,167 +175,13 @@ export class SearchEngine {
   }
 
   /**
-   * Initialize search strategies for different entity types
+   * The strategies of executeSearch, which searchRules, searchDevices and
+   * searchTargetLists run. searchFlows and searchAlarms call the client
+   * themselves; the flow and alarm strategies here were never run, and the
+   * alarm one re-filtered results with regexes read from the raw query
+   * (source_ip:.*+* made the invalid RegExp ..*+.*), so both are gone.
    */
   private initializeStrategies(): void {
-    this.strategies.set('flows', {
-      entityType: 'flows',
-      executeApiCall: async (client, params, apiParams, searchOptions) => {
-        // Use getFlowData instead of searchFlows since it handles parameters better
-        let queryString = params.query;
-
-        // Add time range to query if provided
-        if (searchOptions.time_range?.start && searchOptions.time_range?.end) {
-          const startDate = new Date(searchOptions.time_range.start);
-          const endDate = new Date(searchOptions.time_range.end);
-
-          if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-            throw new Error('Invalid time range format');
-          }
-
-          if (startDate >= endDate) {
-            throw new Error('Start time must be before end time');
-          }
-
-          const startTs = Math.floor(startDate.getTime() / 1000);
-          const endTs = Math.floor(endDate.getTime() / 1000);
-          queryString = mspAnd(`ts:${startTs}-${endTs}`, params.query);
-        }
-
-        // Use getFlowData which works reliably
-        return client.getFlowData(
-          queryString,
-          params.group_by,
-          'ts:desc',
-          apiParams.limit
-        );
-      },
-    });
-
-    this.strategies.set('alarms', {
-      entityType: 'alarms',
-
-      executeApiCall: async (client, params, apiParams, _searchOptions) => {
-        // Pass the full query including any severity filters
-        return client.getActiveAlarms(
-          apiParams.queryString || params.query || undefined,
-          params.group_by,
-          params.sort_by || 'timestamp:desc',
-          params.limit,
-          params.cursor
-        );
-      },
-      processResults: (results, params) => {
-        let filteredResults = results;
-
-        // Client-side filtering to ensure results match query criteria
-        if (params.query && typeof params.query === 'string') {
-          // Extract severity filter from query (e.g., "severity:medium")
-          const severityMatch = params.query.match(
-            /severity:(high|medium|low|critical)/i
-          );
-          if (severityMatch) {
-            const expectedSeverity = severityMatch[1].toLowerCase();
-            // Map severity names to their string values for filtering
-            const severityMapping: Record<string, string[]> = {
-              low: ['low'],
-              medium: ['medium'],
-              high: ['high'],
-              critical: ['critical'],
-            };
-
-            const validSeverities = severityMapping[expectedSeverity] || [
-              expectedSeverity,
-            ];
-            filteredResults = results.filter(
-              alarm =>
-                alarm.severity &&
-                validSeverities.includes(alarm.severity.toLowerCase())
-            );
-          }
-
-          // Extract type filter from query (e.g., "type:1" or "type:>=4")
-          const typeMatch = params.query.match(/type:([><=]*\d+)/i);
-          if (typeMatch) {
-            const typeExpression = typeMatch[1];
-            if (typeExpression.startsWith('>=')) {
-              const minType = parseInt(typeExpression.substring(2));
-              filteredResults = filteredResults.filter(
-                alarm => alarm.type && parseInt(String(alarm.type)) >= minType
-              );
-            } else if (typeExpression.startsWith('<=')) {
-              const maxType = parseInt(typeExpression.substring(2));
-              filteredResults = filteredResults.filter(
-                alarm => alarm.type && parseInt(String(alarm.type)) <= maxType
-              );
-            } else if (typeExpression.startsWith('>')) {
-              const minType = parseInt(typeExpression.substring(1));
-              filteredResults = filteredResults.filter(
-                alarm => alarm.type && parseInt(String(alarm.type)) > minType
-              );
-            } else if (typeExpression.startsWith('<')) {
-              const maxType = parseInt(typeExpression.substring(1));
-              filteredResults = filteredResults.filter(
-                alarm => alarm.type && parseInt(String(alarm.type)) < maxType
-              );
-            } else {
-              const exactType = parseInt(typeExpression);
-              filteredResults = filteredResults.filter(
-                alarm =>
-                  alarm.type && parseInt(String(alarm.type)) === exactType
-              );
-            }
-          }
-
-          // Extract status filter from query (e.g., "status:1" or "resolved:true")
-          const statusMatch = params.query.match(/status:(\d+)/i);
-          if (statusMatch) {
-            const expectedStatus = parseInt(statusMatch[1]);
-            filteredResults = filteredResults.filter(
-              alarm =>
-                alarm.status &&
-                parseInt(String(alarm.status)) === expectedStatus
-            );
-          }
-
-          const resolvedMatch = params.query.match(/resolved:(true|false)/i);
-          if (resolvedMatch) {
-            const isResolved = resolvedMatch[1].toLowerCase() === 'true';
-            // Assuming resolved means status === 2 (based on common patterns)
-            filteredResults = filteredResults.filter(alarm => {
-              const status = parseInt(String(alarm.status));
-              return isResolved ? status === 2 : status !== 2;
-            });
-          }
-
-          // Extract source_ip filter from query (e.g., "source_ip:192.168.1.1")
-          const sourceIpMatch = params.query.match(/source_ip:([^\s]+)/i);
-          if (sourceIpMatch) {
-            const expectedIp = sourceIpMatch[1];
-            // Support wildcard matching for IP addresses
-            if (expectedIp.includes('*')) {
-              const pattern = expectedIp.replace(/\*/g, '.*');
-              const regex = new RegExp(pattern, 'i');
-              filteredResults = filteredResults.filter(alarm => {
-                const sourceIp = alarm.remote?.ip || alarm.device?.ip || '';
-                return regex.test(sourceIp);
-              });
-            } else {
-              filteredResults = filteredResults.filter(alarm => {
-                const sourceIp = alarm.remote?.ip || alarm.device?.ip || '';
-                return sourceIp.includes(expectedIp);
-              });
-            }
-          }
-        }
-
-        if (params.limit) {
-          return filteredResults.slice(0, params.limit);
-        }
-        return filteredResults;
-      },
-    });
-
     this.strategies.set('rules', {
       entityType: 'rules',
 
@@ -776,7 +622,7 @@ export class SearchEngine {
       // Build result object
       const result: SearchResult = {
         results,
-        // The alarm, rule and target-list strategies filter on the client,
+        // The rule and target-list strategies filter on the client,
         // so the API's count can include records they dropped. Devices keep
         // the API's count: their strategy only pages.
         count:
