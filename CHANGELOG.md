@@ -923,6 +923,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   10 wildcards against 1,000 characters take under 50 ms. The answers are
   the same, except that a `*` now also matches a line break, which the
   regular expression's `.` did not.
+- A wildcard value may hold any character that is text. Every search tool
+  refused a `*` beside anything but letters, digits, `_`, `.`, `:`, `,` and
+  `-` as an "Invalid wildcard pattern", so `name:*Disney+*`, `C++*`,
+  `*AT&T*`, `*[kids]*`, `*Café*` and any other non-ASCII name were refused,
+  and `search_devices` also refused a `+` next to a `*` as a "dangerous
+  sequence". The API grammar gives none of those characters a meaning (it
+  asks for quotes only around whitespace, a comma, an asterisk or a colon),
+  so they are sent as written, and the client-side searches match them. A
+  control character in a wildcard value is still refused.
 
 ### Removed
 
