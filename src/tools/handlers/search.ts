@@ -34,10 +34,6 @@ import {
   TimeoutError,
   createTimeoutErrorResponse,
 } from '../../utils/timeout-manager.js';
-import {
-  withRetryAndTimeout,
-  isRetryableError,
-} from '../../utils/retry-manager.js';
 import { createSearchTools } from '../search.js';
 import { unixToISOStringOrNow } from '../../utils/timestamp.js';
 import { SEARCH_FIELDS, type SearchParams } from '../../search/types.js';
@@ -463,26 +459,15 @@ export class SearchFlowsHandler extends BaseToolHandler {
         include_analytics: includeAnalyticsValidation.sanitizedValue as boolean,
       };
 
-      // One count for both attempts, so coverage.api_requests includes the
-      // requests of a failed first attempt: they counted against the API's
-      // limit too
+      // The read's requests, counted into coverage.api_requests, retries
+      // included. The client sends a GET again once after a timeout, a
+      // dropped connection or a 502, 503 or 504; this handler does not retry
+      // on top of that.
       const trace = { sent: 0, cached: 0 };
 
-      // Use retry logic for search operations as they can be prone to timeouts
-      const result = await withRetryAndTimeout(
+      const result = await withToolTimeout(
         async () => searchTools.search_flows(searchParams, trace),
-        this.name,
-        {
-          maxAttempts: 2, // Conservative retry for search operations
-          initialDelayMs: 2000, // Wait 2 seconds before retry
-          shouldRetry: (error, attempt) => {
-            // Retry on timeouts and network errors, but not on validation errors
-            if (error instanceof TimeoutError) {
-              return true;
-            }
-            return isRetryableError(error) && attempt === 1; // Only retry once for search
-          },
-        }
+        this.name
       );
       const executionTime = Date.now() - startTime;
 
@@ -630,31 +615,6 @@ export class SearchFlowsHandler extends BaseToolHandler {
           this.name,
           error.duration,
           10000 // Default timeout from timeout-manager
-        );
-      }
-
-      // Handle retry failure errors with enhanced context
-      if (error instanceof Error && error.name === 'RetryFailureError') {
-        const { retryContext } = error as any;
-        const { userGuidance } = error as any;
-
-        return createErrorResponse(
-          this.name,
-          `Search flows operation failed after ${retryContext?.attempts || 'multiple'} attempts: ${error.message}`,
-          ErrorType.SEARCH_ERROR,
-          {
-            retry_attempts: retryContext?.attempts,
-            total_duration_ms: retryContext?.totalDurationMs,
-            final_error:
-              retryContext?.originalError instanceof Error
-                ? retryContext.originalError.message
-                : 'Unknown error',
-          },
-          userGuidance || [
-            'Multiple retry attempts failed',
-            'Try reducing the scope of your search query',
-            'Check network connectivity and try again later',
-          ]
         );
       }
 

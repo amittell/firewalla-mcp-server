@@ -23,6 +23,7 @@ import path from 'node:path';
 import * as ts from 'typescript';
 import {
   AlarmNotFoundError,
+  ApiRequestError,
   BoxSelectionError,
   FirewallaClient,
 } from '../../src/firewalla/client.js';
@@ -395,7 +396,11 @@ describe('archiveAlarm', () => {
     const { client, request } = makeClient({
       alarms: { [BOX_A]: ['42'] },
       post: async () => {
-        throw new Error('API Error (unknown): timeout of 30000ms exceeded');
+        throw new ApiRequestError(
+          'Firewalla API sent no answer (ECONNABORTED: timeout of 30000ms exceeded)',
+          undefined,
+          'ECONNABORTED'
+        );
       },
     });
     await expect(client.archiveAlarm('42', BOX_A)).rejects.toThrow(
@@ -702,7 +707,11 @@ describe('deleteAlarm', () => {
     const { client, request } = makeClient({
       alarms: { [BOX_A]: ['42'] },
       del: async () => {
-        throw new Error('API Error (unknown): timeout of 30000ms exceeded');
+        throw new ApiRequestError(
+          'Firewalla API sent no answer (ECONNABORTED: timeout of 30000ms exceeded)',
+          undefined,
+          'ECONNABORTED'
+        );
       },
     });
     await expect(client.deleteAlarm('42', BOX_A)).rejects.toThrow(

@@ -462,6 +462,12 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
 - Only GETs are retried: at most 2 retries, and only when the pause ends
   within the request's 20 s, with one stderr line. A POST, PATCH, PUT or
   DELETE that gets a 429 is not sent again.
+- A GET that times out, loses its connection (`ECONNRESET`, `EPIPE`) or gets
+  502, 503 or 504 is sent again once, 1 to 2 s later, through the limiter
+  (`retryTransient` in `src/firewalla/client.ts`); a write never is. Tool
+  handlers do not retry on top of that. The error after the last attempt is
+  an `ApiRequestError` carrying `status`, `code` and `attempts`; decide by
+  those, not by its message.
 - The error text starts `Rate limit exceeded` (`Rate limit exceeded (HTTP
   429)` when the API refused the request).
 - Details: "Rate Limiting" in `docs/firewalla-api-reference.md`

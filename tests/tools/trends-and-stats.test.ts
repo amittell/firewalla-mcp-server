@@ -443,7 +443,7 @@ describe('box-scoped getAlarmTrends and getFlowTrends', () => {
     await expect(
       client.getAlarmTrends('30d', undefined, BOX_A)
     ).rejects.toThrow(
-      /Failed to get alarm trends for period 30d: Server error/
+      /Failed to get alarm trends for period 30d: Firewalla API answered 500 Internal Server Error/
     );
     expect(calls.length).toBeGreaterThan(1);
     expect(calls.length).toBeLessThanOrEqual(1 + 4);
@@ -718,7 +718,7 @@ describe('get_flow_trends', () => {
     const body = parse(res);
     expect(body.errorType).toBe('api_error');
     expect(body.message).toMatch(
-      /^Failed to get flow trends: .*Failed to get flow trends for period 30d: Server error/
+      /^Failed to get flow trends: .*Failed to get flow trends for period 30d: Firewalla API answered 500 Internal Server Error/
     );
   });
 });
@@ -804,7 +804,7 @@ describe('getRuleTrends', () => {
   });
 
   it.each([
-    ['fails', () => new HttpStatus(500), 'failed (Server error'],
+    ['fails', () => new HttpStatus(500), 'failed (Firewalla API answered 500'],
     ['returns no points', () => [], 'failed (it returned no points)'],
   ])(
     'counts per UTC day, and says so, when the day read %s',

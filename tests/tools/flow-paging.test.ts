@@ -30,7 +30,6 @@ import {
   StreamingSessionError,
 } from '../../src/utils/streaming-manager.js';
 import { pagingCoverage } from '../../src/utils/paging-coverage.js';
-import { RetryManager } from '../../src/utils/retry-manager.js';
 
 const TOTAL = 1000;
 /** Flow i ends at NOW - i */
@@ -601,7 +600,7 @@ describe('api_requests counts requests sent to the API', () => {
     });
   });
 
-  describe('search_flows retries a failed read once, and counts both attempts', () => {
+  describe('a request that timed out is sent once more, and both are counted', () => {
     const search = async (limit: number, client: FirewallaClient) => {
       const response = await new SearchFlowsHandler().execute(
         { query: 'protocol:tcp', limit },
@@ -610,14 +609,9 @@ describe('api_requests counts requests sent to the API', () => {
       return JSON.parse(response.content[0].text).data;
     };
 
-    beforeEach(() => {
-      // Skip the 1 to 2 s wait before the second attempt
-      jest
-        .spyOn(RetryManager.prototype as any, 'delay')
-        .mockResolvedValue(undefined);
-    });
-
-    it('a first request that timed out, then one that answered', async () => {
+    // The client waits 1 to 2 s on its clock, which here moves only when
+    // the client sleeps
+    it('search_flows: a first request that timed out, then one that answered', async () => {
       const { client, calls } = makeClient({ timeoutAt: 1 });
       const data = await search(100, client);
       expect(data.flows).toHaveLength(100);
@@ -629,15 +623,26 @@ describe('api_requests counts requests sent to the API', () => {
       });
     });
 
-    it('a first page that answered, then a second page that timed out', async () => {
+    it('search_flows: a first page that answered, then a second page that timed out', async () => {
       const { client, calls } = makeClient({ timeoutAt: 2 });
       const data = await search(700, client);
       expect(data.flows).toHaveLength(700);
-      // The second attempt reads the first page from the cache
+      // Only the page that timed out is sent again
       expect(calls.map(call => call.limit)).toEqual([500, 200, 200]);
       expect(data.coverage).toMatchObject({
         api_requests: 3,
-        cached_pages: 1,
+        cached_pages: 0,
+      });
+    });
+
+    it('get_flow_data: a streamed chunk whose second page timed out', async () => {
+      const { client, calls } = makeClient({ timeoutAt: 2 });
+      const chunk = page(await run({ limit: 700 }, client));
+      expect(chunk.ids).toEqual(ids(0, 700));
+      expect(calls.map(call => call.limit)).toEqual([500, 200, 200]);
+      expect(chunk.coverage).toMatchObject({
+        api_requests: 3,
+        cached_pages: 0,
       });
     });
   });

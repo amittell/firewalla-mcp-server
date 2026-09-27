@@ -67,24 +67,6 @@ export class TimeoutError extends Error {
 }
 
 /**
- * Validation error class for immediate parameter/validation failures
- */
-export class ValidationError extends Error {
-  public readonly isValidation = true;
-  public readonly duration: number;
-  public readonly toolName: string;
-
-  constructor(toolName: string, duration: number, originalError: string) {
-    super(
-      `Tool '${toolName}' failed validation: ${originalError}. This is an immediate parameter or configuration error, not a timeout (completed in ${duration}ms).`
-    );
-    this.name = 'ValidationError';
-    this.duration = duration;
-    this.toolName = toolName;
-  }
-}
-
-/**
  * Performance warning class for monitoring
  */
 export class PerformanceWarning extends Error {
@@ -336,7 +318,13 @@ export class TimeoutManager {
 export const globalTimeoutManager = new TimeoutManager();
 
 /**
- * Convenience function for wrapping tool operations with timeout
+ * Runs a tool's operation with a time limit. A TimeoutError when the limit
+ * passes; any other failure is thrown as it came, so its message, and the
+ * HTTP status and error code of an ApiRequestError, reach the tool's error
+ * response. It used to wrap a failure within 50 ms in a ValidationError
+ * saying "This is an immediate parameter or configuration error, not a
+ * timeout", and a later one in "This appears to be a processing error, not
+ * a timeout", which a 503 answered after two attempts is neither.
  */
 export async function withToolTimeout<T>(
   operation: () => Promise<T>,
@@ -353,37 +341,10 @@ export async function withToolTimeout<T>(
     });
   } catch (error) {
     const duration = Date.now() - startTime;
-
-    // Enhanced immediate failure detection
-    if (duration < 50) {
-      // This is likely an immediate validation failure, not a timeout
-      logger.warn(`Immediate validation failure detected`, {
-        tool: toolName,
-        duration_ms: duration,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        error_type: error?.constructor?.name,
-        is_actual_timeout: error instanceof TimeoutError,
-        warning: 'immediate_validation_failure',
-      });
-
-      // Convert immediate failures to ValidationError for clarity
-      if (error instanceof Error && !(error instanceof TimeoutError)) {
-        const validationError = new ValidationError(
-          toolName,
-          duration,
-          error.message
-        );
-        // Keep the original so handlers can still tell error classes apart
-        (validationError as Error & { cause?: unknown }).cause = error;
-        throw validationError;
-      }
-    }
-
-    // Handle actual timeout errors
     if (error instanceof TimeoutError) {
       logger.error(
         `Actual timeout occurred - operation exceeded time limit`,
-        error instanceof Error ? error : undefined,
+        error,
         {
           tool: toolName,
           duration_ms: duration,
@@ -391,35 +352,7 @@ export async function withToolTimeout<T>(
           error_type: 'actual_timeout',
         }
       );
-      throw error; // Re-throw actual timeout errors
     }
-
-    // For other errors that took longer (may be slow validation or processing errors)
-    if (error instanceof Error) {
-      // If it's not immediate and not a timeout, it might be a slow processing error
-      if (duration >= 50 && duration < (customTimeoutMs || 30000)) {
-        const processingError = new Error(
-          `Tool '${toolName}' failed after ${duration}ms: ${error.message}. This appears to be a processing error, not a timeout.`
-        );
-        processingError.name = error.name;
-        processingError.stack = error.stack;
-        (processingError as Error & { cause?: unknown }).cause = error;
-        // Add debugging information as a property
-        (processingError as any).debugInfo = {
-          duration,
-          toolName,
-          originalError: error.message,
-          wasImmediate: false,
-          wasTimeout: false,
-          errorCategory: 'processing_error',
-        };
-        throw processingError;
-      }
-
-      // For any other edge cases, preserve original error
-      throw error;
-    }
-
     throw error;
   }
 }

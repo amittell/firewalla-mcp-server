@@ -26,6 +26,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 import { createHash } from 'crypto';
+import { STATUS_CODES } from 'node:http';
 import { URLSearchParams } from 'url';
 import type {
   FirewallaConfig,
@@ -501,6 +502,117 @@ export class ForbiddenError extends Error {
 }
 
 /**
+ * A request to the MSP API failed. `status` is the HTTP status the API
+ * answered, undefined when no answer came; `code` is axios's error code
+ * (ECONNABORTED for a request whose timeout ran out, ECONNRESET, ...);
+ * `attempts` is how many times the request was sent, 2 when a GET was tried
+ * again (see retryTransient). Code that reacts to a failure reads these, not
+ * the message.
+ */
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+    readonly code?: string,
+    readonly attempts = 1
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
+
+/** Times a GET is sent again after a failure that can pass (see retryTransient) */
+export const MAX_TRANSIENT_RETRIES = 1;
+
+/** The wait before a GET is sent again: this, plus up to as much again at random */
+export const TRANSIENT_RETRY_DELAY_MS = 1000;
+
+/**
+ * The answers a GET is sent again after: a gateway or the API itself was
+ * briefly unavailable. Any other status, 500 included, would fail the same
+ * way again; 429 has its own path (retryRateLimited).
+ */
+const TRANSIENT_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
+
+/**
+ * axios's codes for a GET that got no answer and is sent again: its timeout
+ * ran out (ECONNABORTED, or ETIMEDOUT from the socket), or the connection
+ * was dropped while it was sent (ECONNRESET, EPIPE). A kept-alive socket
+ * that the server closes mid-request fails with ECONNRESET. ECONNREFUSED is
+ * not here: it comes from connecting a new socket, and the next attempt
+ * would connect the same way.
+ */
+const TRANSIENT_CODES: ReadonlySet<string> = new Set([
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'ECONNRESET',
+  'EPIPE',
+]);
+
+/** axios's codes for a request whose timeout ran out */
+const TIMEOUT_CODES: ReadonlySet<string> = new Set([
+  'ECONNABORTED',
+  'ETIMEDOUT',
+]);
+
+/** Whether a failed request might succeed if sent again: see TRANSIENT_STATUSES and TRANSIENT_CODES */
+function isTransientFailure(error: AxiosError): boolean {
+  const status = error.response?.status;
+  if (status !== undefined) {
+    return TRANSIENT_STATUSES.has(status);
+  }
+  return typeof error.code === 'string' && TRANSIENT_CODES.has(error.code);
+}
+
+/** Whether request() failed with no answer because its timeout ran out */
+function isApiTimeout(error: unknown): boolean {
+  return (
+    error instanceof ApiRequestError &&
+    error.status === undefined &&
+    error.code !== undefined &&
+    TIMEOUT_CODES.has(error.code)
+  );
+}
+
+/** Whether request() failed with this HTTP status */
+function hasStatus(error: unknown, status: number): boolean {
+  return error instanceof ApiRequestError && error.status === status;
+}
+
+/** What request() adds to the status line of a failed answer */
+const STATUS_HINTS: Record<number, (url: string) => string> = {
+  400: url => `invalid parameters sent to ${url}`,
+  401: () => 'invalid or expired MSP token',
+  404: url => `${url} does not exist`,
+  429: () => 'too many requests, wait before trying again',
+  500: () => 'the Firewalla API is experiencing issues',
+  502: () =>
+    'a gateway could not reach the Firewalla API server, or the resource ID is invalid',
+  503: () => 'the Firewalla API is temporarily down',
+  504: () => 'a gateway timed out waiting for the Firewalla API',
+};
+
+/**
+ * The message for a request that failed: the HTTP status and its reason,
+ * or axios's error code when no answer came, and the number of attempts when
+ * the request was sent more than once. "Firewalla API answered 503 Service
+ * Unavailable after 2 attempts: the Firewalla API is temporarily down";
+ * "Firewalla API sent no answer after 2 attempts (ECONNABORTED: timeout of
+ * 30000ms exceeded)".
+ */
+function apiFailureMessage(error: AxiosError, attempts: number): string {
+  const after = attempts > 1 ? ` after ${attempts} attempts` : '';
+  const status = error.response?.status;
+  if (status === undefined) {
+    const code = error.code ? `${error.code}: ` : '';
+    return `Firewalla API sent no answer${after} (${code}${error.message})`;
+  }
+  const reason = STATUS_CODES[status] ?? error.response?.statusText ?? '';
+  const hint = STATUS_HINTS[status]?.(error.config?.url ?? 'the API');
+  return `Firewalla API answered ${status}${reason ? ` ${reason}` : ''}${after}${hint ? `: ${hint}` : ''}`;
+}
+
+/**
  * An axios request config carrying the request's rate-limit state from one
  * attempt to the next
  */
@@ -512,8 +624,10 @@ interface RateLimitedConfig extends InternalAxiosRequestConfig {
   rateLimitDeadline?: number;
   /** 429 retries sent so far */
   rateLimitRetries?: number;
+  /** Retries sent so far after a failure that can pass (see retryTransient) */
+  transientRetries?: number;
   /**
-   * Called each time the request goes to the API, 429 retries included. A
+   * Called each time the request goes to the API, retries included. A
    * function because axios copies a plain object in a config, so a counter
    * object would be counted in a copy.
    */
@@ -702,6 +816,8 @@ export class FirewallaClient {
    *   it when the slot is more than RATE_LIMIT_MAX_WAIT_MS away
    * - Log all API requests and responses for debugging
    * - Pause on a 429 and retry a GET (see retryRateLimited)
+   * - Send a GET again once after a timeout, a dropped connection or a
+   *   502, 503 or 504 (see retryTransient)
    * - Transform HTTP error codes into meaningful error messages
    * - Handle authentication and authorization failures
    * - Provide specific guidance for common error scenarios
@@ -784,10 +900,67 @@ export class FirewallaClient {
         if (error.response?.status === 429) {
           return this.retryRateLimited(error);
         }
+        if (this.canRetryTransient(error)) {
+          return this.retryTransient(error);
+        }
 
         return Promise.reject(error);
       }
     );
+  }
+
+  /**
+   * Whether a failed request is a GET that retryTransient sends again: it
+   * failed in a way that can pass (isTransientFailure) and has not been
+   * sent again for that yet. A POST, PUT, PATCH or DELETE is never sent
+   * again: the API may have applied it before the answer was lost.
+   */
+  private canRetryTransient(error: AxiosError): boolean {
+    const config = error.config as RateLimitedConfig | undefined;
+    return (
+      config !== undefined &&
+      config.method?.toUpperCase() === 'GET' &&
+      (config.transientRetries ?? 0) < MAX_TRANSIENT_RETRIES &&
+      isTransientFailure(error)
+    );
+  }
+
+  /**
+   * Sends a GET again after TRANSIENT_RETRY_DELAY_MS plus up to as much
+   * again at random. It goes through the request interceptor like any
+   * request, so the rate limiter releases it and `onSent` counts it in the
+   * read's RequestTrace. When the rate limiter refuses it, it was never sent,
+   * and the failure it was sent again for is thrown instead.
+   *
+   * @private
+   */
+  private async retryTransient(error: AxiosError): Promise<AxiosResponse> {
+    const config = error.config as RateLimitedConfig;
+    const retries = config.transientRetries ?? 0;
+    const waitMs = TRANSIENT_RETRY_DELAY_MS * (1 + Math.random());
+    const failure = error.response?.status ?? error.code ?? 'no answer';
+    process.stderr.write(
+      `API Request failed: ${failure} GET ${config.url}; retrying in ${(waitMs / 1000).toFixed(1)} s (retry ${retries + 1} of ${MAX_TRANSIENT_RETRIES})\n`
+    );
+    await this.clock.sleep(waitMs);
+
+    let sent = false;
+    const retry: RateLimitedConfig = {
+      ...config,
+      transientRetries: retries + 1,
+      onSent: () => {
+        sent = true;
+        config.onSent?.();
+      },
+    };
+    try {
+      return await this.api.request(retry);
+    } catch (retryError) {
+      if (!sent && retryError instanceof RateLimitError) {
+        throw error;
+      }
+      throw retryError;
+    }
   }
 
   /**
@@ -991,8 +1164,9 @@ export class FirewallaClient {
    * GET up to `limit` results from a /v2 list endpoint, at most
    * MAX_API_PAGE_SIZE per request, following next_cursor. The MSP API answers
    * 400 "limit exceeds max allowed value of 500" to a larger limit on
-   * /v2/alarms and /v2/flows. Reports the requests sent to the API (429
-   * retries included; a page from the response cache sends none), the pages
+   * /v2/alarms and /v2/flows. Reports the requests sent to the API (a 429's
+   * retries and a transient failure's retry included; a page from the
+   * response cache sends none), the pages
    * answered from the cache, and why paging stopped (see PagingStopReason).
    * A next_cursor this read already sent stops it, with no cursor returned:
    * following it would fetch the same page again, and the loop would repeat
@@ -1196,52 +1370,25 @@ export class FirewallaClient {
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
-        const statusText = error.response?.statusText;
-        const url = error.config?.url;
-
-        let errorMessage = `API Error (${status || 'unknown'}): ${error.message}`;
-
-        if (status) {
-          switch (status) {
-            case 400:
-              logger.debug('API 400 Error Details:', {
-                url,
-                params: filteredParams,
-                response: error.response?.data,
-              });
-              errorMessage = `Bad Request: Invalid parameters sent to ${url}`;
-              break;
-            case 401:
-              errorMessage =
-                'Authentication failed: Invalid or expired MSP token';
-              break;
-            case 403:
-              throw new ForbiddenError(forbiddenMessage(error));
-            case 404:
-              errorMessage = `Resource not found: ${url} does not exist`;
-              break;
-            case 429:
-              errorMessage =
-                'Rate limit exceeded: Too many requests, please wait before retrying';
-              break;
-            case 500:
-              errorMessage =
-                'Server error: Firewalla API is experiencing issues';
-              break;
-            case 502:
-              errorMessage =
-                'Bad Gateway: Unable to connect to Firewalla API server or invalid resource ID';
-              break;
-            case 503:
-              errorMessage =
-                'Service unavailable: Firewalla API is temporarily down';
-              break;
-            default:
-              errorMessage = `HTTP ${status} ${statusText}: ${error.message}`;
-          }
+        if (status === 403) {
+          throw new ForbiddenError(forbiddenMessage(error));
         }
-
-        throw new Error(errorMessage);
+        if (status === 400) {
+          logger.debug('API 400 Error Details:', {
+            url: error.config?.url,
+            params: filteredParams,
+            response: error.response?.data,
+          });
+        }
+        const attempts =
+          ((error.config as RateLimitedConfig | undefined)?.transientRetries ??
+            0) + 1;
+        throw new ApiRequestError(
+          apiFailureMessage(error, attempts),
+          status,
+          error.code,
+          attempts
+        );
       }
 
       // A 403 from the response interceptor carries its own explanation, and
@@ -3203,7 +3350,11 @@ export class FirewallaClient {
             : `POST ${endpoint} returned 404 although the alarm exists (GET returned it). ${action} needs MSP 2.11.0 or later, and the API's 404 does not say whether the endpoint or the alarm was missing`
         );
       }
-      if (/API Error \(unknown\)|^Request failed:/.test(message)) {
+      // No answer came, or the error did not come from the API's answer
+      if (
+        (error instanceof ApiRequestError && error.status === undefined) ||
+        message.startsWith('Request failed:')
+      ) {
         const check =
           action === 'delete'
             ? 'check with get_specific_alarm, which answers not found once it is gone,'
@@ -3574,9 +3725,7 @@ export class FirewallaClient {
           note: precedence.trim() || undefined,
         });
       } catch (error) {
-        if (!(
-          error instanceof Error && error.message.startsWith('Bad Request')
-        )) {
+        if (!hasStatus(error, 400)) {
           throw error;
         }
       }
@@ -4152,12 +4301,12 @@ export class FirewallaClient {
         );
       } catch (apiError) {
         if (apiError instanceof Error) {
-          if (apiError.message.includes('timeout')) {
+          if (isApiTimeout(apiError)) {
             throw new Error(
-              'Search request timed out. Try reducing the search scope or limit.'
+              `Search request timed out: ${apiError.message}. Try reducing the search scope or limit.`
             );
           }
-          if (apiError.message.includes('400')) {
+          if (hasStatus(apiError, 400)) {
             throw new Error(`Invalid search query: ${apiError.message}`);
           }
         }
@@ -4411,12 +4560,12 @@ export class FirewallaClient {
         } = await this.requestRules(trimmedQuery, params, minHitsTerm));
       } catch (apiError) {
         if (apiError instanceof Error) {
-          if (apiError.message.includes('timeout')) {
+          if (isApiTimeout(apiError)) {
             throw new Error(
-              'Search request timed out. Try reducing the search scope or limit.'
+              `Search request timed out: ${apiError.message}. Try reducing the search scope or limit.`
             );
           }
-          if (apiError.message.includes('400')) {
+          if (hasStatus(apiError, 400)) {
             throw new Error(`Invalid search query: ${apiError.message}`);
           }
         }
@@ -4791,12 +4940,12 @@ export class FirewallaClient {
         };
       } catch (apiError) {
         if (apiError instanceof Error) {
-          if (apiError.message.includes('timeout')) {
+          if (isApiTimeout(apiError)) {
             throw new Error(
-              'Search request timed out. Try reducing the search scope or limit.'
+              `Search request timed out: ${apiError.message}. Try reducing the search scope or limit.`
             );
           }
-          if (apiError.message.includes('400')) {
+          if (hasStatus(apiError, 400)) {
             throw new Error(`Invalid search query: ${apiError.message}`);
           }
         }
@@ -4999,12 +5148,12 @@ export class FirewallaClient {
         }>('GET', `/v2/target-lists`, params);
       } catch (apiError) {
         if (apiError instanceof Error) {
-          if (apiError.message.includes('timeout')) {
+          if (isApiTimeout(apiError)) {
             throw new Error(
-              'Search request timed out. Try reducing the search scope or limit.'
+              `Search request timed out: ${apiError.message}. Try reducing the search scope or limit.`
             );
           }
-          if (apiError.message.includes('400')) {
+          if (hasStatus(apiError, 400)) {
             throw new Error(`Invalid search query: ${apiError.message}`);
           }
         }
