@@ -398,18 +398,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a GET that ran out its timeout, or a 503 that took 20 s, is not sent again,
   while a 503 or a reset that comes back at once is. When a tool gives up,
   its request in flight is cancelled and a request not yet sent is not sent.
-  A POST, PATCH, PUT or DELETE is never sent again, as the API may have
-  applied it. A 429 keeps its own wait; `search_flows` also tried again a 429
-  the client had given up on, and reported the rate limiter's refusal of that
-  attempt in place of the 429. A failed request's error now says what the API
-  answered and how many attempts were made: `Firewalla API answered 503
-  Service Unavailable after 2 attempts: the Firewalla API is temporarily
-  down`, or `Firewalla API sent no answer after 2 attempts (ECONNABORTED:
-  timeout of 5000ms exceeded)` with `API_TIMEOUT=5000`; a 400 says `Firewalla
-  API answered 400 Bad Request`, where it said `Bad Request: Invalid
-  parameters sent to ...`. Tools no longer wrap a failure in "This is an
-  immediate parameter or configuration error, not a timeout" or "This appears
-  to be a processing error, not a timeout".
+  A write tool that gives up says what became of its write, where it said
+  only that it timed out: a write still waiting for the rate limiter "was not
+  sent, so nothing was changed"; one sent and not answered may have reached
+  Firewalla, since cancelling it does not undo it, so the error says "The
+  outcome is unknown: Firewalla may have applied the change" and names the
+  read to check with before trying again (`get_network_rules` for the rule
+  tools, `get_target_lists` for the target-list tools, `get_device_status`
+  for `rename_device`). A POST, PATCH, PUT or DELETE is never sent again, as
+  the API may have applied it. A 429 keeps its own wait; `search_flows` also
+  tried again a 429 the client had given up on, and reported the rate
+  limiter's refusal of that attempt in place of the 429. A failed request's
+  error now says what the API answered and how many attempts were made:
+  `Firewalla API answered 503 Service Unavailable after 2 attempts: the
+  Firewalla API is temporarily down`, or `Firewalla API sent no answer after
+  2 attempts (ECONNABORTED: timeout of 5000ms exceeded)` with
+  `API_TIMEOUT=5000`; a 400 says `Firewalla API answered 400 Bad Request`,
+  where it said `Bad Request: Invalid parameters sent to ...`. Tools no
+  longer wrap a failure in "This is an immediate parameter or configuration
+  error, not a timeout" or "This appears to be a processing error, not a
+  timeout".
 - The client's response cache holds at most `CACHE_MAX_ENTRIES` responses
   (default 1000); when it is full, expired entries go first, then the least
   recently used. It had no limit, and an entry was removed only when its own
