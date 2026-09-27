@@ -27,33 +27,12 @@ import { safeUnixToISOString } from '../utils/timestamp.js';
 export type OptimizableObject = Record<string, unknown>;
 
 /**
- * Default truncation limits for the rule summary
+ * Truncation limits for the rule summary
  */
-const DEFAULT_TRUNCATION_LIMITS = {
+const TRUNCATION_LIMITS = {
   TARGET_VALUE: 60,
   NOTES: 60,
 } as const;
-
-/**
- * Current truncation limits (configurable)
- */
-export let TRUNCATION_LIMITS = { ...DEFAULT_TRUNCATION_LIMITS };
-
-/**
- * Configure truncation limits for different deployment scenarios
- */
-export function setTruncationLimits(
-  limits: Partial<typeof DEFAULT_TRUNCATION_LIMITS>
-): void {
-  TRUNCATION_LIMITS = { ...DEFAULT_TRUNCATION_LIMITS, ...limits };
-}
-
-/**
- * Reset truncation limits to defaults
- */
-export function resetTruncationLimits(): void {
-  TRUNCATION_LIMITS = { ...DEFAULT_TRUNCATION_LIMITS };
-}
 
 /**
  * Base response interface with optional pagination metadata

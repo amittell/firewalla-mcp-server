@@ -261,9 +261,8 @@ describe('a filter set to false or null', () => {
 });
 
 describe('geographic alarm search and statistics', () => {
-  // searchAlarmsByGeography sends the query `*` and getGeographicStatistics
-  // `*` when no time range is given; neither handler is registered, so no
-  // tool reaches them
+  // Both had handlers that were never registered; the handlers are removed,
+  // and neither name is a tool
   it.each(['search_alarms_by_geography', 'get_geographic_statistics'])(
     '%s is not a registered tool',
     name => {

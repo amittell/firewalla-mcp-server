@@ -9,9 +9,7 @@ This guide provides comprehensive query syntax examples and patterns for advance
 - [Logical Operators](#logical-operators)
 - [Field-Specific Queries](#field-specific-queries)
 - [Tool-Specific Query Examples](#tool-specific-query-examples)
-- [Geographic Query Patterns](#geographic-query-patterns)
 - [Performance-Optimized Queries](#performance-optimized-queries)
-- [Complex Correlation Queries](#complex-correlation-queries)
 - [Common Query Patterns](#common-query-patterns)
 - [Troubleshooting Query Issues](#troubleshooting-query-issues)
 
@@ -356,44 +354,6 @@ search_target_lists query:"category:social_media AND target_count:>1000"
 search_target_lists query:"owner:custom AND last_updated:>NOW-7d"
 ```
 
-## Geographic Query Patterns
-
-### Multi-Country Analysis
-
-```bash
-# High-risk country analysis
-search_flows_by_geography query:"blocked:true" geographic_filters:"{countries:[\"China\",\"Russia\",\"Iran\"],min_risk_score:0.8}"
-
-# Continental traffic analysis
-search_flows_by_geography query:"bytes:>10000000" geographic_filters:"{continents:[\"Asia\",\"Europe\"]}"
-
-# Regional threat hunting
-search_alarms_by_geography query:"severity:>=medium" geographic_filters:"{regions:[\"Eastern Europe\",\"Middle East\"]}"
-```
-
-### Infrastructure-Based Queries
-
-```bash
-# Cloud provider analysis
-search_flows_by_geography query:"protocol:tcp" geographic_filters:"{hosting_providers:[\"amazon\",\"cloudflare\"],exclude_cloud:false}"
-
-# ASN-specific analysis
-search_flows_by_geography query:"blocked:true" geographic_filters:"{asns:[\"AS4134\",\"AS8075\"]}"
-
-# VPN/Proxy detection
-search_flows_by_geography query:"bytes:>50000000" geographic_filters:"{exclude_vpn:true,exclude_cloud:true}"
-```
-
-### Risk-Based Geographic Filtering
-
-```bash
-# High-risk geographic analysis
-search_alarms_by_geography query:"severity:high" geographic_filters:"{high_risk_countries:true,threat_analysis:true}"
-
-# Geographic risk scoring
-search_flows_by_geography query:"duration:>300" geographic_filters:"{min_risk_score:0.9}"
-```
-
 ## Performance-Optimized Queries
 
 ### Time-Bounded Queries
@@ -434,28 +394,6 @@ search_flows query:"severity:high" limit:500
 
 # Use pagination for large datasets
 search_flows query:"severity:high" limit:500 cursor:"eyJ0aW1l..."
-```
-
-## Complex Correlation Queries
-
-### Cross-Reference Examples
-
-```bash
-# Security incident correlation
-search_cross_reference primary_query:"blocked:true AND country:China" secondary_queries:"[\"severity:high\",\"type:malware_detection\"]" correlation_field:"source_ip" limit:1000
-
-# Network behavior correlation
-search_enhanced_cross_reference primary_query:"bytes:>100000000" secondary_queries:"[\"device_type:laptop\",\"application:torrent\"]" correlation_params:"{correlationFields:[\"device_ip\",\"application\"],correlationType:\"AND\"}" limit:500
-```
-
-### Multi-Entity Analysis
-
-```bash
-# Device and flow correlation
-search_enhanced_cross_reference primary_query:"online:false" secondary_queries:"[\"blocked:true\",\"severity:high\"]" correlation_params:"{correlationFields:[\"device_ip\",\"source_ip\"],temporalWindow:{windowSize:30,windowUnit:\"minutes\"}}" limit:200
-
-# Geographic and security correlation
-search_enhanced_cross_reference primary_query:"country:China OR country:Russia" secondary_queries:"[\"malware_detected:true\",\"intrusion_attempt:true\"]" correlation_params:"{correlationFields:[\"source_ip\",\"country\"],networkScope:{includeSubnets:true}}" limit:300
 ```
 
 ## Common Query Patterns

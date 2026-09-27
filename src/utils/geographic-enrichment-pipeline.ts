@@ -540,23 +540,3 @@ export async function enrichWithGeographicData<T extends Record<string, any>>(
   const pipeline = getGlobalEnrichmentPipeline(geoCache);
   return pipeline.enrichObject(obj, ipFields);
 }
-
-/**
- * Convenience function for batch enriching arrays of objects
- */
-export async function enrichArrayWithGeographicData<
-  T extends Record<string, any>,
->(objects: T[], geoCache: GeographicCache, ipFields?: string[]): Promise<T[]> {
-  if (objects.length === 0) {
-    return objects;
-  }
-
-  const pipeline = getGlobalEnrichmentPipeline(geoCache);
-
-  // Process objects in parallel for efficiency
-  const enrichedObjects = await Promise.all(
-    objects.map(async obj => pipeline.enrichObject(obj, ipFields))
-  );
-
-  return enrichedObjects;
-}

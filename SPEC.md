@@ -322,8 +322,6 @@ interface GetDeviceStatusParams {
 - `get_device_status`: requires `limit` 
 - `get_bandwidth_usage`: parameter renamed from `top` to `limit`, required
 - `get_network_rules`: requires `limit`
-- `get_most_active_rules`: requires `limit`
-- `get_recent_rules`: requires `limit`
 - All search tools: require both `query` and `limit`
 
 **Error Response for Missing Limit:**

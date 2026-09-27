@@ -303,31 +303,6 @@ curl -I "https://$FIREWALLA_MSP_ID" \
 // Then use returned cursor for next page
 ```
 
-#### 4. Split Complex Queries
-```javascript
-// ❌ Complex correlation - may timeout
-search_enhanced_cross_reference({
-  primary_query: "protocol:tcp",
-  secondary_queries: ["severity:high", "online:false"],
-  correlation_params: {
-    correlationFields: ["source_ip", "destination_ip", "country", "asn"],
-    correlationType: "AND"
-  },
-  limit: 5000
-})
-
-// ✅ Simplified correlation
-search_enhanced_cross_reference({
-  primary_query: "protocol:tcp AND timestamp:>NOW-1h",
-  secondary_queries: ["severity:high"],
-  correlation_params: {
-    correlationFields: ["source_ip"],
-    correlationType: "AND"
-  },
-  limit: 1000
-})
-```
-
 ### Network Timeouts
 
 **Symptom**: `"Network timeout"` or `"ETIMEDOUT"` error
@@ -355,7 +330,6 @@ time curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
 **Common Scenarios**:
 - Bandwidth analysis on > 1,000 devices
 - Complex geographic searches
-- Large-scale cross-reference operations
 
 **Optimization Strategies**:
 

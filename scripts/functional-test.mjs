@@ -44,7 +44,7 @@ const record = (phase, name, status, note = '') => {
 };
 
 function parsePayload(res) {
-  // unified-response wraps JSON in content[0].text
+  // a tool response carries its JSON in content[0].text
   const first = res.content?.[0];
   if (first?.type !== 'text') return {};
   try { return JSON.parse(first.text); } catch { return { raw: first.text }; }

@@ -7,7 +7,6 @@ This guide provides comprehensive documentation on limit configurations, perform
 - [Overview](#overview)
 - [Limit Configuration Philosophy](#limit-configuration-philosophy)
 - [Tool-Specific Limits](#tool-specific-limits)
-- [Performance Tier System](#performance-tier-system)
 - [Limit Rationale by Operation Type](#limit-rationale-by-operation-type)
 - [Historical Context: Resolved Discrepancies](#historical-context-resolved-discrepancies)
 - [Performance Optimization Strategies](#performance-optimization-strategies)
@@ -45,7 +44,6 @@ export const STANDARD_LIMITS = {
   SEARCH_FLOWS: 1000,          // Flow search operations
   SEARCH_ALARMS: 1000,         // Alarm search operations
   BANDWIDTH_ANALYSIS: 500,     // Bandwidth-intensive operations
-  CROSS_REFERENCE: 2000,       // Complex correlation operations
   RULES_SUMMARY: 2000,         // Rule analysis operations
   STATISTICS: 100,             // Statistical operations (fixed results)
 }
@@ -55,7 +53,7 @@ export const STANDARD_LIMITS = {
 
 ### Basic Data Retrieval Tools (Limit: 1000)
 
-**Tools**: `get_active_alarms`, `get_device_status`, `get_flow_data`, `get_network_rules`, `get_target_lists`, `get_most_active_rules`, `get_recent_rules`
+**Tools**: `get_active_alarms`, `get_device_status`, `get_flow_data`, `get_network_rules`, `get_target_lists`
 
 **Rationale**:
 - Simple API calls with minimal server-side processing
@@ -94,22 +92,6 @@ search_flows query:"severity:high AND protocol:tcp" limit:800
 search_alarms query:"(severity:high OR severity:critical) AND source_ip:192.168.*" limit:1000
 ```
 
-### Geographic Search Operations (Limit: 1000)
-
-**Tools**: `search_flows_by_geography`, `search_alarms_by_geography`, `get_geographic_statistics`
-
-**Rationale**:
-- Geographic data requires additional IP geolocation processing
-- Results include enriched geographic metadata
-- Consistent with standard search operations
-- Geographic filtering often naturally limits result sets
-
-**Performance Characteristics**:
-- Average response time: 800-2000ms
-- Memory usage: 30-150MB per request (includes geo data caching)
-- Network bandwidth: 3-15MB per request
-- CPU usage: Medium-High (due to geographic enrichment)
-
 ### Bandwidth Analysis Operations (Limit: 500)
 
 **Tools**: `get_bandwidth_usage`
@@ -134,32 +116,6 @@ const memoryUsageEstimate = {
   500_devices: '100MB',   // Optimal limit
   1000_devices: '250MB',  // Causes performance issues
   2000_devices: '500MB+'  // Risk of memory exhaustion
-}
-```
-
-### Cross-Reference Operations (Limit: 2000)
-
-**Tools**: `search_cross_reference`, `search_enhanced_cross_reference`
-
-**Rationale**:
-- Cross-reference operations correlate data across multiple entities
-- Higher limits provide better correlation analysis
-- Complex algorithms require more data points for accuracy
-- Results are highly valuable for security analysis
-
-**Performance Characteristics**:
-- Average response time: 2000-5000ms
-- Memory usage: 100-300MB per request
-- Network bandwidth: 10-30MB per request
-- CPU usage: Very High (correlation algorithms)
-
-**Correlation Effectiveness by Limit**:
-```typescript
-const correlationQuality = {
-  500_results: 'Basic patterns detectable',
-  1000_results: 'Good pattern recognition',
-  2000_results: 'Excellent correlation analysis',  // Current limit
-  5000_results: 'Comprehensive but slow'
 }
 ```
 
@@ -211,30 +167,6 @@ const correlationQuality = {
 - Network bandwidth: 0.5-2MB per request
 - CPU usage: Low
 
-## Performance Tier System
-
-The server categorizes tools into performance tiers based on resource usage:
-
-### Tier 1: Simple Operations (Limit: 1000)
-**Tools**: Basic data retrieval, standard searches
-**Characteristics**: Fast API calls, minimal processing
-**Response Time Target**: <1 second
-
-### Tier 2: Moderate Operations (Limit: 500)
-**Tools**: Bandwidth analysis, geographic searches
-**Characteristics**: Data aggregation, enrichment processing
-**Response Time Target**: <3 seconds
-
-### Tier 3: Complex Operations (Limit: 200-2000)
-**Tools**: Cross-reference analysis, statistical summaries
-**Characteristics**: Advanced algorithms, correlation analysis
-**Response Time Target**: <5 seconds
-
-### Tier 4: Statistical Operations (Limit: 100)
-**Tools**: Summary statistics, trend analysis
-**Characteristics**: Aggregated results, minimal data volume
-**Response Time Target**: <1 second
-
 ## Limit Rationale by Operation Type
 
 ### Security Operations
@@ -242,7 +174,6 @@ The server categorizes tools into performance tiers based on resource usage:
 **High Priority**: Security analysis requires comprehensive data
 - `get_active_alarms`: 1000 (covers typical alert volumes)
 - `search_alarms`: 1000 (sufficient for threat investigation)
-- `search_enhanced_cross_reference`: 2000 (security correlation needs more data)
 
 ### Network Analysis
 
@@ -278,17 +209,12 @@ Before the centralized limits system, the server had significant inconsistencies
    - **After**: All search tools standardized to 1000
    - **Impact**: Reduced memory usage by 60-80% for alarm searches
 
-2. **Geographic Tools Mismatch**:
-   - **Before**: `search_flows_by_geography` (1000), `search_alarms_by_geography` (5000)
-   - **After**: Both standardized to 1000
-   - **Impact**: Consistent performance across geographic operations
-
-3. **Rules Summary Over-limit**:
+2. **Rules Summary Over-limit**:
    - **Before**: `get_network_rules_summary` (10000)
    - **After**: Reduced to 2000
    - **Impact**: Response time improved from 15–30 seconds to 3–5 seconds
 
-4. **Device Search Variation**:
+3. **Device Search Variation**:
    - **Before**: `search_devices` (2000)
    - **After**: Standardized to 1000
    - **Impact**: Improved consistency with other search operations

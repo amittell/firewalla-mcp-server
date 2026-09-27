@@ -1,8 +1,7 @@
 /**
  * Response standardization utilities
  *
- * Provides consistent response formatting across all MCP tools while maintaining
- * backward compatibility through configuration-based format selection.
+ * Provides consistent response formatting across all MCP tools.
  */
 
 import type {
@@ -12,7 +11,6 @@ import type {
   SearchMetadata,
   PaginationMetadata,
   StatisticalMetadata,
-  ResponseCategory,
 } from '../types.js';
 
 /**
@@ -140,110 +138,5 @@ export class ResponseStandardizer {
     }
 
     return 'simple';
-  }
-}
-
-// BackwardCompatibilityLayer removed - greenfield project uses standard responses only
-
-/**
- * Utility functions for response format detection and conversion
- */
-export class ResponseFormatUtils {
-  /**
-   * Detect the category of response based on content and tool name
-   *
-   * @param toolName - Name of the tool
-   * @param responseData - Response data to analyze
-   * @returns Detected response category
-   */
-  static detectResponseCategory(
-    toolName: string,
-    responseData: any
-  ): ResponseCategory {
-    // Correlation tools pattern
-    if (
-      toolName.includes('correlation') ||
-      toolName.includes('cross_reference')
-    ) {
-      return 'correlation';
-    }
-
-    // Search tools pattern (check after correlation to avoid conflicts)
-    if (toolName.startsWith('search_')) {
-      return 'search';
-    }
-
-    // Statistical tools pattern
-    if (
-      toolName.includes('bandwidth') ||
-      toolName.includes('statistics') ||
-      toolName.includes('trends') ||
-      toolName.includes('most_active')
-    ) {
-      return 'statistical';
-    }
-
-    // Paginated tools pattern (has cursor or pagination metadata)
-    if (
-      responseData?.next_cursor !== undefined ||
-      responseData?.cursor !== undefined ||
-      responseData?.pagination !== undefined
-    ) {
-      return 'paginated';
-    }
-
-    // Default to search category for unknown patterns
-    return 'search';
-  }
-
-  /**
-   * Check if a response follows the standard format
-   *
-   * @param response - Response to check
-   * @param category - Expected response category
-   * @returns True if response follows standard format
-   */
-  static isStandardFormat(response: any, category: ResponseCategory): boolean {
-    const hasResults = Array.isArray(response.results);
-    const hasCount = typeof response.count === 'number';
-    const hasExecutionTime = typeof response.execution_time_ms === 'number';
-
-    const baseStandard = hasResults && hasCount && hasExecutionTime;
-
-    switch (category) {
-      case 'search':
-        return (
-          baseStandard &&
-          typeof response.query_executed === 'string' &&
-          typeof response.entity_type === 'string'
-        );
-
-      case 'paginated':
-        return (
-          baseStandard &&
-          response.pagination !== undefined &&
-          typeof response.data_source === 'string'
-        );
-
-      case 'statistical':
-        return (
-          baseStandard &&
-          response.analysis !== undefined &&
-          typeof response.analysis.period === 'string'
-        );
-
-      case 'correlation':
-        return (
-          response.primary !== undefined &&
-          Array.isArray(response.correlations) &&
-          response.correlation_summary !== undefined
-        );
-
-      case 'status':
-        return baseStandard; // Simple status responses just need basic fields
-
-      default:
-        return false;
-    }
   }
 }

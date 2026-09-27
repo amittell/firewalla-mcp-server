@@ -463,9 +463,7 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
   within the request's 20 s, with one stderr line. A POST, PATCH, PUT or
   DELETE that gets a 429 is not sent again.
 - The error text starts `Rate limit exceeded` (`Rate limit exceeded (HTTP
-  429)` when the API refused the request). `ErrorClassifier` in
-  `src/validation/error-classification.ts` classifies that as a rate-limit
-  error, though nothing in `src/` calls it.
+  429)` when the API refused the request).
 - Details: "Rate Limiting" in `docs/firewalla-api-reference.md`
 
 ### Monitoring

@@ -7,7 +7,6 @@ This document provides comprehensive mapping information between user-facing fie
 - [Overview](#overview)
 - [Severity Field Conversion](#severity-field-conversion)
 - [Field Mappings by Entity Type](#field-mappings-by-entity-type)
-- [Common Correlation Fields](#common-correlation-fields)
 - [Supported Operators](#supported-operators)
 - [Type Conversions](#type-conversions)
 - [Example Queries](#example-queries)
@@ -138,29 +137,6 @@ User-facing fields for target list data:
 | `owner` | `owner` | List owner | `admin`, `user123` |
 | `target_count` | `targets.length` | Number of targets | Numeric count |
 | `last_updated` | `lastUpdated` | Last update time | Unix timestamp |
-
-## Common Correlation Fields
-
-These fields can be used for cross-reference searches between different entity types:
-
-### Universal Fields
-- `device_ip` - Available in flows, alarms, devices
-- `device_id` - Available in flows, alarms, devices
-- `protocol` - Available in flows, alarms, rules
-- `timestamp` - Available in flows, alarms, rules
-- `gid` - Available in flows, alarms, rules, devices
-
-### Network Fields
-- `source_ip` - Available in flows, alarms
-- `destination_ip` - Available in flows, alarms
-- `port` - Available in flows, alarms, rules
-- `subnet` - Available in flows, alarms, devices
-
-### Geographic Fields
-- `country` - Available in flows, alarms
-- `continent` - Available in flows, alarms
-- `asn` - Available in flows, alarms
-- `organization` - Available in flows, alarms
 
 ## Supported Operators
 
