@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `oldest_ts` and `newest_ts`, the oldest and newest `ts` among the flows the
   API returned (Unix seconds; `oldest` and `newest` give them as ISO
   strings), `api_requests` (the requests sent to the API, which count against
-  its 100 per 5 minutes, 429 retries included; a page answered from the
+  its 100 per 5 minutes, retries after a 429, a timeout, a dropped
+  connection or a 502, 503 or 504 included; a page answered from the
   client's response cache sends none), `cached_pages` (the pages answered
   from that cache), and why paging stopped, `stopped_reason`:
   `limit_reached`, `no_more_pages`, `repeated_cursor` or `empty_page`.
@@ -374,13 +375,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and 413. A request without a session ID, other than `initialize`, and a
   session ID that is not a UUID v4 still get 400.
 - `search_flows` counts the requests of both attempts in
-  `coverage.api_requests`. The tool tries a read again when the first attempt
-  fails with a timeout or a network error, and each attempt counted its own
-  requests, so `coverage` gave only the second attempt's, while the first
-  attempt's requests had counted against the API's 100 per 5 minutes too. A
-  first request that timed out and a second that answered reported
-  `api_requests: 1`; they now report 2. `cached_pages` counts both attempts
-  too.
+  `coverage.api_requests`. A read is tried again once after a timeout, a
+  dropped connection or HTTP 502, 503 or 504 (see the next entry), and each
+  of the tool's two attempts counted its own requests, so `coverage` gave
+  only the second attempt's, while the first attempt's requests had counted
+  against the API's 100 per 5 minutes too. A first request that timed out and
+  a second that answered reported `api_requests: 1`; they now report 2.
+- Every read is tried again once, 1 to 2 s later, after a timeout
+  (`ECONNABORTED`, `ETIMEDOUT`), a dropped connection (`ECONNRESET`, `EPIPE`)
+  or HTTP 502, 503 or 504. Only `search_flows` tried a read again, deciding
+  by words in the error message, and every failure reached it wrapped in a
+  message that said "not a timeout", so every failure matched "timeout": with
+  the HTTP layer stubbed, a first request answered 400, 401, 403, 404 or 500
+  was sent a second time, while `get_flow_data`, `get_active_alarms`,
+  `get_device_status` and the other reads failed on the first 503. The client
+  now sends the GET again itself, through the rate limiter, and the retry
+  counts in `coverage.api_requests`. A POST, PATCH, PUT or DELETE is never
+  sent again, as the API may have applied it. A 429 keeps its own wait;
+  `search_flows` also tried again a 429 the client had given up on, and
+  reported the rate limiter's refusal of that attempt in place of the 429. A
+  failed request's error now says what the API answered and how many attempts
+  were made: `Firewalla API answered 503 Service Unavailable after 2
+  attempts: the Firewalla API is temporarily down`, or `Firewalla API sent no
+  answer after 2 attempts (ECONNABORTED: timeout of 30000ms exceeded)`; a 400
+  says `Firewalla API answered 400 Bad Request`, where it said `Bad Request:
+  Invalid parameters sent to ...`. Tools no longer wrap a failure in "This is
+  an immediate parameter or configuration error, not a timeout" or "This
+  appears to be a processing error, not a timeout".
 - The client's `getSpecificAlarm` checks the alarm ID before it lists the
   boxes. Called without a gid and without `FIREWALLA_BOX_ID`, it sent
   `GET /v2/boxes` and only then refused an ID that cannot be a path segment,

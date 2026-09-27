@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
+  ApiRequestError,
   BoxSelectionError,
   FirewallaClient,
 } from '../../src/firewalla/client.js';
@@ -308,8 +309,9 @@ describe('getRuleTrends', () => {
     (client as any).request = jest.fn(
       async (_method: string, endpoint: string) => {
         if (endpoint === '/v2/trends/rules') {
-          throw new Error(
-            'Bad Request: Invalid parameters sent to /v2/trends/rules'
+          throw new ApiRequestError(
+            'Firewalla API answered 400 Bad Request: invalid parameters sent to /v2/trends/rules',
+            400
           );
         }
         return {
