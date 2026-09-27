@@ -40,6 +40,7 @@ const NAMES = [
   'Café TV',
   '客厅电视',
   'Büro 🖨️ printer',
+  'Alex’s MacBook Air',
   'plain',
 ];
 
@@ -121,6 +122,8 @@ const CASES: Array<[string, string]> = [
   ['*Café*', 'Café TV'],
   ['*客厅*', '客厅电视'],
   ['*🖨️*', 'Büro 🖨️ printer'],
+  // The U+2019 apostrophe device names in live alarms carry
+  ['*Alex’s*', 'Alex’s MacBook Air'],
 ];
 
 describe('wildcard values with any text are matched on the client', () => {
