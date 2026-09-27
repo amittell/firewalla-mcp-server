@@ -184,6 +184,61 @@ describe('the response cache', () => {
   );
 });
 
+describe('eviction from a full cache', () => {
+  /** A flow read of one device: its coverage */
+  const readFlows = async (client: FirewallaClient, id: string) =>
+    (await client.getFlowData(`device.id:${id}`, undefined, undefined, 10))
+      .coverage;
+
+  it('drops an expired entry before the least recently used, and keeps the one written', async () => {
+    // Cap 3: rules A, a flow page (15 s), rules B; 20 s later the flow page
+    // has expired, so writing rules C drops it, not A, the least recently
+    // used
+    const { client, sent } = makeClient({ cacheMaxEntries: 3 });
+    await readRules(client, 'A');
+    now += 1000;
+    await readFlows(client, 'f');
+    now += 1000;
+    await readRules(client, 'B');
+    now += 20_000;
+    await readRules(client, 'C');
+    expect(cacheSize(client)).toBe(3);
+    const before = sent.length;
+    await readRules(client, 'A');
+    await readRules(client, 'C');
+    expect(sent).toHaveLength(before);
+  });
+
+  it('does not scan a full cache with nothing expired on every write', async () => {
+    // Every scan read all entries: 1.9 ms per write at 100,000
+    const { client } = makeClient({ cacheMaxEntries: 50 });
+    const scans = jest.spyOn(client as any, 'dropExpiredCache');
+    for (let i = 0; i < 200; i++) {
+      await readRules(client, i);
+    }
+    expect(cacheSize(client)).toBe(50);
+    // Only the first write's sweep, the one due every minute
+    expect(scans).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds one entry, the last written, with a cap of 1', async () => {
+    const { client } = makeClient({ cacheMaxEntries: 1 });
+    expect(await readFlows(client, 'a')).toMatchObject({ api_requests: 1 });
+    expect(await readFlows(client, 'b')).toMatchObject({ api_requests: 1 });
+    expect(cacheSize(client)).toBe(1);
+    expect(await readFlows(client, 'b')).toMatchObject({
+      api_requests: 0,
+      cached_pages: 1,
+    });
+    // a was evicted to make room: sent again, not counted as cached
+    expect(await readFlows(client, 'a')).toMatchObject({
+      api_requests: 1,
+      cached_pages: 0,
+    });
+    expect(cacheSize(client)).toBe(1);
+  });
+});
+
 describe('CACHE_MAX_ENTRIES', () => {
   const saved = process.env.CACHE_MAX_ENTRIES;
 
@@ -200,6 +255,8 @@ describe('CACHE_MAX_ENTRIES', () => {
     expect(getConfig().cacheMaxEntries).toBe(1000);
     process.env.CACHE_MAX_ENTRIES = '250';
     expect(getConfig().cacheMaxEntries).toBe(250);
+    process.env.CACHE_MAX_ENTRIES = '1';
+    expect(getConfig().cacheMaxEntries).toBe(1);
     process.env.CACHE_MAX_ENTRIES = '0';
     expect(() => getConfig()).toThrow(/CACHE_MAX_ENTRIES must be at least 1/);
   });
