@@ -1317,6 +1317,20 @@ The official docs do not cover the points below. Each was measured against a liv
 - **Free text matches nothing on rules** (2026-09-26): of 98 rules, one had a given word in its target value, and `/v2/rules?query=<that word>` returned 0 rules.
 - **`id:<rule id>` works on rules**, though it is not a documented rule qualifier. On `/v2/rules`, `id:<box gid>:<n>` alone or with `box.id:<box gid>`, with or without `limit=1`, returned just that rule (count 1; the box had 61 other rules). The status check in `pause_rule`, `resume_rule` and `delete_rule` uses it, and it matches the returned rule's `id` instead of taking the first result.
 - **`groupBy` returns one row per group with the group's total.** On `/v2/alarms`, `groupBy=status` returned `{status, count}` rows, `type` returned `{type, count}` and `box` returned `{gid, count}`; on `/v2/flows`, `box` rows also carried `device`, `download`, `upload` and `total`. The rows have no `ts`, and `count` is the number of matching items in the query window, not limited by `limit`: with `limit=10`, a box's row counted tens of thousands of blocked flows. The row totals agreed across `status`, `type` and `box`. A plain alarm item also carries `count: 1`.
+- **A quoted free-text phrase with a colon is refused** (2026-09-27, GET with `limit=1`): the API answers it with HTTP 400, while it takes a quoted colon inside a field value. Brackets make no difference.
+
+  | endpoint | query | status |
+  | --- | --- | --- |
+  | flows | `"show ts:[1 TO 2]"` | 400 |
+  | flows | `"a:b"` | 400 |
+  | flows | `'a:b'` | 400 |
+  | alarms | `"a:b"` | 400 |
+  | flows | `"show ts 1 TO 2"` | 200 |
+  | flows | `"a[b]"` | 200 |
+  | flows | `domain:"a:b"` | 200 |
+  | flows | `device.name:"x:y"` | 200 |
+  | alarms | `device.name:"x:y"` | 200 |
+
 - **Parentheses match nothing**: `(type:1 OR type:10) box.id:<gid>` and `(type:1 OR type:10) AND box.id:<gid>` returned no alarms, where `type:1,10 box.id:<gid>` did; on 2026-09-26, `(region:US OR region:CN)` with other terms returned 0 flows. `type:1 OR type:10 box.id:<gid>` returned the same alarms as `type:1,10 box.id:<gid>` only because the repeated `type` is OR and every one of those alarms has "or" in its text (see above).
 - **`/v2/alarms` returns archived alarms too** unless the query names a status: in the default 30-day window, `groupBy=status` counted active (`status:1`) and archived (`status:2`) alarms together. `get_active_alarms` adds `status:1` unless the query names a status.
 
@@ -1327,7 +1341,7 @@ The official docs do not cover the points below. Each was measured against a liv
 - `NOT` becomes the `-` prefix: `region:US AND NOT protocol:tcp` is sent as `region:US -protocol:tcp`. `NOT` of an `OR` excludes each term: `NOT (region:US OR region:CN)` is sent as `-region:US -region:CN` (measured above: each exclusion holds). `NOT` of a comparison is sent as the opposite comparison, the form the official grammar documents: `NOT total:>1MB` is sent as `total:<=1MB`, which matched the same flows as `-total:>1MB`.
 - A relative time is sent as Unix seconds: `ts:>1h` becomes `ts:>` the time an hour before the request, and so do `s`, `m`, `d` and `w` (`ts:<=7d`).
 - A lower and an upper bound on one field become one range: `ts:>=a AND ts:<=b` is sent as `ts:a-b` (measured equal: 197 alarms either way). A range includes its ends, so a pair with a strict bound (`ts:>a AND ts:<b`) is refused, with the inclusive range as the suggestion.
-- A query that has no form in this grammar is refused with a validation error before anything is sent: an `OR` between different fields (`region:US OR category:social`), `NOT` over an `AND`, the exclusion of free text, a wildcard or a range, two other conditions on one field (the API would read them as either), `[low TO high]` range syntax (the API's ranges are `field:low-high`, which is what the error suggests), a `box.id` other than the box the request is scoped to (the API would read the two as either box), and an empty phrase `""`, which has no text to find.
+- A query that has no form in this grammar is refused with a validation error before anything is sent: an `OR` between different fields (`region:US OR category:social`), `NOT` over an `AND`, the exclusion of free text, a wildcard or a range, two other conditions on one field (the API would read them as either), `[low TO high]` range syntax (the API's ranges are `field:low-high`, which is what the error suggests), a `box.id` other than the box the request is scoped to (the API would read the two as either box), an empty phrase `""`, which has no text to find, and, on `/v2/alarms` and `/v2/flows`, a quoted free-text phrase with a colon, which the API answers with 400 (see above; the error suggests the phrase without its colon, or putting it in a field as in `domain:"a:b"`).
 - The error for an `OR` or `NOT` the API cannot run lists one query per disjunct of the query's disjunctive normal form, in API form, whose results together are the query's: `region:US OR (category:social AND status:blocked)` suggests `region:US` and `category:social status:blocked`, and `NOT (action:block AND status:paused)` suggests `-action:block` and `-status:paused`. Disjuncts that differ only in one field's value are merged into a comma list. There are no suggestions when a disjunct has no API form of its own, or past 64 disjuncts.
 - Lowercase `and`, `or` and `not` stay words, as the API reads them. A query already in this form (spaces, commas, `-`) is sent unchanged.
 - A single-quoted value is sent in double quotes, the quotes the grammar documents: `'rock AND roll'` as `"rock AND roll"` and `name:'Home Office'` as `name:"Home Office"`. A single quote right after a letter, digit or underscore is an apostrophe and is sent as it is (`name:Alex's`).

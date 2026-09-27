@@ -1080,6 +1080,54 @@ export function toMspQuery(query: string): string {
 }
 
 /**
+ * Refuses a query for /v2/flows or /v2/alarms with a quoted free-text
+ * phrase that holds a colon. The API answers one with HTTP 400, while it
+ * takes a quoted colon in a field value (measured 2026-09-27, GET with
+ * limit 1: "a:b", 'a:b' and "show ts:[1 TO 2]" on flows and "a:b" on
+ * alarms answered 400; domain:"a:b" on flows and device.name:"x:y" on
+ * flows and alarms 200; "show ts 1 TO 2" and "a[b]" on flows 200). The
+ * search tools match free text themselves for rules, devices and target
+ * lists, so a colon there is fine and this is not called for them.
+ *
+ * @param query - The query, in the tools' language or the API's
+ * @throws {MspQueryError} Naming the phrase, with the query without its
+ *   colons as the suggestion
+ */
+export function refuseColonInQuotedText(query: string): void {
+  if (typeof query !== 'string' || !query.trim()) {
+    return;
+  }
+  const terms = translate(query);
+  const phrases = terms.filter(
+    term =>
+      term.kind === 'text' &&
+      term.values[0].startsWith('"') &&
+      term.values[0].includes(':')
+  );
+  if (phrases.length === 0) {
+    return;
+  }
+  const part = phrases.map(term => term.values[0]).join(' ');
+  const suggestion = terms
+    .map(term =>
+      phrases.includes(term)
+        ? term.values[0].replace(/\s*:\s*/g, ' ')
+        : renderLiteral(term)
+    )
+    .join(' ');
+  const trimmed = query.trim();
+  throw new MspQueryError(
+    cannotSend(
+      trimmed,
+      `${part} is a quoted phrase with a colon and no field, which the MSP API answers with HTTP 400 (measured 2026-09-27), though it takes a quoted colon in a field value. Put the phrase in a field, as in domain:"a:b", or search without the colon: send ${suggestion}.`
+    ),
+    trimmed,
+    part,
+    [suggestion]
+  );
+}
+
+/**
  * The terms of the query toMspQuery sends, every one of which must hold:
  * for checking a result against the whole query on the client
  *
