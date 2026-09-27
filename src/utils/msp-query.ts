@@ -258,9 +258,28 @@ export function bracketRangeError(
 }
 
 /**
+ * A single-quoted value (`'rock AND roll'`, quotes included) in the double
+ * quotes the API grammar documents: `\'` becomes `'`, a `"` is escaped, and
+ * other escapes are kept
+ */
+function doubleQuoted(singleQuoted: string): string {
+  const inside = singleQuoted
+    .slice(1, -1)
+    .replace(/\\([\s\S])|"/g, (match: string, escaped?: string) =>
+      escaped === undefined ? '\\"' : escaped === "'" ? "'" : match
+    );
+  return `"${inside}"`;
+}
+
+/**
  * Splits a query into parentheses and words. A word runs to the next space
- * or parenthesis outside double quotes, so `name:"living room"` and the
- * colons of `mac:AA:BB:CC:DD:EE:FF` stay in one word.
+ * or parenthesis outside quotes, so `name:"living room"` and the colons of
+ * `mac:AA:BB:CC:DD:EE:FF` stay in one word. The search parser reads single
+ * quotes as quotes too, so a single-quoted value is one word, sent in
+ * double quotes: `'rock AND roll'` was split at its spaces and sent as
+ * `'rock roll'`, its AND read as an operator. A single quote right after a
+ * letter, digit or underscore is an apostrophe (`name:Alex's`), as the
+ * parser reads it.
  */
 function tokenize(query: string): Token[] {
   const tokens: Token[] = [];
@@ -277,10 +296,12 @@ function tokenize(query: string): Token[] {
       continue;
     }
     const start = i;
+    let text = '';
     while (i < query.length && !/[\s()]/.test(query[i])) {
-      if (query[i] === '"') {
+      const c = query[i];
+      if (c === '"' || (c === "'" && !/\w/.test(query[i - 1] ?? ''))) {
         let close = i + 1;
-        while (close < query.length && query[close] !== '"') {
+        while (close < query.length && query[close] !== c) {
           close += query[close] === '\\' ? 2 : 1;
         }
         if (close >= query.length) {
@@ -289,12 +310,15 @@ function tokenize(query: string): Token[] {
             `${query.slice(start)} opens a quote that is never closed`
           );
         }
+        const quoted = query.slice(i, close + 1);
+        text += c === '"' ? quoted : doubleQuoted(quoted);
         i = close + 1;
       } else {
+        text += c;
         i++;
       }
     }
-    tokens.push({ kind: 'word', text: query.slice(start, i) });
+    tokens.push({ kind: 'word', text });
   }
   return tokens;
 }
@@ -407,6 +431,14 @@ function parseTerm(text: string, query: string): Literal {
   const body = negated ? text.slice(1) : text;
   const match = FIELD_TERM.exec(body);
   if (!match) {
+    // The search parser refuses one as well: on the client an empty phrase
+    // is found in any text, so it matched every device and target list
+    if (/^"\s*"$/.test(body)) {
+      throw malformed(
+        query,
+        `${text} is an empty phrase, with no text to find; put a word in it or leave it out`
+      );
+    }
     const literal: Literal = {
       negated: false,
       field: '',

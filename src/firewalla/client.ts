@@ -5062,7 +5062,6 @@ export class FirewallaClient {
         let filteredDevices = deviceArray || [];
 
         if (searchQuery.query?.trim()) {
-          const query = clientQuery.toLowerCase();
           filteredDevices = filteredDevices.filter(device => {
             if (!device) {
               return false;
@@ -5166,7 +5165,11 @@ export class FirewallaClient {
               }
             };
 
-            return matchesQuery(query, matchesTerm);
+            // Each term is matched in lowercase; the query is not, so AND,
+            // OR and NOT stay operators and and, or and not stay words
+            return matchesQuery(clientQuery, term =>
+              matchesTerm(term.toLowerCase())
+            );
           });
         }
 

@@ -112,6 +112,9 @@ export class QueryParser {
     // Set right after `field:` or `field:>=`, where a bare value starts
     let expectValue = false;
 
+    // How many [ are open: TO is a keyword only inside [low TO high]
+    let bracketDepth = 0;
+
     // The index just past a quoted segment starting at `from`
     const closingQuote = (from: number): number => {
       let end = from + 1;
@@ -201,6 +204,7 @@ export class QueryParser {
 
       // Brackets for ranges
       if (char === '[') {
+        bracketDepth++;
         tokens.push({
           type: TokenType.LBRACKET,
           value: char,
@@ -212,6 +216,7 @@ export class QueryParser {
       }
 
       if (char === ']') {
+        bracketDepth = Math.max(0, bracketDepth - 1);
         tokens.push({
           type: TokenType.RBRACKET,
           value: char,
@@ -318,28 +323,36 @@ export class QueryParser {
         continue;
       }
 
-      // Words (fields, values, logical operators)
+      // Words (fields, values, logical operators). A quote right after a
+      // letter, digit or underscore is an apostrophe in the word (Alex's,
+      // don't); it opened a quoted string that was never closed.
       if (/[a-zA-Z_]/.test(char)) {
         let word = '';
         const start = i;
 
-        while (i < safeInput.length && /[a-zA-Z0-9_.-]/.test(safeInput[i])) {
+        while (
+          i < safeInput.length &&
+          (/[a-zA-Z0-9_.-]/.test(safeInput[i]) ||
+            (safeInput[i] === "'" && /\w/.test(safeInput[i - 1])))
+        ) {
           word += safeInput[i];
           i++;
         }
 
-        const upperWord = word.toUpperCase();
-        if (upperWord === 'AND' || upperWord === 'OR' || upperWord === 'NOT') {
+        // Operators are uppercase, as toMspQuery reads them: and, or and not
+        // are words, as the API reads them. TO is a keyword only inside
+        // [low TO high], so free text may hold the word to.
+        if (word === 'AND' || word === 'OR' || word === 'NOT') {
           tokens.push({
             type: TokenType.LOGICAL,
-            value: upperWord,
+            value: word,
             position: start,
             length: word.length,
           });
-        } else if (upperWord === 'TO') {
+        } else if (word === 'TO' && bracketDepth > 0) {
           tokens.push({
             type: TokenType.TO,
-            value: upperWord,
+            value: word,
             position: start,
             length: word.length,
           });
@@ -488,7 +501,15 @@ export class QueryParser {
     // be refused ("Expected ':' after field"), so search_devices,
     // search_target_lists and search_rules could not take `nas` alone.
     if (this.match(TokenType.FIELD, TokenType.VALUE, TokenType.QUOTED_VALUE)) {
-      return { type: 'text', value: this.previous().value };
+      const token = this.previous();
+      // An empty phrase is found in any text, so it matched every item
+      if (token.type === TokenType.QUOTED_VALUE && !token.value.trim()) {
+        this.errors.push(
+          `Empty phrase at position ${token.position}: it has no text to find, so it would match everything. Put a word in it or leave it out`
+        );
+        return undefined;
+      }
+      return { type: 'text', value: token.value };
     }
 
     // Wildcard query (standalone *) - treat as match-all

@@ -202,5 +202,7 @@ export function targetListMatchesQuery(list: unknown, query: string): boolean {
     }
   };
 
-  return matchesQuery(query.toLowerCase(), matchesTerm);
+  // Each term is matched in lowercase; the query is not, so AND, OR and NOT
+  // stay operators and and, or and not stay words
+  return matchesQuery(query, term => matchesTerm(term.toLowerCase()));
 }

@@ -121,9 +121,17 @@ describe('the search parser always returns', () => {
     expect(queryParser.parse('name:nas :x', 'devices').errors).toEqual([
       "Unexpected token ':' at position 9",
     ]);
-    expect(queryParser.parse('nas TO x', 'devices').errors).toEqual([
-      "Unexpected token 'TO' at position 4",
+    expect(queryParser.parse('nas ] x', 'devices').errors).toEqual([
+      "Unexpected token ']' at position 4",
     ]);
+  });
+
+  it('reads TO outside [low TO high] as a word, not a stray keyword', () => {
+    // go to school was refused: "Unexpected token 'TO' at position 3"
+    for (const query of ['go to school', 'nas TO x']) {
+      const parsed = queryParser.parse(query, 'devices');
+      expect([query, parsed.errors]).toEqual([query, []]);
+    }
   });
 
   it('still ANDs terms side by side, NOT included', () => {
@@ -190,6 +198,14 @@ describe('fuzz: short token sequences from the grammar', () => {
     'NOT',
     'TO',
     'and',
+    'or',
+    'not',
+    'to',
+    "Alex's",
+    "name:Alex's",
+    "'single quoted'",
+    "'open",
+    '""',
     'x',
   ];
 

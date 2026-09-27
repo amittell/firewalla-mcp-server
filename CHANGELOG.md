@@ -629,6 +629,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`lastSeen`); a domain, an address, a country code, a name with spaces or
   marker text keeps its text. An object with its own `constructor` key had
   none of its keys renamed; it is renamed like any other now.
+- `search_devices` and `search_target_lists` read lowercase `and`, `or` and
+  `not` as words, as the other search tools and the API do. They read them
+  as operators, so on a stub `nas or laptop` found every device named nas or
+  laptop, where `search_rules` found the one rule holding all three words
+  and `search_flows` sent the three words. Every search tool also refused a
+  query that starts or ends with one of them (`nas or`, `or nas`,
+  `status:blocked or`) as an operator with no term; they are words there
+  too now. Uppercase `AND`, `OR` and `NOT` are operators as before.
+- The search parser reads `to` outside `[low TO high]` as a word. It read
+  it in any case as the range keyword, so `search_devices`,
+  `search_target_lists` and `search_rules` refused free text such as
+  `go to school` ("Unexpected token 'TO' at position 3").
+- A single quote right after a letter, digit or underscore is an
+  apostrophe, not the start of a quoted value. `search_devices`,
+  `search_target_lists` and `search_rules` refused `name:Alex's` and
+  `don't` as an unclosed quote, and past that check the device and target
+  list matchers would have read `Alex's` as the comma list `alex,s`. The
+  check counted quote characters, so it also refused an escaped quote
+  inside double quotes (`name:"say \"hi"`); it follows the quotes as the
+  parser does now.
+- A single-quoted phrase is sent to the API in double quotes, the quotes
+  its grammar documents: `'rock AND roll'` goes out as `"rock AND roll"`.
+  The search parser read single quotes as quotes, but the translation to
+  the API's grammar did not: it split the phrase at its spaces, read its
+  `AND` as an operator and sent `'rock roll'`, so `search_rules` found no
+  rule with the phrase. A single quote that opens a phrase and is never
+  closed is refused, as the parser already refused it.
+- An empty phrase (`""`) is refused before a request. It has no text to
+  find: `search_devices`, `search_target_lists` and `search_rules` matched
+  every device, list and rule, and `search_flows` and `search_alarms` sent
+  it to the API as it was. An empty field value (`name:""`) is left as it
+  is.
 
 ### Removed
 

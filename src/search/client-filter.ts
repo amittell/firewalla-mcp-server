@@ -6,13 +6,16 @@
  * what each `field:value` term matches. NOT binds tightest, then AND, then OR,
  * and terms with no operator between them are ANDed, as in the MSP syntax.
  * The MSP API's exclusion prefix works too: `-field:value` and `-(...)` are
- * NOT.
+ * NOT. Operators are uppercase, as toMspQuery reads them: `and`, `or` and
+ * `not` are words to match, as the API reads them.
  */
 
 // A term runs to the next space or parenthesis outside quotes, so colons in a
-// value (mac:AA:BB:CC:DD:EE:FF) and spaces in a quoted value stay in the term
+// value (mac:AA:BB:CC:DD:EE:FF) and spaces in a quoted value stay in the term.
+// A single quote right after a letter, digit or underscore is an apostrophe
+// in the word (name:Alex's), not the start of a quoted value.
 const TOKEN_PATTERN =
-  /[()]|(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s()"'])+/g;
+  /[()]|(?:"(?:[^"\\]|\\.)*"|(?<!\w)'(?:[^'\\]|\\.)*'|[^\s()"])+/g;
 
 /**
  * Evaluates a search query against one item
@@ -28,7 +31,7 @@ export function matchesQuery(
   const tokens = query.match(TOKEN_PATTERN) || [];
   let position = 0;
 
-  const peek = (): string | undefined => tokens[position]?.toUpperCase();
+  const peek = (): string | undefined => tokens[position];
 
   // Both sides of AND/OR are always evaluated so the whole query is consumed
   const parseOr = (): boolean => {
@@ -93,8 +96,10 @@ export function unquoteQueryValue(value: string): string {
   return quoted ? quoted[2].replace(/\\(.)/g, '$1') : value;
 }
 
-// One value of a comma list: quoted values keep their commas
-const LIST_VALUE = /(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^,"'])+/g;
+// One value of a comma list: quoted values keep their commas, and a single
+// quote right after a letter, digit or underscore is an apostrophe
+// (name:Alex's was read as the list alex,s)
+const LIST_VALUE = /(?:"(?:[^"\\]|\\.)*"|(?<!\w)'(?:[^'\\]|\\.)*'|[^,"])+/g;
 
 /**
  * The values of a comma list, unquoted, as the MSP API grammar reads
