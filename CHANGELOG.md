@@ -687,6 +687,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `query_executed`. `search_rules` reports the terms it sent to
   `GET /v2/rules`: its free text is not sent but matched on the client, as
   `free_text_coverage` says, so a query of free text alone reports `""`.
+- `get_flow_data` sends one time window on every page of a read and in
+  every chunk of a stream. A relative time such as `ts:>1h` was resolved
+  again for each page, against the clock, so pages read across a second
+  asked for windows a second apart, the query reported was resolved once
+  more, and each chunk of a stream resolved it anew under the first
+  chunk's cursor. It is resolved once per read, and once per stream, and
+  that string is sent on every page and reported. `get_active_alarms` and
+  `search_flows` resolved it once already.
 - The search tools no longer refuse ordinary words as "potentially dangerous
   content". The query sanitizer matched patterns for shell commands and
   network tools, SQL, script, templates, file paths and URL schemes, so

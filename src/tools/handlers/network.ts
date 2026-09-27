@@ -39,7 +39,7 @@ import {
   createStreamingResponse,
   type StreamingOperation,
 } from '../../utils/streaming-manager.js';
-import { mspAnd } from '../../utils/msp-query.js';
+import { mspAnd, toMspQuery } from '../../utils/msp-query.js';
 import type { PagingCoverage } from '../../utils/paging-coverage.js';
 
 /**
@@ -389,7 +389,10 @@ export class GetFlowDataHandler extends BaseToolHandler {
           this.name,
           streamingOperation,
           {
-            query: finalQuery,
+            // A relative ts:>1h resolved once for the session, so a later
+            // chunk reads the window the first one did: resolved in each
+            // chunk, it moved with the clock under the session's cursor
+            query: finalQuery ? toMspQuery(finalQuery) || undefined : undefined,
             groupBy,
             sortBy,
             limit,
