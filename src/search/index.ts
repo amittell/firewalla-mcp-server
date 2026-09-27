@@ -416,10 +416,10 @@ function convertWildcardToRegex(pattern: string): string {
     throw new Error('Wildcard pattern too long (max 100 characters)');
   }
 
-  // Check for dangerous patterns that could cause ReDoS
+  // Check for dangerous patterns that could cause ReDoS. A + or { next to
+  // a * is escaped below, so it is no quantifier: *Disney+* and C++* were
+  // refused for it.
   const dangerousPatterns = [
-    /(\*\+|\+\*)/, // Nested quantifiers
-    /(\*\{|\{\*)/, // Quantifier combinations
     /(\.\*){5,}/, // Too many .* sequences
     /(\*.*\*.*\*.*\*)/, // Multiple wildcards in sequence
   ];

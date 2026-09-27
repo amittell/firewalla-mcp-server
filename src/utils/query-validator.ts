@@ -18,6 +18,8 @@ const FIELD_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_.]*$/;
 // `:>`, `:>=`, `:<`, `:<=` are the MSP API's numeric comparisons (e.g. `download:>10MB`)
 const OPERATOR_PATTERN = /^(:|=|!=|>|<|>=|<=|:>|:>=|:<|:<=)$/;
 const LOGICAL_OPERATORS = ['AND', 'OR', 'NOT'];
+// A control character, or a surrogate without its pair
+const NOT_TEXT = /[\p{Cc}\p{Cs}]/u;
 
 interface QueryToken {
   // text: a free-text word or quoted phrase, which the API searches as text
@@ -327,12 +329,18 @@ export function validateFirewallaQuerySyntax(query: string): ValidationResult {
           );
         }
 
-        // Check for common syntax errors. A comma list may hold wildcards
-        // (domain:*apple*,*google*), as toMspQuery sends an OR of
-        // them, and the client-side searches read it as any of its values
-        if (token.value.includes('*') && !token.value.match(/^[*\w.:,-]+$/)) {
+        // A wildcard value may hold any character that is text: the
+        // client matches * without a regular expression (matchesWildcard),
+        // and of the characters in a value the API grammar gives a meaning
+        // only to quotes and to whitespace, a comma, an asterisk and a
+        // colon, which a literal must quote (docs/firewalla-api-reference.md,
+        // "Quoted Search"); a comma list of wildcards is any of them
+        // (domain:*apple*,*google*). Only [*\w.:,-] was allowed, which
+        // refused name:*Disney+*, C++*, *AT&T* and every non-ASCII name. A
+        // control character, or half of a surrogate pair, is not text.
+        if (token.value.includes('*') && NOT_TEXT.test(token.value)) {
           errors.push(
-            `Invalid wildcard pattern '${token.value}' at position ${token.position}`
+            `Invalid wildcard pattern '${token.value}' at position ${token.position}: it has a character that is not text (a control character or half a surrogate pair)`
           );
         }
         break;
