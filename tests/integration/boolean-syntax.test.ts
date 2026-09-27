@@ -5,46 +5,46 @@
 
 import { createSearchTools } from '../../src/tools/search.js';
 import type { FirewallaClient } from '../../src/firewalla/client.js';
+import type { Flow } from '../../src/types.js';
+
+const BLOCKED_FLOW: Flow = {
+  ts: 1640995200,
+  gid: '00000000-0000-0000-0000-000000000000',
+  protocol: 'tcp',
+  direction: 'outbound',
+  block: true,
+  count: 1,
+  device: { id: 'AA:BB:CC:DD:EE:FF', ip: '192.168.1.100', name: 'Test Device' },
+  destination: { id: '8.8.8.8', name: '8.8.8.8', ip: '8.8.8.8' },
+};
 
 describe('Boolean Syntax Integration Test', () => {
-  let mockFirewalla: FirewallaClient;
-  let searchTools: any;
+  // The query of every getFlowData call
+  let queryLog: string[];
+  let searchTools: ReturnType<typeof createSearchTools>;
 
   beforeEach(() => {
-    // Create a mock Firewalla client that tracks which queries are sent
-    const queryLog: string[] = [];
-    
-    mockFirewalla = {
-      getFlowData: jest.fn().mockImplementation((query: string) => {
-        queryLog.push(query);
-        
-        // Simulate different responses based on query syntax
-        if (query.includes('blocked:1') || query.includes('blocked=1')) {
-          return Promise.resolve({
-            results: [
-              {
-                ts: 1640995200,
-                protocol: 'tcp',
-                blocked: true,
-                source_ip: '192.168.1.100',
-                destination_ip: '8.8.8.8'
-              }
-            ],
-            count: 1
-          });
-        }
-        
-        // If the query contains untranslated boolean values, simulate backend error
-        if (query.includes('blocked:true') || query.includes('blocked=true')) {
-          return Promise.reject(new Error('Bad Request: Invalid parameters'));
-        }
-        
-        return Promise.resolve({ results: [], count: 0 });
-      }),
-      queryLog
-    } as any;
+    queryLog = [];
 
-    searchTools = createSearchTools(mockFirewalla);
+    const mockFirewalla: Pick<FirewallaClient, 'getFlowData'> = {
+      getFlowData: jest.fn(async (query?: string) => {
+        queryLog.push(query ?? '');
+
+        // Simulate different responses based on query syntax
+        if (query?.includes('blocked:1') || query?.includes('blocked=1')) {
+          return { results: [BLOCKED_FLOW], count: 1 };
+        }
+
+        // If the query contains untranslated boolean values, simulate backend error
+        if (query?.includes('blocked:true') || query?.includes('blocked=true')) {
+          throw new Error('Bad Request: Invalid parameters');
+        }
+
+        return { results: [], count: 0 };
+      }),
+    };
+
+    searchTools = createSearchTools(mockFirewalla as FirewallaClient);
   });
 
   test('colon syntax with boolean translation should work', async () => {
@@ -55,8 +55,8 @@ describe('Boolean Syntax Integration Test', () => {
     });
 
     expect(result.results).toHaveLength(1);
-    expect(mockFirewalla.queryLog).toContain('blocked:1');
-    expect(mockFirewalla.queryLog).not.toContain('blocked:true');
+    expect(queryLog).toContain('blocked:1');
+    expect(queryLog).not.toContain('blocked:true');
   });
 
   test('equals syntax with boolean translation should work', async () => {
@@ -67,8 +67,8 @@ describe('Boolean Syntax Integration Test', () => {
     });
 
     expect(result.results).toHaveLength(1);
-    expect(mockFirewalla.queryLog).toContain('blocked:1');
-    expect(mockFirewalla.queryLog).not.toContain('blocked=true');
+    expect(queryLog).toContain('blocked:1');
+    expect(queryLog).not.toContain('blocked=true');
   });
 
   test('untranslated boolean syntax should still work with enhanced translator', async () => {
@@ -92,7 +92,7 @@ describe('Boolean Syntax Integration Test', () => {
     
     // With enhanced boolean translator, this should now succeed
     expect(result).toBeDefined();
-    expect(result.boolean_translation).toBeDefined();
+    expect(result).toHaveProperty('boolean_translation');
   });
 
   test('boolean translation debug info is included', async () => {
@@ -102,11 +102,12 @@ describe('Boolean Syntax Integration Test', () => {
     });
 
     // Should include debug info about the translation
-    expect(result).toHaveProperty('boolean_translation');
-    expect(result.boolean_translation).toMatchObject({
-      original_query: 'blocked:true AND protocol:tcp',
-      translated_query: 'blocked:1 AND protocol:tcp',
-      translation_applied: true
+    expect(result).toMatchObject({
+      boolean_translation: {
+        original_query: 'blocked:true AND protocol:tcp',
+        translated_query: 'blocked:1 AND protocol:tcp',
+        translation_applied: true,
+      },
     });
   });
 });

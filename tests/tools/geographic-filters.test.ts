@@ -56,10 +56,9 @@ const body = (res: any) => JSON.parse(res.content[0].text);
 
 async function searchFlows(geographic_filters: unknown, query = 'protocol:tcp') {
   const { client, get } = makeClient();
-  const res = await new SearchFlowsHandler().execute(
-    { query, limit: 10, geographic_filters },
-    client
-  );
+  // Unchecked, as the server hands a client's arguments to execute
+  const args: Record<string, unknown> = { query, limit: 10, geographic_filters };
+  const res = await new SearchFlowsHandler().execute(args, client);
   return { res, get };
 }
 
@@ -179,6 +178,8 @@ describe('search_flows geographic_filters', () => {
       new SearchEngine(client).searchFlows({
         query: 'protocol:tcp',
         limit: 10,
+        // An untyped caller can still send a refused filter
+        // @ts-expect-error continents is not in FlowGeographicFilters
         geographic_filters: { continents: ['Asia'] },
       })
     ).rejects.toThrow(GeographicFilterError);

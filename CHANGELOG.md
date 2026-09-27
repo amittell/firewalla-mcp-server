@@ -504,6 +504,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI runs `npm audit --audit-level=high --omit=dev` and fails on a high or
   critical advisory in a production dependency. On 2026-09-26 it reports
   0 advisories across 124 production dependencies.
+- CI type checks the tests, with `npm run typecheck:tests`
+  (`tsc -p tsconfig.test.json --noEmit`) in the `test` job on every Node
+  version. ts-jest only transpiles them (`isolatedModules` in
+  `tsconfig.test.json`) and `tsconfig.json` covers `src/` alone, so nothing
+  read their types: on 2026-09-26 they had 54 type errors in 18 files, now
+  fixed. Among them, `pauseRule` was called with a duration it no longer
+  takes, `ToolRegistry.getHandler` was stubbed to return `null` where it
+  returns `undefined`, and stubs of the client's private `request` declared
+  fewer parameters than the arguments the tests read back from them.
 - Every read-only tool takes an optional `response_format`: `json`, the
   default, returns the same compact JSON as before, byte for byte;
   `markdown` returns the response as markdown for reading. The markdown has

@@ -8,7 +8,6 @@ import {
   ensureConsistentGeoData,
   batchNormalize,
   type NormalizationConfig,
-  type SanitizationResult,
 } from '../../src/utils/data-normalizer.js';
 import type { GeographicData } from '../../src/types.js';
 

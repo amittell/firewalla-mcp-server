@@ -30,7 +30,13 @@ function makeClient(total: number) {
   } as any);
   const now = Math.floor(Date.now() / 1000);
   const request = jest.fn(
-    async (_method: string, _endpoint: string, params: any = {}) => {
+    async (
+      _method: string,
+      _endpoint: string,
+      params: any = {},
+      _body?: unknown,
+      _cacheable?: boolean
+    ) => {
       if (params.limit > 500) {
         throw new Error('Bad Request: limit exceeds max allowed value of 500');
       }

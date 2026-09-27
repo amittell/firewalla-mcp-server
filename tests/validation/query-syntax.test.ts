@@ -15,6 +15,8 @@ import { FieldValidator } from '../../src/validation/field-validator.js';
 import { QuerySanitizer, ParameterValidator } from '../../src/validation/error-handler.js';
 import { SEARCH_FIELDS } from '../../src/search/types.js';
 
+type EntityType = keyof typeof SEARCH_FIELDS;
+
 describe('Query Syntax Validation', () => {
   describe('Basic Field Queries', () => {
     it('should validate simple field:value queries', () => {
@@ -521,7 +523,7 @@ describe('Query Syntax Validation', () => {
   describe('Cross-Entity Field Validation', () => {
     it('should validate fields across multiple entity types', () => {
       const commonFields = ['timestamp', 'status', 'protocol'];
-      const entityTypes = ['flows', 'alarms', 'rules', 'devices'] as const;
+      const entityTypes: EntityType[] = ['flows', 'alarms', 'rules', 'devices'];
 
       commonFields.forEach(field => {
         const result = FieldValidator.validateFieldAcrossTypes(field, entityTypes);
@@ -532,7 +534,7 @@ describe('Query Syntax Validation', () => {
 
     it('should provide cross-type suggestions for invalid fields', () => {
       const field = 'invalid_cross_field';
-      const entityTypes = ['flows', 'alarms'] as const;
+      const entityTypes: EntityType[] = ['flows', 'alarms'];
 
       const result = FieldValidator.validateFieldAcrossTypes(field, entityTypes);
       expect(result.isValid).toBe(false);
@@ -541,10 +543,14 @@ describe('Query Syntax Validation', () => {
     });
 
     it('should handle field aliases correctly', () => {
-      const aliasTests = [
-        { field: 'srcIP', entityTypes: ['flows'] as const, shouldSuggest: 'source_ip' },
-        { field: 'proto', entityTypes: ['flows', 'alarms'] as const, shouldSuggest: 'protocol' },
-        { field: 'size', entityTypes: ['flows'] as const, shouldSuggest: 'bytes' }
+      const aliasTests: Array<{
+        field: string;
+        entityTypes: EntityType[];
+        shouldSuggest: string;
+      }> = [
+        { field: 'srcIP', entityTypes: ['flows'], shouldSuggest: 'source_ip' },
+        { field: 'proto', entityTypes: ['flows', 'alarms'], shouldSuggest: 'protocol' },
+        { field: 'size', entityTypes: ['flows'], shouldSuggest: 'bytes' }
       ];
 
       aliasTests.forEach(({ field, entityTypes, shouldSuggest }) => {

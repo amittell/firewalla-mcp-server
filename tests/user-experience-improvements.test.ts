@@ -7,6 +7,9 @@ import { RetryManager } from '../src/utils/retry-manager.js';
 import { TimeoutError } from '../src/utils/timeout-manager.js';
 import { createTimeoutErrorResponse } from '../src/utils/timeout-manager.js';
 
+/** An operation for withRetry that resolves to a string */
+type Operation = () => Promise<string>;
+
 describe('User Experience Improvements', () => {
   describe('Retry Manager', () => {
     let retryManager: RetryManager;
@@ -16,7 +19,7 @@ describe('User Experience Improvements', () => {
     });
 
     test('should succeed on first attempt when operation succeeds', async () => {
-      const mockOperation = jest.fn().mockResolvedValue('success');
+      const mockOperation = jest.fn<Operation>().mockResolvedValue('success');
 
       const result = await retryManager.withRetry(mockOperation, {
         maxAttempts: 3,
@@ -28,7 +31,7 @@ describe('User Experience Improvements', () => {
     });
 
     test('should retry on timeout errors and succeed on second attempt', async () => {
-      const mockOperation = jest.fn()
+      const mockOperation = jest.fn<Operation>()
         .mockRejectedValueOnce(new TimeoutError('test-operation', 1000, 10000))
         .mockResolvedValueOnce('success');
 
@@ -44,7 +47,7 @@ describe('User Experience Improvements', () => {
 
     test('should retry on network errors', async () => {
       const networkError = new Error('Network timeout');
-      const mockOperation = jest.fn()
+      const mockOperation = jest.fn<Operation>()
         .mockRejectedValueOnce(networkError)
         .mockResolvedValueOnce('success');
 
@@ -60,7 +63,7 @@ describe('User Experience Improvements', () => {
 
     test('should not retry on validation errors', async () => {
       const validationError = new Error('Invalid parameter');
-      const mockOperation = jest.fn().mockRejectedValue(validationError);
+      const mockOperation = jest.fn<Operation>().mockRejectedValue(validationError);
 
       await expect(
         retryManager.withRetry(mockOperation, {
@@ -75,7 +78,7 @@ describe('User Experience Improvements', () => {
 
     test('should throw RetryFailureError after max attempts', async () => {
       const timeoutError = new TimeoutError('test-operation', 1000, 10000);
-      const mockOperation = jest.fn().mockRejectedValue(timeoutError);
+      const mockOperation = jest.fn<Operation>().mockRejectedValue(timeoutError);
 
       await expect(
         retryManager.withRetry(mockOperation, {
@@ -93,7 +96,7 @@ describe('User Experience Improvements', () => {
 
     test('should include user guidance in retry failure error', async () => {
       const timeoutError = new TimeoutError('test-operation', 1000, 10000);
-      const mockOperation = jest.fn().mockRejectedValue(timeoutError);
+      const mockOperation = jest.fn<Operation>().mockRejectedValue(timeoutError);
 
       try {
         await retryManager.withRetry(mockOperation, {
@@ -164,7 +167,7 @@ describe('User Experience Improvements', () => {
     test('should handle retry with timeout wrapper appropriately', async () => {
       // This test verifies that our retry logic works with timeout operations
       const testRetryManager = new RetryManager();
-      const mockOperation = jest.fn()
+      const mockOperation = jest.fn<Operation>()
         .mockRejectedValueOnce(new TimeoutError('test-operation', 1000, 10000))
         .mockResolvedValueOnce('success');
 

@@ -136,7 +136,7 @@ describe('setupTools', () => {
     });
 
     it('should handle unknown tool error', async () => {
-      mockRegistry.getHandler.mockReturnValue(null);
+      mockRegistry.getHandler.mockReturnValue(undefined);
 
       const request = {
         params: {
@@ -224,7 +224,7 @@ describe('setupTools', () => {
     });
 
     it('should handle registry returning empty tool names', async () => {
-      mockRegistry.getHandler.mockReturnValue(null);
+      mockRegistry.getHandler.mockReturnValue(undefined);
       mockRegistry.getToolNames.mockReturnValue([]);
 
       const request = {
@@ -247,7 +247,7 @@ describe('setupTools', () => {
     });
 
     it('should handle registry returning null tool names', async () => {
-      mockRegistry.getHandler.mockReturnValue(null);
+      mockRegistry.getHandler.mockReturnValue(undefined);
       mockRegistry.getToolNames.mockReturnValue(null as any);
 
       const request = {

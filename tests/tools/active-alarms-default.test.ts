@@ -29,7 +29,12 @@ function makeClient() {
     defaultPageSize: 100,
     maxPageSize: 10000,
   } as any);
-  const request = jest.fn(async () => ({ count: 0, results: [] }));
+  const request = jest.fn(
+    async (..._args: Parameters<FirewallaClient['request']>) => ({
+      count: 0,
+      results: [],
+    })
+  );
   (client as any).request = request;
   return { client, request };
 }

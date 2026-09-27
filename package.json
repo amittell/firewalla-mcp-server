@@ -69,6 +69,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,json,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,json,md}\"",
     "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc -p tsconfig.test.json --noEmit",
     "clean": "rimraf dist coverage .nyc_output",
     "prebuild": "npm run clean",
     "prepublishOnly": "npm run build && npm run test:ci && npm run lint:check",
