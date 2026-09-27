@@ -468,8 +468,11 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
   DELETE that gets a 429 is not sent again.
 - A GET that times out, loses its connection (`ECONNRESET`, `EPIPE`) or gets
   502, 503 or 504 is sent again once, 1 to 2 s later, through the limiter
-  (`retryTransient` in `src/firewalla/client.ts`); a write never is. Tool
-  handlers do not retry on top of that. The error after the last attempt is
+  (`retryTransient` in `src/firewalla/client.ts`); a write never is. Only
+  when 2 s plus the failed attempt's time fit before the tool's deadline
+  (`ToolBudget`, set by `withToolTimeout`), so with the defaults a timed-out
+  GET is not retried. The tool's abort signal cancels its requests when it
+  gives up. Tool handlers do not retry on top of that. The error after the last attempt is
   an `ApiRequestError` carrying `status`, `code` and `attempts`; decide by
   those, not by its message.
 - The error text starts `Rate limit exceeded` (`Rate limit exceeded (HTTP

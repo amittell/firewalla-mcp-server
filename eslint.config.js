@@ -21,7 +21,9 @@ export default [
         clearInterval: 'readonly',
         clearTimeout: 'readonly',
         URL: 'readonly',
-        Buffer: 'readonly'
+        Buffer: 'readonly',
+        AbortController: 'readonly',
+        AbortSignal: 'readonly'
       }
     },
     plugins: {

@@ -204,6 +204,9 @@ describe('a 503, then a 200', () => {
 });
 
 describe('the client sends a GET again once', () => {
+  // These stubs fail at once, so a retry fits in the tool's time; how long
+  // the failure took is tested in retry-budget.test.ts, where a GET that ran
+  // out a 30 s timeout is not sent again
   it.each([502, 503, 504, 'ECONNABORTED', 'ETIMEDOUT', 'ECONNRESET', 'EPIPE'])(
     'after %s',
     async failure => {

@@ -598,7 +598,8 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
         );
       }
 
-      // withToolTimeout rewraps errors; the original is kept as `cause`
+      // The error itself (withToolTimeout throws it as it came), or one a
+      // wrapper kept as `cause`
       const selectionError =
         error instanceof BoxSelectionError
           ? error
