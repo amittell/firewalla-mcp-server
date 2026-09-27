@@ -418,6 +418,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
             groups: response.groups,
             next_cursor: response.next_cursor,
             has_more: !!response.next_cursor,
+            query_executed: response.query,
           },
           { executionTimeMs: executionTime }
         );
@@ -435,7 +436,9 @@ export class GetFlowDataHandler extends BaseToolHandler {
         cached: false,
         source: 'firewalla_api',
         queryParams: {
-          query: finalQuery,
+          // The query sent: the time range, the qualifier renames and the
+          // box scope included
+          query: response.query ?? finalQuery,
           groupBy,
           sortBy,
           limit,

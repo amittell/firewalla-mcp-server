@@ -1700,6 +1700,8 @@ export class FirewallaClient {
     next_cursor?: string;
     groups?: AlarmGroup[];
     group_by?: string;
+    /** The query sent, after the renames, the box scope and toMspQuery */
+    query?: string;
   }> {
     const params: Record<string, unknown> = {
       sortBy: translateSortBy(sortBy, 'alarms'),
@@ -1722,6 +1724,11 @@ export class FirewallaClient {
 
     // Apply box filter through the query parameter
     params.query = this.addBoxFilter(params.query as string | undefined);
+    // What request() sends, as withMspQuery translates it
+    const sentQuery =
+      typeof params.query === 'string'
+        ? toMspQuery(params.query) || undefined
+        : undefined;
 
     const response = await this.requestPages<any>(
       '/v2/alarms',
@@ -1738,6 +1745,7 @@ export class FirewallaClient {
         count: 0,
         results: [],
         next_cursor: undefined,
+        query: sentQuery,
       };
     }
 
@@ -1755,6 +1763,7 @@ export class FirewallaClient {
         groups,
         group_by: group,
         next_cursor: response.next_cursor,
+        query: sentQuery,
       };
     }
 
@@ -1806,6 +1815,7 @@ export class FirewallaClient {
         this.enrichWithGeographicData(alarm, ['remote.ip'])
       ),
       next_cursor: response.next_cursor,
+      query: sentQuery,
     };
   }
 
@@ -2377,11 +2387,11 @@ export class FirewallaClient {
     results: NetworkRule[];
     next_cursor?: string;
     free_text_coverage?: RulesTextCoverage;
+    /** The query sent: the terms other than free text; '' for none */
+    query: string;
   }> {
-    const { response, items, matchedWords, coverage } = await this.requestRules(
-      query,
-      limit !== undefined ? { limit } : {}
-    );
+    const { response, items, matchedWords, coverage, sent } =
+      await this.requestRules(query, limit !== undefined ? { limit } : {});
     const rules = items.map((item: any): NetworkRule => ({
       id: item.id || 'unknown',
       action: item.action || 'block',
@@ -2439,6 +2449,7 @@ export class FirewallaClient {
       // A read for words sends no cursor, so it has none to pass on
       next_cursor: matchedWords ? undefined : response.next_cursor,
       ...(coverage && { free_text_coverage: coverage }),
+      query: sent,
     };
   }
 
@@ -2471,6 +2482,8 @@ export class FirewallaClient {
     items: any[];
     matchedWords: boolean;
     coverage?: RulesTextCoverage;
+    /** The query sent, as withMspQuery translates it; '' for none */
+    sent: string;
   }> {
     const { fields, text } = query
       ? mspSplitText(query)
@@ -2486,6 +2499,8 @@ export class FirewallaClient {
       words.length > 0 ? unbounded : { ...params };
     // Apply box filter through the query parameter
     request.query = this.addBoxFilter(sent || undefined);
+    const sentQuery =
+      typeof request.query === 'string' ? toMspQuery(request.query) : '';
 
     const response = await this.request<{
       count: number;
@@ -2497,7 +2512,12 @@ export class FirewallaClient {
     // API returns {count, results[]} format
     const results = Array.isArray(response?.results) ? response.results : [];
     if (words.length === 0) {
-      return { response, items: results, matchedWords: false };
+      return {
+        response,
+        items: results,
+        matchedWords: false,
+        sent: sentQuery,
+      };
     }
     const items = results.filter(item => ruleMatchesWords(item, words));
     // Complete unless the API answered as if it held more rules than it sent
@@ -2511,6 +2531,7 @@ export class FirewallaClient {
       response,
       items,
       matchedWords: true,
+      sent: sentQuery,
       coverage: {
         rules_checked: results.length,
         rules_matched: items.length,

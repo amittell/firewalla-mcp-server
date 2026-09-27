@@ -122,6 +122,9 @@ interface SearchStrategy {
     next_cursor?: string;
     // Rules searched with free text: what was checked
     free_text_coverage?: RulesTextCoverage;
+    // The query sent to the API, for an entity the API searches (rules);
+    // their free text is not sent but matched on the client
+    query?: string;
   }>;
 
   validateParams?: (params: SearchParams) => {
@@ -782,7 +785,9 @@ export class SearchEngine {
             : results.length,
         limit: params.limit || 100,
         offset: params.offset || 0,
-        query: finalQuery,
+        // For rules, the query sent to the API (their free text is matched
+        // on the client); devices and target lists send none
+        query: response.query ?? finalQuery,
         execution_time_ms: Date.now() - startTime,
         aggregations,
       };
@@ -1051,7 +1056,9 @@ export class SearchEngine {
           count: response.groups.length,
           limit: params.limit,
           offset: 0,
-          query: params.query,
+          // The query sent: getActiveAlarms renames qualifiers
+          // (source_ip: goes out as device.ip:) and adds the box scope
+          query: response.query ?? params.query,
           execution_time_ms: Date.now() - startTime,
           next_cursor: response.next_cursor,
         };
@@ -1078,7 +1085,7 @@ export class SearchEngine {
         count: results.length,
         limit: params.limit,
         offset: params.offset || 0,
-        query: params.query,
+        query: response.query ?? params.query,
         execution_time_ms: Date.now() - startTime,
         next_cursor: response.next_cursor,
       };
