@@ -605,6 +605,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   counts each rule on the day its creation time falls in, and the note says
   so. Only if that read fails or returns no points are the days UTC days,
   and the note says why.
+- The tools that rename field names to snake_case (the rule, alarm, flow,
+  device and most analytics tools) keep every value. Two keys of one object
+  that read the same once renamed became one key, and the value of the one
+  the API sent first was dropped: an alarm whose `remote` had both
+  `rootDomain` and `root_domain` came back with one of them, and
+  `timestamp` beside `ts` lost one too. The key that needs no renaming now
+  keeps its name and the renamed one gets ` <duplicate 2>` (3, 4 and so on
+  if that is taken), as marked keys do. Renamed keys are named in code unit
+  order, so the names do not depend on the order the API sent the keys in.
+- Renaming field names to snake_case leaves keys that are data as they
+  are. It renamed every key: `get_network_rules_summary` counted the target
+  type `remotePort` as `remote_port`, a country code key `US` became `_u_s`,
+  a MAC address `AA:BB:...` became `_a_a:_b_b:...`, and a key named
+  `toString` became `function toString() { [native code] }`. A key holding
+  the text `<U+200B>` became `<_u+200_b>`, so once invisible characters were
+  marked, a key with a real U+200B took the name `x<U+200B>` with nothing to
+  tell the two apart. The counts by action, direction, status and target
+  type in `get_network_rules_summary`, and the search engine's aggregations
+  by group value, now keep their keys and normalize only what is under
+  them. Elsewhere a key is renamed only when it is shaped like the API's
+  field names, an ASCII identifier that starts with a lowercase letter
+  (`lastSeen`); a domain, an address, a country code, a name with spaces or
+  marker text keeps its text. An object with its own `constructor` key had
+  none of its keys renamed; it is renamed like any other now.
 
 ### Removed
 

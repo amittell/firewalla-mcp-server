@@ -38,6 +38,9 @@ const INVISIBLE =
 /** The message of each alarm GET /v2/alarms returns, in order */
 let alarmMessages: string[] = [];
 
+/** The action of each rule GET /v2/rules returns, in order */
+let ruleActions: string[] = [];
+
 function answer(url: string): unknown {
   const now = Math.floor(Date.now() / 1000);
   const device = {
@@ -70,18 +73,16 @@ function answer(url: string): unknown {
   if (url === '/v2/rules') {
     // The rules summary counts rules by action, so an action is a key
     return {
-      count: 1,
-      results: [
-        {
-          id: 'rule-0001',
-          gid: BOX,
-          action: `block${tags('x')}`,
-          status: 'active',
-          target: { type: 'domain', value: 'example.com' },
-          ts: now,
-          updateTs: now,
-        },
-      ],
+      count: ruleActions.length,
+      results: ruleActions.map((action, index) => ({
+        id: `rule-000${index + 1}`,
+        gid: BOX,
+        action,
+        status: 'active',
+        target: { type: 'domain', value: 'example.com' },
+        ts: now,
+        updateTs: now,
+      })),
     };
   }
   if (url === '/v2/alarms') {
@@ -132,6 +133,7 @@ beforeAll(() => {
 beforeEach(async () => {
   process.env.FIREWALLA_ENABLE_WRITE_TOOLS = 'true';
   alarmMessages = [`Alarm about ${DEVICE_NAME}`];
+  ruleActions = [`block${tags('x')}`];
   const server = (new FirewallaMCPServer() as any).server as Server;
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   client = new Client({ name: 'untrusted-text-test', version: '0.0.0' });
@@ -266,6 +268,30 @@ describe('invisible characters are shown as markers', () => {
       expect(statistics.total).toBe(3);
       expect(statistics.by_type).toEqual({
         'x<U+200B>': 2,
+        'x<U+200B> <duplicate 2>': 1,
+      });
+    }
+  );
+
+  it.each([
+    ['the hidden character first', ['x\u{200B}', 'x<U+200B>']],
+    ['the marker text first', ['x<U+200B>', 'x\u{200B}']],
+  ])(
+    'in keys that read the same once marked, through the field normalizer, %s',
+    async (_order, actions) => {
+      // get_network_rules_summary normalizes its field names before the
+      // keys are marked; the rule actions it counts by are data, and the
+      // text <U+200B> in one used to become <_u+200_b>
+      ruleActions = actions;
+      const text = textOf(
+        await client.callTool({
+          name: 'get_network_rules_summary',
+          arguments: {},
+        })
+      );
+      expect(text).not.toMatch(INVISIBLE);
+      expect(JSON.parse(text).data.breakdown.by_action).toEqual({
+        'x<U+200B>': 1,
         'x<U+200B> <duplicate 2>': 1,
       });
     }

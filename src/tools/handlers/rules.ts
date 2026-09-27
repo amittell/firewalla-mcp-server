@@ -35,6 +35,7 @@ import {
 import { ResourceValidator } from '../../validation/resource-validator.js';
 import { logger } from '../../monitoring/logger.js';
 import { USER_REQUEST_ONLY } from '../../utils/untrusted-text.js';
+import { dataKeyed } from '../../utils/field-normalizer.js';
 import {
   targetListEntries,
   targetListEntryCount,
@@ -997,11 +998,13 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
         total_rules: allRules.length,
         limit_applied: limit,
         summary_timestamp: getCurrentTimestamp(),
+        // Keyed by the values the API sent (the target type remotePort),
+        // which are not field names to rename
         breakdown: {
-          by_action: rulesByAction,
-          by_direction: rulesByDirection,
-          by_status: rulesByStatus,
-          by_target_type: rulesByTargetType,
+          by_action: dataKeyed(rulesByAction),
+          by_direction: dataKeyed(rulesByDirection),
+          by_status: dataKeyed(rulesByStatus),
+          by_target_type: dataKeyed(rulesByTargetType),
         },
         hit_statistics: {
           total_hits: totalHits,
