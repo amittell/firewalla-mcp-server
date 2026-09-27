@@ -150,10 +150,12 @@ function tokenizeQuery(query: string): QueryToken[] {
       current++;
     }
 
-    if (LOGICAL_OPERATORS.includes(word.toUpperCase())) {
+    // Operators are uppercase, as toMspQuery reads them: and, or and not
+    // are words, as the API reads them (nas or was refused as ending in OR)
+    if (LOGICAL_OPERATORS.includes(word)) {
       tokens.push({
         type: 'logical',
-        value: word.toUpperCase(),
+        value: word,
         position: wordStart,
       });
     } else if (word === '-' && query[current] === '(') {

@@ -412,7 +412,7 @@ export class EnhancedQueryValidator {
       const position = match.index;
       
       // Skip logical operators and range keywords - they have different syntax rules
-      if (logicalOperators.includes(field.toUpperCase()) || rangeKeywords.includes(field.toUpperCase())) {
+      if (logicalOperators.includes(field) || rangeKeywords.includes(field)) {
         continue;
       }
       
@@ -503,7 +503,8 @@ export class EnhancedQueryValidator {
     const quickFixes: QuickFix[] = [];
     
     // Check for malformed logical operators, but be more lenient about placement
-    const logicalPattern = /\b(AND|OR|NOT)\b/gi;
+    // Uppercase only: and, or and not are words, as toMspQuery reads them
+    const logicalPattern = /\b(AND|OR|NOT)\b/g;
     let match;
     
     while ((match = logicalPattern.exec(query)) !== null) {

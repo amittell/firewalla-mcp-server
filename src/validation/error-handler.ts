@@ -1219,6 +1219,30 @@ const UNSUPPORTED_QUERY_FIELDS: Record<string, Record<string, string>> = {
 };
 
 /**
+ * The quote a query leaves open, or undefined when every quote is closed.
+ * A backslash escapes the next character inside quotes (name:"a\"b"), and
+ * a single quote right after a letter, digit or underscore is an
+ * apostrophe (name:Alex's), as the search parser reads them. Counting the
+ * quotes refused both.
+ */
+function unclosedQuote(query: string): '"' | "'" | undefined {
+  let open: '"' | "'" | undefined;
+  for (let i = 0; i < query.length; i++) {
+    const char = query[i];
+    if (open) {
+      if (char === '\\') {
+        i++;
+      } else if (char === open) {
+        open = undefined;
+      }
+    } else if (char === '"' || (char === "'" && !/\w/.test(query[i - 1] ?? ''))) {
+      open = char;
+    }
+  }
+  return open;
+}
+
+/**
  * Search query sanitization utilities
  */
 export class QuerySanitizer {
@@ -1307,12 +1331,11 @@ export class QuerySanitizer {
     }
 
     // Check for unmatched quotes
-    const singleQuotes = (trimmedQuery.match(/'/g) || []).length;
-    const doubleQuotes = (trimmedQuery.match(/"/g) || []).length;
-    if (singleQuotes % 2 !== 0) {
+    const unclosed = unclosedQuote(trimmedQuery);
+    if (unclosed === "'") {
       structuralIssues.push('Unmatched single quotes in query');
     }
-    if (doubleQuotes % 2 !== 0) {
+    if (unclosed === '"') {
       structuralIssues.push('Unmatched double quotes in query');
     }
 
