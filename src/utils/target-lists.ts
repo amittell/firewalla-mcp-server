@@ -8,6 +8,7 @@ import {
   matchesQuery,
   unquoteQueryValue,
 } from '../search/client-filter.js';
+import { matchesWildcard } from './wildcard.js';
 
 /**
  * The number of entries in a target list: the length of its `targets` when
@@ -54,10 +55,7 @@ function matchesPattern(value: string, pattern: string): boolean {
   if (!pattern.includes('*')) {
     return value === pattern;
   }
-  const escaped = pattern
-    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*/g, '.*');
-  return new RegExp(`^${escaped}$`).test(value);
+  return matchesWildcard(value, pattern);
 }
 
 /**

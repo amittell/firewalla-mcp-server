@@ -57,6 +57,7 @@ import type {
   GeographicData,
 } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
+import { matchesWildcard } from '../utils/wildcard.js';
 import {
   commaListValues,
   ipv4InCidr,
@@ -5284,10 +5285,7 @@ export class FirewallaClient {
               if (!pattern.includes('*')) {
                 return value === pattern;
               }
-              const escaped = pattern
-                .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-                .replace(/\*/g, '.*');
-              return new RegExp(`^${escaped}$`).test(value);
+              return matchesWildcard(value, pattern);
             };
             // Free text: a word or quoted phrase with no field, found in
             // the name, IP, MAC or id, vendor, or network or group name

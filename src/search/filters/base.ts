@@ -4,6 +4,7 @@
  */
 
 import type { QueryNode } from '../types.js';
+import { matchesWildcard } from '../../utils/wildcard.js';
 
 /**
  * Base filter interface that all filters must implement
@@ -114,14 +115,12 @@ export abstract class BaseFilter implements Filter {
       return false;
     }
 
-    // Convert wildcard pattern to regex
-    const regexPattern = pattern
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape regex chars except * and ?
-      .replace(/\*/g, '.*') // Convert * to .*
-      .replace(/\?/g, '.'); // Convert ? to .
-
-    const regex = new RegExp(`^${regexPattern}$`, 'i');
-    return regex.test(String(value));
+    // * is any run and ? any one character, compared as the i flag does;
+    // no regular expression, which could backtrack for seconds
+    return matchesWildcard(String(value), pattern, {
+      ignoreCase: true,
+      anyChar: true,
+    });
   }
 
   /**
