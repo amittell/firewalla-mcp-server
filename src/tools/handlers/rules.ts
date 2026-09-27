@@ -36,6 +36,7 @@ import { ResourceValidator } from '../../validation/resource-validator.js';
 import { logger } from '../../monitoring/logger.js';
 import { USER_REQUEST_ONLY } from '../../utils/untrusted-text.js';
 import { dataKeyed } from '../../utils/field-normalizer.js';
+import { keyedByData } from '../../utils/data-keys.js';
 import {
   targetListEntries,
   targetListEntryCount,
@@ -899,7 +900,7 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
           acc[action] = (acc[action] || 0) + 1;
           return acc;
         },
-        {}
+        keyedByData<number>()
       );
 
       const rulesByDirection = allRules.reduce(
@@ -912,7 +913,7 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
           acc[direction] = (acc[direction] || 0) + 1;
           return acc;
         },
-        {}
+        keyedByData<number>()
       );
 
       const rulesByStatus = allRules.reduce(
@@ -925,7 +926,7 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
           acc[status] = (acc[status] || 0) + 1;
           return acc;
         },
-        {}
+        keyedByData<number>()
       );
 
       const rulesByTargetType = allRules.reduce(
@@ -938,7 +939,7 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
           acc[targetType] = (acc[targetType] || 0) + 1;
           return acc;
         },
-        {}
+        keyedByData<number>()
       );
 
       // Calculate hit statistics

@@ -27,6 +27,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { FirewallaClient } from '../firewalla/client.js';
 import { safeUnixToISOString } from '../utils/timestamp.js';
+import { keyedByData } from '../utils/data-keys.js';
 
 /**
  * Registers MCP resource handlers on the server to provide structured Firewalla firewall data via URI-based endpoints
@@ -275,20 +276,14 @@ export function setupResources(
 
           const threatStats = {
             total: threats.length,
-            by_severity: threats.reduce(
-              (acc, threat) => {
-                acc[threat.severity] = (acc[threat.severity] || 0) + 1;
-                return acc;
-              },
-              {} as Record<string, number>
-            ),
-            by_type: threats.reduce(
-              (acc, threat) => {
-                acc[threat.type] = (acc[threat.type] || 0) + 1;
-                return acc;
-              },
-              {} as Record<string, number>
-            ),
+            by_severity: threats.reduce((acc, threat) => {
+              acc[threat.severity] = (acc[threat.severity] || 0) + 1;
+              return acc;
+            }, keyedByData<number>()),
+            by_type: threats.reduce((acc, threat) => {
+              acc[threat.type] = (acc[threat.type] || 0) + 1;
+              return acc;
+            }, keyedByData<number>()),
           };
 
           return {

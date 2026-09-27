@@ -11,6 +11,7 @@ import type {
   SecurityMetricsSummary,
 } from '../types.js';
 import { unixToISOString, safeUnixToISOString } from '../utils/timestamp.js';
+import { keyedByData } from '../utils/data-keys.js';
 import {
   apiDataBlock,
   apiErrorBlock,
@@ -596,13 +597,10 @@ function analyzeThreatPatterns(
   byType: Record<string, number>;
   timeDistribution: Record<number, number>;
 } {
-  const byType = threats.reduce(
-    (acc, threat) => {
-      acc[threat.type] = (acc[threat.type] || 0) + 1;
-      return acc;
-    },
-    {} as Record<string, number>
-  );
+  const byType = threats.reduce((acc, threat) => {
+    acc[threat.type] = (acc[threat.type] || 0) + 1;
+    return acc;
+  }, keyedByData<number>());
 
   const timeDistribution = threats.reduce(
     (acc, threat) => {
