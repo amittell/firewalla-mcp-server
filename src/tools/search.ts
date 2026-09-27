@@ -916,7 +916,9 @@ export class SearchEngine {
           count: response.groups.length,
           limit: params.limit,
           offset: 0,
-          query: queryString,
+          // The query sent: getFlowData renames qualifiers (bytes: goes out
+          // as total:) and adds the box scope
+          query: response.query ?? queryString,
           execution_time_ms: Date.now() - startTime,
           next_cursor: response.next_cursor,
         };
@@ -949,7 +951,7 @@ export class SearchEngine {
         count: results.length,
         limit: params.limit,
         offset: params.offset || 0,
-        query: queryString,
+        query: response.query ?? queryString,
         execution_time_ms: Date.now() - startTime,
         next_cursor: response.next_cursor,
         coverage: response.coverage,
