@@ -133,9 +133,11 @@ const NUMBER = /^\d+(?:\.\d+)?(?:[KMGT]?B)?$/i;
 const RANGE = /^\d+(?:\.\d+)?(?:[KMGT]?B)?-\d+(?:\.\d+)?(?:[KMGT]?B)?$/i;
 const COMPARISON = /^(>=|<=|>|<)(.*)$/s;
 const FIELD_TERM = /^([A-Za-z_][\w.]*):(.*)$/s;
-// field:[low TO high], or with braces for excluded ends (Lucene syntax)
+// field:[low TO high], or with braces for excluded ends (Lucene syntax).
+// TO in any case: field:[1 to 2] was not found, so flows and alarms sent it
+// as it was, and the search parser refused it as "Expected TO"
 const BRACKET_RANGE =
-  /(^|[\s(])(-?)([A-Za-z_][\w.]*):([[{])\s*([^\s\]}]+)\s+TO\s+([^\s\]}]+)\s*([\]}])/;
+  /(^|[\s(])(-?)([A-Za-z_][\w.]*):([[{])\s*([^\s\]}]+)\s+[Tt][Oo]\s+([^\s\]}]+)\s*([\]}])/;
 
 const OPPOSITE: Record<string, string> = {
   '>': '<=',

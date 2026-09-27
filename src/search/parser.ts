@@ -356,8 +356,8 @@ export class QueryParser {
         }
 
         // Operators are uppercase, as toMspQuery reads them: and, or and not
-        // are words, as the API reads them. TO is a keyword only inside
-        // [low TO high], so free text may hold the word to.
+        // are words, as the API reads them. TO, in any case, is a keyword
+        // only inside [low TO high], so free text may hold the word to.
         if (word === 'AND' || word === 'OR' || word === 'NOT') {
           tokens.push({
             type: TokenType.LOGICAL,
@@ -365,7 +365,7 @@ export class QueryParser {
             position: start,
             length: word.length,
           });
-        } else if (word === 'TO' && bracketDepth > 0) {
+        } else if (word.toUpperCase() === 'TO' && bracketDepth > 0) {
           tokens.push({
             type: TokenType.TO,
             value: word,

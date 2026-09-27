@@ -540,7 +540,7 @@ export class ProgressiveValidator {
     const impossible: string[] = [];
     
     // Check for impossible numeric ranges
-    const rangePattern = /(\w+):\[(\d+)\s+TO\s+(\d+)\]/g;
+    const rangePattern = /(\w+):\[(\d+)\s+TO\s+(\d+)\]/gi;
     let match;
     
     while ((match = rangePattern.exec(query)) !== null) {
