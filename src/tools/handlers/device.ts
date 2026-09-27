@@ -366,7 +366,12 @@ export class RenameDeviceHandler extends BaseToolHandler {
       });
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
-        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000,
+          error
+        );
       }
 
       const errorMessage =

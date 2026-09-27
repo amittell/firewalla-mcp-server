@@ -448,7 +448,8 @@ export class PauseRuleHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000 // Default timeout
+          10000,
+          error
         );
       }
 
@@ -622,7 +623,8 @@ export class ResumeRuleHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000 // Default timeout
+          10000,
+          error
         );
       }
 
@@ -1220,7 +1222,12 @@ export class CreateTargetListHandler extends BaseToolHandler {
       return this.createUnifiedResponse(response);
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
-        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000,
+          error
+        );
       }
 
       const errorMessage =
@@ -1344,7 +1351,12 @@ export class UpdateTargetListHandler extends BaseToolHandler {
       return this.createUnifiedResponse(response);
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
-        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000,
+          error
+        );
       }
 
       const errorMessage =
@@ -1412,7 +1424,12 @@ export class DeleteTargetListHandler extends BaseToolHandler {
       return this.createUnifiedResponse(response);
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
-        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000,
+          error
+        );
       }
 
       const errorMessage =
@@ -1663,7 +1680,12 @@ export class CreateRuleHandler extends BaseToolHandler {
       return this.createUnifiedResponse(response);
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
-        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000,
+          error
+        );
       }
 
       const errorMessage =
@@ -1741,7 +1763,12 @@ export class DeleteRuleHandler extends BaseToolHandler {
       });
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
-        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          10000,
+          error
+        );
       }
 
       const errorMessage =

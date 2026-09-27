@@ -90,7 +90,7 @@ import {
 } from '../utils/geographic.js';
 import { safeAccess, safeValue } from '../utils/data-normalizer.js';
 import { validateAlarmId } from '../utils/alarm-id-validation.js';
-import { currentToolBudget } from '../utils/timeout-manager.js';
+import { currentToolBudget, type ToolWrite } from '../utils/timeout-manager.js';
 import { PERFORMANCE_THRESHOLDS } from '../config/limits.js';
 import { normalizeTimestamps } from '../utils/data-validator.js';
 import {
@@ -584,6 +584,27 @@ function isTransientFailure(error: AxiosError): boolean {
   return typeof error.code === 'string' && TRANSIENT_CODES.has(error.code);
 }
 
+/**
+ * The read tool that shows whether a write to `url` was applied, named in the
+ * error of a tool that gave up with the write sent and not answered
+ */
+export function checkingReadTool(url: string | undefined): string | undefined {
+  const path = url ?? '';
+  if (path.startsWith('/v2/rules')) {
+    return 'get_network_rules';
+  }
+  if (path.startsWith('/v2/target-lists')) {
+    return 'get_target_lists';
+  }
+  if (/^\/v2\/boxes\/[^/]+\/devices\//.test(path)) {
+    return 'get_device_status';
+  }
+  if (path.startsWith('/v2/alarms/')) {
+    return 'get_specific_alarm';
+  }
+  return undefined;
+}
+
 /** Whether request() failed with no answer because its timeout ran out */
 function isApiTimeout(error: unknown): boolean {
   return (
@@ -654,6 +675,8 @@ interface RateLimitedConfig extends InternalAxiosRequestConfig {
   toolDeadline?: number;
   /** When this attempt was sent, in Date.now() milliseconds */
   sentAt?: number;
+  /** A write's record in its tool's budget (see ToolWrite) */
+  toolWrite?: ToolWrite;
   /**
    * Called each time the request goes to the API, retries included. A
    * function because axios copies a plain object in a config, so a counter
@@ -870,6 +893,17 @@ export class FirewallaClient {
    * @returns {void}
    */
   private setupInterceptors(): void {
+    /** Marks a write answered in its tool's budget */
+    const answered = (
+      config: InternalAxiosRequestConfig | undefined,
+      status: number
+    ) => {
+      const write = (config as RateLimitedConfig | undefined)?.toolWrite;
+      if (write) {
+        write.state = 'answered';
+        write.status = status;
+      }
+    };
     this.api.interceptors.request.use(
       (
         config
@@ -885,6 +919,20 @@ export class FirewallaClient {
         request.toolDeadline ??=
           budget?.deadline ?? Date.now() + PERFORMANCE_THRESHOLDS.TIMEOUT_MS;
         const name = `${config.method?.toUpperCase()} ${config.url}`;
+        // A write is recorded in the tool's budget, so a tool that gives up
+        // can say whether it was sent (see describeWrites)
+        if (
+          budget &&
+          !request.toolWrite &&
+          config.method?.toUpperCase() !== 'GET'
+        ) {
+          request.toolWrite = {
+            request: name,
+            check: checkingReadTool(config.url),
+            state: 'queued',
+          };
+          budget.writes.push(request.toolWrite);
+        }
         // A request the tool gave up on is not sent, nor counted
         const cancelled = () =>
           new CanceledError(
@@ -898,6 +946,9 @@ export class FirewallaClient {
           }
           process.stderr.write(`API Request: ${name}\n`);
           request.sentAt = Date.now();
+          if (request.toolWrite) {
+            request.toolWrite.state = 'sent';
+          }
           request.onSent?.();
           return config;
         };
@@ -937,6 +988,7 @@ export class FirewallaClient {
 
     this.api.interceptors.response.use(
       response => {
+        answered(response.config, response.status);
         process.stderr.write(
           `API Response: ${response.status} ${response.config.url}\n`
         );
@@ -946,6 +998,9 @@ export class FirewallaClient {
         // Refused before it was sent; the request interceptor logged it
         if (error instanceof RateLimitError) {
           throw error;
+        }
+        if (error.response) {
+          answered(error.config, error.response.status);
         }
         process.stderr.write(
           `API Response Error: ${error.response?.status} ${error.message}\n`

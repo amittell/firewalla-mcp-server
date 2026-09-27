@@ -37,6 +37,63 @@ export interface ToolBudget {
   deadline: number;
   /** Aborted when the tool gives up */
   signal: AbortSignal;
+  /** The operation's POST, PUT, PATCH and DELETE requests, as the client made them */
+  writes: ToolWrite[];
+}
+
+/** A write request a tool's operation made, and how far it got */
+export interface ToolWrite {
+  /** `POST /v2/rules/<id>/pause` */
+  request: string;
+  /** The read tool that shows whether the write was applied */
+  check?: string;
+  /**
+   * queued: made, waiting for the rate limiter; sent: sent to the API, not
+   * answered yet; answered: the API answered it
+   */
+  state: 'queued' | 'sent' | 'answered';
+  /** The HTTP status of its answer */
+  status?: number;
+}
+
+/**
+ * What became of a tool's writes when the tool gave up. A write still
+ * waiting for the rate limiter is never sent. One sent and not answered
+ * may have reached Firewalla: cancelling it does not undo it, so the caller
+ * must check before trying again, or it may pause or create a rule twice.
+ */
+function describeWrites(
+  toolName: string,
+  duration: number,
+  writes: ToolWrite[]
+): Pick<TimeoutError, 'writeOutcome' | 'writeState'> {
+  const check = (write: ToolWrite) =>
+    write.check
+      ? `Check with ${write.check} before trying again.`
+      : 'Check the current state before trying again.';
+  const gaveUp = `${toolName} gave up after ${duration} ms`;
+  const sent = writes.find(write => write.state === 'sent');
+  if (sent) {
+    return {
+      writeState: 'unknown',
+      writeOutcome: `${gaveUp} with ${sent.request} sent and not answered. The outcome is unknown: Firewalla may have applied the change. ${check(sent)}`,
+    };
+  }
+  const answered = writes.find(write => write.state === 'answered');
+  if (answered) {
+    return {
+      writeState: 'applied',
+      writeOutcome: `${gaveUp}, after ${answered.request} was answered${answered.status ? ` HTTP ${answered.status}` : ''}: the change was made. ${check(answered)}`,
+    };
+  }
+  const queued = writes.find(write => write.state === 'queued');
+  if (queued) {
+    return {
+      writeState: 'not_sent',
+      writeOutcome: `${gaveUp} while ${queued.request} waited for the rate limit. It was not sent, so nothing was changed.`,
+    };
+  }
+  return {};
 }
 
 const toolBudgets = new AsyncLocalStorage<ToolBudget>();
@@ -78,6 +135,13 @@ export class TimeoutError extends Error {
   public readonly isTimeout = true;
   public readonly duration: number;
   public readonly toolName: string;
+  /**
+   * What became of the operation's writes, when it made any: not_sent,
+   * unknown (sent and not answered) or applied (see describeWrites)
+   */
+  writeState?: 'not_sent' | 'unknown' | 'applied';
+  /** The same for the tool's caller, in a sentence or three */
+  writeOutcome?: string;
 
   constructor(toolName: string, duration: number, timeoutMs: number) {
     super(
@@ -140,6 +204,11 @@ export class TimeoutManager {
     };
 
     const budget = new AbortController();
+    const toolBudget: ToolBudget = {
+      deadline: metrics.startTime + finalConfig.timeoutMs,
+      signal: budget.signal,
+      writes: [],
+    };
 
     try {
       // Create timeout promise
@@ -155,8 +224,13 @@ export class TimeoutManager {
             duration,
             finalConfig.timeoutMs
           );
-          // Cancels the operation's requests (see ToolBudget)
+          // Cancels the operation's requests (see ToolBudget); a write still
+          // in flight after this was sent and not answered
           budget.abort(timeoutError);
+          Object.assign(
+            timeoutError,
+            describeWrites(finalConfig.toolName, duration, toolBudget.writes)
+          );
           reject(timeoutError);
         }, finalConfig.timeoutMs);
 
@@ -165,13 +239,7 @@ export class TimeoutManager {
 
       // Race the operation against the timeout
       const result = await Promise.race([
-        toolBudgets.run(
-          {
-            deadline: metrics.startTime + finalConfig.timeoutMs,
-            signal: budget.signal,
-          },
-          operation
-        ),
+        toolBudgets.run(toolBudget, operation),
         timeoutPromise,
       ]);
 
@@ -635,11 +703,22 @@ export function createValidationErrorResponse(
 export function createTimeoutErrorResponse(
   toolName: string,
   duration: number,
-  timeoutMs: number
+  timeoutMs: number,
+  error?: unknown
 ): {
   content: Array<{ type: string; text: string }>;
   isError: true;
 } {
+  // A tool that writes says what became of its write: the generic advice
+  // (a narrower query, a smaller limit) would have the caller send it again
+  if (error instanceof TimeoutError && error.writeOutcome) {
+    return createErrorResponse(
+      toolName,
+      error.writeOutcome,
+      ErrorType.TIMEOUT_ERROR,
+      { duration, write: error.writeState }
+    );
+  }
   const guidance = generateTimeoutGuidance(toolName, duration, timeoutMs);
 
   return createErrorResponse(
