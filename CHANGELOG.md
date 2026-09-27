@@ -670,6 +670,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   set the `box.id` term was sent but not reported. All three give the query
   as sent now. `applied_filters.geographic` was already true only when
   `geographic_filters` added a region term.
+- The search tools no longer refuse ordinary words as "potentially dangerous
+  content". The query sanitizer matched patterns for shell commands and
+  network tools, SQL, script, templates, file paths and URL schemes, so
+  `search_devices`, `search_target_lists` and `search_rules` refused
+  `Cat Feeder`, `name:"Top Floor"`, `ping pong`, `name:"PS 5"`,
+  `kill switch` and `dig site`, and `search_flows` and `search_alarms`
+  refused `drop table`. A query goes only into the query string of an HTTPS
+  request to the MSP API and into matching on the client, and reaches none
+  of those, so the patterns guarded nothing. A check for regex quantifiers
+  is gone as well: every regex the search tools build from a query escapes
+  `+`, `{` and `(`. Control characters, the 2,000-character limit and the
+  nesting limit are still checked.
 
 ### Removed
 

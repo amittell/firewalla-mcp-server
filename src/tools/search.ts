@@ -831,19 +831,9 @@ export class SearchEngine {
       // Validate basic search parameters
       this.validateBasicSearchParams(params, 'searchFlows');
 
-      // Basic security check for dangerous patterns
-      const dangerousPatterns = [
-        /DROP\s+TABLE/i,
-        /<script/i,
-        /javascript:/i,
-        /data:text\/html/i,
-      ];
-
-      if (dangerousPatterns.some(pattern => pattern.test(params.query))) {
-        throw new Error(
-          'Query validation failed: Query contains potentially dangerous content'
-        );
-      }
+      // No SQL or HTML patterns: the query goes into the query string of an
+      // HTTPS request and reaches no SQL, HTML or script
+      // (QuerySanitizer.sanitizeSearchQuery says the same)
 
       if (
         !params.limit ||
@@ -1003,19 +993,9 @@ export class SearchEngine {
       // Validate basic search parameters
       this.validateBasicSearchParams(params, 'searchFlows');
 
-      // Basic security check for dangerous patterns
-      const dangerousPatterns = [
-        /DROP\s+TABLE/i,
-        /<script/i,
-        /javascript:/i,
-        /data:text\/html/i,
-      ];
-
-      if (dangerousPatterns.some(pattern => pattern.test(params.query))) {
-        throw new Error(
-          'Enhanced query validation failed: Query contains potentially dangerous content'
-        );
-      }
+      // No SQL or HTML patterns: the query goes into the query string of an
+      // HTTPS request and reaches no SQL, HTML or script
+      // (QuerySanitizer.sanitizeSearchQuery says the same)
 
       if (
         !params.limit ||

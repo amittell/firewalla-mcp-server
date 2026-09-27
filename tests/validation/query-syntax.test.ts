@@ -363,47 +363,28 @@ describe('Query Syntax Validation', () => {
       });
     });
 
-    it('should detect SQL injection patterns', () => {
-      const sqlInjectionQueries = [
+    it('does not refuse SQL, script or template text, which reaches no such sink', () => {
+      // The query goes only into an HTTPS query string and into matching on
+      // the client. These were refused as "potentially dangerous content",
+      // along with names such as Cat Feeder and Top Floor.
+      const queries = [
         "severity:high; DROP TABLE flows; --",
         "source_ip:192.168.1.1' OR 1=1 --",
         "protocol:tcp UNION SELECT * FROM users",
-        "action:block'; DELETE FROM rules; --"
-      ];
-
-      sqlInjectionQueries.forEach(query => {
-        const result = QuerySanitizer.sanitizeSearchQuery(query);
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('Query contains potentially dangerous content');
-      });
-    });
-
-    it('should detect script injection patterns', () => {
-      const scriptInjectionQueries = [
+        "action:block'; DELETE FROM rules; --",
         'severity:<script>alert("xss")</script>',
         'source_ip:javascript:alert(1)',
         'name:<iframe src="malicious.com"></iframe>',
-        'description:eval("malicious code")'
-      ];
-
-      scriptInjectionQueries.forEach(query => {
-        const result = QuerySanitizer.sanitizeSearchQuery(query);
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('Query contains potentially dangerous content');
-      });
-    });
-
-    it('should detect template injection patterns', () => {
-      const templateInjectionQueries = [
+        'description:eval("malicious code")',
         'name:${malicious.code}',
         'description:{{constructor.constructor("alert(1)")()}}',
         'target_value:<%=system("rm -rf /")%>'
       ];
 
-      templateInjectionQueries.forEach(query => {
+      queries.forEach(query => {
         const result = QuerySanitizer.sanitizeSearchQuery(query);
-        expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('Query contains potentially dangerous content');
+        expect([query, result.errors]).toEqual([query, []]);
+        expect(result.isValid).toBe(true);
       });
     });
 
