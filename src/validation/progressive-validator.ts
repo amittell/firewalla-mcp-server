@@ -579,7 +579,7 @@ export class ProgressiveValidator {
     let complexity = 0;
     
     // Count logical operators
-    complexity += (query.match(/\b(AND|OR|NOT)\b/gi) || []).length * 2;
+    complexity += (query.match(/\b(AND|OR|NOT)\b/g) || []).length * 2;
     
     // Count field conditions
     complexity += (query.match(/\w+\s*[:=]/g) || []).length;

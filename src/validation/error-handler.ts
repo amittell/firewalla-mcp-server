@@ -1347,7 +1347,7 @@ export class QuerySanitizer {
     // Normalize common patterns for better parsing
     const normalizedQuery = trimmedQuery
       .replace(/\s+/g, ' ')  // Normalize whitespace
-      .replace(/\s+(AND|OR|NOT)\s+/gi, ' $1 ')  // Normalize logical operators FIRST
+      .replace(/\s+(AND|OR|NOT)\s+/g, ' $1 ')  // Normalize logical operators FIRST (uppercase: and, or and not are words)
       .replace(/\s*:\s*/g, ':')  // Remove spaces around colons
       .replace(/\s*>\s*=\s*/g, '>=')  // Handle spaced '>='
       .replace(/\s*<\s*=\s*/g, '<=')  // Handle spaced '<='
@@ -1426,7 +1426,7 @@ export class QuerySanitizer {
         /^\*+$/,                          // Pure wildcards: "*", "**", etc.
         /^\*\s*$|^\s*\*$/,               // Wildcards with whitespace
         /^[*\s]+$/,                     // Only wildcards and spaces
-        /^\*+\s*(AND|OR|NOT)\s*\*+$/i,   // Multiple wildcards with operators
+        /^\*+\s*(AND|OR|NOT)\s*\*+$/,   // Multiple wildcards with operators
         /^[*\s()]+$/,                 // Wildcards, spaces, and parentheses only
       ];
       
@@ -1539,8 +1539,9 @@ export class QuerySanitizer {
     const complexityIssues: string[] = [];
 
     // Check for excessive logical operators (potential performance issue)
-    const orCount = (query.match(/\bOR\b/gi) || []).length;
-    const andCount = (query.match(/\bAND\b/gi) || []).length;
+    // Uppercase only: and and or are words, as toMspQuery reads them
+    const orCount = (query.match(/\bOR\b/g) || []).length;
+    const andCount = (query.match(/\bAND\b/g) || []).length;
     const totalLogicalOps = orCount + andCount;
 
     if (totalLogicalOps > 20) {

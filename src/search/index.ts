@@ -6,6 +6,27 @@
 import type { SearchFilter, SearchOptions } from '../types.js';
 
 /**
+ * Whether `char` opens or closes a quote: a double quote, or a single quote
+ * that does not follow a letter, digit or underscore (in Alex's it is an
+ * apostrophe, as the search parser reads it), unless escaped; inside a
+ * quote, only the quote that opened it closes it
+ */
+function opensOrClosesQuote(
+  char: string,
+  prevChar: string,
+  inQuotes: boolean,
+  quoteChar: string
+): boolean {
+  if (prevChar === '\\') {
+    return false;
+  }
+  if (inQuotes) {
+    return char === quoteChar;
+  }
+  return char === '"' || (char === "'" && !/\w/.test(prevChar));
+}
+
+/**
  * Splits a string by commas while preserving quoted substrings as single segments.
  *
  * Commas inside single or double quotes are ignored as split points. Leading and trailing whitespace is trimmed from each resulting segment.
@@ -23,11 +44,11 @@ function smartSplitCommas(value: string): string[] {
     const char = value[i];
     const prevChar = i > 0 ? value[i - 1] : '';
 
-    if ((char === '"' || char === "'") && prevChar !== '\\') {
+    if (opensOrClosesQuote(char, prevChar, inQuotes, quoteChar)) {
       if (!inQuotes) {
         inQuotes = true;
         quoteChar = char;
-      } else if (char === quoteChar) {
+      } else {
         inQuotes = false;
         quoteChar = '';
       }
@@ -102,11 +123,11 @@ function smartSplitLogicalOperators(query: string): string[] {
     const prevChar = i > 0 ? query[i - 1] : '';
 
     // Handle quote state
-    if ((char === '"' || char === "'") && prevChar !== '\\') {
+    if (opensOrClosesQuote(char, prevChar, inQuotes, quoteChar)) {
       if (!inQuotes) {
         inQuotes = true;
         quoteChar = char;
-      } else if (char === quoteChar) {
+      } else {
         inQuotes = false;
         quoteChar = '';
       }
@@ -124,7 +145,9 @@ function smartSplitLogicalOperators(query: string): string[] {
 
     // Check for logical operators outside quotes
     const remaining = query.slice(i);
-    const logicalMatch = remaining.match(/^\s+(AND|OR|NOT)\s+/i);
+    // Uppercase only, as toMspQuery and the search parser read them: and,
+    // or and not are words (a or b or c or d was read as four terms)
+    const logicalMatch = remaining.match(/^\s+(AND|OR|NOT)\s+/);
 
     if (logicalMatch) {
       // Add current token if not empty
@@ -134,7 +157,7 @@ function smartSplitLogicalOperators(query: string): string[] {
       }
 
       // Add the logical operator
-      result.push(logicalMatch[1].toUpperCase());
+      result.push(logicalMatch[1]);
 
       // Skip past the matched logical operator and whitespace
       i += logicalMatch[0].length;
@@ -192,8 +215,8 @@ export function parseSearchQuery(query: string): ParsedQuery {
     }
 
     // Check if token is a logical operator
-    if (/^(AND|OR|NOT)$/i.test(token)) {
-      currentLogical = token.toUpperCase() as 'AND' | 'OR' | 'NOT';
+    if (/^(AND|OR|NOT)$/.test(token)) {
+      currentLogical = token as 'AND' | 'OR' | 'NOT';
       complexity += 0.5;
       continue;
     }
