@@ -61,10 +61,10 @@ The MCP server acts as a bridge between Claude and your Firewalla firewall, tran
 |---|---|---|
 | `pause_rule`, `resume_rule`, `create_target_list`, `update_target_list` and `delete_target_list` were always registered | All 11 write tools are off; the server lists 24 read-only tools, and a call to a write tool answers "Unknown tool" and sends nothing | `FIREWALLA_ENABLE_WRITE_TOOLS=true` |
 | The HTTP transport listened on every interface | It listens on 127.0.0.1. The Docker image sets `MCP_HTTP_HOST=0.0.0.0`, so a published port works as before | `MCP_HTTP_HOST=0.0.0.0` outside Docker, with `MCP_HTTP_BEARER_TOKEN` |
-| Any `Host` header was served | 403 unless it is `localhost`, `127.0.0.1`, `[::1]` or the `MCP_HTTP_HOST` address | the name clients connect by (a compose service name, a LAN address) in `MCP_HTTP_ALLOWED_HOSTS` |
+| Any `Host` header was served | 403 unless it is `localhost`, `127.0.0.1`, `[::1]` or the `MCP_HTTP_HOST` address; a wildcard `MCP_HTTP_HOST` (`0.0.0.0`, `::`, as in the Docker image) adds nothing, so every other name clients use must be listed | the name clients connect by (a compose service name, a LAN address) in `MCP_HTTP_ALLOWED_HOSTS` |
 | Any `Origin` was served | 403 for a request with an `Origin` header, which browsers send; MCP clients that send none are not affected | the page's origin in `MCP_HTTP_ALLOWED_ORIGINS` |
 | No token check (`MCP_HTTP_BEARER_TOKEN` did not exist) | With `MCP_HTTP_BEARER_TOKEN` set, 401 without `Authorization: Bearer <token>` | the token in every client, whenever the port is reachable from other machines |
-| Any path starting with `MCP_HTTP_PATH` was served | Only `/mcp` and `/mcp/`, with or without a query string; `/mcpx` and `/mcp/x` get 404 | a client URL that ends in `/mcp` |
+| Any path starting with `MCP_HTTP_PATH` was served | Only the configured `MCP_HTTP_PATH` (default `/mcp`) and that path with one trailing slash, with or without a query string; with the default, `/mcpx` and `/mcp/x` get 404 | a client URL that ends in exactly the configured `MCP_HTTP_PATH` |
 | `MCP_TEST_MODE=true` started under any `NODE_ENV` | Refused with `NODE_ENV=production`, which the Docker image sets | `-e NODE_ENV=development` with `-e MCP_TEST_MODE=true` |
 | `API_RATE_LIMIT` was range-checked and not applied | At most `API_RATE_LIMIT` requests start in any 5 minutes (default 100, the MSP API's quota per token); a request that cannot start within 20 s fails and says when capacity returns | a lower `API_RATE_LIMIT` when other clients use the same token |
 
