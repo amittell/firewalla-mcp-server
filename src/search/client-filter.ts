@@ -5,9 +5,10 @@
  * `matchesQuery` evaluates AND, OR, NOT and parentheses; the caller decides
  * what each `field:value` term matches. NOT binds tightest, then AND, then OR,
  * and terms with no operator between them are ANDed, as in the MSP syntax.
- * The MSP API's exclusion prefix works too: `-field:value` and `-(...)` are
- * NOT. Operators are uppercase, as toMspQuery reads them: `and`, `or` and
- * `not` are words to match, as the API reads them.
+ * The MSP API's exclusion prefix works too: `-field:value`, `-(...)` and a
+ * `-` before free text (`-laptop`) are NOT. Operators are uppercase, as
+ * toMspQuery reads them: `and`, `or` and `not` are words to match, as the
+ * API reads them.
  */
 
 // A term runs to the next space or parenthesis outside quotes, so colons in a
@@ -80,7 +81,9 @@ export function matchesQuery(
       }
       return result;
     }
-    if (/^-[\w.]+:/.test(token)) {
+    // -field:value, and - before free text (-laptop, -"a b"), as
+    // withNotForMinus reads them for the parser
+    if (/^-[\p{L}\p{N}\p{M}_*?"']/u.test(token)) {
       return !matchesTerm(token.slice(1));
     }
     return matchesTerm(token);

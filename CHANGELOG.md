@@ -771,6 +771,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as `"not blocked:true"` or `'online:true'` the same way. An apostrophe
   after a letter opens no quote, so `Alex's blocked:true` is still
   translated.
+- The query syntax check refuses two operators with no term between them,
+  and an operator with no term beside it inside parentheses, and names
+  them, as the search parser and `toMspQuery` refuse them.
+  `name:x AND AND name:y` passed it, and `search_devices` and
+  `search_target_lists` then refused it as "Unexpected token: AND" with
+  `name:"x AND" AND name:y` as the query to try. The search parser reads
+  `NOT NOT x` as `x`, as `toMspQuery` and the client matcher do:
+  `search_devices` refused it while `search_flows` sent `x`.
+- `search_devices` and `search_target_lists` read a `-` before free text as
+  NOT, as they read one before a field. They took `NOT laptop` and refused
+  `-laptop` and `-"a b"` as an "Unexpected character '-'", and
+  `name:nas -x` with `name:"nas -x"` as the query to try. `search_rules`
+  refuses `-laptop` as it refuses `NOT laptop`, because the API's `-`
+  excludes field values only, as `search_flows` and `search_alarms` did
+  already. Every search tool refuses a `-` that starts no term
+  (`- laptop`, `nas -`) as one: `search_flows` and `search_alarms` said
+  `"-" excludes free text`, and the others "Unexpected character '-'".
+  Over every query of up to four pieces from
+  words, operators, quotes, parentheses and `-` (41,370 of them, each also
+  with a field term before or after it), the syntax check, the enhanced
+  validator and the parser now accept and refuse the same queries for
+  devices, target lists, rules and flows.
 
 ### Removed
 
