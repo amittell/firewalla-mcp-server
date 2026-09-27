@@ -1406,7 +1406,8 @@ export class QuerySanitizer {
     // "device.ip:value"). A term runs to the next space or parenthesis outside
     // quotes, so colons inside a value (mac:AA:BB:CC:DD:EE:FF, ip:fe80::1,
     // mac:"aa:bb:cc:00:00:01") are never read as field names.
-    const termPattern = /(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s()"'])+/g;
+    // A single quote after a letter, digit or underscore is an apostrophe
+    const termPattern = /(?:"(?:[^"\\]|\\.)*"|(?<!\w)'(?:[^'\\]|\\.)*'|[^\s()"])+/g;
     const foundFields: string[] = [];
 
     for (const term of query.match(termPattern) || []) {

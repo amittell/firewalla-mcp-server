@@ -11,6 +11,8 @@
  * Quoted values are left alone.
  */
 
+import { QUOTED_TEXT } from './msp-query.js';
+
 // Leading context of a term: start of text, whitespace or '('
 const BLOCKED_TERM =
   /(^|[\s(])(-?)(?:blocked|block)[:=](true|false|1|0)(?=$|[\s)])/gi;
@@ -33,7 +35,7 @@ const TRANSLATIONS: Record<string, Array<(text: string) => string>> = {
 };
 
 // Splits a query into unquoted text (even indexes) and quoted values (odd)
-const QUOTED_VALUE = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/;
+const QUOTED_VALUE = QUOTED_TEXT;
 
 /**
  * Translates legacy field names in a query into MSP qualifiers

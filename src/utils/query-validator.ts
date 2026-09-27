@@ -9,7 +9,7 @@
  */
 
 import type { ValidationResult } from '../types.js';
-import { findBracketRange } from './msp-query.js';
+import { findBracketRange, QUOTED_TEXT } from './msp-query.js';
 
 /**
  * Firewalla query syntax patterns
@@ -190,7 +190,7 @@ function tokenizeQuery(query: string): QueryToken[] {
 }
 
 // A quoted value, whose commas and spaces are its own
-const QUOTED = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/;
+const QUOTED = QUOTED_TEXT;
 
 /**
  * A comma list broken by a space, such as `online:true, false` or

@@ -1070,7 +1070,9 @@ export class SearchRulesHandler extends BaseToolHandler {
  */
 function invalidIpBlocks(query: string): string[] {
   const values = [
-    ...query.matchAll(/(?:^|[\s(])-?ip:("(?:[^"\\]|\\.)*"|[^\s()]+)/gi),
+    ...query.matchAll(
+      /(?:^|[\s(])-?ip:("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s()]+)/gi
+    ),
   ].flatMap(match => commaListValues(match[1]));
   return values.filter(
     value => value.includes('/') && ipv4InCidr('0.0.0.0', value) === undefined

@@ -655,7 +655,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the API's grammar did not: it split the phrase at its spaces, read its
   `AND` as an operator and sent `'rock roll'`, so `search_rules` found no
   rule with the phrase. A single quote that opens a phrase and is never
-  closed is refused, as the parser already refused it.
+  closed is refused, as the parser already refused it. The check for
+  `[low TO high]` range syntax skipped only double-quoted text, so
+  `'show ts:[1 TO 2]'` was refused as a range; it skips single-quoted text
+  too now, and goes out as `"show ts:[1 TO 2]"`. So do the `-` to `NOT`
+  rewrite for the validators and the qualifier renames, which also took an
+  apostrophe for a quote: in `Alex's bytes:>1MB it's` the `bytes:` was not
+  renamed to `total:`.
 - An empty phrase (`""`) is refused before a request. It has no text to
   find: `search_devices`, `search_target_lists` and `search_rules` matched
   every device, list and rule, and `search_flows` and `search_alarms` sent

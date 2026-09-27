@@ -181,9 +181,20 @@ export interface BracketRange {
 }
 
 /**
+ * A quoted value: in double quotes, or in single quotes that open where a
+ * word could start (a single quote after a letter, digit or underscore is
+ * an apostrophe, as in Alex's), backslash escapes included. Split on it,
+ * a query's unquoted text is at the even indexes and its quoted values at
+ * the odd ones.
+ */
+export const QUOTED_TEXT = /("(?:[^"\\]|\\.)*"|(?<!\w)'(?:[^'\\]|\\.)*')/;
+
+/**
  * The first Lucene-style range in a query (`field:[low TO high]`, or with
- * braces), outside double quotes. The API's grammar has none: its ranges are
- * `field:low-high`, which include both ends.
+ * braces), outside quotes. The API's grammar has none: its ranges are
+ * `field:low-high`, which include both ends. Single-quoted text is quoted
+ * too: toMspQuery sends 'show ts:[1 TO 2]' as one phrase, and it was
+ * refused here as a range.
  *
  * @param query - A query as the caller wrote it
  * @returns The range and its API form, or undefined when there is none
@@ -192,7 +203,7 @@ export function findBracketRange(query: string): BracketRange | undefined {
   if (!query || typeof query !== 'string') {
     return undefined;
   }
-  const pieces = query.split(/("(?:[^"\\]|\\.)*")/);
+  const pieces = query.split(QUOTED_TEXT);
   for (let i = 0; i < pieces.length; i += 2) {
     const match = BRACKET_RANGE.exec(pieces[i]);
     if (!match) {
@@ -1208,15 +1219,15 @@ export function mspValue(value: string): string {
 
 /**
  * The API's `-field:value` and `-(...)` exclusions written as NOT, for the
- * validators and parsers that know only the boolean operators. The query
- * sent to the API is not rewritten this way.
+ * validators and parsers that know only the boolean operators, outside
+ * quoted values. The query sent to the API is not rewritten this way.
  */
 export function withNotForMinus(query: string): string {
   if (!query || typeof query !== 'string') {
     return query;
   }
   return query
-    .split(/("(?:[^"\\]|\\.)*")/)
+    .split(QUOTED_TEXT)
     .map((part, index) =>
       index % 2 === 1
         ? part
