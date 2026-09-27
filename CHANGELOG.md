@@ -913,6 +913,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   contains "validation"), and its ignore patterns (`bulk-operations`,
   `problematic-tools`, `timeout-retry`) matched no file. It no longer passes `--passWithNoTests`, so a pattern
   that matches nothing fails instead of passing.
+- A wildcard the client matches itself no longer stalls the server.
+  `search_rules`, `search_target_lists` and `search_devices` matched `*`
+  with a regular expression, which backtracks: on a stub, 9 wildcards
+  against a 40-character value took 8.5 s in `search_rules`
+  (`target.value:`) and 5.4 s in `search_target_lists` (`name:`), and no
+  other request ran meanwhile. Wildcards are matched without a regular
+  expression now, in time at most the value's length times the pattern's:
+  10 wildcards against 1,000 characters take under 50 ms. The answers are
+  the same, except that a `*` now also matches a line break, which the
+  regular expression's `.` did not.
 
 ### Removed
 

@@ -34,6 +34,7 @@ import {
 import { unquoteQueryValue } from '../search/client-filter.js';
 import { dataKeyed } from '../utils/field-normalizer.js';
 import { keyedByData } from '../utils/data-keys.js';
+import { matchesWildcard } from '../utils/wildcard.js';
 import {
   GeographicFilterError,
   geographicFiltersToMspQuery,
@@ -76,10 +77,7 @@ function ruleSatisfiesTerm(rule: any, term: MspTerm): boolean | undefined {
     term.field.toLowerCase() !== 'status';
   return values.some(value => {
     if (value.includes('*')) {
-      const pattern = value
-        .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-        .replace(/\*/g, '.*');
-      return new RegExp(`^${pattern}$`).test(actual);
+      return matchesWildcard(actual, value);
     }
     return isTarget ? actual.includes(value) : actual === value;
   });

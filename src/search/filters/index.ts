@@ -7,6 +7,7 @@ import type { QueryNode, FieldQuery, WildcardQuery } from '../types.js';
 import type { Filter, FilterContext, FilterResult } from './base.js';
 import { TimeRangeFilter } from './time.js';
 import { commaListValues, ipv4InCidr } from '../client-filter.js';
+import { matchesWildcard } from '../../utils/wildcard.js';
 
 /**
  * Determines whether a query node is a field query.
@@ -139,11 +140,7 @@ class IpAddressFilter implements Filter {
       // `*` matches the rest of the address, or any run of it: 192.168.*
       // matches 192.168.1.20, as the device search itself does. It used to
       // match one octet, so 192.168.* matched no address with four.
-      const regexPattern = pattern
-        .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-        .replace(/\*/g, '.*');
-      const regex = new RegExp(`^${regexPattern}$`, 'i');
-      return regex.test(ip);
+      return matchesWildcard(ip, pattern, { ignoreCase: true });
     }
 
     return ip === pattern;
