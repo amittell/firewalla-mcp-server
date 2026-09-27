@@ -1580,7 +1580,7 @@ The official docs do not document rate limits. Measured 2026-09-26 on `GET /v2/b
 - **Burst 2**, starting 70 s after that reset: 98 requests were answered 200, then 429 with `x-ratelimit-reset` 301 s after the previous reset and `retry-after: 203`. With the 2 requests made since the reset, that is exactly 100 accepted in the window.
 - A successful response carries no rate-limit headers (`GET /v2/boxes` answered with `date` only), so a client cannot see how much of the quota is left before it gets a 429.
 
-So the API accepts 100 requests per token in each fixed 5-minute (300 s) window, and a window starts with the first request after the previous one ends. A 429's `retry-after` and `x-ratelimit-reset` both give the window's end, which can be up to about 300 s away. The waits of 40 to 60 s seen on 2026-09-25 were the tail of such a window.
+So the API accepted 100 requests from that token in each fixed 5-minute (300 s) window (whether the limit is per token or per account was not measured), and a window starts with the first request after the previous one ends. A 429's `retry-after` and `x-ratelimit-reset` both give the window's end, which can be up to about 300 s away. The waits of 40 to 60 s seen on 2026-09-25 were the tail of such a window.
 
 Wait until `x-ratelimit-reset` (or for `retry-after`) before retrying.
 
