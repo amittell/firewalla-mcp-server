@@ -91,6 +91,7 @@ npm run lint:check       # Check linting with zero warnings
 npm run format           # Format code with Prettier
 npm run format:check     # Check code formatting
 npm run typecheck        # Type checking without emitting files
+npm run typecheck:tests  # Type check tests/ with src/ (ts-jest only transpiles)
 npm run clean            # Clean all generated files
 ```
 

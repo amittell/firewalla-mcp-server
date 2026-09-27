@@ -637,7 +637,7 @@ describe('get_flow_trends', () => {
     expect(
       calls
         .slice(1)
-        .map(call => [call.url, call.params])
+        .map((call): [string, Record<string, any>] => [call.url, call.params])
         .sort((a, b) => a[1].query.localeCompare(b[1].query))
     ).toEqual([
       [

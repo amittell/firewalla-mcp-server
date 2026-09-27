@@ -224,9 +224,9 @@ export function withRetries<T>(testFn: () => Promise<T>, category: 'flaky' | 'ne
       try {
         return await testFn();
       } catch (error) {
-        lastError = error as Error;
+        lastError = error instanceof Error ? error : new Error(String(error));
         if (attempt < maxRetries) {
-          console.warn(`Test attempt ${attempt + 1} failed, retrying... (${error.message})`);
+          console.warn(`Test attempt ${attempt + 1} failed, retrying... (${lastError.message})`);
           // Wait before retry
           await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
         }

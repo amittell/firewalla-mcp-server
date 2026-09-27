@@ -32,6 +32,22 @@ import {
   TimeoutError,
   createTimeoutErrorResponse 
 } from '../../src/utils/timeout-manager.js';
+import type { ValidationResult } from '../../src/types.js';
+
+/**
+ * A validator with the largest value it takes and the smallest it refuses,
+ * kept together so each value is checked by its own parameter's validator
+ */
+function boundaryTest<T>(
+  parameter: string,
+  [maxValid, exceedsMax]: [T, T],
+  validation: (value: T) => ValidationResult
+) {
+  return {
+    parameter,
+    validate: () => [validation(maxValid), validation(exceedsMax)],
+  };
+}
 
 describe('Regression Prevention Tests', () => {
   describe('Null/Undefined Parameter Handling Prevention', () => {
@@ -149,7 +165,7 @@ describe('Regression Prevention Tests', () => {
       });
 
       it('should validate geographic filter arrays with null elements', () => {
-        const geoArrayTests = [
+        const geoArrayTests: Array<Record<string, Array<string | null | undefined>>> = [
           { countries: [null, 'China', undefined, 'Russia', '', '   '] },
           { continents: ['Asia', null, 'Europe', undefined] },
           { regions: [null, undefined, '', 'Eastern Europe'] },
@@ -159,7 +175,7 @@ describe('Regression Prevention Tests', () => {
         geoArrayTests.forEach(geoFilters => {
           Object.entries(geoFilters).forEach(([key, values]) => {
             // Filter out null/undefined/empty values
-            const cleanedValues = values.filter(v => 
+            const cleanedValues = values.filter((v): v is string =>
               v !== null && 
               v !== undefined && 
               typeof v === 'string' && 
@@ -514,39 +530,36 @@ describe('Regression Prevention Tests', () => {
         };
 
         const boundaryTests = [
-          {
-            parameter: 'limit',
-            values: [systemLimits.maxLimit, systemLimits.maxLimit + 1],
-            validation: (value: number) => ParameterValidator.validateNumber(
+          boundaryTest(
+            'limit',
+            [systemLimits.maxLimit, systemLimits.maxLimit + 1],
+            value => ParameterValidator.validateNumber(
               value, 
               'limit', 
               { required: true, min: 1, max: systemLimits.maxLimit }
             )
-          },
-          {
-            parameter: 'query',
-            values: [
+          ),
+          boundaryTest(
+            'query',
+            [
               'a'.repeat(systemLimits.maxQueryLength),
               'a'.repeat(systemLimits.maxQueryLength + 1)
             ],
-            validation: (value: string) => QuerySanitizer.sanitizeSearchQuery(value)
-          },
-          {
-            parameter: 'duration',
-            values: [systemLimits.maxDuration, systemLimits.maxDuration + 1],
-            validation: (value: number) => ParameterValidator.validateNumber(
+            value => QuerySanitizer.sanitizeSearchQuery(value)
+          ),
+          boundaryTest(
+            'duration',
+            [systemLimits.maxDuration, systemLimits.maxDuration + 1],
+            value => ParameterValidator.validateNumber(
               value,
               'duration',
               { required: true, min: 1, max: systemLimits.maxDuration, integer: true }
             )
-          }
+          )
         ];
 
-        boundaryTests.forEach(({ parameter, values, validation }) => {
-          const [maxValid, exceedsMax] = values;
-          
-          const validResult = validation(maxValid);
-          const invalidResult = validation(exceedsMax);
+        boundaryTests.forEach(({ parameter, validate }) => {
+          const [validResult, invalidResult] = validate();
           
           expect(validResult.isValid).toBe(true);
           expect(invalidResult.isValid).toBe(false);

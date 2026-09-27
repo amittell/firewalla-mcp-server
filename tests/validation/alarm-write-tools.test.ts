@@ -91,7 +91,13 @@ function makeClient({
     maxPageSize: 10000,
   } as any);
   const request = jest.fn(
-    async (method: string, endpoint: string, _params?: unknown, _body?: any) => {
+    async (
+      method: string,
+      endpoint: string,
+      _params?: unknown,
+      _body?: unknown,
+      _cacheable?: boolean
+    ) => {
       if (method === 'GET' && endpoint === '/v2/boxes') {
         return BOXES.map(box => ({ ...box, model: 'goldpro' }));
       }

@@ -4,7 +4,7 @@
  */
 
 import { FirewallaClient } from '../../src/firewalla/client.js';
-import { GeographicData } from '../../src/types.js';
+import type { FirewallaConfig, GeographicData } from '../../src/types.js';
 import {
   isPrivateIP,
   mapContinent,
@@ -42,7 +42,7 @@ jest.mock('axios', () => {
 });
 
 // Create a test configuration
-const testConfig = {
+const testConfig: FirewallaConfig = {
   mspToken: 'test-token',
   mspId: 'test.firewalla.net',
   boxId: 'test-box-123',
@@ -51,6 +51,7 @@ const testConfig = {
   cacheTtl: 300,
   defaultPageSize: 100,
   maxPageSize: 10000,
+  transport: { type: 'stdio', port: 3000, path: '/mcp' },
 };
 
 describe('IP Geolocation Enrichment', () => {

@@ -10,6 +10,16 @@ import {
   withUnifiedResponse,
   type UnifiedResponse,
 } from '../../src/utils/unified-response.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+
+/** The text of a result's first content block, which must be text */
+function firstText(result: CallToolResult): string {
+  const [block] = result.content;
+  if (block?.type !== 'text') {
+    throw new Error(`expected a text block, got ${block?.type}`);
+  }
+  return block.text;
+}
 
 describe('Unified Response Format', () => {
   describe('createSuccessResponse', () => {
@@ -65,7 +75,7 @@ describe('Unified Response Format', () => {
       expect(toolResponse.content[0].type).toBe('text');
       expect(toolResponse.isError).toBe(false);
 
-      const parsedContent = JSON.parse(toolResponse.content[0].text);
+      const parsedContent = JSON.parse(firstText(toolResponse));
       expect(parsedContent.success).toBe(true);
       expect(parsedContent.data.test).toBe(true);
     });
@@ -78,7 +88,7 @@ describe('Unified Response Format', () => {
       expect(toolResponse.content[0].type).toBe('text');
       expect(toolResponse.isError).toBe(true);
 
-      const parsedContent = JSON.parse(toolResponse.content[0].text);
+      const parsedContent = JSON.parse(firstText(toolResponse));
       expect(parsedContent.success).toBe(false);
       expect(parsedContent.error).toBe('Error message');
     });

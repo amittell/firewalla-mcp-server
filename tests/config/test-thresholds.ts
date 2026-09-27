@@ -30,6 +30,14 @@ export interface TestThresholds {
 }
 
 /**
+ * Overrides for updateTestThresholds: any subset of any section, since it
+ * merges each section into the current one
+ */
+export type TestThresholdOverrides = {
+  [Section in keyof TestThresholds]?: Partial<TestThresholds[Section]>;
+};
+
+/**
  * Default test thresholds optimized for different environments
  */
 const DEFAULT_TEST_THRESHOLDS: TestThresholds = {
@@ -67,7 +75,7 @@ let currentTestThresholds: TestThresholds = DEFAULT_TEST_THRESHOLDS;
 /**
  * Update test thresholds at runtime
  */
-export function updateTestThresholds(newThresholds: Partial<TestThresholds>): void {
+export function updateTestThresholds(newThresholds: TestThresholdOverrides): void {
   currentTestThresholds = {
     ...currentTestThresholds,
     ...newThresholds,
@@ -133,7 +141,7 @@ export const THRESHOLD_PRESETS = {
       mediumScoreMin: 0.7,
     }
   }
-};
+} satisfies Record<string, TestThresholdOverrides>;
 
 /**
  * Apply environment-specific preset

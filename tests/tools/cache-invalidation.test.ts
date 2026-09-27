@@ -82,7 +82,7 @@ describe('response cache', () => {
       status = 'paused';
       return { status: 200, data: { success: true } };
     });
-    await client.pauseRule('rule-0001', 30);
+    await client.pauseRule('rule-0001');
 
     const after = await client.getNetworkRules();
     expect(ruleGets()).toBe(2);

@@ -15,12 +15,23 @@ function exitCode(exit: jest.Mock, ms = 1000): Promise<number | undefined> {
   });
 }
 
+type WriteCallback = (error?: Error | null) => void;
+
+// Writable.write's two forms: (chunk, callback) and (chunk, encoding, callback)
 function fakeStream() {
   return {
-    write: jest.fn((_chunk: string, callback?: () => void) => {
-      callback?.();
-      return true;
-    }),
+    write: jest.fn(
+      (
+        _chunk: unknown,
+        encodingOrCallback?: BufferEncoding | WriteCallback,
+        callback?: WriteCallback
+      ) => {
+        (typeof encodingOrCallback === 'function'
+          ? encodingOrCallback
+          : callback)?.();
+        return true;
+      }
+    ),
   };
 }
 

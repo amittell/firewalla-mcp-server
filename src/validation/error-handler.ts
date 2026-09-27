@@ -936,9 +936,14 @@ export class ParameterValidator {
  */
 export class SafeAccess {
   /**
-   * Safely access nested object properties with enhanced null checking
+   * Safely access nested object properties with enhanced null checking.
+   * A null or undefined obj gives defaultValue.
    */
-  static getNestedValue(obj: ValidatableValue, path: string, defaultValue: unknown = undefined): unknown {
+  static getNestedValue(
+    obj: ValidatableValue | null | undefined,
+    path: string,
+    defaultValue: unknown = undefined
+  ): unknown {
     // Enhanced null/undefined checking to prevent Object conversion errors
     if (obj === null || obj === undefined) {
       return defaultValue;
