@@ -194,6 +194,29 @@ export const QUOTED_TEXT =
   /("(?:[^"\\]|\\.)*"|(?<![\p{L}\p{N}\p{M}_])'(?:[^'\\]|\\.)*')/u;
 
 /**
+ * `rewrite` applied to the text of `query` outside its quoted values
+ * (QUOTED_TEXT), which are left as they are: "blocked:true" is a phrase,
+ * not a term to translate
+ */
+export function outsideQuotes(
+  query: string,
+  rewrite: (text: string) => string
+): string {
+  return query
+    .split(QUOTED_TEXT)
+    .map((part, index) => (index % 2 === 1 ? part : rewrite(part)))
+    .join('');
+}
+
+/** The text of `query` outside its quoted values, a space for each one */
+export function unquotedText(query: string): string {
+  return query
+    .split(QUOTED_TEXT)
+    .filter((_part, index) => index % 2 === 0)
+    .join(' ');
+}
+
+/**
  * The first Lucene-style range in a query (`field:[low TO high]`, or with
  * braces), outside quotes. The API's grammar has none: its ranges are
  * `field:low-high`, which include both ends. Single-quoted text is quoted

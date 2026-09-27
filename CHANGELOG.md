@@ -765,6 +765,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "cannot be used with non-numeric field") rather than for their fields; and
   `network_name:LAN` matched no device while `network.name:LAN` found the
   one on that network.
+- The boolean translation that writes `blocked:true` as `blocked:1` leaves
+  quoted text alone. `search_flows` sent `domain:"blocked:true"` as
+  `domain:"blocked:1"`, and both translators changed a quoted phrase such
+  as `"not blocked:true"` or `'online:true'` the same way. An apostrophe
+  after a letter opens no quote, so `Alex's blocked:true` is still
+  translated.
 
 ### Removed
 
