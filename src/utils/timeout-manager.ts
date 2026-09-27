@@ -3,6 +3,7 @@
  * Provides consistent timeout handling across all tools and operations
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { PERFORMANCE_THRESHOLDS } from '../config/limits.js';
 import { ErrorType, createErrorResponse } from '../validation/error-handler.js';
 import { logger } from '../monitoring/logger.js';
@@ -21,6 +22,28 @@ export interface TimeoutConfig {
   enableMetrics?: boolean;
   /** Tool name for context */
   toolName?: string;
+}
+
+/**
+ * The time a tool's operation has. withTimeout sets it for the operation and
+ * everything it awaits, so the API client can read it without a parameter
+ * on every method: it does not send again a failed request whose answer
+ * could not come in time, and it passes `signal` to every request, so a
+ * request in flight when the time runs out is cancelled and one not yet
+ * sent is not sent.
+ */
+export interface ToolBudget {
+  /** When the tool gives up, in Date.now() milliseconds */
+  deadline: number;
+  /** Aborted when the tool gives up */
+  signal: AbortSignal;
+}
+
+const toolBudgets = new AsyncLocalStorage<ToolBudget>();
+
+/** The budget of the tool operation this runs in, if any (see ToolBudget) */
+export function currentToolBudget(): ToolBudget | undefined {
+  return toolBudgets.getStore();
 }
 
 /**
@@ -116,6 +139,8 @@ export class TimeoutManager {
       error: false,
     };
 
+    const budget = new AbortController();
+
     try {
       // Create timeout promise
       const timeoutPromise = new Promise<never>((_, reject) => {
@@ -125,20 +150,30 @@ export class TimeoutManager {
           metrics.endTime = Date.now();
           metrics.duration = duration;
           this.recordMetrics(metrics);
-          reject(
-            new TimeoutError(
-              finalConfig.toolName,
-              duration,
-              finalConfig.timeoutMs
-            )
+          const timeoutError = new TimeoutError(
+            finalConfig.toolName,
+            duration,
+            finalConfig.timeoutMs
           );
+          // Cancels the operation's requests (see ToolBudget)
+          budget.abort(timeoutError);
+          reject(timeoutError);
         }, finalConfig.timeoutMs);
 
         this.activeTimeouts.set(operationId, timeoutId);
       });
 
       // Race the operation against the timeout
-      const result = await Promise.race([operation(), timeoutPromise]);
+      const result = await Promise.race([
+        toolBudgets.run(
+          {
+            deadline: metrics.startTime + finalConfig.timeoutMs,
+            signal: budget.signal,
+          },
+          operation
+        ),
+        timeoutPromise,
+      ]);
 
       // Operation completed successfully
       metrics.endTime = Date.now();

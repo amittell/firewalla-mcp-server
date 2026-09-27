@@ -1005,8 +1005,8 @@ function validateTrendBox(
 }
 
 /**
- * The BoxSelectionError behind a failure, if any: withToolTimeout rewraps
- * errors and keeps the original as `cause`
+ * The BoxSelectionError behind a failure, if any: the failure itself
+ * (withToolTimeout throws it as it came), or one a wrapper kept as `cause`
  */
 function boxSelectionError(error: unknown): BoxSelectionError | undefined {
   if (error instanceof BoxSelectionError) {

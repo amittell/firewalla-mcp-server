@@ -176,10 +176,9 @@ export class ArchiveAlarmHandler extends BaseToolHandler {
     }
 
     try {
-      // Not wrapped in withToolTimeout, which rewraps errors (hiding
-      // BoxSelectionError and AlarmNotFoundError) and would report a write
-      // it cut off as failed although it may have been applied. Each request
-      // has the client's apiTimeout.
+      // Not wrapped in withToolTimeout, which would report a write it cut
+      // off as failed although it may have been applied, and would cancel
+      // the request it cut off. Each request has the client's apiTimeout.
       const result = await firewalla.archiveAlarm(parsed.alarmId, parsed.gid);
       return this.createUnifiedResponse({
         archived: true,

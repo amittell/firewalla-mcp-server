@@ -19,6 +19,7 @@
  */
 
 import axios, {
+  CanceledError,
   type AxiosError,
   type AxiosInstance,
   type AxiosRequestConfig,
@@ -89,6 +90,8 @@ import {
 } from '../utils/geographic.js';
 import { safeAccess, safeValue } from '../utils/data-normalizer.js';
 import { validateAlarmId } from '../utils/alarm-id-validation.js';
+import { currentToolBudget } from '../utils/timeout-manager.js';
+import { PERFORMANCE_THRESHOLDS } from '../config/limits.js';
 import { normalizeTimestamps } from '../utils/data-validator.js';
 import {
   checkMuteRequest,
@@ -615,7 +618,7 @@ const STATUS_HINTS: Record<number, (url: string) => string> = {
  * the request was sent more than once. "Firewalla API answered 503 Service
  * Unavailable after 2 attempts: the Firewalla API is temporarily down";
  * "Firewalla API sent no answer after 2 attempts (ECONNABORTED: timeout of
- * 30000ms exceeded)".
+ * 5000ms exceeded)".
  */
 function apiFailureMessage(error: AxiosError, attempts: number): string {
   const after = attempts > 1 ? ` after ${attempts} attempts` : '';
@@ -643,6 +646,14 @@ interface RateLimitedConfig extends InternalAxiosRequestConfig {
   rateLimitRetries?: number;
   /** Retries sent so far after a failure that can pass (see retryTransient) */
   transientRetries?: number;
+  /**
+   * When the tool the request serves gives up, in Date.now() milliseconds
+   * (ToolBudget in timeout-manager.ts); outside a tool,
+   * PERFORMANCE_THRESHOLDS.TIMEOUT_MS after the request was first made
+   */
+  toolDeadline?: number;
+  /** When this attempt was sent, in Date.now() milliseconds */
+  sentAt?: number;
   /**
    * Called each time the request goes to the API, retries included. A
    * function because axios copies a plain object in a config, so a counter
@@ -866,12 +877,33 @@ export class FirewallaClient {
         const request = config as RateLimitedConfig;
         const deadline = (request.rateLimitDeadline ??=
           this.clock.now() + RATE_LIMIT_MAX_WAIT_MS);
+        // The tool's time: a request is cancelled when the tool gives up
+        const budget = currentToolBudget();
+        if (budget) {
+          request.signal ??= budget.signal;
+        }
+        request.toolDeadline ??=
+          budget?.deadline ?? Date.now() + PERFORMANCE_THRESHOLDS.TIMEOUT_MS;
         const name = `${config.method?.toUpperCase()} ${config.url}`;
+        // A request the tool gave up on is not sent, nor counted
+        const cancelled = () =>
+          new CanceledError(
+            `Not sent: the tool gave up before ${name} was sent`,
+            undefined,
+            config
+          );
         const send = () => {
+          if (request.signal?.aborted) {
+            throw cancelled();
+          }
           process.stderr.write(`API Request: ${name}\n`);
+          request.sentAt = Date.now();
           request.onSent?.();
           return config;
         };
+        if (request.signal?.aborted) {
+          throw cancelled();
+        }
         const refuse = (error: RateLimitError) => {
           process.stderr.write(
             `API Request refused for the rate limit: ${name}; capacity returns in ${Math.max(0, Math.ceil((error.availableAt - this.clock.now()) / 1000))} s\n`
@@ -934,7 +966,12 @@ export class FirewallaClient {
           return this.retryRateLimited(error);
         }
         if (this.canRetryTransient(error)) {
-          return this.retryTransient(error);
+          if (this.retryFitsToolBudget(error)) {
+            return this.retryTransient(error);
+          }
+          process.stderr.write(
+            `API Request failed: ${error.response?.status ?? error.code} GET ${error.config?.url}; not retried, as its answer could not come before the tool gives up\n`
+          );
         }
 
         return Promise.reject(error);
@@ -953,8 +990,30 @@ export class FirewallaClient {
     return (
       config !== undefined &&
       config.method?.toUpperCase() === 'GET' &&
+      !config.signal?.aborted &&
       (config.transientRetries ?? 0) < MAX_TRANSIENT_RETRIES &&
       isTransientFailure(error)
+    );
+  }
+
+  /**
+   * Whether a GET sent again could still answer before its tool gives up
+   * (toolDeadline): the longest wait before it, 2 x TRANSIENT_RETRY_DELAY_MS,
+   * plus as long again as the attempt that failed took, must end before the
+   * deadline. A retry that could not answer in time would still cost one of
+   * the API's 100 requests per 5 minutes. An attempt that ran out its
+   * timeout took API_TIMEOUT, so with the defaults (API_TIMEOUT and the tool
+   * timeout both 30 s) a timed-out GET is never sent again, while a 503 or a
+   * reset that comes back at once is, and a 503 that took 20 s is not.
+   * Measured with Date.now(), the clock the tool's deadline is set with.
+   */
+  private retryFitsToolBudget(error: AxiosError): boolean {
+    const config = error.config as RateLimitedConfig;
+    const now = Date.now();
+    const attemptMs = Math.max(0, now - (config.sentAt ?? now));
+    return (
+      now + 2 * TRANSIENT_RETRY_DELAY_MS + attemptMs <
+      (config.toolDeadline ?? Number.POSITIVE_INFINITY)
     );
   }
 
@@ -962,8 +1021,8 @@ export class FirewallaClient {
    * Sends a GET again after TRANSIENT_RETRY_DELAY_MS plus up to as much
    * again at random. It goes through the request interceptor like any
    * request, so the rate limiter releases it and `onSent` counts it in the
-   * read's RequestTrace. When the rate limiter refuses it, it was never sent,
-   * and the failure it was sent again for is thrown instead.
+   * read's RequestTrace. When the rate limiter refuses it or the tool gives
+   * up first, it is never sent, and the failure it was for is thrown instead.
    *
    * @private
    */
@@ -989,7 +1048,8 @@ export class FirewallaClient {
     try {
       return await this.api.request(retry);
     } catch (retryError) {
-      if (!sent && retryError instanceof RateLimitError) {
+      // Not sent: the rate limiter had no slot, or the tool gave up
+      if (!sent) {
         throw error;
       }
       throw retryError;

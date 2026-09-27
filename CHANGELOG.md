@@ -383,25 +383,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a second that answered reported `api_requests: 1`; they now report 2.
 - Every read is tried again once, 1 to 2 s later, after a timeout
   (`ECONNABORTED`, `ETIMEDOUT`), a dropped connection (`ECONNRESET`, `EPIPE`)
-  or HTTP 502, 503 or 504. Only `search_flows` tried a read again, deciding
-  by words in the error message, and every failure reached it wrapped in a
-  message that said "not a timeout", so every failure matched "timeout": with
-  the HTTP layer stubbed, a first request answered 400, 401, 403, 404 or 500
-  was sent a second time, while `get_flow_data`, `get_active_alarms`,
+  or HTTP 502, 503 or 504, when its answer could still come before the tool
+  gives up. Only `search_flows` tried a read again, deciding by words in the
+  error message, and every failure reached it wrapped in a message that said
+  "not a timeout", so every failure matched "timeout": with the HTTP layer
+  stubbed, a first request answered 400, 401, 403, 404 or 500 was sent a
+  second time, while `get_flow_data`, `get_active_alarms`,
   `get_device_status` and the other reads failed on the first 503. The client
   now sends the GET again itself, through the rate limiter, and the retry
-  counts in `coverage.api_requests`. A POST, PATCH, PUT or DELETE is never
-  sent again, as the API may have applied it. A 429 keeps its own wait;
-  `search_flows` also tried again a 429 the client had given up on, and
-  reported the rate limiter's refusal of that attempt in place of the 429. A
-  failed request's error now says what the API answered and how many attempts
-  were made: `Firewalla API answered 503 Service Unavailable after 2
-  attempts: the Firewalla API is temporarily down`, or `Firewalla API sent no
-  answer after 2 attempts (ECONNABORTED: timeout of 30000ms exceeded)`; a 400
-  says `Firewalla API answered 400 Bad Request`, where it said `Bad Request:
-  Invalid parameters sent to ...`. Tools no longer wrap a failure in "This is
-  an immediate parameter or configuration error, not a timeout" or "This
-  appears to be a processing error, not a timeout".
+  counts in `coverage.api_requests`. The wait before it plus as long again as
+  the failed attempt took must end before the tool's time does, since a retry
+  that cannot answer in time still costs one of the 100 requests per 5
+  minutes: with the defaults (`API_TIMEOUT` and the tool timeout both 30 s),
+  a GET that ran out its timeout, or a 503 that took 20 s, is not sent again,
+  while a 503 or a reset that comes back at once is. When a tool gives up,
+  its request in flight is cancelled and a request not yet sent is not sent.
+  A POST, PATCH, PUT or DELETE is never sent again, as the API may have
+  applied it. A 429 keeps its own wait; `search_flows` also tried again a 429
+  the client had given up on, and reported the rate limiter's refusal of that
+  attempt in place of the 429. A failed request's error now says what the API
+  answered and how many attempts were made: `Firewalla API answered 503
+  Service Unavailable after 2 attempts: the Firewalla API is temporarily
+  down`, or `Firewalla API sent no answer after 2 attempts (ECONNABORTED:
+  timeout of 5000ms exceeded)` with `API_TIMEOUT=5000`; a 400 says `Firewalla
+  API answered 400 Bad Request`, where it said `Bad Request: Invalid
+  parameters sent to ...`. Tools no longer wrap a failure in "This is an
+  immediate parameter or configuration error, not a timeout" or "This appears
+  to be a processing error, not a timeout".
 - The client's response cache holds at most `CACHE_MAX_ENTRIES` responses
   (default 1000); when it is full, expired entries go first, then the least
   recently used. It had no limit, and an entry was removed only when its own
