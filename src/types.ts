@@ -761,7 +761,7 @@ export interface SearchFilter {
     | 'contains'
     | 'startswith'
     | 'endswith'
-    | 'regex'
+    | 'wildcard'
     | 'range';
   /** Value(s) to filter against */
   value: string | number | boolean | Array<string | number | boolean>;

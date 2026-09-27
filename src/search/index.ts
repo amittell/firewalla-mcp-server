@@ -88,7 +88,7 @@ interface QueryComponent {
     | 'contains'
     | 'startswith'
     | 'endswith'
-    | 'regex'
+    | 'wildcard'
     | 'range';
   value: string | number | boolean | Array<string | number | boolean>;
   logical?: 'AND' | 'OR' | 'NOT';
@@ -195,7 +195,7 @@ export function parseSearchQuery(query: string): ParsedQuery {
   //   * Simple equality/inequality: +1
   //   * Comparisons: +1.2
   //   * Array membership: +1.5
-  //   * Pattern matching/regex: +2
+  //   * Pattern matching (wildcards): +2
   //   * Range queries: +2.5
   //   * Full-text search: +3
   // - Final score used to optimize query execution order and resource allocation
@@ -257,7 +257,7 @@ export function parseSearchQuery(query: string): ParsedQuery {
 /**
  * Parses a single field expression from a search query into a structured QueryComponent.
  *
- * Supports range queries (e.g., `field:[min TO max]`), comparison operators (e.g., `field:>=value`), wildcards (converted to regex), arrays (comma-separated values with quoted value support), standard equality, and free-text search when no field is specified.
+ * Supports range queries (e.g., `field:[min TO max]`), comparison operators (e.g., `field:>=value`), wildcards (kept as written), arrays (comma-separated values with quoted value support), standard equality, and free-text search when no field is specified.
  *
  * @param expression - The field expression string to parse
  * @returns The parsed QueryComponent, or null if parsing fails
@@ -296,23 +296,17 @@ function parseFieldExpression(expression: string): QueryComponent | null {
   if (fieldMatch) {
     const [, field, value] = fieldMatch;
 
-    // Detect wildcards
+    // Detect wildcards. The pattern is kept as written: the searches
+    // match it with matchesWildcard (src/utils/wildcard.ts), and it was
+    // turned into a regular expression only to be checked here, which
+    // refused four or more wildcards and a + beside a *.
     if (value.includes('*') || value.includes('?')) {
-      // A comma list of wildcards (name:*nas*,*cam*) is any of its values;
-      // each value is checked on its own. As one pattern, four `*` read as
-      // a dangerous sequence.
+      // A comma list of wildcards (name:*nas*,*cam*) is any of its values
       const listValues = smartSplitCommas(value).filter(Boolean);
       if (listValues.length > 1) {
-        listValues
-          .filter(entry => /[*?]/.test(entry))
-          .forEach(entry => convertWildcardToRegex(entry));
         return { field, operator: 'in', value: listValues };
       }
-      return {
-        field,
-        operator: 'regex',
-        value: convertWildcardToRegex(value),
-      };
+      return { field, operator: 'wildcard', value };
     }
 
     // Detect array values (comma-separated), but handle commas within quotes
@@ -401,54 +395,6 @@ function mapComparisonOperator(op: string): QueryComponent['operator'] {
 }
 
 /**
- * Converts a wildcard pattern containing `*` and `?` into an equivalent regular expression string.
- *
- * Escapes all regex special characters except `*` and `?`, then replaces `*` with `.*` and `?` with `.`.
- * Includes protection against ReDoS (Regular Expression Denial of Service) attacks.
- *
- * @param pattern - The wildcard pattern to convert
- * @returns The corresponding regular expression string
- * @throws {Error} If the pattern is too long or contains dangerous patterns
- */
-function convertWildcardToRegex(pattern: string): string {
-  // Protection against ReDoS attacks
-  if (pattern.length > 100) {
-    throw new Error('Wildcard pattern too long (max 100 characters)');
-  }
-
-  // Check for dangerous patterns that could cause ReDoS. A + or { next to
-  // a * is escaped below, so it is no quantifier: *Disney+* and C++* were
-  // refused for it.
-  const dangerousPatterns = [
-    /(\.\*){5,}/, // Too many .* sequences
-    /(\*.*\*.*\*.*\*)/, // Multiple wildcards in sequence
-  ];
-
-  for (const dangerousPattern of dangerousPatterns) {
-    if (dangerousPattern.test(pattern)) {
-      throw new Error(
-        'Wildcard pattern contains potentially dangerous sequences'
-      );
-    }
-  }
-
-  // Escape special regex characters except * and ?
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-
-  // Convert wildcards to regex with limited quantifiers
-  const result = escaped
-    .replace(/\*/g, '[^\\s]*') // * becomes [^\s]* (non-greedy, no whitespace)
-    .replace(/\?/g, '[^\\s]'); // ? becomes [^\s] (single non-whitespace char)
-
-  // Validate the resulting regex pattern length
-  if (result.length > 200) {
-    throw new Error('Generated regex pattern too complex');
-  }
-
-  return result;
-}
-
-/**
  * Returns the complexity score associated with a given query operator.
  *
  * The complexity scoring system helps optimize query execution and resource allocation:
@@ -456,7 +402,7 @@ function convertWildcardToRegex(pattern: string): string {
  * **Score Ranges:**
  * - 1.0-1.2: Simple operations (equality, comparison)
  * - 1.3-1.9: Moderate operations (array membership, basic filters)
- * - 2.0-2.9: Complex operations (pattern matching, regex, ranges)
+ * - 2.0-2.9: Complex operations (pattern matching, wildcards, ranges)
  * - 3.0+: Very complex operations (full-text search, advanced algorithms)
  *
  * **Usage:**
@@ -485,7 +431,7 @@ function getOperatorComplexity(operator: QueryComponent['operator']): number {
     case 'startswith':
     case 'endswith':
       return 2;
-    case 'regex':
+    case 'wildcard':
       return 3;
     case 'range':
       return 2.5;
@@ -532,7 +478,7 @@ const DEFAULT_MAX_COMPLEXITY = 10;
 /**
  * Validates the syntax and complexity of a search query.
  *
- * Checks for empty queries, enforces a maximum complexity threshold, and validates regex patterns within the query. Returns an object indicating whether the query is valid and an array of error messages if any issues are found.
+ * Checks for empty queries and enforces a maximum complexity threshold. Returns an object indicating whether the query is valid and an array of error messages if any issues are found.
  *
  * @param query - The search query string to validate
  * @param maxComplexity - The maximum allowed complexity score for the query (default is 10)
@@ -557,75 +503,6 @@ export function validateSearchQuery(
       errors.push(
         `Query too complex (${parsed.complexity}). Maximum complexity is ${maxComplexity}.`
       );
-    }
-
-    // Check for unsupported operators and validate regex patterns
-    for (const component of parsed.components) {
-      if (
-        component.operator === 'regex' &&
-        typeof component.value === 'string'
-      ) {
-        try {
-          const pattern = component.value;
-
-          // Check pattern length to prevent ReDoS
-          if (pattern.length > 100) {
-            errors.push(
-              `Regex pattern too long (max 100 characters): ${pattern}`
-            );
-            continue;
-          }
-
-          // Check for catastrophic backtracking patterns
-          const catastrophicPatterns = [
-            /(\(.*\*.*\)){2,}/, // Nested groups with quantifiers
-            /(\.\*\+|\+\.\*)/, // Greedy quantifier combinations
-            /(\w\*\+|\+\w\*)/, // Word character quantifier combinations
-            /(\.\*){3,}/, // Multiple .* sequences
-            /(.*\+.*\+.*\+)/, // Multiple + quantifiers
-          ];
-
-          for (const catPattern of catastrophicPatterns) {
-            if (catPattern.test(pattern)) {
-              errors.push(
-                `Regex pattern contains potentially catastrophic backtracking: ${pattern}`
-              );
-              break;
-            }
-          }
-
-          const regex = new RegExp(pattern);
-
-          // Test regex with various inputs to ensure it doesn't hang
-          const testInputs = [
-            '',
-            'a',
-            'test',
-            '123',
-            'long_test_string_with_various_chars_123',
-          ];
-          const testTimeout = 100; // 100ms timeout for regex testing
-
-          for (const testInput of testInputs) {
-            const start = Date.now();
-            regex.test(testInput);
-            const elapsed = Date.now() - start;
-
-            if (elapsed > testTimeout) {
-              errors.push(
-                `Regex pattern takes too long to execute (${elapsed}ms): ${pattern}`
-              );
-              break;
-            }
-          }
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : 'Unknown error';
-          errors.push(
-            `Invalid regex pattern: ${component.value} (${errorMessage})`
-          );
-        }
-      }
     }
   } catch (error) {
     errors.push(
