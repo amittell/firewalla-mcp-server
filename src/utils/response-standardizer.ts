@@ -123,7 +123,8 @@ export class ResponseStandardizer {
       return 'simple';
     }
 
-    const operatorCount = (query.match(/\s+(AND|OR|NOT)\s+/gi) || []).length;
+    // Uppercase only, as toMspQuery reads operators
+    const operatorCount = (query.match(/\s+(AND|OR|NOT)\s+/g) || []).length;
     const wildcardCount = (query.match(/\*/g) || []).length;
     const parenthesesCount = (query.match(/[()]/g) || []).length;
 

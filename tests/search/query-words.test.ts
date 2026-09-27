@@ -53,6 +53,7 @@ const NAMES = [
   'go to school',
   "1990's radio",
   "3d's printer",
+  'w or x or y or z',
 ];
 
 const DEVICES = NAMES.map((name, i) => ({
@@ -329,6 +330,28 @@ describe('an apostrophe after a digit', () => {
   it('finds the device through search_devices', async () => {
     expect(await devices("1990's")).toEqual(["1990's radio"]);
     expect(await devices("name:3d's")).toEqual(["3d's printer"]);
+  });
+});
+
+describe('lowercase words in the legacy parser that search_devices runs', () => {
+  // client.searchDevices checks each query with parseSearchQuery and
+  // formatQueryForAPI (src/search/index.ts), which split on and, or and not
+  // in any case, so a or b or c or d was four terms and three operators
+  // and refused as too complex. Every word must match, so the names use
+  // letters no other device or rule has.
+  it('search_devices takes w or x or y or z as seven words', async () => {
+    expect(await devices('w or x or y or z')).toEqual(['w or x or y or z']);
+  });
+
+  it('search_rules takes it as seven words too', async () => {
+    expect(await rules('w or x or y or z')).toEqual(['w or x or y or z']);
+  });
+
+  it('the complexity check counts only uppercase operators', async () => {
+    // 21 or words beside a field term were "Too many logical operators"
+    const query = `online:true${' or'.repeat(21)}`;
+    const result = await devices(query);
+    expect(Array.isArray(result) ? [] : result.message).toEqual([]);
   });
 });
 
