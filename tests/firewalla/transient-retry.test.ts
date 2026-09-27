@@ -267,6 +267,24 @@ describe('the client sends a GET again once', () => {
     expect(calls).toHaveLength(3);
     expect(flows.coverage).toMatchObject({ api_requests: 3 });
   });
+
+  it("counts a 429's retry in attempts, as api_requests does", async () => {
+    // A 429, then a 503 on its retry, then a 503 on the transient retry:
+    // three requests
+    const { client, calls } = makeClient([
+      { status: 429, retryAfter: '1' },
+      503,
+      503,
+    ]);
+    const failure = await client
+      .getFlowData(undefined, undefined, undefined, 5)
+      .catch(error => error);
+    expect(calls).toHaveLength(3);
+    expect(failure).toMatchObject({ status: 503, attempts: 3 });
+    expect(failure.message).toBe(
+      'Firewalla API answered 503 Service Unavailable after 3 attempts: the Firewalla API is temporarily down'
+    );
+  });
 });
 
 describe('a 429 keeps its own path', () => {

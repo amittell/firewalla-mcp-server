@@ -240,6 +240,19 @@ const RELATIVE_UNIT_SECONDS: Record<string, number> = {
   w: 604800,
 };
 
+/** A `ts` comparison with a time relative to now: `ts:>1h`, `ts:<=2d` */
+const RELATIVE_TS = /\bts:(>=|<=|>|<)(\d+)([smhdw])\b/;
+
+/**
+ * Whether a query compares `ts` with a time relative to now, which
+ * translateRelativeTimestamps turns into seconds that differ every second.
+ * Ask it of the query as its caller gave it: after translation only
+ * seconds are left.
+ */
+export function hasRelativeTimestamp(query: unknown): boolean {
+  return typeof query === 'string' && RELATIVE_TS.test(query);
+}
+
 /**
  * Rewrites relative `ts` comparisons into the Unix-seconds form the MSP API
  * accepts: `ts:>1h` -> `ts:>1735689600` (one hour before `nowSeconds`).
@@ -253,7 +266,7 @@ export function translateRelativeTimestamps(
     return query;
   }
   return query.replace(
-    /\bts:(>=|<=|>|<)(\d+)([smhdw])\b/g,
+    new RegExp(RELATIVE_TS.source, 'g'),
     (_match, op: string, amount: string, unit: string) =>
       `ts:${op}${nowSeconds - Number(amount) * RELATIVE_UNIT_SECONDS[unit]}`
   );

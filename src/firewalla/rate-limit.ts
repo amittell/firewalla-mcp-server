@@ -153,12 +153,20 @@ export class RequestRateLimiter {
   /**
    * Resolves once the caller has a slot, after every request queued before
    * it. Rejects with a RateLimitError if the slot would come after
-   * `deadline`, for example because a 429 paused the client meanwhile.
+   * `deadline`, for example because a 429 paused the client meanwhile. When
+   * `signal` is aborted (its tool gave up), rejects at once, even mid-wait,
+   * and takes no slot: a request that is never sent must not hold one for
+   * the window, and must not hold up the requests queued after it.
    */
-  async acquire(deadline: number): Promise<void> {
+  async acquire(deadline: number, signal?: AbortSignal): Promise<void> {
     this.waiting++;
     const turn = this.queue.then(async () => {
       for (;;) {
+        if (signal?.aborted) {
+          throw signal.reason instanceof Error
+            ? signal.reason
+            : new Error('Cancelled while waiting for the rate limit');
+        }
         const now = this.clock.now();
         const at = this.slotAt(now);
         if (at <= now) {
@@ -168,7 +176,7 @@ export class RequestRateLimiter {
         if (at > deadline) {
           throw this.unavailable(at);
         }
-        await this.clock.sleep(at - now);
+        await this.sleepUnlessAborted(at - now, signal);
       }
     });
     this.queue = turn.catch(() => undefined);
@@ -176,6 +184,27 @@ export class RequestRateLimiter {
       await turn;
     } finally {
       this.waiting--;
+    }
+  }
+
+  /** Waits `ms` on the clock, or until `signal` is aborted */
+  private async sleepUnlessAborted(
+    ms: number,
+    signal?: AbortSignal
+  ): Promise<void> {
+    if (!signal) {
+      await this.clock.sleep(ms);
+      return;
+    }
+    let onAbort = (): void => undefined;
+    const aborted = new Promise<void>(resolve => {
+      onAbort = resolve;
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+    try {
+      await Promise.race([this.clock.sleep(ms), aborted]);
+    } finally {
+      signal.removeEventListener('abort', onAbort);
     }
   }
 

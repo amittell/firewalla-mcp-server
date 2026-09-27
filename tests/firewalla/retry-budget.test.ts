@@ -43,8 +43,13 @@ function makeClient(
   answers: Answer[],
   {
     apiTimeout = 30000,
+    rateLimit = 100,
     sleep,
-  }: { apiTimeout?: number; sleep?: (ms: number) => Promise<void> } = {}
+  }: {
+    apiTimeout?: number;
+    rateLimit?: number;
+    sleep?: (ms: number) => Promise<void>;
+  } = {}
 ) {
   const sleeps: number[] = [];
   const clock = {
@@ -61,7 +66,7 @@ function makeClient(
       mspToken: 'test-token',
       mspId: 'test.firewalla.net',
       apiTimeout,
-      rateLimit: 100,
+      rateLimit,
       cacheTtl: 300,
       defaultPageSize: 100,
       maxPageSize: 10000,
@@ -220,6 +225,31 @@ describe("a retry must be able to answer within the tool's 30 s", () => {
     expect(flows.results).toHaveLength(5);
     expect(fast.calls).toHaveLength(2);
   });
+
+  it('outside a tool, time queued for the rate limiter is not taken from the budget', async () => {
+    // Two requests per 5 minutes, both taken at the start. A read made
+    // 285 s later waits 15 s for a slot, is sent at 300 s, and gets a 503
+    // after 10 s: 2 s and another 10 s end at 322 s, inside 300 s + 30 s,
+    // though past 285 s + 30 s. The retry's slot is free by then.
+    const { client, calls } = makeClient(
+      [{}, {}, { afterMs: 10000, fail: 503 }],
+      { rateLimit: 2 }
+    );
+    const start = now;
+    await client.getFlowData('device.id:a', undefined, undefined, 5);
+    now += 1000;
+    await client.getFlowData('device.id:b', undefined, undefined, 5);
+    now = start + 285_000;
+    const flows = await client.getFlowData(
+      'device.id:c',
+      undefined,
+      undefined,
+      5
+    );
+    expect(flows.results).toHaveLength(5);
+    expect(calls).toHaveLength(4);
+    expect(flows.coverage).toMatchObject({ api_requests: 2 });
+  });
 });
 
 describe('when the tool gives up', () => {
@@ -281,6 +311,41 @@ describe('when the tool gives up', () => {
     await delay(250);
     expect(calls).toHaveLength(0);
     expect(late).toMatchObject({ code: 'ERR_CANCELED' });
+  });
+
+  it('a request queued for the rate limiter takes no slot', async () => {
+    // One request per 5 minutes, taken 290 s ago: the next waits 10 s, but
+    // the tool gives up after 100 ms. Once the first request's window has
+    // passed, a new request goes out at once: the cancelled one held no slot.
+    const { client, calls } = makeClient([], {
+      rateLimit: 1,
+      sleep: async ms => {
+        await delay(Math.min(ms, 500));
+        now += ms;
+      },
+    });
+    const start = now;
+    await client.getFlowData('device.id:a', undefined, undefined, 5);
+    now = start + 290_000;
+    await expect(
+      withToolTimeout(
+        () => client.getFlowData('device.id:b', undefined, undefined, 5),
+        'get_flow_data',
+        100
+      )
+    ).rejects.toBeInstanceOf(TimeoutError);
+    // Past the queued request's wait
+    await delay(700);
+    expect(calls).toHaveLength(1);
+    now = start + 300_001;
+    const flows = await client.getFlowData(
+      'device.id:c',
+      undefined,
+      undefined,
+      5
+    );
+    expect(flows.results).toHaveLength(5);
+    expect(calls).toHaveLength(2);
   });
 
   it('a retry still waiting to be sent is not sent', async () => {
