@@ -756,6 +756,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is gone as well: every regex the search tools build from a query escapes
   `+`, `{` and `(`. Control characters, the 2,000-character limit and the
   nesting limit are still checked.
+- `search_devices` refuses a field its matcher does not read, as an invalid
+  field, and reads `network_name` and `group_name` as `network.name` and
+  `group.name`. It accepted `os`, `device_type` and `bandwidth_usage` and
+  matched such a term as its literal text, so `os:linux` matched no device
+  and `NOT os:linux` every one; it refused `last_seen:>1h` and
+  `total_download:>1000` for their values ("expects a numeric value",
+  "cannot be used with non-numeric field") rather than for their fields; and
+  `network_name:LAN` matched no device while `network.name:LAN` found the
+  one on that network.
 
 ### Removed
 

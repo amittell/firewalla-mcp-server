@@ -337,16 +337,29 @@ describe('Query Syntax Validation', () => {
     });
 
     describe('Device Search Fields', () => {
-      it('should validate common device fields', () => {
+      it('should validate the device fields search_devices matches', () => {
         const deviceFields = [
           'id', 'name', 'ip', 'mac',
-          'online', 'device_type', 'mac_vendor', 'os',
-          'last_seen', 'bandwidth_usage', 'connection_count'
+          'online', 'mac_vendor', 'gid',
+          'network.name', 'network_name', 'group.name', 'group_name'
         ];
 
         deviceFields.forEach(field => {
           const result = FieldValidator.validateField(field, 'devices');
           expect(result.isValid).toBe(true);
+        });
+      });
+
+      it('should refuse the device fields search_devices does not read', () => {
+        // It searched each such term as literal text, so it matched nothing
+        const unreadFields = [
+          'device_type', 'os', 'last_seen', 'bandwidth_usage',
+          'connection_count', 'total_download', 'total_upload'
+        ];
+
+        unreadFields.forEach(field => {
+          const result = FieldValidator.validateField(field, 'devices');
+          expect([field, result.isValid]).toEqual([field, false]);
         });
       });
     });
