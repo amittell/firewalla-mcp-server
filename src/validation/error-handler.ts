@@ -1235,7 +1235,7 @@ function unclosedQuote(query: string): '"' | "'" | undefined {
       } else if (char === open) {
         open = undefined;
       }
-    } else if (char === '"' || (char === "'" && !/\w/.test(query[i - 1] ?? ''))) {
+    } else if (char === '"' || (char === "'" && !/[\p{L}\p{N}_]/u.test(query[i - 1] ?? ''))) {
       open = char;
     }
   }
@@ -1407,7 +1407,7 @@ export class QuerySanitizer {
     // quotes, so colons inside a value (mac:AA:BB:CC:DD:EE:FF, ip:fe80::1,
     // mac:"aa:bb:cc:00:00:01") are never read as field names.
     // A single quote after a letter, digit or underscore is an apostrophe
-    const termPattern = /(?:"(?:[^"\\]|\\.)*"|(?<!\w)'(?:[^'\\]|\\.)*'|[^\s()"])+/g;
+    const termPattern = /(?:"(?:[^"\\]|\\.)*"|(?<![\p{L}\p{N}_])'(?:[^'\\]|\\.)*'|[^\s()"])+/gu;
     const foundFields: string[] = [];
 
     for (const term of query.match(termPattern) || []) {
