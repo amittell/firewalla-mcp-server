@@ -1833,6 +1833,8 @@ export class FirewallaClient {
     groups?: FlowGroup[];
     group_by?: string;
     coverage?: PagingCoverage;
+    /** The query sent, after the renames, the box scope and toMspQuery */
+    query?: string;
   }> {
     const params: Record<string, unknown> = {
       // timestamp: and bytes: are rejected by /v2/flows; sent as ts: and total:
@@ -1857,6 +1859,11 @@ export class FirewallaClient {
 
     // Apply box filter through the query parameter
     params.query = this.addBoxFilter(params.query as string | undefined);
+    // What request() sends, as withMspQuery translates it
+    const sentQuery =
+      typeof params.query === 'string'
+        ? toMspQuery(params.query) || undefined
+        : undefined;
 
     const response = await this.requestPages<any>(
       '/v2/flows',
@@ -1879,6 +1886,7 @@ export class FirewallaClient {
         groups,
         group_by: group,
         next_cursor: response.next_cursor,
+        query: sentQuery,
       };
     }
 
@@ -1983,6 +1991,7 @@ export class FirewallaClient {
         Array.isArray(response.results) ? response.results : [],
         response
       ),
+      query: sentQuery,
     };
   }
 

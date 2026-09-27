@@ -661,6 +661,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every device, list and rule, and `search_flows` and `search_alarms` sent
   it to the API as it was. An empty field value (`name:""`) is left as it
   is.
+- `search_flows` reports the query it sent. `metadata.query`, and
+  `query_executed` for groups, gave the query before the client renamed
+  qualifiers and added the box scope, and `query_info.final_query`
+  repeated the caller's query. On a stub, `bytes:>1MB` was sent as
+  `total:>1MB` and reported as `bytes:>1MB`, `blocked:true` was sent as
+  `status:blocked` and reported as `blocked:1`, and with `FIREWALLA_BOX_ID`
+  set the `box.id` term was sent but not reported. All three give the query
+  as sent now. `applied_filters.geographic` was already true only when
+  `geographic_filters` added a region term.
 
 ### Removed
 

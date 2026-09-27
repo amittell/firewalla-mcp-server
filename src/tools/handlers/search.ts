@@ -590,7 +590,8 @@ export class SearchFlowsHandler extends BaseToolHandler {
         coverage: result.coverage,
         query_info: {
           original_query: searchArgs.query,
-          final_query: finalQuery,
+          // The query sent to the API; final_query repeated original_query
+          final_query: metadata.query,
           applied_filters: {
             // only when the filters added a term to the query
             geographic: !!geographicTerm,
