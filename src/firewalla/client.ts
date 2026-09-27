@@ -221,6 +221,23 @@ function toAlarmGroups(items: unknown[]): AlarmGroup[] {
 /** Largest `limit` the MSP API accepts on its /v2 list endpoints */
 const MAX_API_PAGE_SIZE = 500;
 
+/**
+ * Most responses the client keeps cached when the config gives no
+ * cacheMaxEntries (CACHE_MAX_ENTRIES). One client serves every HTTP
+ * session, so the cache lives as long as the process.
+ */
+export const DEFAULT_CACHE_MAX_ENTRIES = 1000;
+
+/** A cache write drops every expired entry when this long has passed since the last sweep */
+const CACHE_SWEEP_INTERVAL_MS = 60_000;
+
+/**
+ * A relative time comparison such as `ts:>1h`. request() sends it as Unix
+ * seconds counted back from now, so the same query is a new cache key every
+ * second and its entry is never read again.
+ */
+const RELATIVE_TIME_QUERY = /\bts:(?:>=|<=|>|<)\d+[smhdw]\b/i;
+
 const DAY_SECONDS = 24 * 60 * 60;
 
 /** Days in a /v2/trends series (measured 2026-09-25) */
@@ -748,8 +765,17 @@ export class FirewallaClient {
   /** @private Axios instance configured for Firewalla MSP API access */
   private api: AxiosInstance;
 
-  /** @private In-memory cache for API responses with TTL management */
+  /**
+   * @private In-memory cache for API responses, least recently used first:
+   * a Map iterates in insertion order, and a read inserts its entry again
+   */
   private cache: Map<string, { data: unknown; expires: number }>;
+
+  /** @private Most entries `cache` holds; see setCache */
+  private readonly cacheMaxEntries: number;
+
+  /** @private When the next cache write drops the expired entries */
+  private nextCacheSweepAt = 0;
 
   /** @private Geographic cache for IP geolocation lookups */
   private geoCache: GeographicCache;
@@ -776,6 +802,13 @@ export class FirewallaClient {
       clock
     );
     this.cache = new Map();
+    const { cacheMaxEntries } = config;
+    this.cacheMaxEntries =
+      typeof cacheMaxEntries === 'number' &&
+      Number.isFinite(cacheMaxEntries) &&
+      cacheMaxEntries >= 1
+        ? Math.floor(cacheMaxEntries)
+        : DEFAULT_CACHE_MAX_ENTRIES;
     this.geoCache = new GeographicCache({
       maxSize: 10000,
       ttlMs: 3600000, // 1 hour cache for geographic data
@@ -1076,19 +1109,52 @@ export class FirewallaClient {
    */
   private getFromCache<T>(key: string): T | null {
     const cached = this.cache.get(key);
-    if (cached && cached.expires > Date.now()) {
-      return cached.data as T;
-    }
     this.cache.delete(key);
-    return null;
+    if (!cached || cached.expires <= Date.now()) {
+      return null;
+    }
+    // Inserted again, so it is the most recently used
+    this.cache.set(key, cached);
+    return cached.data as T;
   }
 
+  /**
+   * Caches `data` for `ttlSeconds`, else CACHE_TTL. The cache holds at most
+   * cacheMaxEntries: when it is full, the expired entries go first, then the
+   * least recently used. Expired entries are also dropped by the first write
+   * CACHE_SWEEP_INTERVAL_MS after the last sweep, since an entry nothing
+   * reads again is otherwise never removed.
+   */
   private setCache<T>(key: string, data: T, ttlSeconds?: number): void {
     const ttl = ttlSeconds || this.config.cacheTtl;
-    this.cache.set(key, {
-      data,
-      expires: Date.now() + ttl * 1000,
-    });
+    this.cache.delete(key);
+    if (!(ttl > 0)) {
+      return;
+    }
+    const now = Date.now();
+    if (
+      now >= this.nextCacheSweepAt ||
+      this.cache.size >= this.cacheMaxEntries
+    ) {
+      this.dropExpiredCache(now);
+    }
+    for (const oldest of this.cache.keys()) {
+      if (this.cache.size < this.cacheMaxEntries) {
+        break;
+      }
+      this.cache.delete(oldest);
+    }
+    this.cache.set(key, { data, expires: now + ttl * 1000 });
+  }
+
+  /** Drops every expired cache entry */
+  private dropExpiredCache(now: number): void {
+    for (const [key, entry] of this.cache) {
+      if (entry.expires <= now) {
+        this.cache.delete(key);
+      }
+    }
+    this.nextCacheSweepAt = now + CACHE_SWEEP_INTERVAL_MS;
   }
 
   /**
@@ -1270,8 +1336,16 @@ export class FirewallaClient {
       this.filterParametersForDataEndpoints(method, endpoint, params)
     );
     const cacheKey = this.getCacheKey(endpoint, filteredParams, method);
+    // A relative time is sent as seconds from now, a new key every second
+    const useCache =
+      cacheable &&
+      method === 'GET' &&
+      !(
+        typeof params?.query === 'string' &&
+        RELATIVE_TIME_QUERY.test(params.query)
+      );
 
-    if (cacheable && method === 'GET') {
+    if (useCache) {
       const cached = this.getFromCache<T>(cacheKey);
       if (cached) {
         if (trace) {
@@ -1357,7 +1431,7 @@ export class FirewallaClient {
         result = response.data;
       }
 
-      if (cacheable && method === 'GET') {
+      if (useCache) {
         // Use shorter TTL for dynamic data (alarms, flows)
         const ttlSeconds =
           endpoint.includes('/alarms') || endpoint.includes('/flows')

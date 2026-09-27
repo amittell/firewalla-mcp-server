@@ -17,6 +17,7 @@
  * - API_TIMEOUT: Request timeout in milliseconds (default: 30000)
  * - API_RATE_LIMIT: API requests the client starts in any 5 minutes (default: 100)
  * - CACHE_TTL: Cache time-to-live in seconds (default: 300)
+ * - CACHE_MAX_ENTRIES: Most API responses kept cached (default: 1000)
  * - DEFAULT_PAGE_SIZE: Default pagination page size (default: 100)
  * - MAX_PAGE_SIZE: Maximum allowed pagination page size (default: 10000)
  * - MCP_TRANSPORT: Transport type (stdio or http, default: stdio)
@@ -99,6 +100,8 @@ export function getConfig(): FirewallaConfig {
     apiTimeout: getOptionalEnvInt('API_TIMEOUT', 30000, 1000, 300000), // 1s to 5min
     rateLimit: getOptionalEnvInt('API_RATE_LIMIT', 100, 1, 1000), // 1 to 1000 requests per 5 minutes
     cacheTtl: getOptionalEnvInt('CACHE_TTL', 300, 0, 3600), // 0s to 1 hour
+    // DEFAULT_CACHE_MAX_ENTRIES in src/firewalla/client.ts
+    cacheMaxEntries: getOptionalEnvInt('CACHE_MAX_ENTRIES', 1000, 1, 100000),
     defaultPageSize: getOptionalEnvInt('DEFAULT_PAGE_SIZE', 100, 1, 10000), // 1 to 10000 items per page
     maxPageSize: getOptionalEnvInt('MAX_PAGE_SIZE', 10000, 100, 100000), // 100 to 100000 items per page
     transport: parseTransportConfig(),

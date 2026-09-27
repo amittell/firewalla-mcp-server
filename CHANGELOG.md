@@ -402,6 +402,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Invalid parameters sent to ...`. Tools no longer wrap a failure in "This is
   an immediate parameter or configuration error, not a timeout" or "This
   appears to be a processing error, not a timeout".
+- The client's response cache holds at most `CACHE_MAX_ENTRIES` responses
+  (default 1000); when it is full, expired entries go first, then the least
+  recently used. It had no limit, and an entry was removed only when its own
+  key was read again after it expired, so every distinct read stayed in
+  memory for the life of the process, and one client serves every HTTP
+  session: with the API stubbed, 200 distinct reads and one more after the
+  TTL left 201 entries. They now leave 1, as a cache write drops every
+  expired entry once a minute has passed since the last sweep. A query with a
+  relative time such as `ts:>1h` is no longer cached: it is sent as Unix
+  seconds counted from now, so each read was a new key (`ts:>1790420701`,
+  then `ts:>1790420702` 1.1 s later) that nothing read again. A page read
+  from the cache still counts in `coverage.cached_pages`, not `api_requests`.
 - The client's `getSpecificAlarm` checks the alarm ID before it lists the
   boxes. Called without a gid and without `FIREWALLA_BOX_ID`, it sent
   `GET /v2/boxes` and only then refused an ID that cannot be a path segment,
