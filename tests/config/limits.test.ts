@@ -1,10 +1,8 @@
 import { 
   getToolLimit, 
-  getToolPerformanceTier,
   getToolTimeout,
   getLimitValidationConfig,
   STANDARD_LIMITS,
-  PERFORMANCE_TIER_LIMITS,
   PERFORMANCE_THRESHOLDS,
   VALIDATION_CONFIG
 } from '../../src/config/limits.js';
@@ -33,57 +31,13 @@ describe('limits configuration', () => {
       expect(getToolLimit('search_target_lists')).toBe(STANDARD_LIMITS.SEARCH_TARGET_LISTS);
     });
 
-    it('should return correct limits for geographic tools', () => {
-      expect(getToolLimit('search_alarms_by_geography')).toBe(STANDARD_LIMITS.GEOGRAPHIC_ALARMS);
-      expect(getToolLimit('get_geographic_statistics')).toBe(STANDARD_LIMITS.GEOGRAPHIC_STATS);
-    });
-
-    it('should return correct limits for cross-reference tools', () => {
-      expect(getToolLimit('search_cross_reference')).toBe(STANDARD_LIMITS.CROSS_REFERENCE);
-      expect(getToolLimit('search_enhanced_cross_reference')).toBe(STANDARD_LIMITS.CROSS_REFERENCE);
-    });
-
     it('should return default limit for unknown tools', () => {
       expect(getToolLimit('unknown_tool')).toBe(STANDARD_LIMITS.BASIC_QUERY);
       expect(getToolLimit('')).toBe(STANDARD_LIMITS.BASIC_QUERY);
     });
   });
 
-  describe('getToolPerformanceTier', () => {
-    it('should return COMPLEX for complex tools', () => {
-      expect(getToolPerformanceTier('search_enhanced_cross_reference')).toBe('COMPLEX');
-      expect(getToolPerformanceTier('search_cross_reference')).toBe('COMPLEX');
-      expect(getToolPerformanceTier('get_correlation_suggestions')).toBe('COMPLEX');
-    });
-
-    it('should return MODERATE for moderate tools', () => {
-      expect(getToolPerformanceTier('get_bandwidth_usage')).toBe('MODERATE');
-      expect(getToolPerformanceTier('search_alarms_by_geography')).toBe('MODERATE');
-    });
-
-    it('should return STATISTICAL for statistical tools', () => {
-      expect(getToolPerformanceTier('get_simple_statistics')).toBe('STATISTICAL');
-      expect(getToolPerformanceTier('get_statistics_by_region')).toBe('STATISTICAL');
-      expect(getToolPerformanceTier('get_statistics_by_box')).toBe('STATISTICAL');
-      expect(getToolPerformanceTier('get_geographic_statistics')).toBe('STATISTICAL');
-    });
-
-    it('should return SIMPLE for other tools', () => {
-      expect(getToolPerformanceTier('get_active_alarms')).toBe('SIMPLE');
-      expect(getToolPerformanceTier('search_flows')).toBe('SIMPLE');
-      expect(getToolPerformanceTier('unknown_tool')).toBe('SIMPLE');
-    });
-  });
-
   describe('getToolTimeout', () => {
-    it('should return complex timeout for complex tools', () => {
-      expect(getToolTimeout('search_enhanced_cross_reference')).toBe(PERFORMANCE_THRESHOLDS.COMPLEX_OPERATION_TIMEOUT);
-      expect(getToolTimeout('search_cross_reference')).toBe(PERFORMANCE_THRESHOLDS.COMPLEX_OPERATION_TIMEOUT);
-      expect(getToolTimeout('get_correlation_suggestions')).toBe(PERFORMANCE_THRESHOLDS.COMPLEX_OPERATION_TIMEOUT);
-      expect(getToolTimeout('search_alarms_by_geography')).toBe(PERFORMANCE_THRESHOLDS.COMPLEX_OPERATION_TIMEOUT);
-      expect(getToolTimeout('get_geographic_statistics')).toBe(PERFORMANCE_THRESHOLDS.COMPLEX_OPERATION_TIMEOUT);
-    });
-
     it('should return search timeout for search tools', () => {
       expect(getToolTimeout('search_flows')).toBe(PERFORMANCE_THRESHOLDS.SEARCH_OPERATION_TIMEOUT);
       expect(getToolTimeout('search_alarms')).toBe(PERFORMANCE_THRESHOLDS.SEARCH_OPERATION_TIMEOUT);

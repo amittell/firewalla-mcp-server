@@ -77,55 +77,7 @@ search_devices: { max: 1000 }     // Optimal device search
 }
 ```
 
-#### 2. Geographic Search Tools Inconsistency
-
-**Problem**: Geographic tools had different limits for similar operations
-
-**Before**:
-```typescript
-search_flows_by_geography: { max: 1000 }     // Reasonable limit
-search_alarms_by_geography: { max: 5000 }    // Caused timeout issues
-get_geographic_statistics: { max: 10000 }    // Excessive for summary data
-```
-
-**After**:
-```typescript
-search_flows_by_geography: { max: 1000 }     // Consistent performance
-search_alarms_by_geography: { max: 1000 }    // Standardized for reliability
-get_geographic_statistics: { max: 1000 }     // Appropriate for statistical data
-```
-
-**Tool Description Enhancement**:
-```typescript
-{
-  name: "search_flows_by_geography",
-  description: `Search network flows with geographic filtering and enrichment.
-
-  Geographic Features:
-  - Multi-country filtering: countries:["China","Russia","Iran"]
-  - Continent-based search: continents:["Asia","Europe"]
-  - ASN and hosting provider filtering
-  - Risk scoring and threat intelligence
-
-  Performance: Includes geographic data enrichment (800-2000ms response).
-  Results include country, region, city, ASN, and risk scoring data.`,
-
-  parameters: {
-    geographic_filters: {
-      type: "object",
-      description: `Geographic filtering options with multi-value support:
-      - countries: Array of country names (OR logic)
-      - continents: Array of continent names (OR logic)
-      - regions: Array of region names (OR logic)
-      - min_risk_score: Minimum geographic risk score (0.0-1.0)
-      - exclude_cloud: Boolean to exclude cloud provider traffic
-      - exclude_vpn: Boolean to exclude VPN/proxy traffic`
-    }
-  }
-}
-```
-
-#### 3. Bandwidth Analysis Over-sizing
+#### 2. Bandwidth Analysis Over-sizing
 
 **Problem**: Bandwidth tools allowed limits that caused memory exhaustion
 
@@ -167,20 +119,18 @@ get_bandwidth_usage: { max: 500 }   // Optimized for 50-100MB memory usage
 }
 ```
 
-#### 4. Rules Summary Excessive Limits
+#### 3. Rules Summary Excessive Limits
 
 **Problem**: Rules summary operations had impractical limits
 
 **Before**:
 ```typescript
 get_network_rules_summary: { max: 10000 }  // 15-30 second response times
-get_most_active_rules: { max: 5000 }       // Inconsistent with other rule tools
 ```
 
 **After**:
 ```typescript
 get_network_rules_summary: { max: 2000 }   // 3-5 second response times
-get_most_active_rules: { max: 1000 }       // Consistent with standard tools
 ```
 
 **Tool Description Enhancement**:
@@ -210,64 +160,6 @@ get_most_active_rules: { max: 1000 }       // Consistent with standard tools
       description: "Maximum rules to analyze (1-2000). Reduced from 10000 for practical response times.",
       minimum: 1,
       maximum: 2000  // Reduced from 10000
-    }
-  }
-}
-```
-
-#### 5. Cross-Reference Tools Optimization
-
-**Problem**: Cross-reference operations had inconsistent limits and unclear performance expectations
-
-**Before**:
-```typescript
-search_cross_reference: { max: 5000 }          // Often timed out
-search_enhanced_cross_reference: { max: 10000 } // Excessive processing time
-```
-
-**After**:
-```typescript
-search_cross_reference: { max: 2000 }          // Reliable 3-5 second responses
-search_enhanced_cross_reference: { max: 2000 } // Consistent high-quality correlation
-```
-
-**Tool Description Enhancement**:
-```typescript
-{
-  name: "search_enhanced_cross_reference",
-  description: `Advanced multi-entity correlation with intelligent scoring and fuzzy matching.
-
-  Correlation Features:
-  - Multi-field correlation across flows, alarms, devices
-  - Intelligent confidence scoring (0.0-1.0)
-  - Fuzzy matching algorithms for IP subnets, strings
-  - Temporal window filtering for time-based correlation
-  - Network and device scope expansion
-
-  Performance: Complex correlation analysis optimized for 2000 results.
-  Processing time: 2-5 seconds with high-quality correlation scoring.
-
-  Use Cases:
-  - Security incident investigation
-  - Threat hunting across multiple data sources
-  - Network behavior analysis
-  - Anomaly detection and root cause analysis`,
-
-  parameters: {
-    correlation_params: {
-      type: "object",
-      description: `Enhanced correlation configuration:
-      - correlationFields: Array of fields to correlate (max 5 for performance)
-      - correlationType: "AND" or "OR" logic for correlation
-      - temporalWindow: Time-based correlation filtering
-      - networkScope: Network-level correlation options
-      - deviceScope: Device-level correlation options`
-    },
-    limit: {
-      type: "number",
-      description: "Maximum results for correlation analysis (1-2000). Higher limits provide better correlation quality.",
-      minimum: 1,
-      maximum: 2000  // Optimized for correlation quality vs performance
     }
   }
 }
@@ -498,33 +390,6 @@ Every search tool now includes comprehensive query syntax examples:
   - timestamp:>NOW-1h
   - last_seen:<NOW-24h
   - created:2024-01-01..2024-01-31`
-}
-```
-
-### Geographic Query Integration
-
-Geographic search tools include specialized geographic query syntax:
-
-```typescript
-{
-  description: `
-  Geographic Query Enhancements:
-
-  Country Filtering:
-  - countries:["China", "Russia", "Iran"]        # Multiple countries (OR logic)
-  - continents:["Asia", "Europe"]                # Continental filtering
-  - regions:["Eastern Europe", "Middle East"]    # Regional filtering
-
-  Infrastructure Filtering:
-  - asns:["AS4134", "AS8075"]                    # Autonomous System Numbers
-  - hosting_providers:["cloudflare", "amazon"]   # Cloud/hosting providers
-  - exclude_cloud:true                           # Exclude cloud traffic
-  - exclude_vpn:true                             # Exclude VPN/proxy traffic
-
-  Risk-Based Filtering:
-  - min_risk_score:0.7                          # Minimum geographic risk score
-  - high_risk_countries:true                     # Known high-risk locations
-  - threat_analysis:true                         # Enhanced threat intelligence`
 }
 ```
 

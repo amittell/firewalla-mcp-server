@@ -447,27 +447,9 @@ const timeoutPatterns = {
 #### 3. Processing Timeout Patterns
 
 **Trigger Conditions**:
-- Complex cross-reference correlation
 - Large geographic dataset enrichment
 - Statistical analysis on massive datasets
 - Multiple concurrent heavy operations
-
-**Example Error Response**:
-```json
-{
-  "error": true,
-  "message": "Processing timeout: Cross-reference correlation exceeded 10 second processing limit",
-  "tool": "search_enhanced_cross_reference",
-  "errorType": "timeout_error",
-  "details": {
-    "correlation_fields": ["source_ip", "destination_ip", "country"],
-    "primary_results": 5000,
-    "secondary_results": 8000,
-    "processing_stage": "fuzzy_matching",
-    "suggestion": "Reduce result sets or use simpler correlation fields"
-  }
-}
-```
 
 ### Validation Error Patterns
 
@@ -622,13 +604,7 @@ function classifyError(error: any, context: any): ErrorType {
    search_devices query:"online:true" limit:2000
    ```
 
-2. **Complex Correlation Queries**:
-   ```bash
-   // Cross-reference operations with large datasets
-   search_enhanced_cross_reference primary_query:"protocol:tcp" secondary_queries:["severity:high"] limit:5000
-   ```
-
-3. **Bandwidth Analysis on Large Networks**:
+2. **Bandwidth Analysis on Large Networks**:
    ```bash
    // Heavy processing operations
    get_bandwidth_usage period:"30d" limit:1000

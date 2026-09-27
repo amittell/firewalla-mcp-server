@@ -554,6 +554,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so. Only if that read fails or returns no points are the days UTC days,
   and the note says why.
 
+### Removed
+
+- Modules nothing imports. None of them is reached from `src/server.ts`,
+  and no script, workflow, Dockerfile or doc runs one, but `tsc` compiled
+  every file in `src/`, so each shipped in `dist/` and the npm package:
+  `src/config/response-config.ts`, `src/config/security.ts`,
+  `src/debug/tools.ts`, `src/health/endpoints.ts`,
+  `src/production/config.ts`, `src/tools/handlers/bulk-alarms.ts`,
+  `src/tools/handlers/bulk-rules.ts`, `src/utils/bulk-operation-manager.ts`,
+  `src/utils/null-safety.ts`, `src/utils/platform.ts`,
+  `src/utils/simple-utils.ts` and `src/utils/unified-response.ts`, and the
+  three test files that tested only them.
+- The handlers of tools the registry never registered:
+  `search_cross_reference`, `search_enhanced_cross_reference`,
+  `get_correlation_suggestions`, `search_alarms_by_geography`,
+  `get_geographic_statistics`, `get_most_active_rules`, `get_recent_rules`,
+  `bulk_delete_alarms`, `bulk_pause_rules` and `bulk_resume_rules`. A call to
+  one was answered "Unknown tool", and still is. The search engine methods
+  only they used went with them, and so did `filterByGeography` and the
+  limits, performance tiers and timeouts `src/config/limits.ts` kept for
+  their names.
+- Exports nothing in `src/` or `tests/` used: `PaginationManager` and the
+  other pagination helpers besides `createPaginatedResponse`,
+  `ResponseFormatUtils`, `globalStreamingManager`,
+  `enrichObjectsWithGeoBatch`, `enrichArrayWithGeographicData`,
+  `updateSearchConfig`, `getSearchConfig`, `setTruncationLimits` and
+  `resetTruncationLimits`.
+- These environment variables are no longer read. None of them did anything
+  before either: `CORS_ORIGINS`, `TRUSTED_PROXIES`, `ENABLE_METRICS`,
+  `ENABLE_HEALTH_CHECKS`, `MAX_CONCURRENT_REQUESTS` and
+  `GRACEFUL_SHUTDOWN_TIMEOUT` were read only by `src/production/config.ts`,
+  and `FIREWALLA_MSP_BASE_URL` only by `src/debug/tools.ts`, neither of them
+  imported; `src/tools/search.ts` parsed `RISK_THRESHOLD_LOW_MAX`,
+  `RISK_THRESHOLD_MEDIUM_MAX`, `RISK_THRESHOLD_HIGH_MAX`,
+  `RISK_THRESHOLD_COUNTRY_MIN` and `RISK_THRESHOLD_ASN_MIN` for the
+  unregistered geographic handlers, and `CORRELATION_TIMEOUT_MS`,
+  `MAX_CORRELATION_RESULTS` and `CACHE_EXPIRATION_MS` for nothing.
+  `RISK_THRESHOLD_FLOW_MIN` is still read, by the geographic analysis of
+  `search_flows`, and `MCP_TEST_MODE` by `src/config/config.ts`.
+- `docs/security-policy-guide.md`. It described the `SecurityManager` of
+  `src/config/security.ts` as enforced, along with RBAC, audit logging and
+  `RBAC_ENABLED`, `AUDIT_LOGGING_ENABLED` and `MAX_RISK_SCORE`, none of which
+  the code has or reads. The sections of the other docs that described the
+  removed tools or the performance tiers are gone too.
+- What the server lists is unchanged: `tools/list` from the built server is
+  the same JSON before and after, 24 tools and 35 with
+  `FIREWALLA_ENABLE_WRITE_TOOLS=true`, and the same handlers are registered.
+  `dist/` is 48 files and 391,589 bytes smaller (2,994,258 to 2,602,669)
+  and the npm tarball 81,251 bytes (782,969 to 701,718).
+
 ## [1.5.0] - 2026-09-25
 
 ### Added

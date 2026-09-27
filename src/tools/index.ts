@@ -12,8 +12,7 @@
  * - **Device (1 tool)**: Device status and inventory management
  * - **Rule (7 tools)**: Firewall rule configuration and analytics
  * - **Analytics (7 tools)**: Statistical analysis and trend reporting
- * - **Search (11 tools)**: Advanced search with cross-reference capabilities
- * - **Bulk Operations (3 tools)**: Alarm and rule bulk management
+ * - **Search (5 tools)**: Flow, alarm, rule, device and target-list search
  *
  * Architecture Benefits:
  * - Single Responsibility Principle for each tool handler
@@ -178,34 +177,3 @@ export function setupTools(
   );
   logger.info(`Registered tools: ${allToolNames.join(', ')}`);
 }
-
-/**
- * Migration Complete!
- *
- * ✅ Migrated to Registry (35 handlers total):
- *
- * Security (3):
- * - get_active_alarms, get_specific_alarm, delete_alarm
- *
- * Network (3):
- * - get_flow_data, get_bandwidth_usage, get_offline_devices
- *
- * Device (1):
- * - get_device_status
- *
- * Rule (6):
- * - get_network_rules, pause_rule, resume_rule, get_target_lists,
- *   get_network_rules_summary, get_most_active_rules, get_recent_rules
- *
- * Analytics (6):
- * - get_boxes, get_simple_statistics, get_statistics_by_region,
- *   get_statistics_by_box, get_flow_trends, get_alarm_trends, get_rule_trends
- *
- * Search (6):
- * - search_flows, search_alarms, search_rules, search_devices,
- *   search_target_lists, search_cross_reference
- *
- * 🗑️ Removed: 1000+ line switch statement replaced with clean registry pattern
- * 🔧 Fixed: Null safety issues in device mapping (lines 1263-1270 in original)
- * 📊 Architecture: Single Responsibility Principle, better testability, maintainability
- */

@@ -573,11 +573,6 @@ export class StreamingManager {
   }
 }
 
-/**
- * Global streaming manager with default configuration
- */
-export const globalStreamingManager = new StreamingManager();
-
 // Default streaming threshold - can be overridden via environment variable or config
 const DEFAULT_STREAMING_THRESHOLD = DEFAULT_STREAMING_CONFIG.streamingThreshold;
 
