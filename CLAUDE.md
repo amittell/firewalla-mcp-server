@@ -150,6 +150,7 @@ MCP_HTTP_ALLOWED_ORIGINS=                 # Browser origins accepted; a request 
 MCP_SESSION_IDLE_TIMEOUT_MS=1800000       # HTTP sessions idle this long are closed (default: 30 min)
 API_TIMEOUT=30000                         # API request timeout in ms (default: 30000, 1000-300000)
 CACHE_TTL=300                             # Response cache TTL in seconds (default: 300, 0-3600)
+CACHE_MAX_ENTRIES=1000                    # Most responses cached; least recently used dropped first (default: 1000, 1-100000)
 DEFAULT_PAGE_SIZE=100                     # Default page size (default: 100)
 MAX_PAGE_SIZE=10000                       # Page size ceiling (default: 10000)
 LOG_LEVEL=info                            # error, warn, info or debug (default: info)
@@ -438,9 +439,12 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
 
 ### Caching System
 - API Responses: 300s TTL (configurable via CACHE_TTL environment variable)
-- Geographic Data: 1h TTL with LRU eviction
+- At most CACHE_MAX_ENTRIES responses (default 1000): when full, expired
+  entries go first, then the least recently used. A cache write drops the
+  expired entries once a minute at most. A query with a relative time
+  (`ts:>1h`) is not cached
+- Geographic Data: 1h TTL with LRU eviction, at most 10000 addresses
 - Cache key collision prevention with enhanced hashing
-- Automatic cleanup of expired entries
 
 ### Rate Limiting
 - The MSP API accepts 100 requests per token in each fixed 5-minute window
