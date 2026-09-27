@@ -17,6 +17,7 @@ import {
 import {
   unixToISOStringOrNow,
   safeUnixToISOString,
+  hasRelativeTimestamp,
 } from '../../utils/timestamp.js';
 import {
   normalizeUnknownFields,
@@ -319,6 +320,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
           const saved = params as typeof params & {
             query?: string;
             sortBy?: string;
+            relativeTime?: boolean;
           };
           const response = await withToolTimeout(
             async () =>
@@ -327,7 +329,12 @@ export class GetFlowDataHandler extends BaseToolHandler {
                 undefined,
                 saved.sortBy,
                 params.limit || limit,
-                params.cursor
+                params.cursor,
+                // The saved query has the relative time as seconds; a
+                // relative read is not cached (readTrace)
+                saved.relativeTime
+                  ? { sent: 0, cached: 0, relativeTime: true }
+                  : undefined
               ),
             this.name
           );
@@ -399,6 +406,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
             // chunk reads the window the first one did: resolved in each
             // chunk, it moved with the clock under the session's cursor
             query: finalQuery ? toMspQuery(finalQuery) || undefined : undefined,
+            relativeTime: hasRelativeTimestamp(finalQuery),
             groupBy,
             sortBy,
             limit,

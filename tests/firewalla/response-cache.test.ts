@@ -24,6 +24,7 @@ import {
 } from '../../src/tools/handlers/search.js';
 import { GetActiveAlarmsHandler } from '../../src/tools/handlers/security.js';
 import { GetNetworkRulesHandler } from '../../src/tools/handlers/rules.js';
+import { GetFlowDataHandler } from '../../src/tools/handlers/network.js';
 
 let now = Date.UTC(2026, 8, 26, 12);
 
@@ -180,6 +181,53 @@ describe('the response cache', () => {
       expect(sent).toHaveLength(2);
       expect(sent[1]).toBe(sent[0]);
       expect(cacheSize(client)).toBe(0);
+    }
+  );
+});
+
+describe('a relative time the client resolves once, as it reports it', () => {
+  // getFlowData and getActiveAlarms turn ts:>1h into seconds themselves
+  // and send that string on every page, so request() sees only seconds;
+  // the read's trace still keeps it out of the cache. Each answer reports
+  // the query it sent.
+  const reported: Record<string, (data: any) => unknown> = {
+    search_flows: data => data.data.metadata.query,
+    get_flow_data: data => data.data.query_parameters.query,
+    'get_flow_data streamed': data => data.query_executed,
+    get_active_alarms: data => data.data.query_executed,
+  };
+
+  it.each([
+    { name: 'search_flows', handler: new SearchFlowsHandler(), limit: 10 },
+    { name: 'get_flow_data', handler: new GetFlowDataHandler(), limit: 10 },
+    {
+      name: 'get_flow_data streamed',
+      handler: new GetFlowDataHandler(),
+      limit: 100,
+    },
+    {
+      name: 'get_active_alarms',
+      handler: new GetActiveAlarmsHandler(),
+      limit: 10,
+    },
+  ])(
+    '$name: ts:>1h twice in one second sends two requests and reports each',
+    async ({ name, handler, limit }) => {
+      const { client, sent } = makeClient();
+      const args = { query: 'ts:>1h', limit };
+      const first = await handler.execute(args, client);
+      const second = await handler.execute(args, client);
+      expect(first.isError).toBeFalsy();
+      expect(second.isError).toBeFalsy();
+      expect(sent).toHaveLength(2);
+      expect(sent[1]).toBe(sent[0]);
+      expect(sent[0]).toContain(`ts:>${Math.floor(now / 1000) - 3600}`);
+      expect(cacheSize(client)).toBe(0);
+      for (const answer of [first, second]) {
+        expect(reported[name](JSON.parse(answer.content[0].text))).toBe(
+          sent[0]
+        );
+      }
     }
   );
 });
