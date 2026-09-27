@@ -9,12 +9,12 @@ Open WebUI can reach this server two ways:
 
 Every command and file on this page was run on 2026-09-26; see [What was tested](#what-was-tested).
 
-**Versions.** Routes 2 and 3 use the HTTP transport and need **1.6.0 or later**, the first release whose HTTP transport checks the `Host` header and a bearer token. On 2026-09-26, npm and Docker Hub still have 1.5.0. Up to 1.5.0 the HTTP transport listens on every interface and ignores `MCP_HTTP_BEARER_TOKEN`, `MCP_HTTP_ALLOWED_HOSTS` and the other `MCP_HTTP_*` settings, so the token in these recipes protects nothing, and the server registers 5 tools that change your box. Until 1.6.0 is published, run routes 2 and 3 on a build of the main branch, as each route shows. With 1.5.0 or earlier, do not expose the HTTP port: use route 1. Route 1 uses stdio and works from 1.4.0; with 1.5.0 it lists 28 tools, 5 of them write tools, and with later releases 24 read-only tools.
+**Versions.** Routes 2 and 3 use the HTTP transport and need **1.6.0 or later**, the first release whose HTTP transport checks the `Host` header and a bearer token. Up to 1.5.0 the HTTP transport listens on every interface and ignores `MCP_HTTP_BEARER_TOKEN`, `MCP_HTTP_ALLOWED_HOSTS` and the other `MCP_HTTP_*` settings, so the token in these recipes protects nothing, and the server registers 5 tools that change your box. With 1.5.0 or earlier, do not expose the HTTP port: use route 1. Route 1 uses stdio and works from 1.4.0; with 1.5.0 it lists 28 tools, 5 of them write tools, and with later releases 24 read-only tools.
 
 ## Prerequisites
 
 - Open WebUI, and a model with tool (function) calling
-- firewalla-mcp-server **1.4.0 or later** for route 1; earlier releases never start under `npx` (see [mcpo never opens its port](#mcpo-never-opens-its-port-port-8000-shows-down)). **1.6.0 or later** for routes 2 and 3, or a build of main until 1.6.0 is published; see Versions above
+- firewalla-mcp-server **1.4.0 or later** for route 1; earlier releases never start under `npx` (see [mcpo never opens its port](#mcpo-never-opens-its-port-port-8000-shows-down)). **1.6.0 or later** for routes 2 and 3; see Versions above
 - For the mcpo routes: mcpo 0.0.20, as the Docker image `ghcr.io/open-webui/mcpo:main` (it includes Node.js 22 and `npx`) or through `uvx`
 - Node.js 18+ if mcpo runs the server with `npx` or `node` outside the mcpo image
 - Docker, for the Docker image and Compose routes
@@ -147,7 +147,7 @@ A connection added here is called by the Open WebUI server, not your browser. If
 
 The Docker image [`amittell/firewalla-mcp-server`](https://hub.docker.com/r/amittell/firewalla-mcp-server) (amd64, arm64 and arm/v7) runs the server; with `MCP_TRANSPORT=http` it serves MCP Streamable HTTP on port 3000 at `/mcp`, and Open WebUI connects to it over the Compose network.
 
-This route needs the 1.6.0 image. Until it is on Docker Hub, `docker compose up` stops with `docker.io/amittell/firewalla-mcp-server:1.6.0: not found`; replace the `image:` line with `build: https://github.com/amittell/firewalla-mcp-server.git#main`, which builds the image from the main branch, or run `docker build -t firewalla-mcp-server:main .` in a checkout and use `image: firewalla-mcp-server:main`. Do not use `latest` or `1.5.0` here: they have no token or `Host` checks.
+This route needs the 1.6.0 image or later. Pin the version rather than `latest`, and do not use `1.5.0` or earlier here: they have no token or `Host` checks.
 
 `compose.yaml`:
 
@@ -265,7 +265,7 @@ FIREWALLA_MSP_ID=yourdomain.firewalla.net \
 npx -y 'firewalla-mcp-server@>=1.6.0'
 ```
 
-The version range keeps `npx` from running 1.5.0; until 1.6.0 is published it stops with `No matching version found for firewalla-mcp-server@>=1.6.0`. Before then, build main from source ([README](../../README.md#option-c-install-from-source)) and replace the last line with `node /absolute/path/to/firewalla-mcp-server/dist/server.js`.
+The version range keeps `npx` from running 1.5.0 or earlier, which have no token or `Host` checks.
 
 - `MCP_HTTP_HOST=0.0.0.0` accepts connections from other machines and from containers. Without it the server listens on 127.0.0.1 only.
 - `MCP_HTTP_ALLOWED_HOSTS` lists every name or address clients put in the URL, besides `localhost`, `127.0.0.1` and `[::1]`: here `host.docker.internal` for an Open WebUI container on this host, and `192.168.1.10` standing for the host's LAN address. A request with any other `Host` gets 403.

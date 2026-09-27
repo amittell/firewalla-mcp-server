@@ -5,4 +5,4 @@
  * `version` lifecycle script during `npm version`;
  * tests/utils/package-version.test.ts fails if the two drift.
  */
-export const PACKAGE_VERSION = '1.5.0';
+export const PACKAGE_VERSION = '1.6.0';
