@@ -719,6 +719,25 @@ export function readTrace(query?: string): RequestTrace {
 }
 
 /**
+ * The trace of a read that resolves its query's relative time itself, so
+ * that request() sees only seconds: the caller's trace, or a new one, noting
+ * the relative time as readTrace does, so the read is not cached
+ */
+function relativeReadTrace(
+  query: string | undefined,
+  trace: RequestTrace | undefined
+): RequestTrace | undefined {
+  if (!hasRelativeTimestamp(query)) {
+    return trace;
+  }
+  if (!trace) {
+    return readTrace(query);
+  }
+  trace.relativeTime = true;
+  return trace;
+}
+
+/**
  * Whether a request names a box: a `box` parameter, a `box` or `gid` in
  * its body, or a gid in an /v2/alarms/{gid}/... or /v2/boxes/{gid}/... path
  */
@@ -1740,7 +1759,9 @@ export class FirewallaClient {
       params,
       Number(limit),
       !force_refresh,
-      trace
+      // request() now sees ts:>1h only as seconds; the trace keeps the
+      // read out of the cache, as it did when request() saw ts:>1h itself
+      relativeReadTrace(query, trace)
     );
 
     // Basic response validation
@@ -1888,7 +1909,9 @@ export class FirewallaClient {
       params,
       Number(limit),
       true,
-      trace
+      // request() now sees ts:>1h only as seconds; the trace keeps the
+      // read out of the cache, as it did when request() saw ts:>1h itself
+      relativeReadTrace(query, trace)
     );
 
     // A grouped response has one item of totals per group and no ts or gid
