@@ -61,9 +61,11 @@ export class MspQueryError extends Error {
 }
 
 /**
- * The MspQueryError behind an error: the error itself, or one a wrapper
- * kept as `cause` or `retryContext.originalError`. withToolTimeout throws a
- * failure as it came, so the error itself is the usual case.
+ * The MspQueryError behind an error: the error itself, or one found by
+ * following, up to five levels down, the error that each wrapper kept as
+ * `cause`, else as `retryContext.originalError`. withToolTimeout throws a
+ * failure as it came, so the error itself is the usual case, and nothing
+ * sets `retryContext` since RetryManager was removed.
  */
 export function findMspQueryError(error: unknown): MspQueryError | undefined {
   let current: unknown = error;
