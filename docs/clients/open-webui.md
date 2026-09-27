@@ -9,12 +9,12 @@ Open WebUI can reach this server two ways:
 
 Every command and file on this page was run on 2026-09-26; see [What was tested](#what-was-tested).
 
-**Versions.** Routes 2 and 3 use the HTTP transport and need **1.6.0 or later**, the first release whose HTTP transport checks the `Host` header and a bearer token. On 2026-09-26, npm and Docker Hub still have 1.5.0. Up to 1.5.0 the HTTP transport listens on every interface and ignores `MCP_HTTP_BEARER_TOKEN`, `MCP_HTTP_ALLOWED_HOSTS` and the other `MCP_HTTP_*` settings, so the token in these recipes protects nothing, and the server registers 5 tools that change your box. Until 1.6.0 is published, run routes 2 and 3 on a build of the main branch, as each route shows. With 1.5.0 or earlier, do not expose the HTTP port: use route 1. Route 1 uses stdio and works from 1.4.0; with 1.5.0 it lists 28 tools, 5 of them write tools, and with later releases 24 read-only tools.
+**Versions.** Routes 2 and 3 use the HTTP transport and need **2.0.0 or later**, the first release whose HTTP transport checks the `Host` header and a bearer token. On 2026-09-26, npm and Docker Hub still have 1.5.0. Up to 1.5.0 the HTTP transport listens on every interface and ignores `MCP_HTTP_BEARER_TOKEN`, `MCP_HTTP_ALLOWED_HOSTS` and the other `MCP_HTTP_*` settings, so the token in these recipes protects nothing, and the server registers 5 tools that change your box. Until 2.0.0 is published, run routes 2 and 3 on a build of the main branch, as each route shows. With 1.5.0 or earlier, do not expose the HTTP port: use route 1. Route 1 uses stdio and works from 1.4.0; with 1.5.0 it lists 28 tools, 5 of them write tools, and with later releases 24 read-only tools.
 
 ## Prerequisites
 
 - Open WebUI, and a model with tool (function) calling
-- firewalla-mcp-server **1.4.0 or later** for route 1; earlier releases never start under `npx` (see [mcpo never opens its port](#mcpo-never-opens-its-port-port-8000-shows-down)). **1.6.0 or later** for routes 2 and 3, or a build of main until 1.6.0 is published; see Versions above
+- firewalla-mcp-server **1.4.0 or later** for route 1; earlier releases never start under `npx` (see [mcpo never opens its port](#mcpo-never-opens-its-port-port-8000-shows-down)). **2.0.0 or later** for routes 2 and 3, or a build of main until 2.0.0 is published; see Versions above
 - For the mcpo routes: mcpo 0.0.20, as the Docker image `ghcr.io/open-webui/mcpo:main` (it includes Node.js 22 and `npx`) or through `uvx`
 - Node.js 18+ if mcpo runs the server with `npx` or `node` outside the mcpo image
 - Docker, for the Docker image and Compose routes
@@ -147,14 +147,14 @@ A connection added here is called by the Open WebUI server, not your browser. If
 
 The Docker image [`amittell/firewalla-mcp-server`](https://hub.docker.com/r/amittell/firewalla-mcp-server) (amd64, arm64 and arm/v7) runs the server; with `MCP_TRANSPORT=http` it serves MCP Streamable HTTP on port 3000 at `/mcp`, and Open WebUI connects to it over the Compose network.
 
-This route needs the 1.6.0 image. Until it is on Docker Hub, `docker compose up` stops with `docker.io/amittell/firewalla-mcp-server:1.6.0: not found`; replace the `image:` line with `build: https://github.com/amittell/firewalla-mcp-server.git#main`, which builds the image from the main branch, or run `docker build -t firewalla-mcp-server:main .` in a checkout and use `image: firewalla-mcp-server:main`. Do not use `latest` or `1.5.0` here: they have no token or `Host` checks.
+This route needs the 2.0.0 image. Until it is on Docker Hub, `docker compose up` stops with `docker.io/amittell/firewalla-mcp-server:2.0.0: not found`; replace the `image:` line with `build: https://github.com/amittell/firewalla-mcp-server.git#main`, which builds the image from the main branch, or run `docker build -t firewalla-mcp-server:main .` in a checkout and use `image: firewalla-mcp-server:main`. Do not use `1.5.0` or `1` here, or `latest` while it is still 1.5.0: they have no token or `Host` checks.
 
 `compose.yaml`:
 
 ```yaml
 services:
   firewalla-mcp:
-    image: amittell/firewalla-mcp-server:1.6.0
+    image: amittell/firewalla-mcp-server:2.0.0
     environment:
       MCP_TRANSPORT: http
       MCP_HTTP_PORT: "3000"
@@ -262,10 +262,10 @@ MCP_HTTP_ALLOWED_HOSTS=host.docker.internal,192.168.1.10 \
 MCP_HTTP_BEARER_TOKEN=choose-a-long-random-token \
 FIREWALLA_MSP_TOKEN=your_msp_access_token_here \
 FIREWALLA_MSP_ID=yourdomain.firewalla.net \
-npx -y 'firewalla-mcp-server@>=1.6.0'
+npx -y 'firewalla-mcp-server@>=2.0.0'
 ```
 
-The version range keeps `npx` from running 1.5.0; until 1.6.0 is published it stops with `No matching version found for firewalla-mcp-server@>=1.6.0`. Before then, build main from source ([README](../../README.md#option-c-install-from-source)) and replace the last line with `node /absolute/path/to/firewalla-mcp-server/dist/server.js`.
+The version range keeps `npx` from running 1.5.0; until 2.0.0 is published it stops with `No matching version found for firewalla-mcp-server@>=2.0.0`. Before then, build main from source ([README](../../README.md#option-c-install-from-source)) and replace the last line with `node /absolute/path/to/firewalla-mcp-server/dist/server.js`.
 
 - `MCP_HTTP_HOST=0.0.0.0` accepts connections from other machines and from containers. Without it the server listens on 127.0.0.1 only.
 - `MCP_HTTP_ALLOWED_HOSTS` lists every name or address clients put in the URL, besides `localhost`, `127.0.0.1` and `[::1]`: here `host.docker.internal` for an Open WebUI container on this host, and `192.168.1.10` standing for the host's LAN address. A request with any other `Host` gets 403.
@@ -378,7 +378,7 @@ mcpo started but did not connect to the server. Its startup summary lists `firew
 
 ### mcpo tool calls hang after a while (HTTP)
 
-With mcpo connected over HTTP (route 2 through mcpo), a tool call that worked earlier never answers, and `docker stats` may show mcpo using a whole CPU core. mcpo is still sending the MCP session ID it got at startup, but the server no longer has that session: it closed it after `MCP_SESSION_IDLE_TIMEOUT_MS` without a request (default 30 minutes), or the server restarted. Up to 1.5.0 the server answers that session ID with 400; from 1.6.0 it answers 404, which the MCP spec tells a client to take as the cue to start a new session. mcpo 0.0.20 neither opens a new session nor gives up after the 400, and whether it recovers on the 404 has not been tested ([open-webui/mcpo#302](https://github.com/open-webui/mcpo/issues/302) is the CPU part). Restart mcpo, and set `MCP_SESSION_IDLE_TIMEOUT_MS` on the server as in route 2. The stdio routes and Open WebUI's native connection do not have this problem.
+With mcpo connected over HTTP (route 2 through mcpo), a tool call that worked earlier never answers, and `docker stats` may show mcpo using a whole CPU core. mcpo is still sending the MCP session ID it got at startup, but the server no longer has that session: it closed it after `MCP_SESSION_IDLE_TIMEOUT_MS` without a request (default 30 minutes), or the server restarted. Up to 1.5.0 the server answers that session ID with 400; from 2.0.0 it answers 404, which the MCP spec tells a client to take as the cue to start a new session. mcpo 0.0.20 neither opens a new session nor gives up after the 400, and whether it recovers on the 404 has not been tested ([open-webui/mcpo#302](https://github.com/open-webui/mcpo/issues/302) is the CPU part). Restart mcpo, and set `MCP_SESSION_IDLE_TIMEOUT_MS` on the server as in route 2. The stdio routes and Open WebUI's native connection do not have this problem.
 
 ### Open WebUI says "Failed to create MCP client"
 
@@ -400,7 +400,7 @@ On 2026-09-26, on macOS (arm64) with Docker in colima (Linux arm64), with dummy 
 - mcpo 0.0.20 as `ghcr.io/open-webui/mcpo:main` (Node.js 22.22.0, npm 10.9.4, `mcp` 1.26.0) and through `uvx` with `mcp` 1.30.0, on host Node.js 24.18.0; each passed a `get_boxes` call through to the server.
 - The HTTP transport: `initialize` got 200 with an allowed `Host` and the token, 401 without the token or with a wrong one, 403 for a `Host` not in `MCP_HTTP_ALLOWED_HOSTS` (the service name `firewalla-mcp` before it was added) and for a browser `Origin`, and 404 on `/mcpx`. mcpo's `headers` carried the token; without them mcpo got 401.
 - The Compose file above with Open WebUI 0.11.4, with an override that used the locally built image and published the ports on loopback, with and without the mcpo service. Open WebUI accepted the native connection with **Auth** Bearer and refused it with no auth or a wrong key, and accepted the mcpo connection; each listed 24 tools. In a chat through each, a stand-in OpenAI-compatible model called `get_boxes`, and Open WebUI ran the tool and passed the server's answer back to the model. The native chat still worked after `docker compose restart firewalla-mcp`. The `build:` line for the Compose file built an image from the repository that answered 403 to an unknown `Host` and 401 without the token.
-- Route 3 with the local build: an Open WebUI container reached it at `http://host.docker.internal:3001/mcp` once `host.docker.internal` was in `MCP_HTTP_ALLOWED_HOSTS`, and got 403 before. With plain `npx -y firewalla-mcp-server`, which installed 1.5.0, the same settings answered 200 to a request without the token and to one with an unknown `Host`, which is why routes 2 and 3 need 1.6.0. `npx -y 'firewalla-mcp-server@>=1.6.0'` stopped with `ETARGET` while npm had only 1.5.0, and the same form with `>=1.5.0` started the server.
+- Route 3 with the local build: an Open WebUI container reached it at `http://host.docker.internal:3001/mcp` once `host.docker.internal` was in `MCP_HTTP_ALLOWED_HOSTS`, and got 403 before. With plain `npx -y firewalla-mcp-server`, which installed 1.5.0, the same settings answered 200 to a request without the token and to one with an unknown `Host`, which is why routes 2 and 3 need 2.0.0. `npx -y 'firewalla-mcp-server@>=2.0.0'` stopped with `ETARGET` while npm had only 1.5.0, and the same form with `>=1.5.0` started the server.
 - `"-e", "FIREWALLA_BOX_ID"` in the `docker run` args forwarded a value set in the environment mcpo passes to `docker`, and set nothing in the container when it was unset.
 - mcpo over HTTP after the server closed its session. With the default timeout, mcpo's last request was its event stream reconnecting 5 minutes after it started; the server closed the session 31 minutes after that, and a tool call 42 minutes after the start did not answer in 25 seconds. With `MCP_SESSION_IDLE_TIMEOUT_MS=5000` the same happened within 15 seconds. After the `firewalla-mcp` container was re-created, mcpo's call hung and mcpo used 105% CPU. With the one-year setting, a call after 70 seconds idle (past the server's 60-second sweep) answered.
 

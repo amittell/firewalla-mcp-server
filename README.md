@@ -7,6 +7,8 @@
 
 A Model Context Protocol (MCP) server that provides real-time access to Firewalla firewall data through 24 read-only tools, plus 11 opt-in write tools, compatible with any MCP client.
 
+This is a community project, not affiliated with Firewalla. It reads your data through the Firewalla MSP API, so it needs an MSP account with API access.
+
 ## Why Firewalla MCP Server?
 
 ### Simple Network Security Integration
@@ -50,6 +52,32 @@ The MCP server acts as a bridge between Claude and your Firewalla firewall, tran
 - Node.js 18+ and npm. On Node 18-22, npm prints an `EBADENGINE` warning for geoip-lite 2.x, which declares Node 24 for its database update script; the lookups the server uses run on Node 18 and later, and CI tests 18, 20, 22 and 24.
 - Firewalla MSP account with API access
 - Your Firewalla device online and connected
+
+## Upgrading to 2.0.0
+
+2.0.0 changes these defaults from 1.5.0. A setup that relied on an old default needs the setting in the last column.
+
+| Up to 1.5.0 | From 2.0.0 | What to set |
+|---|---|---|
+| `pause_rule`, `resume_rule`, `create_target_list`, `update_target_list` and `delete_target_list` were always registered | All 11 write tools are off; the server lists 24 read-only tools, and a call to a write tool answers "Unknown tool" and sends nothing | `FIREWALLA_ENABLE_WRITE_TOOLS=true` |
+| The HTTP transport listened on every interface | It listens on 127.0.0.1. The Docker image sets `MCP_HTTP_HOST=0.0.0.0`, so a published port works as before | `MCP_HTTP_HOST=0.0.0.0` outside Docker, with `MCP_HTTP_BEARER_TOKEN` |
+| Any `Host` header was served | 403 unless it is `localhost`, `127.0.0.1`, `[::1]` or the `MCP_HTTP_HOST` address | the name clients connect by (a compose service name, a LAN address) in `MCP_HTTP_ALLOWED_HOSTS` |
+| Any `Origin` was served | 403 for a request with an `Origin` header, which browsers send; MCP clients that send none are not affected | the page's origin in `MCP_HTTP_ALLOWED_ORIGINS` |
+| No token check (`MCP_HTTP_BEARER_TOKEN` did not exist) | With `MCP_HTTP_BEARER_TOKEN` set, 401 without `Authorization: Bearer <token>` | the token in every client, whenever the port is reachable from other machines |
+| Any path starting with `MCP_HTTP_PATH` was served | Only `/mcp` and `/mcp/`, with or without a query string; `/mcpx` and `/mcp/x` get 404 | a client URL that ends in `/mcp` |
+| `MCP_TEST_MODE=true` started under any `NODE_ENV` | Refused with `NODE_ENV=production`, which the Docker image sets | `-e NODE_ENV=development` with `-e MCP_TEST_MODE=true` |
+| `API_RATE_LIMIT` was range-checked and not applied | At most `API_RATE_LIMIT` requests start in any 5 minutes (default 100, the MSP API's quota per token); a request that cannot start within 20 s fails and says when capacity returns | a lower `API_RATE_LIMIT` when other clients use the same token |
+
+Other changes a script may notice:
+
+- With `FIREWALLA_BOX_ID` set, `get_alarm_trends` covers that box instead of every box, and makes 31 requests for the default `30d` instead of 1. An explicit `group` still reads the group's series in one request.
+- Tool responses are compact JSON, without the indentation.
+- `AND`, `OR` and `NOT` are translated to the API's grammar, which has none of them: `status:blocked AND region:US` matched 0 flows up to 1.5.0 and now matches what `status:blocked region:US` does. A query with no API form is refused as a validation error that suggests runnable queries: an `OR` between different fields, `NOT` over an `AND`, a comma list with a space around a comma, and geographic names the API does not have, such as `country:` (use `region:`). Up to 1.5.0 these returned wrong results or none.
+- IDs are no longer trimmed: an ID with leading or trailing whitespace, `/`, `?`, `#` or `%` is refused before any request.
+- A streamed `get_flow_data` chunk gives each flow's time as `ts`, an ISO string, like a plain page, instead of `timestamp`.
+- Over HTTP, a request with the session ID of a session the server no longer holds gets 404 instead of 400.
+
+[CHANGELOG.md](CHANGELOG.md) has the full list.
 
 ## Quick Start
 
@@ -464,7 +492,7 @@ _This view leaves out the meta block (request_id req_1790000000000_abc123). Call
 
 Every tool that changes something is off by default, so the server is read-only unless you turn them on. Set `FIREWALLA_ENABLE_WRITE_TOOLS=true` to register the 11 write tools: `create_rule`, `delete_rule`, `pause_rule` and `resume_rule` (rules), `create_target_list`, `update_target_list` and `delete_target_list` (target lists), `rename_device` (devices), and `archive_alarm`, `mute_alarm` and `delete_alarm` (alarms). Without it, calling one answers "Unknown tool" and sends nothing. MCP clients that honor tool annotations can ask before calling them; see [Tool annotations](#tool-annotations).
 
-Up to 1.5.0, `pause_rule`, `resume_rule` and the three target-list tools were always registered. If you use them, set `FIREWALLA_ENABLE_WRITE_TOOLS=true`.
+Up to 1.5.0, `pause_rule`, `resume_rule` and the three target-list tools were always registered. If you use them, set `FIREWALLA_ENABLE_WRITE_TOOLS=true`; see [Upgrading to 2.0.0](#upgrading-to-200).
 
 The write tools need an MSP API token with write access. Firewalla said on 2026-09-08 that MSP 2.12 adds read-only API tokens, which cannot make changes. When a write gets HTTP 403, the error says the token may be read-only and that the write tools need a token with write access. A 403 can also mean the request named a box the token cannot access, and the error says that too; `get_boxes` lists the boxes the token can access.
 
@@ -592,6 +620,7 @@ See [SECURITY.md](SECURITY.md) to report a vulnerability. For the HTTP transport
 - **Geographic Data**: IP geolocation is enriched by the MCP server and includes country, city, and risk scores when available.
 
 ### API Limitations
+- **MSP only**: The server sends every request to the MSP API at `https://<FIREWALLA_MSP_ID>` and never connects to the box on your LAN. It has no local mode, so it needs an MSP account with API access even for one box at home, and it sees only what the MSP API returns.
 - **Alarm Deletion**: In July 2025 the MSP API answered `DELETE /v2/alarms/{gid}/{aid}` with `{"message": "success", "success": true}` and kept the alarm, so `delete_alarm` was withdrawn. Measured again on 2026-09-26, the same request deleted the alarm (a GET of it then answered 404, and the archived alarm count fell by one), and `delete_alarm` is back as an opt-in write tool.
 
 ## Troubleshooting
