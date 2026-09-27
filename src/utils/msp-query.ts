@@ -1292,21 +1292,32 @@ export function mspValue(value: string): string {
   return `"${text.replace(/["\\*]/g, '\\$&')}"`;
 }
 
+/** A `-` that starts a term: before a field, a word, a wildcard or `(` */
+const MINUS_BEFORE_TERM = /(^|[\s(])-(?=[\p{L}\p{N}\p{M}_*?(])/gu;
+
 /**
- * The API's `-field:value` and `-(...)` exclusions written as NOT, for the
- * validators and parsers that know only the boolean operators, outside
- * quoted values. The query sent to the API is not rewritten this way.
+ * The API's `-field:value` and `-(...)` exclusions, and a `-` before free
+ * text (`-laptop`, `-"a b"`, `-*phone*`), written as NOT, for the validators
+ * and parsers that know only the boolean operators, outside quoted values.
+ * The query sent to the API is not rewritten this way. A `-` before free
+ * text was left as it was, and the search parser refused it as an
+ * "Unexpected character '-'" while it took NOT before the same text.
  */
 export function withNotForMinus(query: string): string {
   if (!query || typeof query !== 'string') {
     return query;
   }
-  return query
-    .split(QUOTED_TEXT)
-    .map((part, index) =>
-      index % 2 === 1
-        ? part
-        : part.replace(/(^|[\s(])-(?=[A-Za-z_][\w.]*:|\()/g, '$1NOT ')
-    )
+  const parts = query.split(QUOTED_TEXT);
+  return parts
+    .map((part, index) => {
+      if (index % 2 === 1) {
+        return part;
+      }
+      const rewritten = part.replace(MINUS_BEFORE_TERM, '$1NOT ');
+      // A - right before a quoted phrase ends the text before it
+      return index < parts.length - 1
+        ? rewritten.replace(/(^|[\s(])-$/, '$1NOT ')
+        : rewritten;
+    })
     .join('');
 }

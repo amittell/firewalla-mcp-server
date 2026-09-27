@@ -484,7 +484,9 @@ export class QueryParser {
    */
   private parseNotExpression(): QueryNode | undefined {
     if (this.matchLogical('NOT')) {
-      const operand = this.parsePrimary();
+      // NOT NOT x is x, as toMspQuery and the client matcher read it (a
+      // primary alone after NOT refused NOT NOT x here and nowhere else)
+      const operand = this.parseNotExpression();
       if (!operand) {
         this.errors.push('Expected expression after NOT operator');
         return undefined;

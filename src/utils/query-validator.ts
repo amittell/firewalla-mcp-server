@@ -344,6 +344,21 @@ export function validateFirewallaQuerySyntax(query: string): ValidationResult {
           errors.push(
             `Logical operator '${token.value}' at position ${token.position} cannot be at the beginning or end of query`
           );
+        } else if (nextToken?.type === 'logical' && nextToken.value !== 'NOT') {
+          // x AND AND y, x OR AND y, x NOT OR y: the parser and toMspQuery
+          // refuse them, and this check let them through to say
+          // "Unexpected token: AND". AND NOT, OR NOT and NOT NOT are fine.
+          errors.push(
+            `Logical operators '${token.value}' and '${nextToken.value}' at positions ${token.position} and ${nextToken.position} have no term between them`
+          );
+        } else if (nextToken?.value === ')') {
+          errors.push(
+            `Logical operator '${token.value}' at position ${token.position} has no term after it, before ')'`
+          );
+        } else if (token.value !== 'NOT' && prevToken?.value === '(') {
+          errors.push(
+            `Logical operator '${token.value}' at position ${token.position} has no term before it, after '('`
+          );
         }
         break;
 
@@ -352,7 +367,15 @@ export function validateFirewallaQuerySyntax(query: string): ValidationResult {
         break;
 
       case 'text':
-        // Free text needs no field
+        // Free text needs no field. A - excludes the term it starts
+        // (-laptop, -name:x); one before nothing (- laptop, x -) passed
+        // here, and the search parser refused it as an "Unexpected
+        // character '-'"
+        if (/^-(?![\p{L}\p{N}\p{M}_*?"'])/u.test(token.value)) {
+          errors.push(
+            `'-' at position ${token.position} starts no term: write it right before the term to exclude (-laptop, -name:x), or drop it`
+          );
+        }
         break;
     }
   }
