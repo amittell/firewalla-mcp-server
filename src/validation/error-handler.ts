@@ -1265,53 +1265,14 @@ export class QuerySanitizer {
       };
     }
 
-    // Enhanced dangerous patterns detection
-    const dangerousPatterns = [
-      // SQL injection patterns
-      /;\s*(drop|delete|truncate|update|insert|alter|create|exec|execute)\s+/i,
-      /\b(union\s+select|select\s+.*\s+from|insert\s+into)\b/i,
-      /--\s*$|\/\*.*\*\//,  // SQL comments
-      /\b(or|and)\s+1\s*=\s*1\b/i,  // Common SQL injection
-      /\b(or|and)\s+.*\s*=\s*.*\s*(--|#)/i,  // SQL comment injection
-      
-      // Script injection patterns
-      /<script.*?>.*?<\/script>/i,  // Script tags
-      /<iframe.*?>.*?<\/iframe>/i,  // Iframe tags
-      /javascript:/i,  // JavaScript protocol
-      /data:text\/html/i,  // Data URLs
-      /eval\s*\(/i,  // eval function
-      /setTimeout\s*\(/i,  // setTimeout function
-      /setInterval\s*\(/i,  // setInterval function
-      /Function\s*\(/i,  // Function constructor
-      /expression\s*\(/i,  // CSS expression
-      
-      // Event handlers and DOM manipulation
-      /\b(onload|onerror|onclick|onmouseover|onmouseout|onfocus|onblur)\s*=/i,
-      /document\.(write|writeln|createElement)/i,
-      /window\.(location|open)/i,
-      
-      // Template injection patterns
-      /\$\{.*\}/,  // Template literals
-      /\{\{.*\}\}/,  // Handlebars/Angular templates
-      /<%.*%>/,  // JSP/ASP templates
-      
-      // File system and system commands
-      /\b(cat|ls|pwd|rm|mv|cp|chmod|chown|kill|ps|top|wget|curl)\s+/i,
-      /\.\.\/|\.\.\\|\/etc\/|\/var\/|\/tmp\/|c:\\|%systemroot%/i,
-      
-      // Network and protocol exploitation
-      /file:\/\/|ftp:\/\/|ldap:\/\/|gopher:\/\/|dict:\/\//i,
-      /\b(ping|traceroute|nslookup|dig|netstat|ifconfig)\s+/i
-    ];
-
-    for (const pattern of dangerousPatterns) {
-      if (pattern.test(trimmedQuery)) {
-        return {
-          isValid: false,
-          errors: ['Query contains potentially dangerous content']
-        };
-      }
-    }
+    // No list of "dangerous content": the query goes only into the query
+    // string of an HTTPS request to the MSP API (axios percent-encodes it)
+    // and into matching on the client, where every RegExp built from a
+    // query escapes all but its * wildcards. It reaches no SQL, shell,
+    // HTML, script, template engine, file path or URL fetch, so the SQL,
+    // script, event handler, template, command word, path and protocol
+    // patterns that were here guarded nothing, and they refused names such
+    // as Cat Feeder, Top Floor, PS 5 and kill switch.
 
     // Basic structure validation for search queries
     const structuralIssues = [];
@@ -1339,7 +1300,10 @@ export class QuerySanitizer {
       structuralIssues.push('Unmatched double quotes in query');
     }
 
-    // Check for suspicious character sequences
+    // Control characters (NUL, backspace, escape and the rest of C0, and
+    // DEL): the grammar has no use for them, the API gets the value
+    // decoded, where a NUL can end a string, and the query is quoted back
+    // in results and errors
     // eslint-disable-next-line no-control-regex
     if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(trimmedQuery)) {
       structuralIssues.push('Query contains control characters');
@@ -1368,19 +1332,10 @@ export class QuerySanitizer {
       // Warning for very long queries - consider breaking it into smaller parts
     }
 
-    // Check for potential ReDoS (Regular Expression Denial of Service) patterns
-    const redosPatterns = [
-      /(\(.*\+.*\){3,})/,  // Nested quantifiers
-      /(\*.*\+|\+.*\*)/,   // Alternating quantifiers
-      /(\{.*,.*\}.*\{.*,.*\})/  // Multiple range quantifiers
-    ];
-    
-    for (const pattern of redosPatterns) {
-      if (pattern.test(trimmedQuery)) {
-        structuralIssues.push('Query contains potentially problematic regex patterns');
-        break;
-      }
-    }
+    // No check for regex quantifiers: +, {n,m} and ( in a query are
+    // escaped before any RegExp is built from it, so they are not
+    // quantifiers there. The check refused a phrase with a + and a *
+    // ("C++ *") and guarded nothing.
 
     if (structuralIssues.length > 0) {
       return {
