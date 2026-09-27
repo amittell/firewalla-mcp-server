@@ -699,6 +699,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   chunk's cursor. It is resolved once per read, and once per stream, and
   that string is sent on every page and reported. `get_active_alarms` and
   `search_flows` resolved it once already.
+- The search parser reads a word in any script, holding any character the
+  query grammar does not use. `search_devices`, `search_target_lists` and
+  `search_rules` refused free text such as `Alex’s` (with the U+2019
+  apostrophe device names carry in live alarms), `Café`, `客厅` and `AT&T`
+  as an "Unexpected character": a word was ASCII letters, digits, `_`, `.`
+  and `-`. A `'` after a letter or digit in any script is an apostrophe too,
+  as after an ASCII one; in `Café's` it opened a quote that was never
+  closed, and `search_flows` and `search_alarms` refused the query. A number
+  followed by letters is one word (`5GB`, `3d`), and `100-200` stays one
+  number.
 - `search_flows`, `search_alarms`, `get_flow_data` and `get_active_alarms`
   refuse a quoted free-text phrase with a colon (`"a:b"`, `'a:b'`,
   `'show ts:[1 TO 2]'`) before any request, with the phrase without its

@@ -210,6 +210,11 @@ describe('fuzz: short token sequences from the grammar', () => {
     "1990's",
     "name:3d's",
     'bytes:100-200',
+    'Alex’s',
+    "Café's",
+    'AT&T',
+    '客厅',
+    '5GB',
     'x',
   ];
 

@@ -180,6 +180,9 @@ export interface BracketRange {
   query: string;
 }
 
+/** A letter or digit in any script, or _: a ' after one is an apostrophe */
+const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
+
 /**
  * A quoted value: in double quotes, or in single quotes that open where a
  * word could start (a single quote after a letter, digit or underscore is
@@ -187,7 +190,8 @@ export interface BracketRange {
  * a query's unquoted text is at the even indexes and its quoted values at
  * the odd ones.
  */
-export const QUOTED_TEXT = /("(?:[^"\\]|\\.)*"|(?<!\w)'(?:[^'\\]|\\.)*')/;
+export const QUOTED_TEXT =
+  /("(?:[^"\\]|\\.)*"|(?<![\p{L}\p{N}_])'(?:[^'\\]|\\.)*')/u;
 
 /**
  * The first Lucene-style range in a query (`field:[low TO high]`, or with
@@ -289,8 +293,8 @@ function doubleQuoted(singleQuoted: string): string {
  * quotes as quotes too, so a single-quoted value is one word, sent in
  * double quotes: `'rock AND roll'` was split at its spaces and sent as
  * `'rock roll'`, its AND read as an operator. A single quote right after a
- * letter, digit or underscore is an apostrophe (`name:Alex's`), as the
- * parser reads it.
+ * letter, digit or underscore, in any script, is an apostrophe
+ * (`name:Alex's`), as the parser reads it.
  */
 function tokenize(query: string): Token[] {
   const tokens: Token[] = [];
@@ -310,7 +314,10 @@ function tokenize(query: string): Token[] {
     let text = '';
     while (i < query.length && !/[\s()]/.test(query[i])) {
       const c = query[i];
-      if (c === '"' || (c === "'" && !/\w/.test(query[i - 1] ?? ''))) {
+      if (
+        c === '"' ||
+        (c === "'" && !WORD_CHARACTER.test(query[i - 1] ?? ''))
+      ) {
         let close = i + 1;
         while (close < query.length && query[close] !== c) {
           close += query[close] === '\\' ? 2 : 1;

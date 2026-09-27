@@ -23,7 +23,7 @@ function opensOrClosesQuote(
   if (inQuotes) {
     return char === quoteChar;
   }
-  return char === '"' || (char === "'" && !/\w/.test(prevChar));
+  return char === '"' || (char === "'" && !/[\p{L}\p{N}_]/u.test(prevChar));
 }
 
 /**

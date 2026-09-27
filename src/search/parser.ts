@@ -13,6 +13,16 @@ import {
   type QueryValidation,
 } from './types.js';
 
+/**
+ * Characters the query grammar reads: whitespace, quotes, parentheses and
+ * brackets, the colon and comma of field:a,b, comparison signs, and the *
+ * and ? of wildcards. Any other character can be part of a word.
+ */
+const SYNTAX = /[\s"'()[\]:,<>!=*?]/;
+
+/** A letter or digit in any script, or _: a ' after one is an apostrophe */
+const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
+
 /** Tokens that can begin a term, besides NOT */
 const TERM_STARTS: ReadonlySet<TokenTypeValue> = new Set<TokenTypeValue>([
   TokenType.FIELD,
@@ -141,12 +151,17 @@ export class QueryParser {
       return end;
     };
 
-    // Whether the character at `at` continues a word: a letter, digit,
-    // _, . or -, or a quote right after a letter, digit or underscore,
-    // which is an apostrophe in the word (Alex's, 1990's), not a quote
+    // Whether the character at `at` continues a word: any character the
+    // grammar does not read (SYNTAX), in any script, so Café, 客厅, AT&T
+    // and Alex’s are words; or a ' right after a letter, digit or
+    // underscore, which is an apostrophe in the word (Alex's, 1990's), not
+    // a quote. Words were ASCII letters, digits, _, . and - only, and any
+    // other character was refused as unexpected.
     const inWord = (at: number): boolean =>
-      /[a-zA-Z0-9_.-]/.test(safeInput[at]) ||
-      (safeInput[at] === "'" && /\w/.test(safeInput[at - 1] ?? ''));
+      at < safeInput.length &&
+      (!SYNTAX.test(safeInput[at]) ||
+        (safeInput[at] === "'" &&
+          WORD_CHARACTER.test(safeInput[at - 1] ?? '')));
 
     // Every pass must consume input; one that does not would loop forever
     let lastIndex = -1;
@@ -332,8 +347,9 @@ export class QueryParser {
 
       // Words (fields, values, logical operators). A quote right after a
       // letter, digit or underscore is an apostrophe in the word (Alex's,
-      // don't); it opened a quoted string that was never closed.
-      if (/[a-zA-Z_]/.test(char)) {
+      // don't); it opened a quoted string that was never closed. Digits
+      // and . start a number below; - starts nothing.
+      if (!SYNTAX.test(char) && !/[0-9.-]/.test(char)) {
         let word = '';
         const start = i;
 
@@ -384,14 +400,13 @@ export class QueryParser {
           i++;
         }
 
-        // An apostrophe after a digit starts no quote: 1990's and 5's are
-        // one word each, as in the word branch. It opened a quoted string
-        // that was never closed.
-        if (safeInput[i] === "'" && inWord(i)) {
-          while (i < safeInput.length && inWord(i)) {
-            value += safeInput[i];
-            i++;
-          }
+        // A number followed by a word character is one word: 1990's and
+        // 5's (an apostrophe after a digit starts no quote; it opened one
+        // that was never closed), 5GB, 3d. A range such as 100-200 is all
+        // number and stays one, and a wildcard run is left as it was.
+        while (!hasWildcard && inWord(i)) {
+          value += safeInput[i];
+          i++;
         }
 
         tokens.push({
