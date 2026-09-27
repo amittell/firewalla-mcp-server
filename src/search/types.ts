@@ -320,6 +320,12 @@ export const SEARCH_FIELDS = {
     'notes',
     'scope.type',
   ],
+  // The fields search_devices matches (client.searchDevices), and no
+  // others. The matcher reads none of device_type, os, last_seen,
+  // bandwidth_usage, connection_count, total_download and total_upload, and
+  // searched such a term as literal text, so os:linux matched no device and
+  // NOT os:linux every one; total_download:>1000 was refused for its '>'
+  // on a "non-numeric field", not as a field the search does not read
   devices: [
     'id',
     'gid', // Device model box ID, filtered client-side like network.name and group.name
@@ -328,17 +334,10 @@ export const SEARCH_FIELDS = {
     'mac',
     'mac_vendor',
     'online',
-    'device_type',
-    'os',
-    'network_name',
+    'network_name', // network.name
     'network.name',
-    'group_name',
+    'group_name', // group.name
     'group.name',
-    'last_seen',
-    'bandwidth_usage',
-    'connection_count',
-    'total_download',
-    'total_upload',
   ],
   // targets and notes: the query fields the search_target_lists schema lists
   target_lists: [

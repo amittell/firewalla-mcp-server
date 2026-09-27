@@ -5205,10 +5205,12 @@ export class FirewallaClient {
                     name.includes(entry.replace(/\*/g, ''))
                   );
                 case 'network.name':
+                case 'network_name':
                   return anyValue(entry =>
                     networkName.includes(entry.replace(/\*/g, ''))
                   );
                 case 'group.name':
+                case 'group_name':
                   return anyValue(entry =>
                     groupName.includes(entry.replace(/\*/g, ''))
                   );
