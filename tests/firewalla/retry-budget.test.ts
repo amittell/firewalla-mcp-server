@@ -35,6 +35,8 @@ interface Answer {
   afterMs?: number;
   /** An HTTP status, or the axios code of a request with no answer */
   fail?: number | string;
+  /** The retry-after header of a 429 */
+  retryAfter?: string;
 }
 
 let now = Date.UTC(2026, 8, 27, 12);
@@ -81,11 +83,11 @@ function makeClient(
     });
     const answer = answers[calls.length - 1] ?? {};
     now += answer.afterMs ?? 0;
-    const reply = (status: number, data: unknown) =>
+    const reply = (status: number, data: unknown, headers = {}) =>
       ({
         status,
         statusText: '',
-        headers: {},
+        headers,
         data,
         config,
         request: {},
@@ -105,7 +107,11 @@ function makeClient(
         AxiosError.ERR_BAD_RESPONSE,
         config,
         {},
-        reply(answer.fail, '')
+        reply(
+          answer.fail,
+          '',
+          answer.retryAfter ? { 'retry-after': answer.retryAfter } : {}
+        )
       );
     }
     const start = Number(config.params?.cursor ?? 0);
@@ -206,6 +212,80 @@ describe("a retry must be able to answer within the tool's 30 s", () => {
       'Firewalla API answered 503'
     );
     expect(late.calls.map(call => call.limit)).toEqual([500, 200]);
+  });
+
+  it("the retry's own wait counts: 2 s of it must fit before the deadline", async () => {
+    // A second page that fails after 50 ms: retried when that leaves 2.5 s,
+    // not when it leaves 2 s, though the retry itself would take 50 ms
+    const quick = makeClient([{ afterMs: 27450 }, { afterMs: 50, fail: 503 }]);
+    expect((await getFlowData(quick.client, 700)).coverage).toMatchObject({
+      api_requests: 3,
+    });
+    const late = makeClient([{ afterMs: 27950 }, { afterMs: 50, fail: 503 }]);
+    expect((await getFlowData(late.client, 700)).error).toContain(
+      'Firewalla API answered 503'
+    );
+    expect(late.calls).toHaveLength(2);
+  });
+
+  it("a 429's wait counts, as the tool's clock runs through it", async () => {
+    // A 429 asking for 15 s, then a 503 after 10 s: 25 s gone, and 2 s and
+    // another 10 s do not fit. After 5 s, a 503 that came back at once does.
+    const long = makeClient([
+      { fail: 429, retryAfter: '15' },
+      { afterMs: 10000, fail: 503 },
+    ]);
+    expect((await getFlowData(long.client)).error).toContain(
+      'Firewalla API answered 503 Service Unavailable after 2 attempts'
+    );
+    expect(long.calls).toHaveLength(2);
+
+    const short = makeClient([
+      { fail: 429, retryAfter: '5' },
+      { afterMs: 50, fail: 503 },
+    ]);
+    expect((await getFlowData(short.client)).coverage).toMatchObject({
+      api_requests: 3,
+    });
+    expect(short.calls).toHaveLength(3);
+  });
+
+  it('a streamed continuation is a new tool call with its own 30 s', async () => {
+    // The first chunk, then the caller comes back 28.5 s later: its 503 is
+    // retried within the continuation's own time, not the first call's
+    const { client, calls } = makeClient([{}, { afterMs: 50, fail: 503 }]);
+    const handler = new GetFlowDataHandler();
+    const first = JSON.parse(
+      (await handler.execute({ limit: 60 }, client)).content[0].text
+    );
+    expect(first.streaming).toBe(true);
+    now += 28_500;
+    const next = JSON.parse(
+      (await handler.execute({ streaming_session_id: first.sessionId }, client))
+        .content[0].text
+    );
+    expect(next.streaming).toBe(true);
+    expect(next.data).toHaveLength(60);
+    expect(calls).toHaveLength(3);
+    expect(next.coverage).toMatchObject({ api_requests: 2 });
+  });
+
+  it('outside a tool, each request of a paged read has its own 30 s', async () => {
+    // Nothing gives up outside a tool: the second page's budget starts at
+    // its own first send, so a fast 503 after a first page of 28.5 s is
+    // retried
+    const { client, calls } = makeClient([
+      { afterMs: 28500 },
+      { afterMs: 50, fail: 503 },
+    ]);
+    const flows = await client.getFlowData(
+      undefined,
+      undefined,
+      undefined,
+      700
+    );
+    expect(flows.results).toHaveLength(700);
+    expect(calls.map(call => call.limit)).toEqual([500, 200, 200]);
   });
 
   it("outside a tool, the budget is 30 s from the request's first send", async () => {
