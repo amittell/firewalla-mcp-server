@@ -643,10 +643,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `go to school` ("Unexpected token 'TO' at position 3").
 - A single quote right after a letter, digit or underscore is an
   apostrophe, not the start of a quoted value. `search_devices`,
-  `search_target_lists` and `search_rules` refused `name:Alex's` and
-  `don't` as an unclosed quote, and past that check the device and target
-  list matchers would have read `Alex's` as the comma list `alex,s`. The
-  check counted quote characters, so it also refused an escaped quote
+  `search_target_lists` and `search_rules` refused `name:Alex's`, `don't`
+  and `1990's` as an unclosed quote, and past that check the device and
+  target list matchers would have read `Alex's` as the comma list `alex,s`.
+  The check counted quote characters, so it also refused an escaped quote
   inside double quotes (`name:"say \"hi"`); it follows the quotes as the
   parser does now.
 - A single-quoted phrase is sent to the API in double quotes, the quotes

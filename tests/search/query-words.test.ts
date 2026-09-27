@@ -24,7 +24,11 @@ import { queryParser } from '../../src/search/parser.js';
 import { matchesQuery } from '../../src/search/client-filter.js';
 import { validateFirewallaQuerySyntax } from '../../src/utils/query-validator.js';
 import { QuerySanitizer } from '../../src/validation/error-handler.js';
-import { MspQueryError, toMspQuery } from '../../src/utils/msp-query.js';
+import {
+  MspQueryError,
+  mspTerms,
+  toMspQuery,
+} from '../../src/utils/msp-query.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -47,6 +51,8 @@ const NAMES = [
   'rock',
   "Alex's iPhone",
   'go to school',
+  "1990's radio",
+  "3d's printer",
 ];
 
 const DEVICES = NAMES.map((name, i) => ({
@@ -157,10 +163,7 @@ describe('lowercase and, or and not are words', () => {
     ['nas OR laptop', ['nas', 'laptop', 'nas or laptop box']],
     ['rock and roll', ['rock and roll']],
     ['not nas', []],
-    [
-      'NOT nas',
-      ['laptop', 'rock and roll', 'rock', "Alex's iPhone", 'go to school'],
-    ],
+    ['NOT nas', NAMES.filter(name => !name.includes('nas'))],
   ])('search_devices %s', async (query, expected) => {
     expect(await devices(query)).toEqual(expected);
   });
@@ -279,6 +282,53 @@ describe('an apostrophe in a word', () => {
     ["'open", 'Unmatched single quotes in query'],
   ])('the sanitizer still refuses the unclosed quote in %s', (query, error) => {
     expect(QuerySanitizer.sanitizeSearchQuery(query).errors).toContain(error);
+  });
+});
+
+describe('an apostrophe after a digit', () => {
+  // The parser's number branch stopped at the apostrophe, and the rest
+  // opened a quote that was never closed
+  it.each([
+    ["5's", { type: 'text', value: "5's" }],
+    ["1990's", { type: 'text', value: "1990's" }],
+    [
+      "name:3d's",
+      { type: 'field', field: 'name', value: "3d's", operator: '=' },
+    ],
+  ])('%s is one word', (query, ast) => {
+    const parsed = queryParser.parse(query);
+    expect([query, parsed.errors]).toEqual([query, []]);
+    expect(parsed.ast).toEqual(ast);
+  });
+
+  it('leaves a number range a number range', () => {
+    expect(queryParser.parse('100-200').ast).toEqual({
+      type: 'text',
+      value: '100-200',
+    });
+    expect(queryParser.parse('bytes:100-200').ast).toEqual({
+      type: 'field',
+      field: 'bytes',
+      value: '100-200',
+      operator: '=',
+    });
+    expect(toMspQuery('bytes:100-200')).toBe('bytes:100-200');
+    expect(mspTerms('bytes:100-200')[0].kind).toBe('range');
+  });
+
+  it.each(["5's", "1990's", "name:3d's"])(
+    'passes every check and is sent as it is: %s',
+    query => {
+      expect(validateFirewallaQuerySyntax(query).errors).toEqual([]);
+      expect(QuerySanitizer.sanitizeSearchQuery(query).errors).toEqual([]);
+      expect(toMspQuery(query)).toBe(query);
+      expect(matchesQuery(query, term => term === query)).toBe(true);
+    }
+  );
+
+  it('finds the device through search_devices', async () => {
+    expect(await devices("1990's")).toEqual(["1990's radio"]);
+    expect(await devices("name:3d's")).toEqual(["3d's printer"]);
   });
 });
 

@@ -141,6 +141,13 @@ export class QueryParser {
       return end;
     };
 
+    // Whether the character at `at` continues a word: a letter, digit,
+    // _, . or -, or a quote right after a letter, digit or underscore,
+    // which is an apostrophe in the word (Alex's, 1990's), not a quote
+    const inWord = (at: number): boolean =>
+      /[a-zA-Z0-9_.-]/.test(safeInput[at]) ||
+      (safeInput[at] === "'" && /\w/.test(safeInput[at - 1] ?? ''));
+
     // Every pass must consume input; one that does not would loop forever
     let lastIndex = -1;
     while (i < safeInput.length) {
@@ -330,11 +337,7 @@ export class QueryParser {
         let word = '';
         const start = i;
 
-        while (
-          i < safeInput.length &&
-          (/[a-zA-Z0-9_.-]/.test(safeInput[i]) ||
-            (safeInput[i] === "'" && /\w/.test(safeInput[i - 1])))
-        ) {
+        while (i < safeInput.length && inWord(i)) {
           word += safeInput[i];
           i++;
         }
@@ -379,6 +382,16 @@ export class QueryParser {
           }
           value += safeInput[i];
           i++;
+        }
+
+        // An apostrophe after a digit starts no quote: 1990's and 5's are
+        // one word each, as in the word branch. It opened a quoted string
+        // that was never closed.
+        if (safeInput[i] === "'" && inWord(i)) {
+          while (i < safeInput.length && inWord(i)) {
+            value += safeInput[i];
+            i++;
+          }
         }
 
         tokens.push({

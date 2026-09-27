@@ -206,6 +206,10 @@ describe('fuzz: short token sequences from the grammar', () => {
     "'single quoted'",
     "'open",
     '""',
+    "5's",
+    "1990's",
+    "name:3d's",
+    'bytes:100-200',
     'x',
   ];
 
