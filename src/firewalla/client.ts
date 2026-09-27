@@ -95,6 +95,7 @@ import { currentToolBudget, type ToolWrite } from '../utils/timeout-manager.js';
 import { PERFORMANCE_THRESHOLDS } from '../config/limits.js';
 import { normalizeTimestamps } from '../utils/data-validator.js';
 import { hasRelativeTimestamp } from '../utils/timestamp.js';
+import { keyedByData } from '../utils/data-keys.js';
 import {
   checkMuteRequest,
   type AlarmMuteRequest,
@@ -5801,9 +5802,9 @@ export class FirewallaClient {
       // Generate summary statistics by category with enhanced safety
       const summary = {
         total_rules: filteredRules.length,
-        by_action: {} as Record<string, number>,
-        by_target_type: {} as Record<string, number>,
-        by_direction: {} as Record<string, number>,
+        by_action: keyedByData<number>(),
+        by_target_type: keyedByData<number>(),
+        by_direction: keyedByData<number>(),
         active_rules: 0,
         paused_rules: 0,
         rules_with_hits: 0,

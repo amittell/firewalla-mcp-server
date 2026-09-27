@@ -33,6 +33,7 @@ import {
 } from '../utils/msp-query.js';
 import { unquoteQueryValue } from '../search/client-filter.js';
 import { dataKeyed } from '../utils/field-normalizer.js';
+import { keyedByData } from '../utils/data-keys.js';
 import {
   GeographicFilterError,
   geographicFiltersToMspQuery,
@@ -1124,7 +1125,7 @@ export class SearchEngine {
       };
     }
 
-    const groups: Record<string, any[]> = {};
+    const groups = keyedByData<any[]>();
 
     for (const item of results) {
       const groupValue = String(
@@ -1137,7 +1138,7 @@ export class SearchEngine {
     }
 
     // Keyed by the groups' values, which are not field names to rename
-    const aggregations: any = dataKeyed({});
+    const aggregations: any = dataKeyed(keyedByData());
 
     for (const [groupValue, groupItems] of Object.entries(groups)) {
       aggregations[groupValue] = {
@@ -1168,8 +1169,8 @@ export class SearchEngine {
       cloud_provider_flows: 0,
       vpn_flows: 0,
       high_risk_flows: 0,
-      top_countries: {} as Record<string, number>,
-      top_asns: {} as Record<string, number>,
+      top_countries: keyedByData<number>(),
+      top_asns: keyedByData<number>(),
       geographic_data_available: false,
       warnings: [] as string[],
     };
@@ -1237,23 +1238,17 @@ export class SearchEngine {
       top_countries: Object.entries(analysis.top_countries)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 10)
-        .reduce(
-          (acc, [country, count]) => {
-            acc[country] = count;
-            return acc;
-          },
-          {} as Record<string, number>
-        ),
+        .reduce((acc, [country, count]) => {
+          acc[country] = count;
+          return acc;
+        }, keyedByData<number>()),
       top_asns: Object.entries(analysis.top_asns)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 5)
-        .reduce(
-          (acc, [asn, count]) => {
-            acc[asn] = count;
-            return acc;
-          },
-          {} as Record<string, number>
-        ),
+        .reduce((acc, [asn, count]) => {
+          acc[asn] = count;
+          return acc;
+        }, keyedByData<number>()),
     };
   }
 }

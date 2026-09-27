@@ -629,6 +629,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`lastSeen`); a domain, an address, a country code, a name with spaces or
   marker text keeps its text. An object with its own `constructor` key had
   none of its keys renamed; it is renamed like any other now.
+- Counts and lists keyed by values from the API keep a value named like an
+  `Object` member. They were plain objects, so a rule action, direction,
+  status or target type named `toString`, `constructor` or `hasOwnProperty`
+  was counted in `get_network_rules_summary` as
+  `"function toString() { [native code] }1"`, one named `__proto__` was
+  dropped, and a device named `constructor` made `search_devices` with
+  `aggregate` and `group_by: "name"` fail. The counts by threat type and
+  severity in `firewalla://threats/recent` and the prompts had the same
+  flaw. They are objects without a prototype now, where every name is only
+  a key.
 - `search_devices` and `search_target_lists` read lowercase `and`, `or` and
   `not` as words, as the other search tools and the API do. They used to
   read them as operators, so on a stub `nas or laptop` found every device
