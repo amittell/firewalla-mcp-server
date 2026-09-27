@@ -1225,6 +1225,8 @@ export class SearchDevicesHandler extends BaseToolHandler {
         ),
         query_info: {
           original_query: searchArgs.query,
+          // The query the devices were matched against, as query_executed
+          final_query: SafeAccess.getNestedValue(result as any, 'query', ''),
           applied_filters: {
             time_range: !!searchArgs.time_range,
             force_refresh: !!searchArgs.force_refresh,
@@ -1364,6 +1366,8 @@ export class SearchTargetListsHandler extends BaseToolHandler {
         ),
         query_info: {
           original_query: searchArgs.query,
+          // The query the lists were matched against, as query_executed
+          final_query: SafeAccess.getNestedValue(result as any, 'query', ''),
           applied_filters: {
             grouping: !!searchArgs.group_by,
             sorting: !!searchArgs.sort_by,

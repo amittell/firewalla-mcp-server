@@ -632,8 +632,11 @@ export class SearchEngine {
         limit: params.limit || 100,
         offset: params.offset || 0,
         // For rules, the query sent to the API (their free text is matched
-        // on the client); devices and target lists send none
-        query: response.query ?? finalQuery,
+        // on the client). Devices and target lists send none: their query is
+        // the one the client matched them against, as the caller wrote it.
+        // It was the validator's rewrite (-name:nas as NOT name:nas, spaces
+        // around a colon dropped), not the query the matcher read.
+        query: response.query ?? params.query.trim(),
         execution_time_ms: Date.now() - startTime,
         aggregations,
       };
