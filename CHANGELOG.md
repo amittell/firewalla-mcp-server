@@ -932,6 +932,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   asks for quotes only around whitespace, a comma, an asterisk or a colon),
   so they are sent as written, and the client-side searches match them. A
   control character in a wildcard value is still refused.
+- `search_devices` takes a value with four or more wildcards, as the other
+  search tools do. Its query parser turned each wildcard value into a
+  regular expression only to check it, and refused four or more wildcards
+  (`name:*a*b*c*d*`) as a "dangerous sequence". The value is kept as
+  written, and matched without a regular expression: on a stub, 10
+  wildcards return within 50 ms.
 
 ### Removed
 

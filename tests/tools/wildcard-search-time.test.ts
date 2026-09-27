@@ -8,6 +8,7 @@
 
 import { FirewallaClient } from '../../src/firewalla/client.js';
 import {
+  SearchDevicesHandler,
   SearchRulesHandler,
   SearchTargetListsHandler,
 } from '../../src/tools/handlers/search.js';
@@ -42,6 +43,15 @@ function makeClient() {
   const get = (client as any).api.get as jest.Mock;
   get.mockReset();
   get.mockImplementation(async (url: string) => {
+    if (url === '/v2/devices') {
+      return {
+        status: 200,
+        data: [
+          { id: LONG, gid: 'box-a', name: 'abcd router', ip: '192.168.1.20' },
+          { id: `${LONG}b`, gid: 'box-a', name: 'plain', ip: '192.168.1.30' },
+        ],
+      };
+    }
     if (url === '/v2/target-lists') {
       return {
         status: 200,
@@ -117,5 +127,40 @@ describe('9 wildcards against a 40-character value', () => {
     expect(body(lists).data.target_lists.map((list: any) => list.id)).toEqual([
       'l2',
     ]);
+  });
+});
+
+describe('search_devices takes any number of wildcards', () => {
+  // parseSearchQuery turned each wildcard value into a regular expression
+  // only to check it, and refused four or more wildcards as a "dangerous
+  // sequence"; the other search tools took them
+  async function timed(query: string) {
+    const handler = new SearchDevicesHandler();
+    // The first call loads what the handler uses; time the second
+    await handler.execute({ query: 'name:plain', limit: 10 }, makeClient());
+    const started = performance.now();
+    const res = await handler.execute({ query, limit: 10 }, makeClient());
+    const elapsed = performance.now() - started;
+    const data = body(res);
+    return {
+      elapsed,
+      names: res.isError
+        ? data.message
+        : (data.data.devices as any[]).map(device => device.name),
+    };
+  }
+
+  it('name:*a*b*c*d*, within 50 ms', async () => {
+    const { elapsed, names } = await timed('name:*a*b*c*d*');
+    expect(names).toEqual(['abcd router']);
+    expect(elapsed).toBeLessThan(50);
+  });
+
+  it('10 wildcards, within 50 ms', async () => {
+    const pattern = `${'*a'.repeat(9)}*b`;
+    expect(pattern.split('*')).toHaveLength(11);
+    const { elapsed, names } = await timed(`id:${pattern}`);
+    expect(names).toEqual(['plain']);
+    expect(elapsed).toBeLessThan(50);
   });
 });
