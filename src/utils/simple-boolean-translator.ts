@@ -7,6 +7,8 @@
  * Philosophy: OSS elegance over complexity, solve real problems minimally
  */
 
+import { outsideQuotes } from './msp-query.js';
+
 /**
  * Boolean fields that need translation for each entity type
  */
@@ -40,7 +42,15 @@ export function translateBooleanQuery(
     return query; // No translation for unknown entity types
   }
 
-  let translatedQuery = query;
+  // Outside quoted values only: "blocked:true" is a phrase, and it was
+  // rewritten to "blocked:1" (a field value such as domain:"blocked:true"
+  // was sent changed)
+  return outsideQuotes(query, text => translateUnquoted(text, booleanFields));
+}
+
+/** translateBooleanQuery on text with no quoted value in it */
+function translateUnquoted(text: string, booleanFields: string[]): string {
+  let translatedQuery = text;
 
   // Simple regex replacement for each boolean field
   for (const field of booleanFields) {

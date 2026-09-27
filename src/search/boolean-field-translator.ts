@@ -8,7 +8,10 @@
  * - "protocol:tcp" works fine
  *
  * This utility translates boolean field patterns to formats the backend accepts.
+ * Quoted values are left alone: "blocked:true" is a phrase, not a qualifier.
  */
+
+import { outsideQuotes, unquotedText } from '../utils/msp-query.js';
 
 /**
  * Configuration for boolean field translation
@@ -94,11 +97,10 @@ export class BooleanFieldTranslator {
     // First pass: Convert "field=true/false" syntax to "field:true/false" for standardization
     for (const field of config.booleanFields) {
       const equalsPattern = new RegExp(`\\b${field}=(true|false)\\b`, 'gi');
-      translatedQuery = translatedQuery.replace(
-        equalsPattern,
-        (_match, boolValue) => {
+      translatedQuery = outsideQuotes(translatedQuery, text =>
+        text.replace(equalsPattern, (_match, boolValue) => {
           return `${field}:${boolValue}`;
-        }
+        })
       );
     }
 
@@ -107,13 +109,12 @@ export class BooleanFieldTranslator {
       // Match patterns like "field:true" or "field:false" (case insensitive)
       const booleanPattern = new RegExp(`\\b${field}:(true|false)\\b`, 'gi');
 
-      translatedQuery = translatedQuery.replace(
-        booleanPattern,
-        (_match, boolValue) => {
+      translatedQuery = outsideQuotes(translatedQuery, text =>
+        text.replace(booleanPattern, (_match, boolValue) => {
           const lowerBoolValue = boolValue.toLowerCase() as 'true' | 'false';
           const translatedValue = config.translations[lowerBoolValue];
           return `${field}:${translatedValue}`;
-        }
+        })
       );
     }
 
@@ -123,10 +124,12 @@ export class BooleanFieldTranslator {
       // Use negative lookbehind and lookahead to avoid matching fields that are already qualified
       const standalonePattern = new RegExp(`\\b${field}\\b(?!\\s*[:=])`, 'gi');
 
-      translatedQuery = translatedQuery.replace(standalonePattern, _match => {
-        const trueValue = config.translations.true;
-        return `${field}:${trueValue}`;
-      });
+      translatedQuery = outsideQuotes(translatedQuery, text =>
+        text.replace(standalonePattern, _match => {
+          const trueValue = config.translations.true;
+          return `${field}:${trueValue}`;
+        })
+      );
     }
 
     return translatedQuery;
@@ -149,15 +152,17 @@ export class BooleanFieldTranslator {
       return false;
     }
 
-    // Check if any boolean field patterns are present (: syntax, = syntax, or standalone)
+    // Check if any boolean field patterns are present (: syntax, = syntax, or
+    // standalone), outside quoted values
+    const unquoted = unquotedText(query);
     for (const field of config.booleanFields) {
       const colonPattern = new RegExp(`\\b${field}:(true|false)\\b`, 'i');
       const equalsPattern = new RegExp(`\\b${field}=(true|false)\\b`, 'i');
       const standalonePattern = new RegExp(`\\b${field}\\b(?!\\s*[:=])`, 'i');
       if (
-        colonPattern.test(query) ||
-        equalsPattern.test(query) ||
-        standalonePattern.test(query)
+        colonPattern.test(unquoted) ||
+        equalsPattern.test(unquoted) ||
+        standalonePattern.test(unquoted)
       ) {
         return true;
       }
@@ -199,12 +204,11 @@ export class BooleanFieldTranslator {
     let lowercaseQuery = query;
     for (const field of config.booleanFields) {
       const booleanPattern = new RegExp(`\\b${field}:(true|false)\\b`, 'gi');
-      lowercaseQuery = lowercaseQuery.replace(
-        booleanPattern,
-        (_match, boolValue) => {
+      lowercaseQuery = outsideQuotes(lowercaseQuery, text =>
+        text.replace(booleanPattern, (_match, boolValue) => {
           const lowerBoolValue = boolValue.toLowerCase();
           return `${field}:${lowerBoolValue}`;
-        }
+        })
       );
     }
     if (lowercaseQuery !== query) {
@@ -218,11 +222,13 @@ export class BooleanFieldTranslator {
       for (const field of config.booleanFields) {
         const booleanPattern = new RegExp(`\\b${field}:(true|false)\\b`, 'gi');
 
-        altQuery = altQuery.replace(booleanPattern, (_match, boolValue) => {
-          const lowerBoolValue = boolValue.toLowerCase() as 'true' | 'false';
-          const translatedValue = altFormat[lowerBoolValue];
-          return `${field}:${translatedValue}`;
-        });
+        altQuery = outsideQuotes(altQuery, text =>
+          text.replace(booleanPattern, (_match, boolValue) => {
+            const lowerBoolValue = boolValue.toLowerCase() as 'true' | 'false';
+            const translatedValue = altFormat[lowerBoolValue];
+            return `${field}:${translatedValue}`;
+          })
+        );
       }
 
       if (altQuery !== query && altQuery !== lowercaseQuery) {
@@ -264,10 +270,11 @@ export class BooleanFieldTranslator {
         const colonPattern = new RegExp(`\\b${field}:(true|false)\\b`, 'i');
         const equalsPattern = new RegExp(`\\b${field}=(true|false)\\b`, 'i');
         const standalonePattern = new RegExp(`\\b${field}\\b(?!\\s*[:=])`, 'i');
+        const unquoted = unquotedText(query);
         if (
-          colonPattern.test(query) ||
-          equalsPattern.test(query) ||
-          standalonePattern.test(query)
+          colonPattern.test(unquoted) ||
+          equalsPattern.test(unquoted) ||
+          standalonePattern.test(unquoted)
         ) {
           detectedBooleanFields.push(field);
         }
