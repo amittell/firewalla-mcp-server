@@ -13,6 +13,8 @@ import {
   normalizeFirewallaResponse,
   normalize,
   COMMON_FIELD_MAPPINGS,
+  toSnakeCaseDeep,
+  dataKeyed,
 } from '../../src/utils/field-normalizer.js';
 
 describe('Field Normalizer', () => {
@@ -211,6 +213,136 @@ describe('Field Normalizer', () => {
         nullField: null,
         emptyField: null,
       });
+    });
+  });
+
+  // What createUnifiedResponse applies to every handler that enables field
+  // normalization
+  describe('toSnakeCaseDeep', () => {
+    test('renames field names, through arrays and nested objects', () => {
+      expect(
+        toSnakeCaseDeep({
+          lastSeen: 1,
+          timestamp: '2025-01-01T00:00:00.000Z',
+          sourceIP: '192.168.1.1',
+          devices: [{ macVendor: 'Apple', network: { networkId: 'lan' } }],
+          already_snake: true,
+        })
+      ).toEqual({
+        last_seen: 1,
+        ts: '2025-01-01T00:00:00.000Z',
+        source_ip: '192.168.1.1',
+        devices: [{ mac_vendor: 'Apple', network: { network_id: 'lan' } }],
+        already_snake: true,
+      });
+    });
+
+    test('keeps the text of keys that are not field names', () => {
+      const keys = [
+        'example.com',
+        'AA:BB:CC:DD:EE:FF',
+        '192.168.1.10',
+        'US',
+        'ID',
+        'My Laptop',
+        'x<U+200B>',
+        'x\u{200B}',
+        'wg_peer:Profile1',
+      ];
+      const input = Object.fromEntries(keys.map((key, i) => [key, i]));
+      expect(Object.keys(toSnakeCaseDeep(input))).toEqual(keys);
+    });
+
+    test('keeps keys named like Object.prototype members, and their values', () => {
+      // JSON.parse makes __proto__ an own key, as the API's JSON would
+      const input = JSON.parse(
+        '{"constructor":1,"toString":2,"hasOwnProperty":3,"__proto__":{"lastSeen":4}}'
+      );
+      const output = toSnakeCaseDeep(input);
+      expect(Object.keys(output)).toEqual([
+        'constructor',
+        'to_string',
+        'has_own_property',
+        '__proto__',
+      ]);
+      expect(Object.getPrototypeOf(output)).toBe(Object.prototype);
+      expect(JSON.parse(JSON.stringify(output))).toEqual(
+        JSON.parse(
+          '{"constructor":1,"to_string":2,"has_own_property":3,"__proto__":{"last_seen":4}}'
+        )
+      );
+    });
+
+    test.each([
+      ['camelCase first', { fooBar: 1, foo_bar: 2 }],
+      ['snake_case first', { foo_bar: 2, fooBar: 1 }],
+    ])(
+      'keeps both values of two keys that read the same once renamed, %s',
+      (_order, input) => {
+        expect(toSnakeCaseDeep(input)).toEqual({
+          foo_bar: 2,
+          'foo_bar <duplicate 2>': 1,
+        });
+      }
+    );
+
+    test('keeps both values when an alias names a key that is there', () => {
+      expect(toSnakeCaseDeep({ timestamp: 'iso', ts: 1 })).toEqual({
+        ts: 1,
+        'ts <duplicate 2>': 'iso',
+      });
+    });
+
+    test('names renamed keys in code unit order when they read the same', () => {
+      // executionTime is an alias of execution_time_ms, which executionTimeMs
+      // also becomes
+      for (const input of [
+        { executionTimeMs: 2, executionTime: 1 },
+        { executionTime: 1, executionTimeMs: 2 },
+      ]) {
+        expect(toSnakeCaseDeep(input)).toEqual({
+          execution_time_ms: 1,
+          'execution_time_ms <duplicate 2>': 2,
+        });
+      }
+    });
+
+    test('skips a suffix another key already has', () => {
+      expect(
+        toSnakeCaseDeep({ fooBar: 1, foo_bar: 2, 'foo_bar <duplicate 2>': 3 })
+      ).toEqual({
+        foo_bar: 2,
+        'foo_bar <duplicate 2>': 3,
+        'foo_bar <duplicate 3>': 1,
+      });
+    });
+
+    test('keeps the keys of a dataKeyed object and renames inside its values', () => {
+      const counts = dataKeyed({
+        remotePort: { lastSeen: 1 },
+        iPhone: 2,
+        remote_port: 3,
+      });
+      expect(toSnakeCaseDeep({ byTargetType: counts })).toEqual({
+        by_target_type: {
+          remotePort: { last_seen: 1 },
+          iPhone: 2,
+          remote_port: 3,
+        },
+      });
+    });
+
+    test('renames the keys of an object without a prototype', () => {
+      const input = Object.assign(Object.create(null), { lastSeen: 1 });
+      expect(toSnakeCaseDeep(input)).toEqual({ last_seen: 1 });
+    });
+
+    test('returns other values as they are', () => {
+      const date = new Date(0);
+      expect(toSnakeCaseDeep(date)).toBe(date);
+      expect(toSnakeCaseDeep(null)).toBeNull();
+      expect(toSnakeCaseDeep(undefined)).toBeUndefined();
+      expect(toSnakeCaseDeep('fooBar')).toBe('fooBar');
     });
   });
 });

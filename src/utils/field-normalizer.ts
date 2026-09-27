@@ -271,33 +271,102 @@ export const FIELD_ALIAS_MAP: Record<string, string> = {
   lastUpdated: 'last_updated',
 };
 
+/** Objects registered with dataKeyed */
+const DATA_KEYED = new WeakSet<object>();
+
 /**
- * Deep snake_case conversion for objects and arrays
- * Recursively converts all field names to snake_case with intelligent alias handling
+ * Marks `map` as an object whose keys are data, not field names: a count
+ * by rule action or target type, or by the value of a group. toSnakeCaseDeep
+ * keeps its keys as they are and normalizes the values under them. Without
+ * this a target type such as remotePort was counted as remote_port.
+ *
+ * @param map - The object to mark; it is not copied
+ * @returns map
+ */
+export function dataKeyed<T extends object>(map: T): T {
+  DATA_KEYED.add(map);
+  return map;
+}
+
+/**
+ * A key toSnakeCaseDeep renames: a field name as the API writes them, an
+ * ASCII identifier that starts with a lowercase letter (lastSeen, updateTs).
+ * Any other key (a domain, a MAC or IP address, a country code, a name with
+ * spaces, marker text such as <U+200B>) is data and keeps its text.
+ */
+const FIELD_NAME = /^[a-z][A-Za-z0-9_]*$/;
+
+/** The name toSnakeCaseDeep gives `key`: its alias, else its snake_case */
+function snakeCaseKey(key: string): string {
+  // An own property only: FIELD_ALIAS_MAP.constructor is Object, which
+  // turned a key named constructor into "function Object() ..."
+  if (Object.prototype.hasOwnProperty.call(FIELD_ALIAS_MAP, key)) {
+    return FIELD_ALIAS_MAP[key];
+  }
+  return FIELD_NAME.test(key) ? toSnakeCase(key) : key;
+}
+
+/**
+ * The new name of each key of an object that toSnakeCaseDeep renames. A
+ * key whose name does not change keeps it. A renamed key takes its new
+ * name unless another key has it (fooBar and foo_bar, or timestamp and ts);
+ * then it gets the first free " <duplicate N>" suffix, N from 2, as
+ * markInvisibleCharactersIn names marked keys that read the same, so no
+ * value is dropped. Renamed keys are named in code unit order, so the
+ * names do not depend on the order of the keys.
+ */
+function renamedKeys(keys: string[]): Map<string, string> {
+  const taken = new Set<string>();
+  const toRename: string[] = [];
+  for (const key of keys) {
+    if (snakeCaseKey(key) === key) {
+      taken.add(key);
+    } else {
+      toRename.push(key);
+    }
+  }
+  const names = new Map<string, string>();
+  for (const key of toRename.sort()) {
+    const renamed = snakeCaseKey(key);
+    let name = renamed;
+    for (let n = 2; taken.has(name); n++) {
+      name = `${renamed} <duplicate ${n}>`;
+    }
+    taken.add(name);
+    names.set(key, name);
+  }
+  return names;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const prototype: unknown = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+/**
+ * Field names in snake_case, through arrays and plain objects: each field
+ * name gets its FIELD_ALIAS_MAP name, else its snake_case. Keys that are
+ * not field names keep their text (see FIELD_NAME), as do the keys of an
+ * object marked with dataKeyed. No value is dropped when two keys would
+ * get one name (see renamedKeys).
  */
 export function toSnakeCaseDeep<T = any>(obj: T): T {
-  if (obj === null || obj === undefined) {
-    return obj;
-  }
-
   if (Array.isArray(obj)) {
     return obj.map(item => toSnakeCaseDeep(item)) as T;
   }
-
-  if (typeof obj === 'object' && obj.constructor === Object) {
-    const converted: Record<string, any> = {};
-
-    for (const [key, value] of Object.entries(obj)) {
-      // Use alias mapping first, then fall back to snake_case conversion
-      const snakeKey = FIELD_ALIAS_MAP[key] || toSnakeCase(key);
-      converted[snakeKey] = toSnakeCaseDeep(value);
-    }
-
-    return converted as T;
+  if (!isPlainObject(obj)) {
+    return obj;
   }
-
-  // Return primitive values unchanged
-  return obj;
+  const keys = Object.keys(obj);
+  const names = DATA_KEYED.has(obj) ? new Map() : renamedKeys(keys);
+  // fromEntries makes each key an own property, __proto__ included, which
+  // assigning it would not
+  return Object.fromEntries(
+    keys.map(key => [names.get(key) ?? key, toSnakeCaseDeep(obj[key])])
+  ) as T;
 }
 
 /**

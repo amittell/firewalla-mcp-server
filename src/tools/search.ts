@@ -32,6 +32,7 @@ import {
   type MspTerm,
 } from '../utils/msp-query.js';
 import { unquoteQueryValue } from '../search/client-filter.js';
+import { dataKeyed } from '../utils/field-normalizer.js';
 import {
   GeographicFilterError,
   geographicFiltersToMspQuery,
@@ -1297,7 +1298,8 @@ export class SearchEngine {
       groups[groupValue].push(item);
     }
 
-    const aggregations: any = {};
+    // Keyed by the groups' values, which are not field names to rename
+    const aggregations: any = dataKeyed({});
 
     for (const [groupValue, groupItems] of Object.entries(groups)) {
       aggregations[groupValue] = {
