@@ -16,7 +16,7 @@
 // is an apostrophe in the word (name:Alex's, Café's), not the start of a
 // quoted value.
 const TOKEN_PATTERN =
-  /[()]|(?:"(?:[^"\\]|\\.)*"|(?<![\p{L}\p{N}_])'(?:[^'\\]|\\.)*'|[^\s()"])+/gu;
+  /[()]|(?:"(?:[^"\\]|\\.)*"|(?<![\p{L}\p{N}\p{M}_])'(?:[^'\\]|\\.)*'|[^\s()"])+/gu;
 
 /**
  * Evaluates a search query against one item
@@ -101,7 +101,7 @@ export function unquoteQueryValue(value: string): string {
 // quote right after a letter, digit or underscore is an apostrophe
 // (name:Alex's was read as the list alex,s)
 const LIST_VALUE =
-  /(?:"(?:[^"\\]|\\.)*"|(?<![\p{L}\p{N}_])'(?:[^'\\]|\\.)*'|[^,"])+/gu;
+  /(?:"(?:[^"\\]|\\.)*"|(?<![\p{L}\p{N}\p{M}_])'(?:[^'\\]|\\.)*'|[^,"])+/gu;
 
 /**
  * The values of a comma list, unquoted, as the MSP API grammar reads

@@ -12,6 +12,7 @@ import {
   type Token,
   type QueryValidation,
 } from './types.js';
+import { followsWordCharacter } from '../utils/word-characters.js';
 
 /**
  * Characters the query grammar reads: whitespace, quotes, parentheses and
@@ -19,9 +20,6 @@ import {
  * and ? of wildcards. Any other character can be part of a word.
  */
 const SYNTAX = /[\s"'()[\]:,<>!=*?]/;
-
-/** A letter or digit in any script, or _: a ' after one is an apostrophe */
-const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
 
 /** Tokens that can begin a term, besides NOT */
 const TERM_STARTS: ReadonlySet<TokenTypeValue> = new Set<TokenTypeValue>([
@@ -160,8 +158,7 @@ export class QueryParser {
     const inWord = (at: number): boolean =>
       at < safeInput.length &&
       (!SYNTAX.test(safeInput[at]) ||
-        (safeInput[at] === "'" &&
-          WORD_CHARACTER.test(safeInput[at - 1] ?? '')));
+        (safeInput[at] === "'" && followsWordCharacter(safeInput, at)));
 
     // Every pass must consume input; one that does not would loop forever
     let lastIndex = -1;

@@ -36,6 +36,7 @@
  */
 
 import { translateRelativeTimestamps } from './timestamp.js';
+import { followsWordCharacter } from './word-characters.js';
 
 /** A query, or part of one, that the MSP API cannot run */
 export class MspQueryError extends Error {
@@ -180,9 +181,6 @@ export interface BracketRange {
   query: string;
 }
 
-/** A letter or digit in any script, or _: a ' after one is an apostrophe */
-const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
-
 /**
  * A quoted value: in double quotes, or in single quotes that open where a
  * word could start (a single quote after a letter, digit or underscore is
@@ -191,7 +189,7 @@ const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
  * the odd ones.
  */
 export const QUOTED_TEXT =
-  /("(?:[^"\\]|\\.)*"|(?<![\p{L}\p{N}_])'(?:[^'\\]|\\.)*')/u;
+  /("(?:[^"\\]|\\.)*"|(?<![\p{L}\p{N}\p{M}_])'(?:[^'\\]|\\.)*')/u;
 
 /**
  * The first Lucene-style range in a query (`field:[low TO high]`, or with
@@ -314,10 +312,7 @@ function tokenize(query: string): Token[] {
     let text = '';
     while (i < query.length && !/[\s()]/.test(query[i])) {
       const c = query[i];
-      if (
-        c === '"' ||
-        (c === "'" && !WORD_CHARACTER.test(query[i - 1] ?? ''))
-      ) {
+      if (c === '"' || (c === "'" && !followsWordCharacter(query, i))) {
         let close = i + 1;
         while (close < query.length && query[close] !== c) {
           close += query[close] === '\\' ? 2 : 1;

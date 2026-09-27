@@ -17,10 +17,14 @@ import {
   SearchTargetListsHandler,
 } from '../../src/tools/handlers/search.js';
 import { queryParser } from '../../src/search/parser.js';
-import { matchesQuery } from '../../src/search/client-filter.js';
+import {
+  commaListValues,
+  matchesQuery,
+} from '../../src/search/client-filter.js';
 import { QuerySanitizer } from '../../src/validation/error-handler.js';
 import { toMspQuery } from '../../src/utils/msp-query.js';
 import { translateToMspQualifiers } from '../../src/utils/msp-qualifiers.js';
+import { followsWordCharacter } from '../../src/utils/word-characters.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -41,6 +45,9 @@ const NAMES = [
   "Café's TV",
   '客厅电视',
   'AT&T router',
+  "𝒜's printer",
+  "𐐀's lamp",
+  "e\u0301's clock",
   'plain',
 ];
 
@@ -193,5 +200,58 @@ describe("a ' after a letter in any script is an apostrophe", () => {
 
   it('still opens a quote at the start of a word', () => {
     expect(toMspQuery("'Café TV'")).toBe('"Café TV"');
+  });
+});
+
+describe("a ' after a letter outside the BMP, or after a combining mark", () => {
+  // 𝒜 (U+1D49C) and 𐐀 (U+10400) are surrogate pairs, so the code unit
+  // before the ' is the pair's low half; é is written as e and U+0301, so
+  // the character before the ' is a mark. Each tokenizer read the ' as a
+  // quote that was never closed.
+  const WORDS_BEFORE = ["𝒜's", "𐐀's", "e\u0301's"];
+
+  it.each(WORDS_BEFORE)(
+    "followsWordCharacter reads the character before the ' of %s",
+    word => {
+      expect(followsWordCharacter(word, word.indexOf("'"))).toBe(true);
+    }
+  );
+
+  it('followsWordCharacter is false at the start, after a space, after punctuation and after a lone surrogate', () => {
+    expect(followsWordCharacter("'a", 0)).toBe(false);
+    expect(followsWordCharacter(" 'a", 1)).toBe(false);
+    expect(followsWordCharacter("('a", 1)).toBe(false);
+    expect(followsWordCharacter("\udc9c'a", 1)).toBe(false);
+  });
+
+  it.each(WORDS_BEFORE)('is an apostrophe in every tokenizer: %s', word => {
+    expect(queryParser.parse(word).ast).toEqual({ type: 'text', value: word });
+    expect(toMspQuery(word)).toBe(word);
+    expect(QuerySanitizer.sanitizeSearchQuery(`name:${word}`).errors).toEqual(
+      []
+    );
+    expect(matchesQuery(word, term => term === word)).toBe(true);
+    expect(commaListValues(`${word},x`)).toEqual([word, 'x']);
+    expect(translateToMspQualifiers(`${word} bytes:>1MB it's`, 'flows')).toBe(
+      `${word} total:>1MB it's`
+    );
+  });
+
+  it.each([
+    ["𝒜's", "𝒜's printer"],
+    ["𐐀's", "𐐀's lamp"],
+    ["e\u0301's", "e\u0301's clock"],
+  ])('search_devices finds %s', async (word, name) => {
+    expect(await names(SearchDevicesHandler, 'devices', word)).toEqual([name]);
+  });
+
+  it.each(WORDS_BEFORE)('search_alarms sends %s as written', async word => {
+    const { client, get } = makeClient();
+    const res = await new SearchAlarmsHandler().execute(
+      { query: word, limit: 10 },
+      client
+    );
+    expect(res.isError).toBeFalsy();
+    expect(sentQueries(get)).toEqual([word]);
   });
 });
