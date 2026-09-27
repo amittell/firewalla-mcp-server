@@ -720,9 +720,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `search_rules` refused free text such as `Alex’s` (with the U+2019
   apostrophe device names carry in live alarms), `Café`, `客厅` and `AT&T`
   as an "Unexpected character": a word was ASCII letters, digits, `_`, `.`
-  and `-`. A `'` after a letter or digit in any script is an apostrophe too,
-  as after an ASCII one; in `Café's` it opened a quote that was never
-  closed, and `search_flows` and `search_alarms` refused the query. A number
+  and `-`. A `'` after a letter, digit or combining mark in any script is
+  an apostrophe too, as after an ASCII letter: in `Café's`, in `𝒜's` (a
+  letter written as two UTF-16 units) and in `é's` written as `e` and
+  U+0301, it opened a quote that was never closed, and `search_flows` and
+  `search_alarms` refused the query. A number
   followed by letters is one word (`5GB`, `3d`), and `100-200` stays one
   number.
 - `search_flows`, `search_alarms`, `get_flow_data` and `get_active_alarms`

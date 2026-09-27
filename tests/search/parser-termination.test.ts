@@ -19,11 +19,14 @@ import { queryParser } from '../../src/search/parser.js';
 
 const TIMEOUT_MS = 2000;
 
-/** src/search/parser.ts and its types, as CommonJS in a fresh vm context */
+/**
+ * src/search/parser.ts, its types and the word-character helper, as
+ * CommonJS in a fresh vm context
+ */
 function parserInVm(): vm.Context {
   const compile = (file: string): string =>
     ts.transpileModule(
-      readFileSync(path.join(process.cwd(), 'src', 'search', file), 'utf8'),
+      readFileSync(path.join(process.cwd(), 'src', file), 'utf8'),
       {
         compilerOptions: {
           module: ts.ModuleKind.CommonJS,
@@ -32,8 +35,9 @@ function parserInVm(): vm.Context {
       }
     ).outputText;
   const sources = {
-    './types.js': compile('types.ts'),
-    './parser.js': compile('parser.ts'),
+    './types.js': compile('search/types.ts'),
+    './parser.js': compile('search/parser.ts'),
+    '../utils/word-characters.js': compile('utils/word-characters.ts'),
   };
   const context = vm.createContext({});
   vm.runInContext(

@@ -4,26 +4,29 @@
  */
 
 import type { SearchFilter, SearchOptions } from '../types.js';
+import { followsWordCharacter } from '../utils/word-characters.js';
 
 /**
- * Whether `char` opens or closes a quote: a double quote, or a single quote
- * that does not follow a letter, digit or underscore (in Alex's it is an
- * apostrophe, as the search parser reads it), unless escaped; inside a
- * quote, only the quote that opened it closes it
+ * Whether the character at `i` of `text` opens or closes a quote: a double
+ * quote, or a single quote that does not follow a letter, digit, combining
+ * mark or underscore (in Alex's it is an apostrophe, as the search parser
+ * reads it), unless escaped; inside a quote, only the quote that opened it
+ * closes it
  */
 function opensOrClosesQuote(
-  char: string,
-  prevChar: string,
+  text: string,
+  i: number,
   inQuotes: boolean,
   quoteChar: string
 ): boolean {
-  if (prevChar === '\\') {
+  const char = text[i];
+  if (i > 0 && text[i - 1] === '\\') {
     return false;
   }
   if (inQuotes) {
     return char === quoteChar;
   }
-  return char === '"' || (char === "'" && !/[\p{L}\p{N}_]/u.test(prevChar));
+  return char === '"' || (char === "'" && !followsWordCharacter(text, i));
 }
 
 /**
@@ -42,9 +45,8 @@ function smartSplitCommas(value: string): string[] {
 
   for (let i = 0; i < value.length; i++) {
     const char = value[i];
-    const prevChar = i > 0 ? value[i - 1] : '';
 
-    if (opensOrClosesQuote(char, prevChar, inQuotes, quoteChar)) {
+    if (opensOrClosesQuote(value, i, inQuotes, quoteChar)) {
       if (!inQuotes) {
         inQuotes = true;
         quoteChar = char;
@@ -120,10 +122,9 @@ function smartSplitLogicalOperators(query: string): string[] {
 
   while (i < query.length) {
     const char = query[i];
-    const prevChar = i > 0 ? query[i - 1] : '';
 
     // Handle quote state
-    if (opensOrClosesQuote(char, prevChar, inQuotes, quoteChar)) {
+    if (opensOrClosesQuote(query, i, inQuotes, quoteChar)) {
       if (!inQuotes) {
         inQuotes = true;
         quoteChar = char;
