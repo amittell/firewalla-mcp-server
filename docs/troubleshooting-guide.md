@@ -787,25 +787,10 @@ checkMemoryUsage('After operation');
 { query: "severity:high", limit: 1000 }
 
 // ✅ Recent data only
-{ query: "severity:high AND timestamp:>NOW-1h", limit: 1000 }
+{ query: "type:1 AND ts:>1h", limit: 500 }
 ```
 
-#### 2. Combine Related Filters
-```javascript
-// ❌ Multiple separate queries
-const flows = await searchFlows({ query: "protocol:tcp", limit: 500 });
-const alarms = await searchAlarms({ query: "severity:high", limit: 500 });
-
-// ✅ Single correlated query
-const results = await searchCrossReference({
-  primary_query: "protocol:tcp",
-  secondary_queries: ["severity:high"],
-  correlation_field: "source_ip",
-  limit: 500
-});
-```
-
-#### 3. Use Appropriate Limits
+#### 2. Use Appropriate Limits
 ```javascript
 // ❌ Unnecessarily large limit
 { query: "severity:high", limit: 10000 }
