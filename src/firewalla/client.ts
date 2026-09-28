@@ -2726,7 +2726,13 @@ export class FirewallaClient {
     _listType?: string,
     limit?: number,
     owner?: string
-  ): Promise<{ count: number; results: TargetList[]; next_cursor?: string }> {
+  ): Promise<{
+    count: number;
+    results: TargetList[];
+    next_cursor?: string;
+    /** Every list the API returned, before limit: it returns all of them */
+    total: number;
+  }> {
     // `owner` is the endpoint's only parameter; it ignores query and limit
     const params: Record<string, unknown> = {};
     if (owner?.trim()) {
@@ -2749,6 +2755,7 @@ export class FirewallaClient {
     return {
       count: Array.isArray(limitedResults) ? limitedResults.length : 0,
       results: Array.isArray(limitedResults) ? limitedResults : [],
+      total: Array.isArray(results) ? results.length : 0,
     };
   }
 

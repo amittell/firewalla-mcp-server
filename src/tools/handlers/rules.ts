@@ -746,11 +746,13 @@ export class GetTargetListsHandler extends BaseToolHandler {
         : [];
 
       const unifiedResponseData = {
-        total_lists: SafeAccess.safeArrayAccess(
-          listsResponse.results,
-          arr => arr.length,
-          0
-        ),
+        // Every list the owner has: GET /v2/target-lists returns all of
+        // them (it takes no limit or cursor), and limit is applied here.
+        // total_lists counted only the lists returned, so it never said
+        // that limit had left lists out
+        total_lists: listsResponse.total,
+        returned_lists: lists.length,
+        has_more: listsResponse.total > lists.length,
         limit_applied: limit,
         categories: Array.from(
           new Set(
