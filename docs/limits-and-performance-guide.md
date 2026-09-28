@@ -6,9 +6,8 @@ This guide provides comprehensive documentation on limit configurations, perform
 
 - [Overview](#overview)
 - [Limit Configuration Philosophy](#limit-configuration-philosophy)
-- [Tool-Specific Limits](#tool-specific-limits)
-- [Limit Rationale by Operation Type](#limit-rationale-by-operation-type)
-- [Historical Context: Resolved Discrepancies](#historical-context-resolved-discrepancies)
+- [Limits by tool](#limits-by-tool)
+- [History](#history)
 - [Performance Optimization Strategies](#performance-optimization-strategies)
 - [Monitoring and Tuning](#monitoring-and-tuning)
 - [Best Practices](#best-practices)
@@ -49,217 +48,46 @@ export const STANDARD_LIMITS = {
 }
 ```
 
-## Tool-Specific Limits
+## Limits by tool
 
-The maximums below are what each tool's handler takes (`getToolLimit` in
-`src/config/limits.ts`): up to 1000 for `get_flow_data`, `search_flows`,
-`search_alarms`, `get_offline_devices`, `search_devices` and
-`search_target_lists`, and up to 500 for `get_active_alarms` and
-`get_bandwidth_usage`. From 2.0.0 each tool's schema lists the same
-maximum. Up to 1.5.0 the schemas list 500 for all eight, and an MCP client
-that checks arguments against the schema refuses a larger limit before the
-server sees it. `/v2/alarms` and `/v2/flows` return at most 500 records per
-request, so a larger limit on the flow and alarm tools is read 500 at a
-time.
+Each tool's handler takes up to the maximum below (`getToolLimit` in
+`src/config/limits.ts`), and over it answers
+`limit is too large ... (got N, maximum: M)`. From 2.0.0 each tool's schema
+lists the same default and maximum. Up to 1.5.0 the schemas list 500 for
+`get_flow_data`, `search_flows`, `search_alarms`, `get_offline_devices`,
+`search_devices` and `search_target_lists`, no maximum for `search_rules`
+and no `limit` for `get_network_rules_summary`, and an MCP client that
+checks arguments against the schema refuses more than it lists.
 
-### Basic Data Retrieval Tools (Limit: 1000)
+| Tool | Default | Maximum |
+|---|---|---|
+| `get_active_alarms` | 200 | 500, the API's documented maximum for `/v2/alarms` |
+| `get_flow_data`, `search_flows`, `search_alarms` | 200 | 1000 |
+| `get_device_status`, `get_network_rules`, `get_target_lists` | required | 1000 |
+| `search_rules` | 200 | 1000 |
+| `search_devices` | 50 | 1000 |
+| `search_target_lists`, `get_offline_devices` | 100 | 1000 |
+| `get_bandwidth_usage` | 10 | 500 |
+| `get_network_rules_summary` | 200 | 2000 |
+| `get_statistics_by_region`, `get_statistics_by_box` | 5 | none; at least 1 |
 
-**Tools**: `get_device_status`, `get_flow_data`, `get_network_rules`, `get_target_lists`. `get_active_alarms` is capped at 500, the API's documented maximum for `/v2/alarms` (`getToolLimit` in `src/config/limits.ts`)
+`get_network_rules_summary` sends its `limit` to `GET /v2/rules`, and the
+API documents no limit for rules. `get_simple_statistics`,
+`get_flow_insights` and the trend tools take no `limit`.
 
-**Rationale**:
-- Simple API calls with minimal server-side processing
-- Direct data retrieval without complex transformations
-- Balanced between useful result sets and performance
-- Most common use case covers 90% of user needs with <1000 results
+`/v2/alarms` and `/v2/flows` return at most 500 records per request, so
+`get_flow_data`, `search_flows` and `search_alarms` read a larger limit in
+pages of 500 (a limit of 700 sends `limit=500` first). Each page is a
+request against the rate limit and the 30 s tool timeout.
 
-**Performance Characteristics**:
-- Average response time: 200-500ms
-- Memory usage: 10-50MB per request
-- Network bandwidth: 1-5MB per request
-- CPU usage: Low
+## History
 
-### Search Operations (Limit: 1000)
-
-**Tools**: `search_flows`, `search_alarms`, `search_rules`, `search_devices`, `search_target_lists`
-
-**Rationale**:
-- Search operations involve query parsing and filtering
-- Results often require additional processing and normalization
-- Maintains consistency across all search tools
-- Provides sufficient data for analysis while ensuring responsiveness
-
-**Performance Characteristics**:
-- Average response time: 500-1500ms
-- Memory usage: 20-100MB per request
-- Network bandwidth: 2-10MB per request
-- CPU usage: Medium
-
-**Example Usage**:
-```bash
-# Typical search that benefits from 1000 limit (from 2.0.0; 500 at most in
-# the 1.5.0 schema)
-search_flows query:"protocol:tcp AND region:CN" limit:800
-
-# Complex search requiring full limit
-search_alarms query:"(type:1 OR type:2) AND device.ip:192.168.*" limit:1000
-```
-
-### Bandwidth Analysis Operations (Limit: 500)
-
-**Tools**: `get_bandwidth_usage`
-
-**Rationale**:
-- Bandwidth data requires intensive aggregation and sorting
-- Each device record includes multiple bandwidth metrics
-- Memory usage increases significantly with device count
-- Response time degrades rapidly beyond 500 devices
-
-**Performance Characteristics**:
-- Average response time: 1000-3000ms
-- Memory usage: 50-200MB per request
-- Network bandwidth: 5-20MB per request
-- CPU usage: High (aggregation and sorting)
-
-**Memory Usage Pattern**:
-```typescript
-// Memory usage scales significantly with device count
-const memoryUsageEstimate = {
-  100_devices: '20MB',
-  500_devices: '100MB',   // Optimal limit
-  1000_devices: '250MB',  // Causes performance issues
-  2000_devices: '500MB+'  // Risk of memory exhaustion
-}
-```
-
-### Rules Summary Operations (Limit: 2000)
-
-**Tools**: `get_network_rules_summary`
-
-**Rationale**:
-- Rule summary operations analyze rule effectiveness and patterns
-- Higher limits provide better statistical analysis
-- Most organizations have <2000 active rules
-- Reduced from the original 10000 limit for better performance
-
-**Performance Characteristics**:
-- Average response time: 1500-4000ms
-- Memory usage: 75-250MB per request
-- Network bandwidth: 8-25MB per request
-- CPU usage: High (statistical analysis)
-
-### Offline Device Operations (Limit: 1000)
-
-**Tools**: `get_offline_devices`
-
-**Rationale**:
-- Offline device detection requires timestamp analysis
-- Results sorted by last-seen time
-- 1000 offline devices indicate significant network issues
-- Consistent with other device operations
-
-**Performance Characteristics**:
-- Average response time: 300-800ms
-- Memory usage: 15-75MB per request
-- Network bandwidth: 2-8MB per request
-- CPU usage: Medium (timestamp sorting)
-
-### Statistical Operations
-
-**Tools**: `get_simple_statistics`, `get_statistics_by_region`, `get_statistics_by_box`
-
-**Limits**: `get_simple_statistics` takes no `limit`. `get_statistics_by_region` and `get_statistics_by_box` take one of at least 1, default 5, with no maximum. `STANDARD_LIMITS.STATISTICS` (100) is not applied to any tool.
-
-**Performance Characteristics**:
-- Average response time: 100-300ms
-- Memory usage: 5-25MB per request
-- Network bandwidth: 0.5-2MB per request
-- CPU usage: Low
-
-## Limit Rationale by Operation Type
-
-### Security Operations
-
-**High Priority**: Security analysis requires comprehensive data
-- `get_active_alarms`: 500 (the API's maximum for `/v2/alarms`)
-- `search_alarms`: 1000 (sufficient for threat investigation)
-
-### Network Analysis
-
-**Performance Balanced**: Network operations balance detail with speed
-- `get_flow_data`: 1000 (typical network monitoring needs)
-- `search_flows`: 1000 (sufficient for traffic analysis)
-- `get_bandwidth_usage`: 500 (intensive processing requires lower limit)
-
-### Device Management
-
-**Practical Limits**: Based on typical network sizes
-- `get_device_status`: 1000 (covers medium-sized networks)
-- `get_offline_devices`: 1000 (consistent with device operations)
-- `search_devices`: 1000 (sufficient for device discovery)
-
-### Rule Management
-
-**Administrative Focus**: Rule operations serve administrative needs
-- `get_network_rules`: 1000 (typical rule set size)
-- `get_network_rules_summary`: 2000 (comprehensive analysis)
-- `search_rules`: 1000 (sufficient for rule discovery)
-
-## Historical Context: Resolved Discrepancies
-
-### Pre-v1.0.0 Issues
-
-Before the centralized limits system, the server had significant inconsistencies:
-
-#### Limit Discrepancies Found and Fixed
-
-1. **Search Tools Inconsistency**:
-   - **Before**: `search_alarms` (5000), `search_flows` (1000), `search_rules` (3000)
-   - **After**: All search tools standardized to 1000
-   - **Impact**: Reduced memory usage by 60-80% for alarm searches
-
-2. **Rules Summary Over-limit**:
-   - **Before**: `get_network_rules_summary` (10000)
-   - **After**: Reduced to 2000
-   - **Impact**: Response time improved from 15–30 seconds to 3–5 seconds
-
-3. **Device Search Variation**:
-   - **Before**: `search_devices` (2000)
-   - **After**: Standardized to 1000
-   - **Impact**: Improved consistency with other search operations
-
-#### Schema vs Implementation Discrepancies:
-
-1. **Tool Schemas Showed Higher Limits**:
-   - Schema definitions showed maximum limits of 5000-10000
-   - Actual implementations used varying limits
-   - **Resolution**: Updated schemas to match actual performance-tested limits
-
-2. **Parameter Validation Inconsistency**:
-   - Some tools accepted limits higher than optimal
-   - Validation occurred too late in processing pipeline
-   - **Resolution**: Centralized validation with performance-based limits
-
-### Performance Impact of Fixes:
-
-```typescript
-const performanceImprovements = {
-  'search_alarms': {
-    before: { limit: 5000, avgResponseTime: '8-15s', memoryUsage: '400-800MB' },
-    after: { limit: 1000, avgResponseTime: '1-3s', memoryUsage: '80-150MB' },
-    improvement: 'Response time: 80% faster, Memory: 75% reduction'
-  },
-  'get_network_rules_summary': {
-    before: { limit: 10000, avgResponseTime: '15-30s', memoryUsage: '800MB-1.5GB' },
-    after: { limit: 2000, avgResponseTime: '3-5s', memoryUsage: '200-400MB' },
-    improvement: 'Response time: 83% faster, Memory: 70% reduction'
-  },
-  'search_devices': {
-    before: { limit: 2000, avgResponseTime: '3-6s', memoryUsage: '150-300MB' },
-    after: { limit: 1000, avgResponseTime: '1-2s', memoryUsage: '75-150MB' },
-    improvement: 'Response time: 67% faster, Memory: 50% reduction'
-  }
-}
-```
+`src/config/limits.ts` records earlier caps: 5000 for `search_alarms`, 3000
+for `search_rules`, 2000 for `search_devices` and 10000 for
+`get_network_rules_summary`. They are now 1000, and 2000 for the summary.
+Earlier versions of this guide gave response times, memory use and percentage
+gains for that change; nothing in the repository measured them, so they are
+gone, as are the per-tool response time and memory figures.
 
 ## Performance Optimization Strategies
 
@@ -271,7 +99,7 @@ const performanceImprovements = {
    search_flows query:"protocol:tcp AND region:CN" limit:100
 
    # Avoid: Broad query with high limit
-   search_flows query:"protocol:tcp" limit:1000
+   search_flows query:"protocol:tcp" limit:500
    ```
 
 2. **Pagination for Large Datasets**: Use cursor-based pagination
