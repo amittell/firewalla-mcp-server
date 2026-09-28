@@ -1138,6 +1138,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   answered `success: true` with no traffic. It now answers `Failed to get
   flow insights: Authentication failed. Please check your MSP token.`, or
   the error the request met.
+- The docs describe what the code does after the rate-limit, retry, timeout
+  and cache changes and the removal of the unregistered handlers.
+  `API_RATE_LIMIT` is counted per server process: every MCP client that
+  starts the server over stdio has its own count, so processes that share a
+  token need values that add up to 100 or less, and lowering one does not
+  limit the others, where the README said to lower it. The limit was measured
+  on one token; SPEC.md, CLAUDE.md, `.env.example` and the rate-limiting guide
+  called it per token. `docs/error-handling-guide.md` described an
+  HTTP-status-to-error-type mapping, error types, messages, three retries with
+  exponential backoff and a 10-second timeout that the code does not have; it
+  now gives the real ones: the tools answer `api_error` or `search_error`
+  with the API's status in the message, a failed GET is sent again once, and
+  tools give up after 30 s. `docs/troubleshooting-guide.md` and
+  `docs/field-mappings.md` showed cross-reference queries
+  (`correlation_field`, `secondary_queries`) for the removed
+  `search_cross_reference` handlers. The troubleshooting guide also gave
+  `timestamp:>NOW-1h` as a cache-friendly query, where a relative time is
+  never cached, and pointed at a `logs/error.log` that nothing writes. `DEBUG` examples named namespaces nothing writes to, such as
+  `mcp:*`, `cache` and `error-handler`: besides `DEBUG=firewalla:*`, only
+  `api` and `validation` produce output. The README, `.env.example` and the
+  Open WebUI guide listed the `MCP_HTTP_HOST` address among the accepted
+  `Host` values without saying that a wildcard (`0.0.0.0`, `::`, which the
+  Docker image sets) adds nothing, and the README asked for an origin "as
+  the browser sends them", where the setting and the header are both
+  compared as URL origins. The client guides ran
+  `npx firewalla-mcp-server --version` and `--test`, flags the server does
+  not have, and checked the token with `Authorization: Bearer`, where the API
+  takes `Token`.
 
 ### Removed
 
