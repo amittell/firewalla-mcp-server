@@ -1,10 +1,22 @@
 /**
  * A wildcard search the client matches itself must not stall the server.
  * search_rules and search_target_lists matched `*` by building a regular
- * expression, and /^.*a.*a.*a.*a.*a.*a.*a.*a.*b$/ takes about 2 s to fail
- * against 40 a's (measured on Node 24), on the one thread every client
- * shares. The API is stubbed; nothing leaves the process.
+ * expression, and /^.*a.*a.*a.*a.*a.*a.*a.*a.*b$/ takes seconds to fail
+ * against a run of a's (1.6 s at 40, 4.2 s at 45 on Node 22.23.1), on the
+ * one thread every client shares. The API is stubbed; nothing leaves the
+ * process.
+ *
+ * The clock is only a guard here, with a ceiling a loaded machine does not
+ * reach: these searches take tens of milliseconds (115 ms at a load
+ * average of 36), and at 50 characters the regular expressions took
+ * 18.3 s (search_rules) and 11.6 s (search_target_lists), 12 to 18 times
+ * the ceiling. The work bound, fewer than (n + 1)(m + 1) matcher steps, is
+ * checked by counting steps, in wildcard-search-steps.test.ts; this file
+ * does not import the matcher, so it still runs, and fails, on the code
+ * before it.
  */
+
+import { performance } from 'node:perf_hooks';
 
 import { FirewallaClient } from '../../src/firewalla/client.js';
 import {
@@ -28,7 +40,7 @@ jest.mock('axios', () => {
 
 /** 9 wildcards; no value below ends in b, so each match must fail */
 const PATTERN = `${'*a'.repeat(8)}*b`;
-const LONG = 'a'.repeat(40);
+const LONG = 'a'.repeat(50);
 
 function makeClient() {
   const client = new FirewallaClient({
@@ -89,8 +101,11 @@ function makeClient() {
 
 const body = (res: any) => JSON.parse(res.content[0].text);
 
-describe('9 wildcards against a 40-character value', () => {
-  it('search_rules answers at once', async () => {
+/** Far above these searches under load, far below the regex's seconds */
+const CEILING_MS = 1000;
+
+describe('9 wildcards against a 50-character value', () => {
+  it('search_rules answers within 1 s', async () => {
     const started = performance.now();
     const res = await new SearchRulesHandler().execute(
       { query: `target.value:${PATTERN}`, limit: 10 },
@@ -99,10 +114,10 @@ describe('9 wildcards against a 40-character value', () => {
     const elapsed = performance.now() - started;
     expect(res.isError).toBeFalsy();
     expect(body(res).data.rules).toEqual([]);
-    expect(elapsed).toBeLessThan(500);
+    expect(elapsed).toBeLessThan(CEILING_MS);
   });
 
-  it('search_target_lists answers at once', async () => {
+  it('search_target_lists answers within 1 s', async () => {
     const started = performance.now();
     const res = await new SearchTargetListsHandler().execute(
       { query: `name:${PATTERN}`, limit: 10 },
@@ -111,7 +126,7 @@ describe('9 wildcards against a 40-character value', () => {
     const elapsed = performance.now() - started;
     expect(res.isError).toBeFalsy();
     expect(body(res).data.target_lists).toEqual([]);
-    expect(elapsed).toBeLessThan(500);
+    expect(elapsed).toBeLessThan(CEILING_MS);
   });
 
   it('a wildcard still matches as before', async () => {
@@ -150,17 +165,19 @@ describe('search_devices takes any number of wildcards', () => {
     };
   }
 
-  it('name:*a*b*c*d*, within 50 ms', async () => {
+  // name: is matched as text without its *s, so this checks the query is
+  // taken; the id: pattern below goes through the wildcard matcher
+  it('name:*a*b*c*d*, within 1 s', async () => {
     const { elapsed, names } = await timed('name:*a*b*c*d*');
     expect(names).toEqual(['abcd router']);
-    expect(elapsed).toBeLessThan(50);
+    expect(elapsed).toBeLessThan(CEILING_MS);
   });
 
-  it('10 wildcards, within 50 ms', async () => {
+  it('10 wildcards, within 1 s', async () => {
     const pattern = `${'*a'.repeat(9)}*b`;
     expect(pattern.split('*')).toHaveLength(11);
     const { elapsed, names } = await timed(`id:${pattern}`);
     expect(names).toEqual(['plain']);
-    expect(elapsed).toBeLessThan(50);
+    expect(elapsed).toBeLessThan(CEILING_MS);
   });
 });

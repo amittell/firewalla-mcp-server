@@ -19,6 +19,11 @@ export interface WildcardOptions {
   ignoreCase?: boolean;
   /** Read `?` as any one character, as well as `*` as any run */
   anyChar?: boolean;
+  /**
+   * Counts the match's steps, one per loop pass, for tests that bound its
+   * work: fewer than (text length + 1) times (pattern length + 1)
+   */
+  steps?: { count: number };
 }
 
 /**
@@ -54,6 +59,11 @@ function fold(text: string): string {
  * back to the latest `*` and lets it take one more character. An earlier
  * `*` never needs to take more, since the latest one can take anything it
  * could, so the work is at most the text's length times the pattern's.
+ * For a text of n characters and a pattern of m: each go-back moves the
+ * latest `*`'s end one character on, so there are at most n of them, and
+ * between two the pattern index only rises, so at most m other steps.
+ * That is fewer than (n + 1)(m + 1) steps in all, the bound
+ * `options.steps` lets tests check.
  * Unlike /^a.*b$/, a `*` also matches line breaks: `.` did not.
  *
  * @param text - The value to test
@@ -72,7 +82,11 @@ export function matchesWildcard(
   // The latest `*` in the pattern, and where in the text it now ends
   let star = -1;
   let starEnd = 0;
+  const { steps } = options;
   while (ti < t.length) {
+    if (steps) {
+      steps.count++;
+    }
     if (
       pi < p.length &&
       p[pi] !== '*' &&
@@ -93,6 +107,9 @@ export function matchesWildcard(
     }
   }
   while (pi < p.length && p[pi] === '*') {
+    if (steps) {
+      steps.count++;
+    }
     pi++;
   }
   return pi === p.length;
