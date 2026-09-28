@@ -32,6 +32,7 @@ import {
   type MspTerm,
 } from '../utils/msp-query.js';
 import { unquoteQueryValue } from '../search/client-filter.js';
+import { translateToMspQualifiers } from '../utils/msp-qualifiers.js';
 import { dataKeyed } from '../utils/field-normalizer.js';
 import { keyedByData } from '../utils/data-keys.js';
 import { matchesWildcard } from '../utils/wildcard.js';
@@ -705,8 +706,15 @@ export class SearchEngine {
       if (hasRelativeTimestamp(params.query)) {
         trace.relativeTime = true;
       }
-      const translatedQuery = translateRelativeTimestamps(
-        translateBooleanQuery(params.query, 'flows')
+      // The qualifier renames (bytes: to total:, blocked:false to
+      // -status:blocked) come before mspAnd, as in get_flow_data: mspAnd
+      // translates, and read bytes:>1MB OR total:>1MB as an OR between two
+      // fields and refused it, where get_flow_data sent total:>1MB
+      const translatedQuery = translateToMspQualifiers(
+        translateRelativeTimestamps(
+          translateBooleanQuery(params.query, 'flows')
+        ),
+        'flows'
       );
 
       // The query, time range and geographic filters, ANDed in the API's
@@ -862,7 +870,11 @@ export class SearchEngine {
       }
 
       // Apply boolean field translation before building query string
-      const translatedQuery = translateBooleanQuery(params.query, 'alarms');
+      // The qualifier renames come before mspAnd, as in get_active_alarms
+      const translatedQuery = translateToMspQualifiers(
+        translateBooleanQuery(params.query, 'alarms'),
+        'alarms'
+      );
 
       // The query and time range, ANDed in the API's grammar (a space, no
       // parentheses). Alarms have no severity qualifier, so none is added.
