@@ -30,13 +30,14 @@ describe('Boolean Syntax Integration Test', () => {
       getFlowData: jest.fn(async (query?: string) => {
         queryLog.push(query ?? '');
 
-        // Simulate different responses based on query syntax
-        if (query?.includes('blocked:1') || query?.includes('blocked=1')) {
+        // status:blocked is the API's qualifier for blocked flows; search_flows
+        // renames blocked:true to it before combining the query's parts
+        if (query?.includes('status:blocked')) {
           return { results: [BLOCKED_FLOW], count: 1 };
         }
 
         // If the query contains untranslated boolean values, simulate backend error
-        if (query?.includes('blocked:true') || query?.includes('blocked=true')) {
+        if (/blocked[:=](true|1)/.test(query ?? '')) {
           throw new Error('Bad Request: Invalid parameters');
         }
 
@@ -48,27 +49,25 @@ describe('Boolean Syntax Integration Test', () => {
   });
 
   test('colon syntax with boolean translation should work', async () => {
-    // Test "blocked:true" which should be translated to "blocked:1"
+    // "blocked:true" is translated to the API's "status:blocked"
     const result = await searchTools.search_flows({
       query: 'blocked:true',
       limit: 1
     });
 
     expect(result.results).toHaveLength(1);
-    expect(queryLog).toContain('blocked:1');
-    expect(queryLog).not.toContain('blocked:true');
+    expect(queryLog).toEqual(['status:blocked']);
   });
 
   test('equals syntax with boolean translation should work', async () => {
-    // Test "blocked=true" which should be translated to "blocked:1" 
+    // "blocked=true" is translated to the API's "status:blocked"
     const result = await searchTools.search_flows({
-      query: 'blocked=true', 
+      query: 'blocked=true',
       limit: 1
     });
 
     expect(result.results).toHaveLength(1);
-    expect(queryLog).toContain('blocked:1');
-    expect(queryLog).not.toContain('blocked=true');
+    expect(queryLog).toEqual(['status:blocked']);
   });
 
   test('untranslated boolean syntax should still work with enhanced translator', async () => {
@@ -105,7 +104,7 @@ describe('Boolean Syntax Integration Test', () => {
     expect(result).toMatchObject({
       boolean_translation: {
         original_query: 'blocked:true AND protocol:tcp',
-        translated_query: 'blocked:1 AND protocol:tcp',
+        translated_query: 'status:blocked AND protocol:tcp',
         translation_applied: true,
       },
     });

@@ -962,6 +962,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Alex’s` and `*`. It is one term now, matched anywhere in the text with
   each `*` as any run (`Mac*Air` finds `MacBook Air`). A quoted `*` is a
   character, as the API reads one: `"star*box"` finds `star*box` only.
+- `search_flows` and `search_alarms` translate a query as `get_flow_data`
+  and `get_active_alarms` do. They combined it with the time range before
+  its qualifiers were renamed (`bytes:` to `total:`, `blocked:false` to
+  `-status:blocked`), so on a stub `search_flows` refused
+  `bytes:>1MB OR NOT -total:>1MB` as an OR between two fields, `bytes` and
+  `total`, and `blocked:false OR NOT status:blocked` as an OR with an
+  excluded term, quoting `blocked:0`, where `get_flow_data` sent
+  `total:>1MB` and `-status:blocked`. Over every query of up to four
+  pieces from two sets of flow pieces and two of alarm pieces (54,240 and
+  41,370 queries a set), the two tools on each endpoint now send or refuse
+  the same queries, and what they send is one conjunction in the API's
+  grammar that translation leaves unchanged.
 
 ### Removed
 
