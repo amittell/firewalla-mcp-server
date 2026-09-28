@@ -359,6 +359,11 @@ export class FirewallaMCPServer {
                   description:
                     'Get devices under a specific box group (requires group ID)',
                 },
+                cursor: {
+                  type: 'string',
+                  description:
+                    'The next_cursor of a previous page, for the page after it; a cursor this tool did not issue is refused',
+                },
               },
               required: ['limit'],
             },

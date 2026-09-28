@@ -1015,6 +1015,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one. The API's alarm model has none, and every alarm came out `medium`:
   severity was derived from type names such as `MALWARE_FILE`, where the
   API's `type` is a number from 1 to 16.
+- `get_device_status` reports `last_seen` as the API's `lastSeen`, and null
+  when it sends none, where it gave the time of the request. It refuses a
+  `cursor` it did not issue (one that does not decode, or from a listing
+  sorted another way) as a validation error before any request: such a
+  cursor was read as the first page, after the device list was read, so
+  the listing started over without saying so. `cursor` is in its schema,
+  beside the `next_cursor` it returns.
 
 ### Removed
 

@@ -175,7 +175,7 @@ function schemaProperties(tool: string): string[] {
 
 describe('advertised schemas', () => {
   it.each([
-    ['get_device_status', ['limit', 'box', 'group']],
+    ['get_device_status', ['limit', 'box', 'group', 'cursor']],
     ['get_bandwidth_usage', ['period', 'limit', 'box']],
     ['search_devices', ['query', 'limit', 'box']],
     ['search_target_lists', ['query', 'owner', 'limit']],

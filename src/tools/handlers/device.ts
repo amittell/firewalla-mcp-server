@@ -13,7 +13,8 @@ import {
   createErrorResponse,
   ErrorType,
 } from '../../validation/error-handler.js';
-import { unixToISOStringOrNow } from '../../utils/timestamp.js';
+import { safeUnixToISOString } from '../../utils/timestamp.js';
+import { decodeCursor } from '../../utils/pagination.js';
 import {
   sanitizeFieldValue,
   normalizeUnknownFields,
@@ -32,6 +33,42 @@ import {
   TimeoutError,
   createTimeoutErrorResponse,
 } from '../../utils/timeout-manager.js';
+
+/**
+ * Why a get_device_status cursor is not one this listing issued, or
+ * undefined when it is: a base64 JSON offset and page size, from a listing
+ * sorted by name, ascending
+ */
+function deviceCursorProblem(cursor: unknown): string | undefined {
+  if (typeof cursor !== 'string' || cursor.trim() === '') {
+    return 'cursor must be a non-empty string';
+  }
+  let data;
+  try {
+    data = decodeCursor(cursor);
+  } catch (error) {
+    return error instanceof Error ? error.message : 'Failed to decode cursor';
+  }
+  if (
+    (data.sort_by !== undefined && data.sort_by !== 'name') ||
+    (data.sort_order !== undefined && data.sort_order !== 'asc')
+  ) {
+    return `cursor is from a listing sorted by ${data.sort_by ?? 'nothing'} ${data.sort_order ?? ''}, not from get_device_status (sorted by name)`.trim();
+  }
+  return undefined;
+}
+
+/** A device's lastSeen (Unix seconds) as an ISO string; null when none */
+function lastSeenOf(value: unknown): string | null {
+  if (
+    (typeof value !== 'number' && typeof value !== 'string') ||
+    !(Number(value) > 0)
+  ) {
+    return null;
+  }
+  const iso = safeUnixToISOString(value, '');
+  return iso === '' ? null : iso;
+}
 
 export class GetDeviceStatusHandler extends BaseToolHandler {
   name = 'get_device_status';
@@ -102,6 +139,26 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
       const includeOffline = (args?.include_offline as boolean) !== false; // Default to true
       const limit = limitValidation.sanitizedValue! as number;
       const cursor = args?.cursor; // Cursor for pagination
+
+      // A cursor is the next_cursor of a previous page of this listing,
+      // checked before any request. One that did not decode was read as
+      // the first page, after the device list was read, so a mistyped or
+      // foreign cursor started the listing over without saying so.
+      if (cursor !== undefined) {
+        const problem = deviceCursorProblem(cursor);
+        if (problem) {
+          return createErrorResponse(
+            this.name,
+            'Invalid cursor',
+            ErrorType.VALIDATION_ERROR,
+            { cursor },
+            [
+              problem,
+              'Pass the next_cursor of a previous get_device_status page, or leave cursor out for the first page',
+            ]
+          );
+        }
+      }
       // The box to list; getDeviceStatus falls back to FIREWALLA_BOX_ID
       const box = boxValidation.sanitizedValue as string | undefined;
       // A box group ID, sent to /v2/devices as its documented group
@@ -191,9 +248,9 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
                 : finalDevice.online !== undefined
                   ? finalDevice.online
                   : Boolean(device.online),
-            lastSeen: unixToISOStringOrNow(
-              SafeAccess.getNestedValue(finalDevice, 'lastSeen', 0) as number
-            ),
+            // The API's lastSeen, or null when it sent none: a device
+            // without one was reported as seen at the time of the request
+            lastSeen: lastSeenOf(device.lastSeen),
             ipReserved: SafeAccess.getNestedValue(
               finalDevice,
               'ipReserved',
