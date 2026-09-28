@@ -298,32 +298,7 @@ Aggregate data from multiple real endpoints (`/boxes`, `/alarms`, `/rules`) inst
 
 ### Limit Parameters
 
-The schemas require `limit` for `get_device_status`, `get_network_rules` and `get_target_lists`. The other paginated tools take an optional `limit` with a default: 200 for `get_active_alarms`, `get_flow_data`, `search_flows` and `search_alarms`. The v1.0.0 plan below, a required `limit` everywhere, is not what the code does.
-
-**Updated Tool Schemas:**
-```typescript
-// Before (v1.x)
-interface GetDeviceStatusParams {
-  device_id?: string;
-  include_offline?: boolean;
-  limit?: number; // Optional with default
-}
-
-// After (v1.0.0+)  
-interface GetDeviceStatusParams {
-  device_id?: string;
-  include_offline?: boolean;
-  limit: number; // REQUIRED - no default
-}
-```
-
-**Affected Tools:**
-- `get_active_alarms`: requires `limit`
-- `get_flow_data`: requires `limit`
-- `get_device_status`: requires `limit` 
-- `get_bandwidth_usage`: parameter renamed from `top` to `limit`, required
-- `get_network_rules`: requires `limit`
-- All search tools: require both `query` and `limit`
+The schemas require `limit` for `get_device_status`, `get_network_rules` and `get_target_lists` (1 to 1000). The other tools that take one make it optional, with a default: 200 for `get_active_alarms`, `get_flow_data`, `search_flows` and `search_alarms`, 100 for `get_offline_devices` and `search_target_lists`, 50 for `search_devices`, 10 for `get_bandwidth_usage` and 5 for `get_statistics_by_region` and `get_statistics_by_box`. The search tools require `query`. `docs/limits-and-performance-guide.md` gives each tool's maximum. The v1.0.0 plan to require `limit` everywhere was not carried out.
 
 **Error Response for Missing Limit** (`get_target_lists`, whose handler requires it):
 ```json

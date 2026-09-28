@@ -51,6 +51,14 @@ export const STANDARD_LIMITS = {
 
 ## Tool-Specific Limits
 
+The maximums below are what each tool's handler enforces (`getToolLimit` in
+`src/config/limits.ts`), and what each tool's schema lists: `get_flow_data`,
+`search_flows`, `search_alarms`, `get_offline_devices`, `search_devices` and
+`search_target_lists` take up to 1000, `get_active_alarms` and
+`get_bandwidth_usage` up to 500. `/v2/alarms` and `/v2/flows` return at most
+500 records per request, so a larger limit on the flow and alarm tools is
+read 500 at a time.
+
 ### Basic Data Retrieval Tools (Limit: 1000)
 
 **Tools**: `get_device_status`, `get_flow_data`, `get_network_rules`, `get_target_lists`. `get_active_alarms` is capped at 500, the API's documented maximum for `/v2/alarms` (`getToolLimit` in `src/config/limits.ts`)
@@ -308,7 +316,7 @@ export const PERFORMANCE_THRESHOLDS = {
 }
 ```
 
-A tool gives up after `TIMEOUT_MS`, 30 s, and cancels its requests. The server has no memory or concurrency thresholds. Every request counts against `API_RATE_LIMIT` (100 per 5 minutes by default), and the box-scoped trend tools send at most 4 requests at a time.
+A tool that runs under `withToolTimeout` gives up after `TIMEOUT_MS`, 30 s, and cancels its requests. `archive_alarm`, `mute_alarm` and `delete_alarm` do not: a timeout could cut off a write that the API had already applied. For them each request has `API_TIMEOUT` (30 s by default) and waits at most 20 s for the rate limit, a lookup GET can be sent again once, and the write is never sent twice, so on an account with several boxes, where each box is checked for the alarm, a call can take longer than 30 s. The server has no memory or concurrency thresholds. Every request counts against `API_RATE_LIMIT` (100 per 5 minutes by default), and the box-scoped trend tools send at most 4 requests at a time.
 
 ### Tuning Recommendations
 

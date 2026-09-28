@@ -107,7 +107,7 @@ Then set environment variables in your shell.
 
 **Server Connection Issues**
 - Verify global npm installation: `npm list -g firewalla-mcp-server`
-- Test server manually: `MCP_TEST_MODE=true npx firewalla-mcp-server` starts it with dummy credentials; stderr shows `Firewalla MCP Server running on stdio transport` (stop it with Ctrl-C)
+- Test server manually: `MCP_TEST_MODE=true NODE_ENV=development npx firewalla-mcp-server` starts it with dummy credentials (test mode refuses to start with `NODE_ENV=production`); stderr shows `Firewalla MCP Server running on stdio transport` (stop it with Ctrl-C)
 
 **Workspace Configuration**
 - Ensure `.vscode/mcp.json` has correct permissions

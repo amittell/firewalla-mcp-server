@@ -110,7 +110,7 @@ In Cursor, activate Claude Code and test:
 **MCP Connection Issues**
 - Check MCP server installation: `npm list -g firewalla-mcp-server`
 - Verify credentials in MCP config file
-- Test manual connection: `MCP_TEST_MODE=true npx firewalla-mcp-server` starts it with dummy credentials; stderr shows `Firewalla MCP Server running on stdio transport` (stop it with Ctrl-C)
+- Test manual connection: `MCP_TEST_MODE=true NODE_ENV=development npx firewalla-mcp-server` starts it with dummy credentials (test mode refuses to start with `NODE_ENV=production`); stderr shows `Firewalla MCP Server running on stdio transport` (stop it with Ctrl-C)
 
 **Performance Issues**
 - Use specific time ranges in queries
