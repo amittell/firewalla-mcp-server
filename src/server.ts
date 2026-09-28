@@ -879,6 +879,25 @@ export class FirewallaMCPServer {
                   type: 'string',
                   description: 'Pagination cursor from previous response',
                 },
+                geographic_filters: {
+                  type: 'object',
+                  description:
+                    'Countries of the remote end to limit the alarms to, sent as one remote.region: comma list ANDed with the query ({"countries": ["US", "CN"]} is sent as remote.region:US,CN, either country). remote.region, an ISO 3166 country code, is the one geographic alarm qualifier the MSP API documents; other geographic filters and names not listed here are refused as a validation error before any request.',
+                  properties: {
+                    countries: {
+                      type: 'array',
+                      items: { type: 'string', pattern: '^[A-Za-z]{2}$' },
+                      description:
+                        'ISO 3166-1 alpha-2 country codes, any of which may match, e.g. ["US", "CN"]; a code that is not assigned is refused (put remote.region:<code> in the query to send one anyway). An empty list asks for nothing.',
+                    },
+                    regions: {
+                      type: 'array',
+                      items: { type: 'string', pattern: '^[A-Za-z]{2}$' },
+                      description:
+                        "Country codes too, merged with countries: the API's remote.region is a country code",
+                    },
+                  },
+                },
               },
               // the shared search validator requires query -- advertise it
               required: ['query'],

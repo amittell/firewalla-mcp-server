@@ -77,6 +77,8 @@ export interface SearchAlarmsArgs extends BaseSearchArgs {
     start?: string;
     end?: string;
   };
+  /** Countries of the remote end, sent as remote.region: */
+  geographic_filters?: FlowGeographicFilters;
 }
 
 export interface SearchRulesArgs extends BaseSearchArgs {}
@@ -706,6 +708,44 @@ export class SearchAlarmsHandler extends BaseToolHandler {
         );
       }
 
+      // geographic_filters: countries go to the API as remote.region:, the
+      // remote end's country, the one geographic alarm qualifier it
+      // documents; any other filter is refused here, before a request. The
+      // argument was read by no one: {countries: ["CN"]} sent the query
+      // alone and answered as if every country matched
+      let geographicTerm: string | undefined;
+      try {
+        geographicTerm = geographicFiltersToMspQuery(
+          searchArgs.geographic_filters,
+          'alarms'
+        );
+      } catch (error) {
+        if (!(error instanceof GeographicFilterError)) {
+          throw error;
+        }
+        return createErrorResponse(
+          this.name,
+          error.message,
+          ErrorType.VALIDATION_ERROR,
+          {
+            geographic_filters: searchArgs.geographic_filters,
+            ...(error.unsupported.length > 0 && {
+              unsupported_filters: error.unsupported,
+            }),
+            ...(Object.keys(error.invalid).length > 0 && {
+              invalid_values: error.invalid,
+            }),
+            supported_filters: {
+              countries:
+                'ISO 3166-1 alpha-2 country codes of the remote end, sent as remote.region:US,CN (any of them)',
+              regions:
+                "country codes too, merged with countries (the API's remote.region is a country)",
+            },
+          },
+          error.problems
+        );
+      }
+
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: searchArgs.query,
@@ -718,6 +758,7 @@ export class SearchAlarmsHandler extends BaseToolHandler {
         aggregate: searchArgs.aggregate,
         time_range: searchArgs.time_range,
         force_refresh: forceRefreshValidation.sanitizedValue as boolean,
+        geographic_filters: searchArgs.geographic_filters,
       };
 
       const result = await withToolTimeout(
@@ -892,6 +933,8 @@ export class SearchAlarmsHandler extends BaseToolHandler {
           applied_filters: {
             time_range: !!searchArgs.time_range,
             force_refresh: !!searchArgs.force_refresh,
+            // The remote.region term sent for geographic_filters, if any
+            geographic: geographicTerm ?? false,
           },
         },
       };

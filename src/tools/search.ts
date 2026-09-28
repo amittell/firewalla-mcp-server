@@ -892,7 +892,12 @@ export class SearchEngine {
         }
         timeQuery = `ts:${Math.floor(startDate.getTime() / 1000)}-${Math.floor(endDate.getTime() / 1000)}`;
       }
-      const alarmQuery = mspAnd(timeQuery, translatedQuery);
+      // geographic_filters as the remote end's country (remote.region:)
+      const geographicQuery = geographicFiltersToMspQuery(
+        params.geographic_filters,
+        'alarms'
+      );
+      const alarmQuery = mspAnd(timeQuery, translatedQuery, geographicQuery);
 
       // Call API directly without complex validation/parsing
       // mspAnd turned a relative time into seconds; the trace says it was

@@ -302,6 +302,27 @@ function generateRequestId(): string {
  * @abstract
  * @implements {ToolHandler}
  */
+
+/**
+ * Whether a response holds geographic data: a `geo` or `<field>_geo`
+ * object, as the enrichment adds (remote.geo, source_ip_geo), at any depth
+ */
+function hasGeographicData(value: unknown, depth = 0): boolean {
+  if (!value || typeof value !== 'object' || depth > 8) {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.some(item => hasGeographicData(item, depth + 1));
+  }
+  return Object.entries(value).some(
+    ([key, entry]) =>
+      ((key === 'geo' || key.endsWith('_geo')) &&
+        entry !== null &&
+        typeof entry === 'object') ||
+      hasGeographicData(entry, depth + 1)
+  );
+}
+
 export abstract class BaseToolHandler implements ToolHandler {
   /** @description Tool identifier - must be implemented by concrete classes */
   abstract name: string;
@@ -394,11 +415,15 @@ export abstract class BaseToolHandler implements ToolHandler {
     let processedData = data;
     const meta: Record<string, any> = {};
 
-    // Apply geographic enrichment if enabled
+    // Apply geographic enrichment if enabled. geo_enriched says whether
+    // the response holds geographic data: it was true whenever enrichment
+    // was enabled and did not throw, and the pipeline reads top-level IP
+    // fields only, which a list response has none of, so search_alarms and
+    // search_flows said true with no geographic field in their results
     if (this.options.enableGeoEnrichment) {
       try {
         processedData = await enrichWithGeographicData(processedData, geoCache);
-        meta.geo_enriched = true;
+        meta.geo_enriched = hasGeographicData(processedData);
       } catch (error) {
         // Geographic enrichment failure shouldn't break the response
         meta.geo_enriched = false;
