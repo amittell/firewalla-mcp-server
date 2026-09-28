@@ -683,7 +683,7 @@ interface RateLimitedConfig extends InternalAxiosRequestConfig {
   sentAt?: number;
   /**
    * Set on a transient retry: how long it is expected to take, as long as
-   * the attempt that failed. It is sent only while that much time is left
+   * the attempt that failed. It is sent only while more than that is left
    * before toolDeadline, checked when it would take a slot of the rate
    * limiter and again when it would go out (see retryFits).
    */
@@ -1178,7 +1178,7 @@ export class FirewallaClient {
 
   /**
    * Whether a retry starting in `waitMs` could answer before its tool gives
-   * up: at least its retryEstimateMs must be left before toolDeadline then.
+   * up: more than its retryEstimateMs must be left before toolDeadline then.
    * Always true for a request that is not a transient retry.
    */
   private retryFits(request: RateLimitedConfig, waitMs: number): boolean {
@@ -1186,7 +1186,7 @@ export class FirewallaClient {
       return true;
     }
     return (
-      Date.now() + waitMs + request.retryEstimateMs <=
+      Date.now() + waitMs + request.retryEstimateMs <
       (request.toolDeadline ?? Number.POSITIVE_INFINITY)
     );
   }
