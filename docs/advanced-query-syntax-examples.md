@@ -31,8 +31,8 @@ an error, so those look like searches that found nothing.
 | `destination_port:443` on flows | refused: not a flow field | `dport:443` |
 | `resolved:false` on alarms | refused | `status:1` |
 | `type:intrusion_detection` | sent; alarm types are the numbers 1 to 16 | the number, e.g. `type:1` |
-| `device_type:laptop` on devices | passes the field check and matches nothing | `name:*laptop*` |
-| `last_seen:<NOW-1h` on devices | refused: `last_seen` takes a number | `online:false` |
+| `device_type:laptop` on devices | refused: not a field `search_devices` matches | `name:*laptop*` |
+| `last_seen:<NOW-1h` on devices | refused: not a field `search_devices` matches | `online:false` |
 
 ## One device
 

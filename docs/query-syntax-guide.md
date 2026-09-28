@@ -173,7 +173,7 @@ Free text is not sent: `/v2/rules` matched none (measured 2026-09-26: of 98 rule
 | `gid:` | the box gid, exactly or with `*` |
 | `network.name:`, `group.name:` | names containing the value |
 
-A comma list is any of its values (`name:nas,laptop`, `ip:192.168.1.0/24,10.0.0.0/8`). `AND`, `OR`, `NOT`, `-`, a space and parentheses are evaluated. Free text (a word or quoted phrase with no field) matches the name, IP, MAC or id, vendor, and network or group name. A bare MAC address is refused, with the hint to write `mac:<address>`. Other names in the tool's field list, such as `device_type` and `os`, pass the check and match nothing.
+A comma list is any of its values (`name:nas,laptop`, `ip:192.168.1.0/24,10.0.0.0/8`). `AND`, `OR`, `NOT`, `-`, a space and parentheses are evaluated. Free text (a word or quoted phrase with no field) matches the name, IP, MAC or id, vendor, and network or group name. A bare MAC address is refused, with the hint to write `mac:<address>`. Other fields, such as `device_type`, `os` and `last_seen`, are refused as invalid fields (`Invalid field(s) in query: os`); `network_name` and `group_name` work as `network.name` and `group.name` do.
 
 ### Target lists
 
