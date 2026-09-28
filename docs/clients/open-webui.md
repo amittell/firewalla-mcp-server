@@ -306,7 +306,7 @@ Routes 2 and 3 use the HTTP transport. Its checks, and what Open WebUI and mcpo 
 | Setting | Default | What a client needs |
 |---------|---------|---------------------|
 | `MCP_HTTP_HOST` | `127.0.0.1`; `0.0.0.0` in the Docker image | nothing; it decides who can connect |
-| `MCP_HTTP_ALLOWED_HOSTS` | only `localhost`, `127.0.0.1`, `[::1]` and the `MCP_HTTP_HOST` address | the host name in the client's URL must be one of these, else 403 `Host not allowed`. Between containers that is the service name |
+| `MCP_HTTP_ALLOWED_HOSTS` | only `localhost`, `127.0.0.1`, `[::1]` and the `MCP_HTTP_HOST` address; the image's `0.0.0.0` adds nothing | the host name in the client's URL must be one of these, else 403 `Host not allowed`. Between containers that is the service name |
 | `MCP_HTTP_BEARER_TOKEN` | not set; required, at least 16 characters, unless `MCP_HTTP_HOST` is loopback, so the Docker image needs it | `Authorization: Bearer <token>`, else 401: **Auth** Bearer in Open WebUI, `headers` in mcpo's `config.json` |
 | `MCP_HTTP_ALLOW_NO_TOKEN` | `false` | nothing; `true` starts the server beyond loopback without a token. None of these routes uses it |
 | `MCP_HTTP_PATH` | `/mcp` | the URL must end in `/mcp` (or `/mcp/`), else 404 |
