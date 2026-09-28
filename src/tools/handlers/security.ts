@@ -40,6 +40,7 @@ import {
 } from '../../utils/timeout-manager.js';
 import { validateAlarmId } from '../../utils/alarm-id-validation.js';
 import { mspAnd } from '../../utils/msp-query.js';
+import { queryStructureErrors } from '../../utils/query-structure.js';
 
 /**
  * Map alarm types to severity levels
@@ -250,6 +251,25 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         );
       }
 
+      // The structural checks the search tools run, before the query is
+      // translated or sent: an unclosed [, a NUL, 11 levels of nesting and
+      // a 2,001-character query went to the API
+      const structureErrors =
+        typeof queryValidation.sanitizedValue === 'string'
+          ? queryStructureErrors(queryValidation.sanitizedValue)
+          : [];
+      if (structureErrors.length > 0) {
+        return this.createErrorResponse(
+          'Invalid query structure',
+          ErrorType.VALIDATION_ERROR,
+          {
+            query: queryValidation.sanitizedValue,
+            structure_errors: structureErrors,
+          },
+          structureErrors
+        );
+      }
+
       // Active alarms unless the query names a status. /v2/alarms returns
       // archived alarms too (status 2) when no status is given.
       let sanitizedQuery = queryValidation.sanitizedValue as string | undefined;
@@ -281,9 +301,6 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
           );
         }
       }
-
-      // Skip query sanitization that may be over-sanitizing and breaking queries
-      // Just use the query directly - basic validation was already done above
 
       const response = await withToolTimeout(
         async () =>

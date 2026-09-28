@@ -124,9 +124,12 @@ describe('the sanitizer still refuses', () => {
   ])('%s, through search_devices', async (_name, query) => {
     const { res, body } = await searchDevices(query);
     expect(res.isError).toBe(true);
-    expect(body.message).toContain('Query contains control characters');
-    expect(QuerySanitizer.sanitizeSearchQuery(query).errors).toContain(
-      'Query contains control characters'
+    expect(body.message).toBe('Invalid query structure');
+    expect(body.validation_errors.join(' ')).toContain(
+      'Query contains a control character'
+    );
+    expect(QuerySanitizer.sanitizeSearchQuery(query).errors.join(' ')).toContain(
+      'Query contains a control character'
     );
   });
 
@@ -134,20 +137,25 @@ describe('the sanitizer still refuses', () => {
     const query = `name:${'a'.repeat(2001)}`;
     const { res, body } = await searchDevices(query);
     expect(res.isError).toBe(true);
-    expect(body.message).toContain(
-      'Query is too long (maximum 2000 characters)'
+    expect(body.message).toBe('Invalid query structure');
+    expect(body.validation_errors).toContain(
+      'Query is too long (2006 characters; maximum 2000)'
     );
     expect(
       QuerySanitizer.sanitizeSearchQuery(`name:${'a'.repeat(1995)}`).isValid
     ).toBe(true);
   });
 
-  it('nesting deeper than 10 levels', () => {
+  it('nesting deeper than 5 levels', () => {
     expect(
       QuerySanitizer.sanitizeSearchQuery(
-        `${'('.repeat(11)}nas${')'.repeat(11)}`
+        `${'('.repeat(6)}nas${')'.repeat(6)}`
       ).errors
-    ).toContain('Query nesting too deep (maximum 10 levels)');
+    ).toContain('Query nesting is too deep (6 levels; maximum 5)');
+    expect(
+      QuerySanitizer.sanitizeSearchQuery(`${'('.repeat(5)}nas${')'.repeat(5)}`)
+        .errors
+    ).toEqual([]);
   });
 });
 

@@ -278,9 +278,9 @@ describe('an apostrophe in a word', () => {
   });
 
   it.each([
-    ["name:'Home Office", 'Unmatched single quotes in query'],
-    ['name:"Home Office', 'Unmatched double quotes in query'],
-    ["'open", 'Unmatched single quotes in query'],
+    ["name:'Home Office", "Query opens a ' quote at position 5 that is never closed"],
+    ['name:"Home Office', 'Query opens a " quote at position 5 that is never closed'],
+    ["'open", "Query opens a ' quote at position 0 that is never closed"],
   ])('the sanitizer still refuses the unclosed quote in %s', (query, error) => {
     expect(QuerySanitizer.sanitizeSearchQuery(query).errors).toContain(error);
   });

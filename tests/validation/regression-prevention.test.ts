@@ -566,7 +566,7 @@ describe('Regression Prevention Tests', () => {
           
           if (parameter === 'query') {
             expect(invalidResult.errors).toContain(
-              'Query is too long (maximum 2000 characters)'
+              'Query is too long (2001 characters; maximum 2000)'
             );
           } else {
             expect(invalidResult.errors[0]).toContain('system limits');
@@ -584,7 +584,7 @@ describe('Regression Prevention Tests', () => {
           {
             value: 'a'.repeat(5000),
             parameter: 'query',
-            expectedGuidance: 'maximum 2000 characters'
+            expectedGuidance: '5000 characters; maximum 2000'
           },
           {
             value: 2000,
