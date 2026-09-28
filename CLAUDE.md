@@ -383,8 +383,8 @@ This file contains the complete, official Firewalla MSP API v2 documentation inc
 DEBUG=firewalla:* npm run mcp:start
 
 # Enable specific debugging namespaces
-DEBUG=cache,performance,api npm run mcp:start
-DEBUG=validation,query npm run mcp:start
+DEBUG=api npm run mcp:start
+DEBUG=validation npm run mcp:start
 
 # Debug with performance monitoring
 DEBUG=firewalla:* npm run dev
@@ -394,11 +394,11 @@ DEBUG=firewalla:* npm run dev
 `DEBUG=firewalla:*`, `DEBUG=1` or `DEBUG=true` enables all debug output. A
 comma-separated list enables these namespaces (a trailing `*` matches a prefix):
 - **api**: API request/response details
-- **cache**: Cache operations
-- **performance**: Timing
-- **pipeline**: Geographic enrichment
-- **query**: Query translation
 - **validation**: Input validation
+
+`src/monitoring/logger.ts` also has `cache`, `performance`, `pipeline` and
+`query` helpers (`cacheOperation`, `performanceLog`, `pipelineLog`,
+`queryLog`), but nothing calls them, so those namespaces print nothing.
 
 ## Critical Development Guidelines
 
@@ -500,11 +500,10 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
 
 ### Monitoring
 ```bash
-# Enable performance monitoring
-DEBUG=performance npm run dev
+# All debug output
+DEBUG=firewalla:* npm run dev
 
-# Track cache performance  
-DEBUG=cache npm run mcp:start
+# Cache use per read: coverage.cached_pages in get_flow_data and search_flows
 ```
 
 ## Version Information

@@ -57,7 +57,7 @@ npm run mcp:start
 **Check server status:**
 ```bash
 # Start with debug logging
-DEBUG=mcp:* npm run mcp:start
+DEBUG=firewalla:* npm run mcp:start
 
 # Check if server is actually running
 ps aux | grep firewalla-mcp-server
@@ -150,11 +150,7 @@ FIREWALLA_BOX_ID=00000000-0000-0000-0000-000000000000
 2. Use shorter time ranges: "last 2 hours" vs "last month"  
 3. Clear cache: restart the MCP server
 
-**Check caching:**
-```bash
-# Enable cache debugging
-DEBUG=cache npm run mcp:start
-```
+**Check caching:** `get_flow_data` and `search_flows` report `coverage.cached_pages`, the pages answered from the cache. There is no cache debug output: nothing writes to the `cache` debug namespace.
 
 ### Memory issues
 
@@ -213,9 +209,9 @@ get_device_status({limit: 50})
 # Full debugging
 DEBUG=firewalla:* npm run mcp:start
 
-# Specific components
-DEBUG=cache,api npm run mcp:start
-DEBUG=validation,error npm run mcp:start
+# Specific components: api and validation are the namespaces the code writes to
+DEBUG=api npm run mcp:start
+DEBUG=validation npm run mcp:start
 ```
 
 ### Check logs

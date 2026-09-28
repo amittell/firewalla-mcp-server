@@ -687,10 +687,9 @@ Enable comprehensive debugging for detailed error analysis:
 # Enable all debugging
 DEBUG=firewalla:* npm run mcp:start
 
-# Enable specific debug categories
-DEBUG=cache,performance,api npm run mcp:start
-DEBUG=validation,error-handler npm run mcp:start
-DEBUG=query,optimization npm run mcp:start
+# Enable specific debug namespaces: api and validation are the ones the code writes to
+DEBUG=api npm run mcp:start
+DEBUG=validation npm run mcp:start
 ```
 
 ### Error Log Analysis
