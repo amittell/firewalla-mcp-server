@@ -231,6 +231,40 @@ describe("a retry's wait for the rate limiter counts", () => {
   });
 });
 
+describe("a retry's estimated answer must come before the deadline", () => {
+  // A 503 that took 1 s is retried after at most 2 s and budgeted 1 s more:
+  // read 26 s into the 30 s tool, that ends exactly at the deadline
+  beforeEach(() => {
+    jest.spyOn(Math, 'random').mockReturnValue(1);
+  });
+
+  it('a retry that would end exactly at the deadline is not sent', async () => {
+    const { client, calls, sleeps } = makeClient([
+      { afterMs: 1000, fail: 503 },
+    ]);
+    const trace = readTrace();
+    const failure = await readInTool(client, 'r', 26_000, trace);
+
+    expect(failure).toMatchObject({ status: 503, attempts: 1 });
+    expect(calls).toHaveLength(1);
+    expect(trace.sent).toBe(1);
+    expect(sleeps).toEqual([]);
+  });
+
+  it('one that would end 1 ms before it is sent', async () => {
+    const { client, calls, sleeps } = makeClient([
+      { afterMs: 1000, fail: 503 },
+    ]);
+    const trace = readTrace();
+    const flows = await readInTool(client, 'r', 25_999, trace);
+
+    expect(flows.results).toHaveLength(5);
+    expect(calls).toHaveLength(2);
+    expect(trace.sent).toBe(2);
+    expect(sleeps).toEqual([2000]);
+  });
+});
+
 describe('a 429 keeps its own path', () => {
   it('a 429 retry late in the tool is sent, as before', async () => {
     // 25 s into the tool, a 429 asking for 3 s: its retry is not a
