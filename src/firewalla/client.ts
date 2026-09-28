@@ -91,7 +91,11 @@ import {
 } from '../utils/geographic.js';
 import { safeAccess, safeValue } from '../utils/data-normalizer.js';
 import { validateAlarmId } from '../utils/alarm-id-validation.js';
-import { currentToolBudget, type ToolWrite } from '../utils/timeout-manager.js';
+import {
+  currentToolBudget,
+  unknownWriteOutcome,
+  type ToolWrite,
+} from '../utils/timeout-manager.js';
 import { PERFORMANCE_THRESHOLDS } from '../config/limits.js';
 import { normalizeTimestamps } from '../utils/data-validator.js';
 import { hasRelativeTimestamp } from '../utils/timestamp.js';
@@ -539,6 +543,42 @@ export class ApiRequestError extends Error {
     this.name = 'ApiRequestError';
   }
 }
+
+/**
+ * A write (POST, PUT, PATCH or DELETE) that was sent and got no HTTP
+ * status: its timeout ran out, or the connection dropped, after the request
+ * went out. Firewalla may have applied it, so it is not reported as a
+ * failure, which a caller could answer by sending it again. The message
+ * says the outcome is unknown and names `check`, the read that shows
+ * whether it was applied (checkingReadTool); `failure` is what request()
+ * would have said of it ("Firewalla API sent no answer (ECONNRESET: socket
+ * hang up)").
+ */
+export class WriteOutcomeUnknownError extends ApiRequestError {
+  readonly writeState = 'unknown';
+
+  constructor(
+    message: string,
+    code: string | undefined,
+    attempts: number,
+    readonly failure: string,
+    readonly check?: string
+  ) {
+    super(message, undefined, code, attempts);
+    this.name = 'WriteOutcomeUnknownError';
+  }
+}
+
+/**
+ * axios's codes for a request that failed before it reached the API: the
+ * connection was refused, or the host name did not resolve. A write that
+ * failed this way was not applied, and keeps its ordinary error.
+ */
+const NOT_DELIVERED_CODES: ReadonlySet<string> = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+]);
 
 /** Times a GET is sent again after a failure that can pass (see retryTransient) */
 export const MAX_TRANSIENT_RETRIES = 1;
@@ -1705,12 +1745,24 @@ export class FirewallaClient {
         // Every time it went to the API, a 429's retries included
         const attempts =
           (error.config as RateLimitedConfig | undefined)?.sends ?? 0;
-        throw new ApiRequestError(
-          apiFailureMessage(error, attempts),
-          status,
-          error.code,
-          attempts
-        );
+        const failure = apiFailureMessage(error, attempts);
+        // A write that went out and got no status may have been applied
+        if (
+          method !== 'GET' &&
+          status === undefined &&
+          attempts > 0 &&
+          !NOT_DELIVERED_CODES.has(error.code ?? '')
+        ) {
+          const check = checkingReadTool(endpoint);
+          throw new WriteOutcomeUnknownError(
+            `${method} ${endpoint} was sent and not answered (${error.code ? `${error.code}: ` : ''}${error.message}). ${unknownWriteOutcome(check)}`,
+            error.code,
+            attempts,
+            failure,
+            check
+          );
+        }
+        throw new ApiRequestError(failure, status, error.code, attempts);
       }
 
       // A 403 from the response interceptor carries its own explanation, and
@@ -3725,8 +3777,14 @@ export class FirewallaClient {
           action === 'delete'
             ? 'check with get_specific_alarm, which answers not found once it is gone,'
             : 'check its status with get_specific_alarm (2 is archived)';
-        throw new Error(
-          `${method} ${endpoint} got no HTTP status (${message}). The alarm may or may not have been ${ALARM_ACTION_DONE[action]}: ${check} before retrying`
+        const failure =
+          error instanceof WriteOutcomeUnknownError ? error.failure : message;
+        throw new WriteOutcomeUnknownError(
+          `${method} ${endpoint} got no HTTP status (${failure}). The alarm may or may not have been ${ALARM_ACTION_DONE[action]}: ${check} before retrying`,
+          error instanceof ApiRequestError ? error.code : undefined,
+          error instanceof ApiRequestError ? error.attempts : 1,
+          failure,
+          'get_specific_alarm'
         );
       }
       throw error;
@@ -6287,6 +6345,10 @@ export class FirewallaClient {
         'Error in pauseRule:',
         error instanceof Error ? error : new Error(String(error))
       );
+      // Sent and not answered: the caller is told it may have been applied
+      if (error instanceof WriteOutcomeUnknownError) {
+        throw error;
+      }
       throw new Error(error instanceof Error ? error.message : 'Unknown error');
     }
   }
@@ -6329,6 +6391,10 @@ export class FirewallaClient {
         'Error in resumeRule:',
         error instanceof Error ? error : new Error(String(error))
       );
+      // Sent and not answered: the caller is told it may have been applied
+      if (error instanceof WriteOutcomeUnknownError) {
+        throw error;
+      }
       throw new Error(error instanceof Error ? error.message : 'Unknown error');
     }
   }

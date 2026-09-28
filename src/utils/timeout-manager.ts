@@ -56,6 +56,22 @@ export interface ToolWrite {
   status?: number;
 }
 
+/** What a caller is told to do before sending a write again */
+function checkBeforeRetry(check?: string): string {
+  return check
+    ? `Check with ${check} before trying again.`
+    : 'Check the current state before trying again.';
+}
+
+/**
+ * What a caller is told about a write that was sent and not answered: it
+ * may have been applied, and `check`, a read tool (checkingReadTool in
+ * client.ts), shows whether it was
+ */
+export function unknownWriteOutcome(check?: string): string {
+  return `The outcome is unknown: Firewalla may have applied the change. ${checkBeforeRetry(check)}`;
+}
+
 /**
  * What became of a tool's writes when the tool gave up. A write still
  * waiting for the rate limiter is never sent. One sent and not answered
@@ -67,16 +83,13 @@ function describeWrites(
   duration: number,
   writes: ToolWrite[]
 ): Pick<TimeoutError, 'writeOutcome' | 'writeState'> {
-  const check = (write: ToolWrite) =>
-    write.check
-      ? `Check with ${write.check} before trying again.`
-      : 'Check the current state before trying again.';
+  const check = (write: ToolWrite) => checkBeforeRetry(write.check);
   const gaveUp = `${toolName} gave up after ${duration} ms`;
   const sent = writes.find(write => write.state === 'sent');
   if (sent) {
     return {
       writeState: 'unknown',
-      writeOutcome: `${gaveUp} with ${sent.request} sent and not answered. The outcome is unknown: Firewalla may have applied the change. ${check(sent)}`,
+      writeOutcome: `${gaveUp} with ${sent.request} sent and not answered. ${unknownWriteOutcome(sent.check)}`,
     };
   }
   const answered = writes.find(write => write.state === 'answered');

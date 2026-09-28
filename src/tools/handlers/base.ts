@@ -14,7 +14,10 @@
  * @since 2025-06-21
  */
 
-import type { FirewallaClient } from '../../firewalla/client.js';
+import {
+  WriteOutcomeUnknownError,
+  type FirewallaClient,
+} from '../../firewalla/client.js';
 import type { ToolResponseUnified } from '../../types.js';
 import type { FlowGeographicFilters } from '../../utils/geographic-filters.js';
 import {
@@ -492,6 +495,23 @@ export abstract class BaseToolHandler implements ToolHandler {
       details,
       validationErrors
     );
+  }
+
+  /**
+   * The answer for a write that was sent and got no HTTP status
+   * (WriteOutcomeUnknownError): its outcome is unknown, and the message
+   * names the read to check before trying again. Undefined for any other
+   * error, which the tool reports as a failure.
+   */
+  protected unknownWriteResponse(error: unknown): ToolResponse | undefined {
+    if (!(error instanceof WriteOutcomeUnknownError)) {
+      return undefined;
+    }
+    return this.createErrorResponse(error.message, ErrorType.NETWORK_ERROR, {
+      write: error.writeState,
+      code: error.code,
+      check: error.check,
+    });
   }
 
   /**

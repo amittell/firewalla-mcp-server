@@ -440,6 +440,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that stopped it the read failed with `Firewalla API sent no answer
   (ERR_CANCELED: Not sent: ...)` and `attempts` 0, though two requests had
   been sent and the API had answered 429.
+- A write that went out and got no HTTP status says its outcome is unknown,
+  not that it failed. When a shorter `API_TIMEOUT` ran out or the
+  connection was reset after the request was written, `create_rule` and the
+  other seven write tools answered `Failed to create rule: Firewalla API
+  sent no answer (ECONNABORTED: ...)`, and a caller could send it again and
+  create the rule twice, though Firewalla may have applied it. They now say
+  `POST /v2/rules was sent and not answered (ECONNABORTED: timeout of 100ms
+  exceeded). The outcome is unknown: Firewalla may have applied the change.
+  Check with get_network_rules before trying again.`, with `write: unknown`
+  in the details, as a tool that gives up with its write in flight does.
+  `archive_alarm`, `mute_alarm` and `delete_alarm` keep their "may or may
+  not have been archived" text but no longer start it with "Failed to". A
+  write answered with an HTTP status, or refused before it was written
+  (`ECONNREFUSED`, a host name that did not resolve), fails as before.
 - The client's response cache holds at most `CACHE_MAX_ENTRIES` responses
   (default 1000); when it is full, expired entries go first, then the least
   recently used. It had no limit, and an entry was removed only when its own

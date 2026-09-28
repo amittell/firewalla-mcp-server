@@ -455,6 +455,11 @@ export class PauseRuleHandler extends BaseToolHandler {
         );
       }
 
+      const unknownWrite = this.unknownWriteResponse(error);
+      if (unknownWrite) {
+        return unknownWrite;
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
 
@@ -628,6 +633,11 @@ export class ResumeRuleHandler extends BaseToolHandler {
           error.timeoutMs,
           error
         );
+      }
+
+      const unknownWrite = this.unknownWriteResponse(error);
+      if (unknownWrite) {
+        return unknownWrite;
       }
 
       const errorMessage =
@@ -1238,6 +1248,11 @@ export class CreateTargetListHandler extends BaseToolHandler {
         );
       }
 
+      const unknownWrite = this.unknownWriteResponse(error);
+      if (unknownWrite) {
+        return unknownWrite;
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return createErrorResponse(
@@ -1367,6 +1382,11 @@ export class UpdateTargetListHandler extends BaseToolHandler {
         );
       }
 
+      const unknownWrite = this.unknownWriteResponse(error);
+      if (unknownWrite) {
+        return unknownWrite;
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return createErrorResponse(
@@ -1438,6 +1458,11 @@ export class DeleteTargetListHandler extends BaseToolHandler {
           error.timeoutMs,
           error
         );
+      }
+
+      const unknownWrite = this.unknownWriteResponse(error);
+      if (unknownWrite) {
+        return unknownWrite;
       }
 
       const errorMessage =
@@ -1696,6 +1721,11 @@ export class CreateRuleHandler extends BaseToolHandler {
         );
       }
 
+      const unknownWrite = this.unknownWriteResponse(error);
+      if (unknownWrite) {
+        return unknownWrite;
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return createErrorResponse(
@@ -1777,6 +1807,11 @@ export class DeleteRuleHandler extends BaseToolHandler {
           error.timeoutMs,
           error
         );
+      }
+
+      const unknownWrite = this.unknownWriteResponse(error);
+      if (unknownWrite) {
+        return unknownWrite;
       }
 
       const errorMessage =

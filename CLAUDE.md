@@ -475,7 +475,10 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
   the defaults a timed-out GET is not retried. The tool's abort signal cancels its requests when it
   gives up. Tool handlers do not retry on top of that. The error after the last attempt is
   an `ApiRequestError` carrying `status`, `code` and `attempts`; decide by
-  those, not by its message.
+  those, not by its message. A write that went out and got no status throws
+  `WriteOutcomeUnknownError`, which its tool reports as an unknown outcome
+  with the read to check (`unknownWriteResponse` in `handlers/base.ts`),
+  never as a failure.
 - The error text starts `Rate limit exceeded` (`Rate limit exceeded (HTTP
   429)` when the API refused the request).
 - Details: "Rate Limiting" in `docs/firewalla-api-reference.md`

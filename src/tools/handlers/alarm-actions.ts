@@ -9,6 +9,7 @@ import {
   AlarmNotFoundError,
   BoxSelectionError,
   type FirewallaClient,
+  WriteOutcomeUnknownError,
 } from '../../firewalla/client.js';
 import {
   createErrorResponse,
@@ -128,6 +129,14 @@ function alarmWriteErrorResponse(
       gid: args?.gid,
       suggestion:
         'Use get_active_alarms or search_alarms for the alarm aid and its gid',
+    });
+  }
+  // Sent and not answered: it may have been applied, so it is not a failure
+  if (error instanceof WriteOutcomeUnknownError) {
+    return createErrorResponse(tool, message, ErrorType.NETWORK_ERROR, {
+      alarm_id: args?.alarm_id,
+      gid: args?.gid,
+      write: error.writeState,
     });
   }
   return createErrorResponse(
