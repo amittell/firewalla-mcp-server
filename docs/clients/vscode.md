@@ -83,17 +83,6 @@ Then set environment variables in your shell.
 - Query firewall rules when working on network configurations
 - Monitor bandwidth during performance optimization
 
-**DevOps Integration**
-```json
-// In tasks.json - automated security checks
-{
-  "label": "Security Check",
-  "type": "shell",
-  "command": "npx",
-  "args": ["firewalla-mcp-server", "--query", "high-severity-alarms"]
-}
-```
-
 **Debugging Network Issues**
 - Real-time network flow analysis
 - Device connectivity troubleshooting
@@ -118,7 +107,7 @@ Then set environment variables in your shell.
 
 **Server Connection Issues**
 - Verify global npm installation: `npm list -g firewalla-mcp-server`
-- Test server manually: `npx firewalla-mcp-server --test`
+- Test server manually: `MCP_TEST_MODE=true npx firewalla-mcp-server` starts it with dummy credentials; stderr shows `Firewalla MCP Server running on stdio transport` (stop it with Ctrl-C)
 
 **Workspace Configuration**
 - Ensure `.vscode/mcp.json` has correct permissions

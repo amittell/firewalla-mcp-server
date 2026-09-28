@@ -53,21 +53,21 @@ The server supports powerful search queries:
 ### Basic Searches
 ```
 "Find flows with high bandwidth usage"
-"Search for alarms with severity high"
+"Search for security activity alarms (type 1)"
 "Show devices that are offline"
 ```
 
 ### Advanced Searches
 ```
 "Find flows from IP 192.168.1.* AND bytes > 1000000"
-"Search alarms: severity:high OR severity:critical"
+"Search alarms: type:1 OR type:2"
 "Show rules: action:block AND target_value:*.facebook.com"
 ```
 
 ### Geographic Searches
 ```
 "Find traffic from China or Russia"
-"Show alarms from high-risk countries"
+"Show alarms from China or Russia"
 "Analyze flows by geographic region"
 ```
 

@@ -188,7 +188,7 @@ npm run mcp:start
 - `AND`, `OR`, `NOT`
 - `:`, `>`, `<`, `>=`, `<=`
 - `*` for wildcards
-- `[100 TO 1000]` for ranges
+- `field:low-high` for ranges, such as `total:1000000-50000000` (`[100 TO 1000]` is refused: the API has no such syntax)
 
 ### Tool parameter errors
 

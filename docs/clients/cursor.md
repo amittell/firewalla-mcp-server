@@ -108,9 +108,9 @@ In Cursor, activate Claude Code and test:
 4. Verify with `/status` command
 
 **MCP Connection Issues**
-- Check MCP server installation: `npx firewalla-mcp-server --version`
+- Check MCP server installation: `npm list -g firewalla-mcp-server`
 - Verify credentials in MCP config file
-- Test manual connection: `npx firewalla-mcp-server --test`
+- Test manual connection: `MCP_TEST_MODE=true npx firewalla-mcp-server` starts it with dummy credentials; stderr shows `Firewalla MCP Server running on stdio transport` (stop it with Ctrl-C)
 
 **Performance Issues**
 - Use specific time ranges in queries

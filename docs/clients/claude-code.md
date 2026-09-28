@@ -16,8 +16,8 @@ Integrate Firewalla network security data into your Claude Code CLI workflow for
 # Install globally for system-wide access
 npm install -g firewalla-mcp-server
 
-# Verify installation
-npx firewalla-mcp-server --version
+# Verify installation (the server has no --version flag)
+npm list -g firewalla-mcp-server
 ```
 
 ### 2. Configure MCP Connection
@@ -104,7 +104,7 @@ claude-code "Get high-severity alarms as JSON" | jq '.alarms[] | select(.severit
 - Try full path: `/usr/local/bin/npx firewalla-mcp-server`
 
 **Authentication Issues**
-- Test credentials with: `curl -H "Authorization: Bearer $FIREWALLA_MSP_TOKEN" https://$FIREWALLA_MSP_ID/v2/boxes`
+- Test credentials with: `curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" https://$FIREWALLA_MSP_ID/v2/boxes`
 - Verify Box ID format (UUID, not device name)
 
 **Performance Tips**
