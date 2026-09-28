@@ -434,7 +434,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gives the slot back; it was not sent or counted before either, but its slot
   stayed taken for the 5-minute window. A request waiting for a slot looks
   again when one is given back: one queued behind such a retry slept until
-  the next slot freed (4 s later on a stub, 320 s instead of 316 s).
+  the next slot freed (4 s later on a stub, 320 s instead of 316 s). A 429
+  on a transient retry is retried as any 429 is. It was held to the
+  transient retry's estimate, how long the 503 before it took, and when
+  that stopped it the read failed with `Firewalla API sent no answer
+  (ERR_CANCELED: Not sent: ...)` and `attempts` 0, though two requests had
+  been sent and the API had answered 429.
 - The client's response cache holds at most `CACHE_MAX_ENTRIES` responses
   (default 1000); when it is full, expired entries go first, then the least
   recently used. It had no limit, and an entry was removed only when its own

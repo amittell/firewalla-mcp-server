@@ -279,6 +279,57 @@ describe('a 429 keeps its own path', () => {
   });
 });
 
+describe('a 429 on a transient retry', () => {
+  // Read 5 s into the tool; the 503 takes 8 s, and its retry, sent at
+  // 14.5 s, is answered 429 with retry-after 8 s: the 429 retry can go out
+  // at 22.55 s, inside the request's 20 s rate-limit wait
+  beforeEach(() => {
+    jest.spyOn(Math, 'random').mockReturnValue(0.5);
+  });
+
+  it("is retried as any 429 is, not held to the 503 retry's estimate", async () => {
+    const { client, calls } = makeClient([
+      { afterMs: 8000, fail: 503 },
+      { afterMs: 50, fail: 429, retryAfter: '8' },
+      {},
+    ]);
+    const trace = readTrace();
+    const flows = await readInTool(client, 'r', 5_000, trace);
+
+    expect(flows.results).toHaveLength(5);
+    expect(calls).toHaveLength(3);
+    expect(trace.sent).toBe(3);
+    expect(flows.coverage.api_requests).toBe(3);
+  });
+
+  it('a 503 on its 429 retry is not retried again: one transient retry per read', async () => {
+    const { client, calls } = makeClient([
+      { afterMs: 8000, fail: 503 },
+      { afterMs: 50, fail: 429, retryAfter: '8' },
+      { fail: 503 },
+    ]);
+    const trace = readTrace();
+    const failure = await readInTool(client, 'r', 5_000, trace);
+
+    expect(failure).toMatchObject({ status: 503, attempts: 3 });
+    expect(calls).toHaveLength(3);
+    expect(trace.sent).toBe(3);
+  });
+
+  it('a plain 429 at the same point is retried the same way', async () => {
+    const { client, calls } = makeClient([
+      { afterMs: 50, fail: 429, retryAfter: '8' },
+      {},
+    ]);
+    const trace = readTrace();
+    const flows = await readInTool(client, 'r', 14_500, trace);
+
+    expect(flows.results).toHaveLength(5);
+    expect(calls).toHaveLength(2);
+    expect(trace.sent).toBe(2);
+  });
+});
+
 describe('an abort between getting a slot and being sent', () => {
   it('sends nothing, counts nothing, and gives the slot back', async () => {
     // One request per 5 minutes; the next slot frees 1 s after the second
@@ -311,6 +362,8 @@ describe('an abort between getting a slot and being sent', () => {
       .catch((error: unknown) => error);
 
     expect(failure).toMatchObject({ code: 'ERR_CANCELED' });
+    // axios's CanceledError takes (message, config, request)
+    expect(failure.config?.url).toBe('/v2/flows');
     expect(calls).toHaveLength(1);
     expect(onSent).not.toHaveBeenCalled();
     // The first request's window has passed; the slot granted was given back
