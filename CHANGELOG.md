@@ -793,6 +793,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with a field term before or after it), the syntax check, the enhanced
   validator and the parser now accept and refuse the same queries for
   devices, target lists, rules and flows.
+- Each tool's schema lists the `limit` maximum its handler enforces.
+  `get_flow_data`, `search_flows`, `search_alarms`, `get_offline_devices`,
+  `search_devices` and `search_target_lists` listed 500 and took 1000 (the
+  flow and alarm reads get 500 per request and follow the cursor; the others
+  filter the full list on the client), so `search_flows` with `limit: 50000`
+  was refused with "maximum: 1000", a number its schema never gave. They now
+  list 1000. `search_rules` lists its maximum of 1000, where it listed none,
+  and `get_network_rules_summary` lists the `limit` it reads (default 200, at
+  most 2000), which its schema left out.
 
 ### Removed
 

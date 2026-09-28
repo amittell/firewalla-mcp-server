@@ -871,13 +871,13 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
       // - Cause slow API responses
       // - Risk timeout failures on resource-constrained systems
       //
-      // Solution: Use user-specified limit (validated 1-10000) for statistical analysis.
+      // Solution: Use user-specified limit (validated 1-2000) for statistical analysis.
       // This provides:
       // - User control over memory usage and response time
       // - Predictable memory usage based on user's choice
       // - Consistent with other rule tools' validation patterns
       //
-      // The limit is validated to ensure reasonable bounds (1-10000) which allows
+      // The limit is validated to ensure reasonable bounds (1-2000) which allows
       // both lightweight queries and comprehensive enterprise-level analysis.
       const allRulesResponse = await withToolTimeout(
         async () => firewalla.getNetworkRules(undefined, limit),
