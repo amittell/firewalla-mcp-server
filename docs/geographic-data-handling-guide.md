@@ -17,6 +17,17 @@ This guide provides comprehensive documentation on geographic data processing, u
 
 ## Overview
 
+> **The code samples in this guide are illustrations, not the server's code.**
+> The server looks addresses up locally with `geoip-lite`
+> (`src/utils/geographic.ts`), which sends no request. The client caches the
+> results in a `GeographicCache` of at most 10000 addresses for 1 hour, with
+> LRU eviction (a read moves the entry to the end), and neither size nor TTL
+> is configurable. `CACHE_TTL` and `CACHE_MAX_ENTRIES` apply to the response
+> cache only. The MSP API's own geographic field is `region`, an ISO 3166-1
+> alpha-2 code, and the only geographic qualifier a query can use is
+> `region:` on flows and `remote.region:` on alarms
+> (`src/utils/geographic-filters.ts`).
+
 The Firewalla MCP Server implements sophisticated geographic data handling to enrich network flows, security alarms, and device information with location-based intelligence. This system addresses the challenge of inconsistent, missing, or "unknown" geographic data while maintaining performance and reliability.
 
 ### Geographic Data Challenges
@@ -1141,15 +1152,9 @@ class GeographicCache {
     // Remove expired entries first
     this.removeExpiredEntries();
 
-    // If still over limit, use FIFO eviction (oldest entries first)
-    // Map maintains insertion order, so first entries are oldest
-    // 
-    // Note: This cache uses FIFO (First In, First Out) eviction strategy.
-    // FIFO is simpler than LRU and performs well for geographic data where
-    // access patterns are often temporal (recent IPs are more likely to be accessed again).
-    // 
-    // For LRU (Least Recently Used) behavior, consider using a dedicated 
-    // LRU cache library like 'lru-cache' npm package.
+    // If still over limit, evict from the front of the Map. The server's
+    // GeographicCache moves an entry to the end on every read, so the front
+    // is the least recently used (LRU), not the oldest written.
     if (this.cache.size > geoCacheConfig.maxEntries) {
       const entriesToRemove = this.cache.size - geoCacheConfig.maxEntries;
       const keysIterator = this.cache.keys();
@@ -1616,25 +1621,25 @@ class GeoDataErrorHandler {
 
 ### Query Optimization
 
+The MSP API's geographic qualifier is `region:`, which holds an ISO 3166-1
+alpha-2 country code, on flows (`remote.region:` on alarms). `country:`,
+`continent:`, `city:`, `asn:` and the like are refused before any request,
+since the API answers a qualifier it does not know with no results.
+
 ```typescript
-// Geographic query optimization patterns
+// Geographic query patterns for search_flows
 const geographicQueryOptimization = {
-  // Use specific countries instead of wildcards
-  preferred: 'country:China OR country:Russia',
-  avoid: 'country:*',
+  // Several countries: a comma list is any of them
+  preferred: 'region:CN,RU',
 
   // Combine geographic with other filters
-  efficient: 'country:China AND severity:high AND timestamp:>NOW-1h',
-  inefficient: 'country:China',
+  efficient: 'region:CN protocol:tcp ts:>1h',
+  inefficient: 'region:CN',
 
-  // Use geographic filters appropriately
+  // geographic_filters: country codes only; names, '*' and
+  // min_risk_score are refused
   good: {
-    countries: ['China', 'Russia'],      // Specific list
-    min_risk_score: 0.7                  // Risk-based filtering
-  },
-  problematic: {
-    countries: ['*'],                    // Wildcard usage
-    min_risk_score: 0.0                  // No filtering
+    countries: ['CN', 'RU']              // Sent as region:CN,RU
   }
 };
 ```
@@ -1740,16 +1745,6 @@ DEBUG=firewalla:geo:* npm run mcp:start
 
 ### Performance Monitoring Commands
 
-```bash
-# Monitor cache hit rates
-npm run geo:cache:stats
-
-# Check data quality metrics
-npm run geo:quality:report
-
-# Analyze unknown data patterns
-npm run geo:analyze:unknowns
-
-# Performance benchmark
-npm run geo:benchmark
-```
+There are no geographic npm scripts. The client's geographic cache holds at
+most 10000 addresses for 1 hour; `FirewallaClient.getGeographicCacheStats()`
+reports its size, and its hits when `NODE_ENV` is development or test; no tool exposes it.

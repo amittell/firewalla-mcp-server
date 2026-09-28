@@ -33,7 +33,7 @@ Run through this checklist to identify the most common issues:
 2. **Basic Connectivity Test**
    ```bash
    curl -H "Authorization: Token ${FIREWALLA_MSP_TOKEN}" \
-        "https://${FIREWALLA_MSP_ID}/v2/boxes/${FIREWALLA_BOX_ID}/alarms?limit=1"
+        "https://${FIREWALLA_MSP_ID}/v2/boxes"
    ```
 
 3. **MCP Server Status**
@@ -41,9 +41,11 @@ Run through this checklist to identify the most common issues:
    npm run mcp:test
    ```
 
-4. **Recent Error Logs**
+4. **Recent Error Logs**: the server writes its log to stderr (stdout carries
+   the MCP protocol), and nothing writes a log file. Your MCP client keeps the
+   server's stderr in its own log; from a shell, capture it:
    ```bash
-   tail -n 50 logs/error.log
+   npm run mcp:start 2> server.log
    ```
 
 ### Quick Error Identification
@@ -52,10 +54,11 @@ Run through this checklist to identify the most common issues:
 |---------------|--------------|-----------|
 | "parameter is required" | Missing parameter | Add the required parameter |
 | "Authentication failed" | Invalid credentials | Check environment variables |
-| "timed out after" | Performance issue | Reduce scope or use filters |
+| "timed out after" | The tool passed its 30 s | Reduce scope or use filters |
 | "Query is too long" | Query exceeds limits | Shorten or simplify query |
-| "Field 'X' is not allowed" | Invalid field name | Check valid field names |
-| "Network error" | Connectivity issue | Check network and retry |
+| "Query contains invalid field names" | Invalid field name | Check valid field names |
+| "Firewalla API sent no answer" | Connectivity issue | Check network; a failed read was already sent again once when time allowed |
+| "Rate limit exceeded" | This process started `API_RATE_LIMIT` requests in 5 minutes, or the API answered 429 | Wait until the time the message gives; see [rate-limiting-guide.md](rate-limiting-guide.md) |
 
 ## Common Error Categories
 
@@ -70,10 +73,10 @@ The MCP server categorizes errors into specific types to help with troubleshooti
 - **Examples**: Missing required parameters, invalid types, out-of-range values
 
 #### 2. Timeout Errors (`timeout_error`)
-- **Cause**: Operations exceeding time limits
-- **Response Time**: > 10 seconds
-- **Recovery**: Optimize query or reduce scope
-- **Examples**: Large dataset processing, complex correlations
+- **Cause**: The tool passed its time limit, 30 s (`PERFORMANCE_THRESHOLDS.TIMEOUT_MS`); its requests still in flight are cancelled, and those not yet sent are not sent
+- **Response Time**: 30 seconds
+- **Recovery**: Optimize query or reduce scope. A write tool says whether its write was sent: one not sent changed nothing; one sent and not answered may have been applied, so check with the read it names before trying again
+- **Examples**: Large dataset processing, many pages of flows
 
 #### 3. Authentication Errors (`authentication_error`)
 - **Cause**: Invalid or expired credentials
@@ -81,54 +84,53 @@ The MCP server categorizes errors into specific types to help with troubleshooti
 - **Recovery**: Fix authentication configuration
 - **Examples**: Invalid MSP token, insufficient permissions
 
-#### 4. Network Errors (`network_error`)
-- **Cause**: Connectivity or infrastructure issues
-- **Response Time**: Variable (5-30 seconds)
-- **Recovery**: Check network and retry
-- **Examples**: DNS failures, connection timeouts
+#### 4. Network and API Failures
+- **Cause**: Connectivity or infrastructure issues, or an error answer from the API
+- **Type**: `api_error` (`search_error` for the search tools); nothing sets `network_error`
+- **Message**: `Firewalla API sent no answer (ECONNABORTED: timeout of 30000ms exceeded)` or `Firewalla API answered 503 Service Unavailable after 2 attempts: ...`, after the tool's own prefix
+- **Recovery**: The client already sends a failed GET again once, 1 to 2 s later, after a timeout, a dropped connection or a 502, 503 or 504, when the answer could still come before the tool gives up; it never sends a write again. Check the network before trying the tool again
+- **Examples**: DNS failures (`ENOTFOUND`, not retried), connection timeouts
 
 ## Parameter Validation Issues
 
 ### Missing Required Parameters
 
-**Symptom**: `"parameter is required"` error
+**Symptom**: `"<parameter> is required but was not provided"` in `validation_errors`
 
 **Common Cases**:
 ```json
 {
   "error": true,
-  "message": "limit parameter is required",
+  "message": "Query parameter validation failed",
   "tool": "search_flows",
-  "errorType": "validation_error"
+  "errorType": "validation_error",
+  "timestamp": "2026-09-27T12:00:00.000Z",
+  "validation_errors": [
+    "query is required but was not provided",
+    "Please provide a valid string value for query"
+  ]
 }
 ```
 
 **Solution Steps**:
-1. **Identify Missing Parameter**: Check the error message for the specific parameter name
+1. **Identify Missing Parameter**: Check `validation_errors` for the parameter name
 2. **Add Required Parameter**: Include the parameter with a valid value
 3. **Verify Parameter Type**: Ensure the parameter is the correct type (number, string, etc.)
 
 **Examples**:
 ```javascript
-// ❌ Incorrect - missing limit parameter
-{ query: "severity:high" }
+// ❌ Incorrect - search_flows needs a query
+{ limit: 100 }
 
-// ✅ Correct - includes required limit
-{ query: "severity:high", limit: 100 }
+// ✅ Correct - limit is optional (default 200)
+{ query: "protocol:tcp", limit: 100 }
 ```
 
 ### Invalid Parameter Types
 
-**Symptom**: `"must be a [type], got [other_type]"` error
+**Symptom**: `"limit must be a valid number"` or `"limit must be a number, got boolean"` in `validation_errors`, under the message `"Parameter validation failed"`
 
-**Common Cases**:
-```json
-{
-  "error": true,
-  "message": "limit must be a number, got string",
-  "errorType": "validation_error"
-}
-```
+A numeric string such as `"100"` is converted and accepted.
 
 **Solution Steps**:
 1. **Check Parameter Type**: Verify you're passing the correct data type
@@ -137,20 +139,20 @@ The MCP server categorizes errors into specific types to help with troubleshooti
 
 **Examples**:
 ```javascript
-// ❌ Incorrect - string instead of number
-{ query: "severity:high", limit: "100" }
+// ❌ Incorrect - not a number
+{ query: "protocol:tcp", limit: "a hundred" }
 
 // ✅ Correct - proper number type
-{ query: "severity:high", limit: 100 }
+{ query: "protocol:tcp", limit: 100 }
 ```
 
 ### Parameter Range Violations
 
-**Symptom**: `"exceeds system limits"` or `"out of range"` error
+**Symptom**: `"limit is too large ... (got 50000, maximum: 1000)"` or `"limit must be a positive number ..."`
 
 **Common Limits**:
-- `limit`: 1 - 10,000
-- `duration`: 1–1,440 minutes
+- `limit`: the tool schemas give at most 500 for `get_active_alarms`, `get_flow_data`, `search_flows`, `search_alarms`, `get_bandwidth_usage`, `get_offline_devices`, `search_devices` and `search_target_lists`, and at most 1000 for `get_device_status`, `get_network_rules` and `get_target_lists`. The server itself refuses what is over `getToolLimit` in `src/config/limits.ts`: 500 for `get_active_alarms` and `get_bandwidth_usage`, 2000 for `get_network_rules_summary`, 1000 for the others
+- `duration` (`create_rule`): 60 to 31,536,000 seconds
 - `query`: Maximum 2,000 characters
 
 **Solution Steps**:
@@ -161,13 +163,13 @@ The MCP server categorizes errors into specific types to help with troubleshooti
 **Examples**:
 ```javascript
 // ❌ Incorrect - exceeds maximum limit
-{ query: "severity:high", limit: 50000 }
+{ query: "protocol:tcp", limit: 50000 }
 
 // ✅ Correct - within valid range
-{ query: "severity:high", limit: 1000 }
+{ query: "protocol:tcp", limit: 500 }
 
 // ✅ Alternative - use pagination
-{ query: "severity:high", limit: 1000, cursor: "page_token" }
+{ query: "protocol:tcp", limit: 500, cursor: "page_token" }
 ```
 
 ### Null/Undefined Parameter Handling
@@ -190,7 +192,7 @@ The MCP server categorizes errors into specific types to help with troubleshooti
 { query: null, limit: undefined, cursor: "" }
 
 // ✅ Correct - valid values or omitted
-{ query: "severity:high", limit: 100 }
+{ query: "protocol:tcp", limit: 100 }
 // cursor omitted since it's optional
 ```
 
@@ -219,7 +221,7 @@ curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
 
 ### Invalid Box ID
 
-**Symptom**: `"Box not found"` error
+**Symptom**: `"Resource not found. Please check your Box ID."` (HTTP 404), or `Forbidden (HTTP 403)` naming a box the token cannot access
 
 **Diagnostic Steps**:
 1. **Check Box ID Format**: Should be UUID format (e.g., `00000000-0000-0000-0000-000000000000`)
@@ -227,10 +229,9 @@ curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
 3. **Test Box Access**: Try accessing box directly
 
 ```bash
-# Test box access
-curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
-     "https://$FIREWALLA_MSP_ID/v2/boxes/$FIREWALLA_BOX_ID" \
-     -w "HTTP Status: %{http_code}\n"
+# Test box access: the gid should be in the list of boxes the token can access
+curl -s -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
+     "https://$FIREWALLA_MSP_ID/v2/boxes" | grep -c "$FIREWALLA_BOX_ID"
 ```
 
 **Solutions**:
@@ -265,11 +266,10 @@ curl -I "https://$FIREWALLA_MSP_ID" \
 
 ### Large Dataset Timeouts
 
-**Symptom**: `"Query timeout: Dataset too large"` error
+**Symptom**: `timeout_error`: `Operation timed out after <n>ms ...`
 
 **Common Causes**:
-- Query returns > 10,000 potential results
-- Complex correlation analysis on > 5,000 entities
+- Many pages to read: every page is a request, and each counts against the rate limit
 - Geographic enrichment on > 2,000 flows
 - Long time ranges (> 7 days)
 
@@ -281,31 +281,31 @@ curl -I "https://$FIREWALLA_MSP_ID" \
 { query: "protocol:tcp", limit: 2000 }
 
 // ✅ Add time filter
-{ query: "protocol:tcp AND timestamp:>NOW-1h", limit: 2000 }
+{ query: "protocol:tcp AND ts:>1h", limit: 500 }
 ```
 
 #### 2. Use More Specific Filters
 ```javascript
 // ❌ Too general
-{ query: "severity:>=low", limit: 1000 }
+{ query: "protocol:tcp", limit: 500 }
 
 // ✅ More specific
-{ query: "severity:high AND source_ip:192.168.*", limit: 1000 }
+{ query: "protocol:tcp AND device.ip:192.168.*", limit: 500 }
 ```
 
 #### 3. Reduce Limit and Use Pagination
 ```javascript
-// ❌ Large limit - may timeout
-{ query: "severity:high", limit: 5000 }
+// ❌ Refused before any request - over the maximum
+{ query: "type:1", limit: 5000 }
 
 // ✅ Smaller limit with pagination
-{ query: "severity:high", limit: 500, cursor: null }
-// Then use returned cursor for next page
+{ query: "type:1", limit: 500 }
+// Then pass the returned cursor for the next page
 ```
 
 ### Network Timeouts
 
-**Symptom**: `"Network timeout"` or `"ETIMEDOUT"` error
+**Symptom**: `Firewalla API sent no answer (ECONNABORTED: timeout of 30000ms exceeded)`, or the same with `ETIMEDOUT`
 
 **Diagnostic Steps**:
 1. **Test Basic Connectivity**: Use curl to test API access
@@ -315,17 +315,17 @@ curl -I "https://$FIREWALLA_MSP_ID" \
 ```bash
 # Test network connectivity with timing
 time curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
-          "https://$FIREWALLA_MSP_ID/v2/boxes/$FIREWALLA_BOX_ID/alarms?limit=1"
+          "https://$FIREWALLA_MSP_ID/v2/alarms?limit=1"
 ```
 
 **Solutions**:
-1. **Retry with Backoff**: Implement exponential backoff retry logic
+1. **Know what was retried**: the client sends a GET again once when the answer could still come before the tool gives up. With the defaults (`API_TIMEOUT` and the tool timeout both 30 s) a GET that ran out its timeout is not sent again. A retry of your own also counts against the rate limit
 2. **Check Network Path**: Verify routing and firewall rules
 3. **Use Smaller Requests**: Reduce request complexity temporarily
 
 ### Processing Timeouts
 
-**Symptom**: Operations exceed 10-second processing limit
+**Symptom**: Operations exceed the 30-second tool limit
 
 **Common Scenarios**:
 - Bandwidth analysis on > 1,000 devices
@@ -335,7 +335,7 @@ time curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" \
 
 #### 1. Bandwidth Analysis Optimization
 ```javascript
-// ❌ May timeout with large networks
+// ❌ Refused: the limit is at most 500
 get_bandwidth_usage({ period: "30d", limit: 1000 })
 
 // ✅ Optimized approach
@@ -384,10 +384,10 @@ search_flows({
 #### 1. Clean Filter Arrays
 ```javascript
 // ❌ Contains invalid values
-const countries = ["China", null, "", undefined, "Russia"];
+const countries = ["CN", null, "", undefined, "RU"];
 
 // ✅ Clean filter array
-const countries = ["China", "Russia"].filter(c => c && c.trim().length > 0);
+const countries = ["CN", "RU"].filter(c => c && c.trim().length > 0);
 ```
 
 #### 2. Use Proper Country Codes
@@ -395,9 +395,7 @@ const countries = ["China", "Russia"].filter(c => c && c.trim().length > 0);
 // ❌ Inconsistent formats
 { countries: ["USA", "cn", "RUSSIA"] }
 
-// ✅ Consistent ISO codes or names
-{ countries: ["United States", "China", "Russia"] }
-// OR
+// ✅ ISO 3166-1 alpha-2 codes; names are refused
 { countries: ["US", "CN", "RU"] }
 ```
 
@@ -463,11 +461,7 @@ function normalizeGeoFilters(filters) {
       .map(c => c.trim());
   }
 
-  if (filters.continents) {
-    normalized.continents = filters.continents
-      .filter(c => c && typeof c === 'string' && c.trim().length > 0)
-      .map(c => c.trim());
-  }
+  // continents, cities and asns are refused: the API has no such qualifier
 
   return normalized;
 }
@@ -486,40 +480,19 @@ function normalizeGeoFilters(filters) {
 
 #### 1. Proper OR Logic Construction
 ```javascript
-// ❌ Incorrect query construction
-const countries = ["China", "Russia"];
-const query = `country:${countries.join(",")}`; // Wrong!
+// ❌ Refused before any request: the API has no country: qualifier
+const query = "country:CN OR country:RU";
 
-// ✅ Correct OR logic
-function buildCountryQuery(countries) {
-  if (!countries || countries.length === 0) return '';
-
-  if (countries.length === 1) {
-    return `country:${countries[0]}`;
-  }
-
-  const countryQueries = countries.map(country =>
-    country.includes(' ') ? `country:"${country}"` : `country:${country}`
-  );
-
-  return `(${countryQueries.join(' OR ')})`;
+// ✅ The API's region: qualifier, with a comma list for OR
+function buildCountryQuery(codes) {
+  if (!codes || codes.length === 0) return '';
+  return `region:${codes.join(',')}`; // region:CN,RU
 }
 ```
 
-#### 2. Handle Special Characters
-```javascript
-function escapeGeoValue(value) {
-  // Quote values with spaces or special characters
-  if (/[\s&'().]/.test(value)) {
-    return `"${value}"`;
-  }
-  return value;
-}
-
-// Usage
-const cityQuery = `city:${escapeGeoValue("New York")}`;  // city:"New York"
-const countryQuery = `country:${escapeGeoValue("China")}`;  // country:China
-```
+On alarms the qualifier is `remote.region:`. `city:`, `continent:` and
+`asn:` are refused the same way, since the API answers a qualifier it does not
+know with no results.
 
 ## Data Processing and Normalization Issues
 
@@ -722,20 +695,20 @@ DEBUG=query,optimization npm run mcp:start
 
 ### Error Log Analysis
 
-Check specific log files for detailed error information:
+The server writes its log to stderr as one JSON object per line; nothing
+writes a log file. Capture stderr, then search it:
 
 ```bash
-# Check recent errors
-tail -f logs/error.log
+npm run mcp:start 2> server.log
 
 # Check specific tool errors
-grep "search_flows" logs/error.log | tail -20
+grep "search_flows" server.log | tail -20
 
 # Check authentication errors
-grep "authentication" logs/error.log | tail -10
+grep "Authentication failed" server.log | tail -10
 
 # Check timeout errors
-grep "timeout" logs/error.log | tail -10
+grep "timed out" server.log | tail -10
 ```
 
 ### Performance Monitoring
@@ -783,8 +756,8 @@ checkMemoryUsage('After operation');
 
 #### 1. Use Specific Time Ranges
 ```javascript
-// ❌ No time filter - processes all historical data
-{ query: "severity:high", limit: 1000 }
+// ❌ No time filter
+{ query: "type:1", limit: 500 }
 
 // ✅ Recent data only
 { query: "type:1 AND ts:>1h", limit: 500 }
@@ -792,26 +765,23 @@ checkMemoryUsage('After operation');
 
 #### 2. Use Appropriate Limits
 ```javascript
-// ❌ Unnecessarily large limit
-{ query: "severity:high", limit: 10000 }
+// ❌ Refused - over the maximum
+{ query: "type:1", limit: 10000 }
 
 // ✅ Reasonable limit with pagination
-{ query: "severity:high", limit: 100, cursor: null }
+{ query: "type:1", limit: 100 }
 ```
 
 ### Caching Optimization
 
-#### 1. Leverage Built-in Caching
-```javascript
-// Cache-friendly queries (avoid frequently changing parameters)
-const baseQuery = "protocol:tcp AND severity:high";
-
-// ❌ Cache-busting query
-const query = `${baseQuery} AND timestamp:>${Date.now()}`;
-
-// ✅ Cache-friendly query
-const query = `${baseQuery} AND timestamp:>NOW-1h`;
-```
+#### 1. Know What Is Cached
+The client caches GET answers for `CACHE_TTL` seconds (default 300), and
+answers from `/alarms` and `/flows` endpoints for 15 s. It holds at most
+`CACHE_MAX_ENTRIES` (default 1000), and any write clears it. A query with a
+relative time such as `ts:>1h` is never cached: it is sent as Unix seconds, so
+it would get a new key every second, and "the last hour" is read when it is
+asked. A repeated query with fixed times, such as `ts:1790000000-1790003600`,
+is answered from the cache within the TTL and costs no request.
 
 #### 2. Batch Related Requests
 ```javascript
@@ -820,9 +790,9 @@ const devices = await getDeviceStatus({ limit: 100 });
 const alarms = await getActiveAlarms({ limit: 100 });
 const rules = await getNetworkRules({ limit: 100 });
 
-// ✅ Use tools that fetch related data together
+// ✅ When counts are enough, one tool gives several
 const dashboard = await getSimpleStatistics();
-// Includes summary data for devices, alarms, and rules
+// Online and offline boxes, alarms and rules; no device data
 ```
 
 ### Error Prevention Strategies
@@ -866,8 +836,13 @@ async function safeSearchFlows(params) {
 ```
 
 #### 2. Graceful Error Handling
+The server already sends a failed read again once when that can help (see
+Network Timeouts above), and every retry, yours included, counts against the
+100 requests per 5 minutes. This caller-side sketch retries only timeouts,
+decided by `errorType`; nothing sets `network_error`, so a network failure
+arrives as `api_error` with `Firewalla API sent no answer` in the message.
 ```javascript
-async function resilientOperation(operation, maxRetries = 3) {
+async function resilientOperation(operation, maxRetries = 2) {
   let lastError;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -886,9 +861,8 @@ async function resilientOperation(operation, maxRetries = 3) {
         throw error;
       }
 
-      // Retry network and timeout errors with backoff
-      if (attempt < maxRetries &&
-          (error.errorType === 'network_error' || error.errorType === 'timeout_error')) {
+      // Retry timeouts with backoff
+      if (attempt < maxRetries && error.errorType === 'timeout_error') {
         const delay = Math.pow(2, attempt - 1) * 1000; // Exponential backoff
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
@@ -920,8 +894,8 @@ async function getDataWithFallback(primaryParams, fallbackParams) {
 
 // Usage
 const results = await getDataWithFallback(
-  { query: "protocol:tcp AND timestamp:>NOW-24h", limit: 1000 }, // Optimal
-  { query: "protocol:tcp AND timestamp:>NOW-1h", limit: 100 }    // Fallback
+  { query: "protocol:tcp AND ts:>24h", limit: 500 }, // Optimal
+  { query: "protocol:tcp AND ts:>1h", limit: 100 }   // Fallback
 );
 ```
 

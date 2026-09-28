@@ -235,7 +235,7 @@ The server validates pagination parameters:
 // Limit validation
 {
   "limit": 50,        // Valid: reasonable page size
-  "limit": 10000,     // Valid: at maximum allowed limit
+  "limit": 500,       // Valid: within every paginated tool's maximum (the tool schemas list each one)
   "limit": 0,         // Invalid: must be positive
   "limit": 50000      // Invalid: exceeds maximum limit
 }
@@ -579,13 +579,13 @@ async function handleInvalidCursor(query: string, limit: number) {
 ```typescript
 // Problem: Large page sizes causing timeouts
 {
-  "limit": 10000,  // Too large, may cause timeout
+  "limit": 500,    // Large pages take longer, and a tool gives up after 30 s
   "query": "protocol:tcp"
 }
 
 // Solution: Use smaller page sizes
 {
-  "limit": 1000,   // More reasonable page size
+  "limit": 100,    // More reasonable page size
   "query": "protocol:tcp"
 }
 ```

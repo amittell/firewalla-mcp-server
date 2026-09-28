@@ -221,8 +221,8 @@ DEBUG=validation,error npm run mcp:start
 ### Check logs
 
 ```bash
-# Monitor server output
-npm run mcp:start | tee server.log
+# The server logs to stderr; stdout carries the MCP protocol
+npm run mcp:start 2> server.log
 
 # Check for specific errors
 grep -i error server.log

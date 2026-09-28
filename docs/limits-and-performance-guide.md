@@ -53,7 +53,7 @@ export const STANDARD_LIMITS = {
 
 ### Basic Data Retrieval Tools (Limit: 1000)
 
-**Tools**: `get_active_alarms`, `get_device_status`, `get_flow_data`, `get_network_rules`, `get_target_lists`
+**Tools**: `get_device_status`, `get_flow_data`, `get_network_rules`, `get_target_lists`. `get_active_alarms` is capped at 500, the API's documented maximum for `/v2/alarms` (`getToolLimit` in `src/config/limits.ts`)
 
 **Rationale**:
 - Simple API calls with minimal server-side processing
@@ -86,10 +86,10 @@ export const STANDARD_LIMITS = {
 **Example Usage**:
 ```bash
 # Typical search that benefits from 1000 limit
-search_flows query:"severity:high AND protocol:tcp" limit:800
+search_flows query:"protocol:tcp AND region:CN" limit:800
 
 # Complex search requiring full limit
-search_alarms query:"(severity:high OR severity:critical) AND source_ip:192.168.*" limit:1000
+search_alarms query:"(type:1 OR type:2) AND device.ip:192.168.*" limit:1000
 ```
 
 ### Bandwidth Analysis Operations (Limit: 500)
@@ -151,15 +151,11 @@ const memoryUsageEstimate = {
 - Network bandwidth: 2-8MB per request
 - CPU usage: Medium (timestamp sorting)
 
-### Statistical Operations (Limit: 100)
+### Statistical Operations
 
 **Tools**: `get_simple_statistics`, `get_statistics_by_region`, `get_statistics_by_box`
 
-**Rationale**:
-- Statistical operations return fixed-size summary data
-- Low limit prevents unnecessary API load
-- Results are aggregated summaries, not individual records
-- 100 statistical entries provide a comprehensive overview
+**Limits**: `get_simple_statistics` takes no `limit`. `get_statistics_by_region` and `get_statistics_by_box` take one of at least 1, default 5, with no maximum. `STANDARD_LIMITS.STATISTICS` (100) is not applied to any tool.
 
 **Performance Characteristics**:
 - Average response time: 100-300ms
@@ -172,7 +168,7 @@ const memoryUsageEstimate = {
 ### Security Operations
 
 **High Priority**: Security analysis requires comprehensive data
-- `get_active_alarms`: 1000 (covers typical alert volumes)
+- `get_active_alarms`: 500 (the API's maximum for `/v2/alarms`)
 - `search_alarms`: 1000 (sufficient for threat investigation)
 
 ### Network Analysis
@@ -260,7 +256,7 @@ const performanceImprovements = {
 1. **Use Specific Queries**: Narrow queries reduce processing time
    ```bash
    # Good: Specific query
-   search_flows query:"protocol:tcp AND severity:high" limit:100
+   search_flows query:"protocol:tcp AND region:CN" limit:100
 
    # Avoid: Broad query with high limit
    search_flows query:"protocol:tcp" limit:1000
@@ -269,10 +265,10 @@ const performanceImprovements = {
 2. **Pagination for Large Datasets**: Use cursor-based pagination
    ```bash
    # First request
-   search_flows query:"timestamp:>NOW-24h" limit:500
+   search_flows query:"ts:>24h" limit:500
 
    # Subsequent requests with cursor
-   search_flows query:"timestamp:>NOW-24h" limit:500 cursor:"eyJ0aW1lc3RhbXAi..."
+   search_flows query:"ts:>24h" limit:500 cursor:"eyJ0aW1lc3RhbXAi..."
    ```
 
 3. **Appropriate Limits**: Use the minimum limit that meets your needs
@@ -280,11 +276,8 @@ const performanceImprovements = {
    # For quick overview
    get_active_alarms limit:50
 
-   # For detailed analysis
+   # For detailed analysis, and the most one call returns
    get_active_alarms limit:500
-
-   # For comprehensive audit
-   get_active_alarms limit:1000
    ```
 
 ### Memory Optimization
@@ -295,9 +288,8 @@ const performanceImprovements = {
 
 ### Cache Utilization
 
-1. **Query Caching**: Identical queries benefit from 300-second cache
-2. **Geographic Caching**: Location data cached for 1 hour
-3. **Statistical Caching**: Summary data cached for optimal performance
+1. **Query Caching**: A repeated GET is answered from the cache for `CACHE_TTL` seconds (default 300), or 15 s for `/alarms` and `/flows` endpoints, and costs no request. A query with a relative time such as `ts:>1h` is never cached, and any write clears the cache. It holds at most `CACHE_MAX_ENTRIES` answers (default 1000)
+2. **Geographic Caching**: Location data cached for 1 hour, at most 10000 addresses
 
 ## Monitoring and Tuning
 
@@ -305,25 +297,18 @@ const performanceImprovements = {
 
 Monitor these key metrics to validate limit effectiveness:
 
+`PERFORMANCE_THRESHOLDS` in `src/config/limits.ts`:
+
 ```typescript
-const performanceThresholds = {
-  responseTime: {
-    warning: 1000,    // Log warning if >1 second
-    error: 5000,      // Log error if >5 seconds
-    timeout: 10000    // Hard timeout at 10 seconds
-  },
-  memoryUsage: {
-    warning: 100 * 1024 * 1024,  // 100MB
-    error: 500 * 1024 * 1024,    // 500MB
-    critical: 1024 * 1024 * 1024 // 1GB
-  },
-  concurrency: {
-    optimal: 10,      // Optimal concurrent requests
-    warning: 25,      // Performance degradation starts
-    maximum: 50       // Maximum concurrent requests
-  }
+export const PERFORMANCE_THRESHOLDS = {
+  WARNING_MS: 1000, // Log warning if operation takes longer than 1 second
+  ERROR_MS: 5000, // Log error if operation takes longer than 5 seconds
+  TIMEOUT_MS: 30000, // Hard timeout for all operations
+  ...
 }
 ```
+
+A tool gives up after `TIMEOUT_MS`, 30 s, and cancels its requests. The server has no memory or concurrency thresholds. Every request counts against `API_RATE_LIMIT` (100 per 5 minutes by default), and the box-scoped trend tools send at most 4 requests at a time.
 
 ### Tuning Recommendations
 
