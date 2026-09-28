@@ -60,7 +60,7 @@
     "test": "cross-env NODE_ENV=test jest",
     "test:watch": "cross-env NODE_ENV=test jest --watch",
     "test:ci": "cross-env CI=true NODE_ENV=test jest --coverage --watchAll=false",
-    "test:quick": "cross-env NODE_ENV=test jest --testPathPatterns='utils|validation' --testPathIgnorePatterns='bulk-operations|problematic-tools|timeout-retry' --passWithNoTests --maxWorkers=2",
+    "test:quick": "cross-env NODE_ENV=test jest --coverage=false --testPathPatterns=tests/utils/ --testPathPatterns=tests/validation/ --testPathPatterns=tests/search/ --testPathPatterns=tests/config/ --testPathPatterns=tests/monitoring/ --testPathPatterns=tests/prompts/ --testPathPatterns=tests/resources/ --testPathIgnorePatterns=operator-agreement.test --maxWorkers=2",
     "test:integration": "cross-env NODE_ENV=test TEST_ENV=integration jest --testPathPatterns=integration --passWithNoTests",
     "test:unit": "cross-env NODE_ENV=test TEST_ENV=development jest --testPathIgnorePatterns=integration",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",

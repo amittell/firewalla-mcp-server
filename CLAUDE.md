@@ -77,7 +77,7 @@ and bearer token before anything else (`src/http-security.ts`, wired in
 npm run test             # Run all tests
 npm run test:watch       # Run tests in watch mode
 npm run test:ci          # Run tests with coverage for CI
-npm run test:quick       # Run fast unit tests only
+npm run test:quick       # Unit tests (tests/utils, validation, search, config, monitoring, prompts, resources), no coverage
 npm run test:unit        # Run unit tests only
 npm run test:integration # Run integration tests only
 npm run test:regression  # Run regression tests
