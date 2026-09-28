@@ -1011,6 +1011,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it was true whenever enrichment was on and did not fail, so
   `search_alarms` and `search_flows` said true with no geographic field in
   their results.
+- `get_active_alarms` reports an alarm's `severity` only when the API sends
+  one. The API's alarm model has none, and every alarm came out `medium`:
+  severity was derived from type names such as `MALWARE_FILE`, where the
+  API's `type` is a number from 1 to 16.
 
 ### Removed
 

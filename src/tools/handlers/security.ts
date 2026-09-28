@@ -42,132 +42,6 @@ import {
 import { validateAlarmId } from '../../utils/alarm-id-validation.js';
 import { mspAnd } from '../../utils/msp-query.js';
 
-/**
- * Map alarm types to severity levels
- * Based on Firewalla alarm classification and threat levels
- */
-const ALARM_TYPE_SEVERITY_MAP: Record<string, string> = {
-  // Critical severity (immediate threat)
-  MALWARE_FILE: 'critical',
-  MALWARE_URL: 'critical',
-  RANSOMWARE: 'critical',
-  BOTNET: 'critical',
-  C2_COMMUNICATION: 'critical',
-  CRYPTOJACKING: 'critical',
-  DATA_EXFILTRATION: 'critical',
-  BRUTE_FORCE_ATTACK: 'critical',
-  KNOWN_VULNERABILITY_EXPLOIT: 'critical',
-  PHISHING: 'critical',
-  TROJAN: 'critical',
-  SPYWARE: 'critical',
-
-  // High severity (significant security concern)
-  SUSPICIOUS_ACTIVITY: 'high',
-  NETWORK_INTRUSION: 'high',
-  PORT_SCAN: 'high',
-  DGA_DOMAIN: 'high',
-  SUSPICIOUS_DNS: 'high',
-  TOR_CONNECTION: 'high',
-  PROXY_DETECTED: 'high',
-  VPN_DETECTED: 'high',
-  UNUSUAL_TRAFFIC: 'high',
-  ABNORMAL_PROTOCOL: 'high',
-  SUSPICIOUS_URL: 'high',
-  AD_BLOCK_VIOLATION: 'high',
-  PARENTAL_CONTROL_VIOLATION: 'high',
-  POLICY_VIOLATION: 'high',
-  BLOCKED_CONTENT: 'high',
-
-  // Medium severity (notable events requiring attention)
-  DNS_ANOMALY: 'medium',
-  LARGE_UPLOAD: 'medium',
-  LARGE_DOWNLOAD: 'medium',
-  UNUSUAL_BANDWIDTH: 'medium',
-  NEW_DEVICE: 'medium',
-  DEVICE_OFFLINE: 'medium',
-  VULNERABILITY_SCAN: 'medium',
-  INTEL_MATCH: 'medium',
-  GEO_IP_ANOMALY: 'medium',
-  TIME_ANOMALY: 'medium',
-  FREQUENCY_ANOMALY: 'medium',
-  P2P_ACTIVITY: 'medium',
-  GAMING_TRAFFIC: 'medium',
-  STREAMING_TRAFFIC: 'medium',
-
-  // Low severity (informational or minor issues)
-  DNS_REQUEST: 'low',
-  HTTP_REQUEST: 'low',
-  SSL_CERT_ISSUE: 'low',
-  CONNECTIVITY_ISSUE: 'low',
-  DEVICE_WAKEUP: 'low',
-  DEVICE_SLEEP: 'low',
-  CONFIG_CHANGE: 'low',
-  SOFTWARE_UPDATE: 'low',
-  HEARTBEAT: 'low',
-  STATUS_UPDATE: 'low',
-  MONITORING_ALERT: 'low',
-  BACKUP_EVENT: 'low',
-  MAINTENANCE_EVENT: 'low',
-  DIAGNOSTIC_EVENT: 'low',
-};
-
-/**
- * Derives alarm severity from alarm type using predefined mappings
- * @param alarmType - The type field from the alarm
- * @returns The derived severity level (critical, high, medium, low) or 'medium' as default
- */
-function deriveAlarmSeverity(alarmType: any): string {
-  if (!alarmType || typeof alarmType !== 'string') {
-    return 'medium'; // Default severity for unknown types
-  }
-
-  // Normalize alarm type to uppercase and remove special characters
-  const normalizedType = alarmType.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
-
-  // Try exact match first
-  if (ALARM_TYPE_SEVERITY_MAP[normalizedType]) {
-    return ALARM_TYPE_SEVERITY_MAP[normalizedType];
-  }
-
-  // Try partial matches for common patterns
-  const typeString = normalizedType.toLowerCase();
-
-  if (
-    typeString.includes('malware') ||
-    typeString.includes('virus') ||
-    typeString.includes('trojan')
-  ) {
-    return 'critical';
-  }
-
-  if (
-    typeString.includes('intrusion') ||
-    typeString.includes('attack') ||
-    typeString.includes('exploit')
-  ) {
-    return 'high';
-  }
-
-  if (
-    typeString.includes('scan') ||
-    typeString.includes('suspicious') ||
-    typeString.includes('anomaly')
-  ) {
-    return 'medium';
-  }
-
-  if (
-    typeString.includes('dns') ||
-    typeString.includes('http') ||
-    typeString.includes('status')
-  ) {
-    return 'low';
-  }
-
-  // Default to medium severity for unrecognized types
-  return 'medium';
-}
-
 export class GetActiveAlarmsHandler extends BaseToolHandler {
   name = 'get_active_alarms';
   description =
@@ -388,20 +262,17 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         remote: (v: any) => (v ? normalizeUnknownFields(v) : null),
       });
 
-      // Handle severity derivation using immutable approach
+      // A severity only where the API sent one: its alarm model has none
+      // (type, 1-16, is a number). One was derived from type names such as
+      // MALWARE_FILE that the API never sends, so every alarm was "medium"
       const finalNormalizedAlarms = normalizedAlarms.map((alarm: any) => {
         const providedSeverity = sanitizeFieldValue(alarm.severity, null).value;
-        const finalSeverity =
-          !providedSeverity ||
-          providedSeverity === 'unknown' ||
-          providedSeverity === null
-            ? deriveAlarmSeverity(alarm.type)
-            : providedSeverity;
-
-        return {
-          ...alarm,
-          severity: finalSeverity,
-        };
+        const { severity: _severity, ...rest } = alarm;
+        return typeof providedSeverity === 'string' &&
+          providedSeverity.trim() !== '' &&
+          providedSeverity !== 'unknown'
+          ? { ...rest, severity: providedSeverity }
+          : rest;
       });
 
       const startTime = Date.now();
@@ -432,7 +303,9 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
             protocol:
               normalizedAlarm.protocol || finalAlarm.protocol || 'unknown',
             gid: alarm.gid || 'unknown', // Use original GID too
-            severity: normalizedAlarm.severity || 'medium', // Use normalized severity
+            ...(normalizedAlarm.severity
+              ? { severity: normalizedAlarm.severity }
+              : {}),
             // Include conditional properties (use normalized if available, fallback to original)
             ...(normalizedAlarm.device || finalAlarm.device
               ? { device: normalizedAlarm.device || finalAlarm.device }

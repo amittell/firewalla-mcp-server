@@ -1949,6 +1949,10 @@ export class FirewallaClient {
       ...(item.vpn && { vpn: item.vpn }),
       ...(item.port && { port: item.port }),
       ...(item.wan && { wan: item.wan }),
+      // The API's alarm model has no severity; one it sends is kept, as
+      // getSpecificAlarm keeps it, and none is made up
+      ...(typeof item.severity === 'string' &&
+        item.severity.trim() && { severity: item.severity.trim() }),
     }));
 
     // Normalize timestamps in the alarm objects
