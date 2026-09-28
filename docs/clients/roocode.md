@@ -17,8 +17,8 @@ Connect Firewalla network security data to Roocode for integrated security monit
 # Install globally for system access
 npm install -g firewalla-mcp-server
 
-# Verify installation
-npx firewalla-mcp-server --version
+# Verify installation (the server has no --version flag)
+npm list -g firewalla-mcp-server
 ```
 
 ### 2. Configure MCP in Roocode
@@ -112,7 +112,7 @@ In Roocode, test the connection:
 
 ### Connection Issues
 - Verify Firewalla credentials are correct
-- Test connection manually: `curl -H "Authorization: Bearer $FIREWALLA_MSP_TOKEN" https://$FIREWALLA_MSP_ID/v2/boxes`
+- Test connection manually: `curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" https://$FIREWALLA_MSP_ID/v2/boxes`
 - Check network connectivity to MSP domain
 
 ### Performance Optimization

@@ -17,8 +17,8 @@ Integrate Firewalla network security monitoring into Cline for AI-powered securi
 # Install globally for easy access
 npm install -g firewalla-mcp-server
 
-# Verify installation works
-npx firewalla-mcp-server --version
+# Verify installation (the server has no --version flag)
+npm list -g firewalla-mcp-server
 ```
 
 ### 2. Configure Cline MCP Integration
@@ -132,8 +132,8 @@ Are there any firewall rules that might block this endpoint?"
 - Restart VS Code after configuration changes
 
 **MCP Server Issues**
-- Test server manually: `npx firewalla-mcp-server --test`
-- Verify credentials with: `curl -H "Authorization: Bearer $FIREWALLA_MSP_TOKEN" https://$FIREWALLA_MSP_ID/v2/boxes`
+- Test server manually: `MCP_TEST_MODE=true npx firewalla-mcp-server` starts it with dummy credentials; stderr shows `Firewalla MCP Server running on stdio transport` (stop it with Ctrl-C)
+- Verify credentials with: `curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" https://$FIREWALLA_MSP_ID/v2/boxes`
 
 **Performance Optimization**
 - Use specific time ranges for faster analysis
