@@ -135,6 +135,8 @@ export class TimeoutError extends Error {
   public readonly isTimeout = true;
   public readonly duration: number;
   public readonly toolName: string;
+  /** The limit the operation was stopped at, in milliseconds */
+  public readonly timeoutMs: number;
   /**
    * What became of the operation's writes, when it made any: not_sent,
    * unknown (sent and not answered) or applied (see describeWrites)
@@ -150,6 +152,7 @@ export class TimeoutError extends Error {
     this.name = 'TimeoutError';
     this.duration = duration;
     this.toolName = toolName;
+    this.timeoutMs = timeoutMs;
   }
 }
 
@@ -451,7 +454,7 @@ export async function withToolTimeout<T>(
         {
           tool: toolName,
           duration_ms: duration,
-          timeout_limit_ms: customTimeoutMs || 30000,
+          timeout_limit_ms: error.timeoutMs,
           error_type: 'actual_timeout',
         }
       );

@@ -307,7 +307,7 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000 // Default timeout
+          error.timeoutMs
         );
       }
 
@@ -450,7 +450,7 @@ export class PauseRuleHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000,
+          error.timeoutMs,
           error
         );
       }
@@ -625,7 +625,7 @@ export class ResumeRuleHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000,
+          error.timeoutMs,
           error
         );
       }
@@ -1041,7 +1041,7 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000 // Default timeout
+          error.timeoutMs
         );
       }
 
@@ -1108,7 +1108,11 @@ export class GetSpecificTargetListHandler extends BaseToolHandler {
       return this.createUnifiedResponse(response);
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
-        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          error.timeoutMs
+        );
       }
 
       const errorMessage =
@@ -1229,7 +1233,7 @@ export class CreateTargetListHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000,
+          error.timeoutMs,
           error
         );
       }
@@ -1358,7 +1362,7 @@ export class UpdateTargetListHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000,
+          error.timeoutMs,
           error
         );
       }
@@ -1431,7 +1435,7 @@ export class DeleteTargetListHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000,
+          error.timeoutMs,
           error
         );
       }
@@ -1687,7 +1691,7 @@ export class CreateRuleHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000,
+          error.timeoutMs,
           error
         );
       }
@@ -1770,7 +1774,7 @@ export class DeleteRuleHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000,
+          error.timeoutMs,
           error
         );
       }
