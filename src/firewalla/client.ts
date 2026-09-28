@@ -1001,7 +1001,6 @@ export class FirewallaClient {
         const cancelled = () =>
           new CanceledError(
             `Not sent: the tool gave up before ${name} was sent`,
-            undefined,
             config
           );
         // A retry that could no longer answer in time is not sent either
@@ -1012,7 +1011,6 @@ export class FirewallaClient {
           );
           return new CanceledError(
             `Not sent: the retry of ${name} could not answer before its tool gives up`,
-            undefined,
             config
           );
         };
@@ -1283,6 +1281,10 @@ export class FirewallaClient {
     const retry: RateLimitedConfig = {
       ...config,
       rateLimitRetries: retries + 1,
+      // A 429 on a transient retry is retried as any 429 is: the estimate
+      // of the transient retry, how long the 503 before it took, is not
+      // this attempt's
+      retryEstimateMs: undefined,
     };
     return this.api.request(retry);
   }
