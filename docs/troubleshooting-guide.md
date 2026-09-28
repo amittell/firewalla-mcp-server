@@ -57,7 +57,7 @@ Run through this checklist to identify the most common issues:
 | "timed out after" | The tool passed its 30 s | Reduce scope or use filters |
 | "Query is too long" | Query exceeds limits | Shorten or simplify query |
 | "Query contains invalid field names" | Invalid field name | Check valid field names |
-| "Firewalla API sent no answer" | Connectivity issue | Check network; a failed read was already sent again once when time allowed |
+| "Firewalla API sent no answer" | Connectivity issue | Check network. After `ECONNABORTED`, `ETIMEDOUT`, `ECONNRESET` or `EPIPE` a read was already sent again once when time allowed; `ENOTFOUND` (DNS) and `ECONNREFUSED` are not retried |
 | "Rate limit exceeded" | This process started `API_RATE_LIMIT` requests in 5 minutes, or the API answered 429 | Wait until the time the message gives; see [rate-limiting-guide.md](rate-limiting-guide.md) |
 
 ## Common Error Categories
@@ -694,8 +694,14 @@ DEBUG=validation npm run mcp:start
 
 ### Error Log Analysis
 
-The server writes its log to stderr as one JSON object per line; nothing
-writes a log file. Capture stderr, then search it:
+The server writes its log to stderr, and stderr is not JSON lines: the
+logger writes one JSON object per line, debug output included, and the API
+client writes plain text lines beside them, such as `API Request: ...`,
+`API Request queued for the rate limit: ...`,
+`API Request failed: 503 GET <path>; retrying in <n> s (retry 1 of 1)`,
+`API Rate Limited: 429 ...` and `API Response Error: <status> ...`. A JSON
+lines parser has to skip lines that are not JSON. Nothing writes a log file.
+Capture stderr, then search it:
 
 ```bash
 npm run mcp:start 2> server.log
