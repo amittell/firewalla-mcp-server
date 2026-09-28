@@ -1022,6 +1022,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cursor was read as the first page, after the device list was read, so
   the listing started over without saying so. `cursor` is in its schema,
   beside the `next_cursor` it returns.
+- `get_target_lists` gives `total_lists` as every list the API returned for
+  the owner, with `returned_lists` and `has_more` beside it.
+  `GET /v2/target-lists` returns every list and takes no `limit` (measured
+  2026-09-25) and the tool applies `limit`, so `total_lists` counted only
+  the lists returned and never showed that some were left out.
 
 ### Removed
 
