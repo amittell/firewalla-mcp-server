@@ -374,6 +374,11 @@ export class RenameDeviceHandler extends BaseToolHandler {
         );
       }
 
+      const unknownWrite = this.unknownWriteResponse(error);
+      if (unknownWrite) {
+        return unknownWrite;
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return createErrorResponse(
