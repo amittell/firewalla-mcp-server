@@ -432,7 +432,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is not sent, takes no slot, and the 503 it was for is reported at once. A
   request whose tool gives up after it gets a slot and before it is sent
   gives the slot back; it was not sent or counted before either, but its slot
-  stayed taken for the 5-minute window.
+  stayed taken for the 5-minute window. A request waiting for a slot looks
+  again when one is given back: one queued behind such a retry slept until
+  the next slot freed (4 s later on a stub, 320 s instead of 316 s).
 - The client's response cache holds at most `CACHE_MAX_ENTRIES` responses
   (default 1000); when it is full, expired entries go first, then the least
   recently used. It had no limit, and an entry was removed only when its own

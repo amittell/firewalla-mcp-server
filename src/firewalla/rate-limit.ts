@@ -119,12 +119,28 @@ export class RequestRateLimiter {
   private waiting = 0;
   /** Settles once the last waiting request has its slot, or has given up */
   private queue: Promise<void> = Promise.resolve();
+  /**
+   * Resolves when a slot is given back (release), so a request waiting for
+   * a slot looks again at once instead of sleeping on a wait worked out
+   * with that slot taken
+   */
+  private released: Promise<void>;
+  private wakeWaiting: () => void = () => undefined;
 
   constructor(
     readonly limit: number,
     private readonly clock: Clock = systemClock,
     readonly windowMs: number = RATE_LIMIT_WINDOW_MS
-  ) {}
+  ) {
+    this.released = this.nextRelease();
+  }
+
+  /** A promise that the next release() resolves */
+  private async nextRelease(): Promise<void> {
+    return new Promise<void>(resolve => {
+      this.wakeWaiting = resolve;
+    });
+  }
 
   /**
    * Takes a slot if one is free now and no request is waiting for one.
@@ -154,6 +170,9 @@ export class RequestRateLimiter {
     const index = this.started.indexOf(slot);
     if (index !== -1) {
       this.started.splice(index, 1);
+      const wake = this.wakeWaiting;
+      this.released = this.nextRelease();
+      wake();
     }
   }
 
@@ -188,10 +207,11 @@ export class RequestRateLimiter {
   /**
    * Resolves, with the slot taken (for release), once the caller has a
    * slot, after every request queued before it. Rejects with a
-   * RateLimitError if the slot would come after `deadline`, for example because a 429 paused the client meanwhile. When
-   * `signal` is aborted (its tool gave up), rejects at once, even mid-wait,
-   * and takes no slot: a request that is never sent must not hold one for
-   * the window, and must not hold up the requests queued after it.
+   * RateLimitError if the slot would come after `deadline`, for example
+   * because a 429 paused the client meanwhile. When `signal` is aborted
+   * (its tool gave up), rejects at once, even mid-wait, and takes no slot:
+   * a request that is never sent must not hold one for the window, and
+   * must not hold up the requests queued after it.
    */
   async acquire(
     deadline: number,
@@ -227,13 +247,17 @@ export class RequestRateLimiter {
     }
   }
 
-  /** Waits `ms` on the clock, or until `signal` is aborted */
+  /**
+   * Waits `ms` on the clock, or until `signal` is aborted or a slot is
+   * given back, whichever comes first
+   */
   private async sleepUnlessAborted(
     ms: number,
     signal?: AbortSignal
   ): Promise<void> {
+    const { released } = this;
     if (!signal) {
-      await this.clock.sleep(ms);
+      await Promise.race([this.clock.sleep(ms), released]);
       return;
     }
     let onAbort = (): void => undefined;
@@ -242,7 +266,7 @@ export class RequestRateLimiter {
       signal.addEventListener('abort', onAbort, { once: true });
     });
     try {
-      await Promise.race([this.clock.sleep(ms), aborted]);
+      await Promise.race([this.clock.sleep(ms), aborted, released]);
     } finally {
       signal.removeEventListener('abort', onAbort);
     }
