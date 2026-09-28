@@ -954,6 +954,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tools sent. The messages give the position (`Query opens a bracket '['
   at position 7 that is never closed`, `Query contains a control
   character (U+0000) at position 11`).
+- A `*` in free text is a wildcard, as in a field value.
+  `search_devices`, `search_target_lists` and `search_rules` compared it as
+  a character, so `*MacBook*` and `*Alex’s*` (with the U+2019 apostrophe
+  device names carry) found nothing while `MacBook` and `Alex’s` found the
+  device, and the search parser read `*Alex’s*` as the three terms `*`,
+  `Alex’s` and `*`. It is one term now, matched anywhere in the text with
+  each `*` as any run (`Mac*Air` finds `MacBook Air`). A quoted `*` is a
+  character, as the API reads one: `"star*box"` finds `star*box` only.
 
 ### Removed
 
