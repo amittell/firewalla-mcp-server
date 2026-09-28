@@ -7,6 +7,7 @@ import { queryParser } from '../search/parser.js';
 import { SEARCH_FIELDS, type QueryNode, type FieldQuery, type ComparisonQuery, type RangeQuery } from '../search/types.js';
 import { FIELD_MAPPINGS, type EntityType, type CorrelationFieldName } from './field-mapper.js';
 import { QuerySanitizer } from './error-handler.js';
+import { scanOutsideQuotes } from '../utils/query-structure.js';
 import type { ValidationResult } from '../types.js';
 
 /**
@@ -287,10 +288,9 @@ export class EnhancedQueryValidator {
     const errors: DetailedError[] = [];
     const quickFixes: QuickFix[] = [];
     const stack: Array<{ char: string; position: number }> = [];
-    
-    for (let i = 0; i < query.length; i++) {
-      const char = query[i];
-      
+
+    // Outside quoted values: name:"a(b" is one value
+    scanOutsideQuotes(query, (char, i) => {
       if (char === '(') {
         stack.push({ char, position: i });
       } else if (char === ')') {
@@ -315,7 +315,7 @@ export class EnhancedQueryValidator {
           stack.pop();
         }
       }
-    }
+    });
 
     // Check for unmatched opening parentheses
     if (stack.length > 0) {

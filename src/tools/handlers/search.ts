@@ -29,6 +29,7 @@ import {
   validateFirewallaQuerySyntax,
   getExampleQueries,
 } from '../../utils/query-validator.js';
+import { queryStructureErrors } from '../../utils/query-structure.js';
 import {
   withToolTimeout,
   TimeoutError,
@@ -154,6 +155,25 @@ function validateCommonSearchParameters(
         ErrorType.VALIDATION_ERROR,
         undefined,
         queryValidation.errors
+      ),
+    };
+  }
+
+  // Balanced parentheses, brackets and quotes, the nesting and length
+  // limits, and no control characters, for every search tool before any
+  // translation or request. search_flows and search_alarms sent an
+  // unclosed [, a NUL and a 2,001-character query to the API; the other
+  // search tools refused them only after parsing.
+  const structureErrors = queryStructureErrors(args.query);
+  if (structureErrors.length > 0) {
+    return {
+      isValid: false,
+      response: createErrorResponse(
+        toolName,
+        'Invalid query structure',
+        ErrorType.VALIDATION_ERROR,
+        { query: args.query, structure_errors: structureErrors },
+        structureErrors
       ),
     };
   }

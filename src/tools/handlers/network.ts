@@ -41,6 +41,7 @@ import {
   type StreamingOperation,
 } from '../../utils/streaming-manager.js';
 import { mspAnd, toMspQuery } from '../../utils/msp-query.js';
+import { queryStructureErrors } from '../../utils/query-structure.js';
 import type { PagingCoverage } from '../../utils/paging-coverage.js';
 
 /**
@@ -157,6 +158,20 @@ export class GetFlowDataHandler extends BaseToolHandler {
       }
 
       const query = args?.query;
+      // The structural checks the search tools run, before the query is
+      // translated or sent: an unclosed [, a NUL, 11 levels of nesting and
+      // a 2,001-character query went to the API
+      if (typeof query === 'string') {
+        const structureErrors = queryStructureErrors(query);
+        if (structureErrors.length > 0) {
+          return this.createErrorResponse(
+            'Invalid query structure',
+            ErrorType.VALIDATION_ERROR,
+            { query, structure_errors: structureErrors },
+            structureErrors
+          );
+        }
+      }
       const groupBy = groupByValidation.sanitizedValue as string | undefined;
       const sortBy = args?.sortBy;
       const limit = limitValidation.sanitizedValue! as number;

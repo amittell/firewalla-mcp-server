@@ -5,7 +5,10 @@
 
 import { FieldValidator } from './field-validator.js';
 import { pathSegmentProblem } from './path-segment.js';
-import { followsWordCharacter } from '../utils/word-characters.js';
+import {
+  queryStructureErrors,
+  scanOutsideQuotes,
+} from '../utils/query-structure.js';
 import type { ValidationResult } from '../types.js';
 
 /**
@@ -1220,30 +1223,6 @@ const UNSUPPORTED_QUERY_FIELDS: Record<string, Record<string, string>> = {
 };
 
 /**
- * The quote a query leaves open, or undefined when every quote is closed.
- * A backslash escapes the next character inside quotes (name:"a\"b"), and
- * a single quote right after a letter, digit or underscore is an
- * apostrophe (name:Alex's), as the search parser reads them. Counting the
- * quotes refused both.
- */
-function unclosedQuote(query: string): '"' | "'" | undefined {
-  let open: '"' | "'" | undefined;
-  for (let i = 0; i < query.length; i++) {
-    const char = query[i];
-    if (open) {
-      if (char === '\\') {
-        i++;
-      } else if (char === open) {
-        open = undefined;
-      }
-    } else if (char === '"' || (char === "'" && !followsWordCharacter(query, i))) {
-      open = char;
-    }
-  }
-  return open;
-}
-
-/**
  * Search query sanitization utilities
  */
 export class QuerySanitizer {
@@ -1275,63 +1254,11 @@ export class QuerySanitizer {
     // patterns that were here guarded nothing, and they refused names such
     // as Cat Feeder, Top Floor, PS 5 and kill switch.
 
-    // Basic structure validation for search queries
-    const structuralIssues = [];
-    
-    // Check for unmatched parentheses
-    const openParens = (trimmedQuery.match(/\(/g) || []).length;
-    const closeParens = (trimmedQuery.match(/\)/g) || []).length;
-    if (openParens !== closeParens) {
-      structuralIssues.push('Unmatched parentheses in query');
-    }
-
-    // Check for unmatched brackets
-    const openBrackets = (trimmedQuery.match(/\[/g) || []).length;
-    const closeBrackets = (trimmedQuery.match(/\]/g) || []).length;
-    if (openBrackets !== closeBrackets) {
-      structuralIssues.push('Unmatched brackets in query');
-    }
-
-    // Check for unmatched quotes
-    const unclosed = unclosedQuote(trimmedQuery);
-    if (unclosed === "'") {
-      structuralIssues.push('Unmatched single quotes in query');
-    }
-    if (unclosed === '"') {
-      structuralIssues.push('Unmatched double quotes in query');
-    }
-
-    // Control characters (NUL, backspace, escape and the rest of C0, and
-    // DEL): the grammar has no use for them, the API gets the value
-    // decoded, where a NUL can end a string, and the query is quoted back
-    // in results and errors
-    // eslint-disable-next-line no-control-regex
-    if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(trimmedQuery)) {
-      structuralIssues.push('Query contains control characters');
-    }
-
-    // Check for excessive nesting
-    const maxNestingDepth = 10;
-    let currentDepth = 0;
-    let maxDepth = 0;
-    for (const char of trimmedQuery) {
-      if (char === '(' || char === '[') {
-        currentDepth++;
-        maxDepth = Math.max(maxDepth, currentDepth);
-      } else if (char === ')' || char === ']') {
-        currentDepth--;
-      }
-    }
-    if (maxDepth > maxNestingDepth) {
-      structuralIssues.push(`Query nesting too deep (maximum ${maxNestingDepth} levels)`);
-    }
-
-    // Enhanced length validation with context
-    if (trimmedQuery.length > 2000) {
-      structuralIssues.push('Query is too long (maximum 2000 characters)');
-    } else if (trimmedQuery.length > 1000) {
-      // Warning for very long queries - consider breaking it into smaller parts
-    }
+    // Balanced parentheses and brackets outside quoted values, closed
+    // quotes, the nesting and length limits, and no control characters:
+    // the checks every search tool runs (queryStructureErrors). Counting
+    // every ( refused name:"a(b", a value with a parenthesis in it.
+    const structuralIssues = queryStructureErrors(trimmedQuery);
 
     // No check for regex quantifiers: +, {n,m} and ( in a query are
     // escaped before any RegExp is built from it, so they are not
@@ -1561,17 +1488,17 @@ export class QuerySanitizer {
       complexityIssues.push(`Too many range queries (${rangeCount}). Maximum recommended: 5`);
     }
 
-    // Check for deeply nested parentheses
+    // Check for deeply nested parentheses, outside quoted values
     let maxDepth = 0;
     let currentDepth = 0;
-    for (const char of query) {
+    scanOutsideQuotes(query, char => {
       if (char === '(') {
         currentDepth++;
         maxDepth = Math.max(maxDepth, currentDepth);
       } else if (char === ')') {
         currentDepth--;
       }
-    }
+    });
 
     if (maxDepth > 5) {
       complexityIssues.push(`Query nesting too deep (${maxDepth} levels). Maximum recommended: 5`);

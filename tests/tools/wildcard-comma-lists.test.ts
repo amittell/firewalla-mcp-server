@@ -272,7 +272,12 @@ describe('an unclosed quote in a comma list', () => {
         client
       );
       expect(res.isError).toBe(true);
-      expect(body(res).message).toContain('Unclosed quoted string');
+      // The structural check, which every search tool runs first, refuses
+      // it before the parser reads it
+      expect(body(res).message).toBe('Invalid query structure');
+      expect(body(res).validation_errors.join(' ')).toMatch(
+        /Query opens a " quote at position \d+ that is never closed/
+      );
       expect(get).not.toHaveBeenCalled();
     }
   );

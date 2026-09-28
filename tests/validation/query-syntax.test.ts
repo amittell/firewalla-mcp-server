@@ -162,7 +162,13 @@ describe('Query Syntax Validation', () => {
         invalidQueries.forEach(query => {
           const result = QuerySanitizer.sanitizeSearchQuery(query);
           expect(result.isValid).toBe(false);
-          expect(result.errors).toContain('Unmatched parentheses in query');
+          expect(
+            result.errors.some(error =>
+              /^Query (opens a parenthesis '\(' at position \d+ that is never closed|has a closing parenthesis '\)' at position \d+ with no '\(' open before it)$/.test(
+                error
+              )
+            )
+          ).toBe(true);
         });
       });
     });
@@ -243,7 +249,13 @@ describe('Query Syntax Validation', () => {
       invalidRangeQueries.forEach(query => {
         const result = QuerySanitizer.sanitizeSearchQuery(query);
         expect(result.isValid).toBe(false);
-        expect(result.errors).toContain('Unmatched brackets in query');
+        expect(
+          result.errors.some(error =>
+            /^Query (opens a bracket '\[' at position \d+ that is never closed|has a closing bracket '\]' at position \d+ with no '\[' open before it)$/.test(
+              error
+            )
+          )
+        ).toBe(true);
       });
     });
 
@@ -411,9 +423,8 @@ describe('Query Syntax Validation', () => {
       unmatchedQuoteQueries.forEach(query => {
         const result = QuerySanitizer.sanitizeSearchQuery(query);
         expect(result.isValid).toBe(false);
-        expect(result.errors.some(error => 
-          error.includes('Unmatched single quotes') || 
-          error.includes('Unmatched double quotes')
+        expect(result.errors.some(error =>
+          /^Query opens a ["'] quote at position \d+ that is never closed$/.test(error)
         )).toBe(true);
       });
     });
@@ -423,7 +434,9 @@ describe('Query Syntax Validation', () => {
       
       const result = QuerySanitizer.sanitizeSearchQuery(longQuery);
       expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('Query is too long (maximum 2000 characters)');
+      expect(result.errors).toContain(
+        `Query is too long (${longQuery.length} characters; maximum 2000)`
+      );
     });
 
     it('should detect excessive nesting', () => {
@@ -431,7 +444,7 @@ describe('Query Syntax Validation', () => {
       
       const result = QuerySanitizer.sanitizeSearchQuery(deeplyNestedQuery);
       expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('Query nesting too deep (maximum 10 levels)');
+      expect(result.errors).toContain('Query nesting is too deep (15 levels; maximum 5)');
     });
 
     it('should detect control characters', () => {
@@ -439,7 +452,9 @@ describe('Query Syntax Validation', () => {
       
       const result = QuerySanitizer.sanitizeSearchQuery(controlCharQuery);
       expect(result.isValid).toBe(false);
-      expect(result.errors).toContain('Query contains control characters');
+      expect(result.errors).toContain(
+        'Query contains a control character (U+0000) at position 13'
+      );
     });
   });
 

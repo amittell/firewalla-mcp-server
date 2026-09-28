@@ -941,6 +941,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   written, and matched without a regular expression: on a stub, a
   10-wildcard `id:` pattern against a 50-character id is matched in fewer
   than (n + 1)(m + 1) steps, and the search answers within 1 s.
+- Every search tool refuses a malformed or oversized query before it
+  translates or sends it, with the same checks and messages: parentheses
+  and brackets that do not pair, a quote never closed, a control
+  character, more than 5 levels of parentheses and more than 2,000
+  characters. On a stub, `search_flows`, `search_alarms`, `get_flow_data`
+  and `get_active_alarms` each sent a query with an unclosed `[`, a NUL,
+  BEL, ESC or DEL, or 2,001 characters to the API, and `get_flow_data` and
+  `get_active_alarms` sent 6 and 11 levels of parentheses. Parentheses and
+  brackets inside quoted values are text: `search_devices`, `search_rules`
+  and `search_target_lists` refused `name:"a(b"`, which the flow and alarm
+  tools sent. The messages give the position (`Query opens a bracket '['
+  at position 7 that is never closed`, `Query contains a control
+  character (U+0000) at position 11`).
 
 ### Removed
 
