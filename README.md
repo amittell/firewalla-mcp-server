@@ -129,12 +129,17 @@ docker run -it --rm --env-file .env amittell/firewalla-mcp-server
 
 **HTTP Transport (for standalone Docker containers and external access):**
 ```bash
-# Run with HTTP transport on port 3000
+# Make a token and keep the value echo prints: every client sends it
+export MCP_HTTP_BEARER_TOKEN="$(openssl rand -hex 32)"
+echo "$MCP_HTTP_BEARER_TOKEN"
+
+# Run with HTTP transport on port 3000. -e MCP_HTTP_BEARER_TOKEN with no
+# value passes the exported one without putting it on the command line
 docker run -d --name firewalla-mcp \
   -p 3000:3000 \
   -e MCP_TRANSPORT=http \
   -e MCP_HTTP_PORT=3000 \
-  -e MCP_HTTP_BEARER_TOKEN=a_long_random_secret \
+  -e MCP_HTTP_BEARER_TOKEN \
   -e FIREWALLA_MSP_TOKEN=your_token \
   -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
   amittell/firewalla-mcp-server
@@ -143,10 +148,11 @@ docker run -d --name firewalla-mcp \
 # -e FIREWALLA_BOX_ID=your_box_gid \
 
 # The server will be accessible at http://localhost:3000/mcp, and clients
-# send the header: Authorization: Bearer a_long_random_secret
+# send the header: Authorization: Bearer <the token echo printed>
 
 # Using env file (recommended): besides the credentials, .env sets
-# MCP_TRANSPORT=http and MCP_HTTP_BEARER_TOKEN
+# MCP_TRANSPORT=http and MCP_HTTP_BEARER_TOKEN; to add a new token to it:
+# echo "MCP_HTTP_BEARER_TOKEN=$(openssl rand -hex 32)" >> .env
 docker run -d --name firewalla-mcp \
   -p 3000:3000 \
   --env-file .env \
@@ -165,6 +171,7 @@ services:
       - MCP_HTTP_PORT=3000
       # The image already listens on every interface of the container
       - MCP_HTTP_HOST=0.0.0.0
+      # From the shell or a .env next to this file; openssl rand -hex 32
       - MCP_HTTP_BEARER_TOKEN=\${MCP_HTTP_BEARER_TOKEN}
       # Other containers reach it as http://firewalla-mcp:3000/mcp
       - MCP_HTTP_ALLOWED_HOSTS=firewalla-mcp
