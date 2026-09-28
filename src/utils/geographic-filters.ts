@@ -120,20 +120,30 @@ function asksForNothing(name: string, value: unknown): boolean {
   return false;
 }
 
+/** The country qualifier of each search: the remote end's, for alarms */
+const COUNTRY_QUALIFIER = { flows: 'region', alarms: 'remote.region' } as const;
+
 /**
- * The flow query term for search_flows' `geographic_filters`
+ * The query term for the `geographic_filters` of search_flows and
+ * search_alarms
  *
  * @param filters - The geographic_filters argument, e.g. `{ countries: ["US", "CN"] }`
- * @returns `region:US,CN` for the countries asked for, or undefined when the
- *   filters ask for nothing
- * @throws {GeographicFilterError} When a filter has no documented flow
+ * @param entity - `flows` (region:, the flow's country) or `alarms`
+ *   (remote.region:, the remote end's country, the one geographic alarm
+ *   qualifier the API documents)
+ * @returns `region:US,CN` (or `remote.region:US,CN`) for the countries asked
+ *   for, or undefined when the filters ask for nothing
+ * @throws {GeographicFilterError} When a filter has no documented
  *   qualifier (continents, cities, asns, hosting_providers, exclude_vpn,
  *   exclude_cloud, min_risk_score, or a name this server does not know), or
  *   a value is not an ISO 3166-1 alpha-2 country code
  */
 export function geographicFiltersToMspQuery(
-  filters: unknown
+  filters: unknown,
+  entity: 'flows' | 'alarms' = 'flows'
 ): string | undefined {
+  const qualifier = COUNTRY_QUALIFIER[entity];
+  const search = entity === 'alarms' ? 'alarm' : 'flow';
   if (filters === undefined || filters === null) {
     return undefined;
   }
@@ -159,7 +169,7 @@ export function geographicFiltersToMspQuery(
     if (!Array.isArray(value)) {
       invalid[name] = [JSON.stringify(value)];
       problems.push(
-        `geographic_filters.${name} takes a list of ISO 3166-1 alpha-2 country codes (the API's region qualifier), such as ["US", "CN"], not ${JSON.stringify(value)}.`
+        `geographic_filters.${name} takes a list of ISO 3166-1 alpha-2 country codes (the API's ${qualifier} qualifier), such as ["US", "CN"], not ${JSON.stringify(value)}.`
       );
       continue;
     }
@@ -178,7 +188,7 @@ export function geographicFiltersToMspQuery(
     if (bad.length > 0) {
       invalid[name] = bad;
       problems.push(
-        `geographic_filters.${name} takes a list of ISO 3166-1 alpha-2 country codes (the API's region qualifier), such as ["US", "CN"]; ${invalid[name].join(', ')} ${invalid[name].length === 1 ? 'is not an assigned code' : 'are not assigned codes'}. To send another code anyway (such as XK), put region:<code> in the query.`
+        `geographic_filters.${name} takes a list of ISO 3166-1 alpha-2 country codes (the API's ${qualifier} qualifier), such as ["US", "CN"]; ${invalid[name].join(', ')} ${invalid[name].length === 1 ? 'is not an assigned code' : 'are not assigned codes'}. To send another code anyway (such as XK), put ${qualifier}:<code> in the query.`
       );
       continue;
     }
@@ -188,7 +198,7 @@ export function geographicFiltersToMspQuery(
   if (unsupported.length > 0) {
     const names = unsupported.map(name => `geographic_filters.${name}`);
     problems.unshift(
-      `${names.join(', ')} ${names.length === 1 ? 'has' : 'have'} no equivalent in the MSP API's flow search, whose one geographic qualifier is region (an ISO 3166 country code), so the search was not sent: the API answers a qualifier it does not know with no results rather than an error. Use geographic_filters.countries (sent as region:US,CN) or region: in the query.`
+      `${names.join(', ')} ${names.length === 1 ? 'has' : 'have'} no equivalent in the MSP API's ${search} search, whose one geographic qualifier is ${qualifier} (an ISO 3166 country code), so the search was not sent: the API answers a qualifier it does not know with no results rather than an error. Use geographic_filters.countries (sent as ${qualifier}:US,CN) or ${qualifier}: in the query.`
     );
   }
   if (problems.length > 0) {
@@ -196,7 +206,7 @@ export function geographicFiltersToMspQuery(
   }
 
   const unique = [...new Set(codes)];
-  return unique.length > 0 ? `region:${unique.join(',')}` : undefined;
+  return unique.length > 0 ? `${qualifier}:${unique.join(',')}` : undefined;
 }
 
 /**

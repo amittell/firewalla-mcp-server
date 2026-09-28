@@ -95,12 +95,21 @@ describe('search_flows lists geographic_filters', () => {
     expect(schemaOf('search_flows').required).toEqual(['query']);
   });
 
-  it.each(['search_alarms', 'get_flow_data'])(
-    '%s, which takes no geographic_filters, does not list them',
-    name => {
-      expect(schemaOf(name).properties.geographic_filters).toBeUndefined();
-    }
-  );
+  it('get_flow_data, which takes no geographic_filters, does not list them', () => {
+    expect(
+      schemaOf('get_flow_data').properties.geographic_filters
+    ).toBeUndefined();
+  });
+
+  it("search_alarms lists them as the remote end's remote.region", () => {
+    const geographic = schemaOf('search_alarms').properties.geographic_filters;
+    expect(Object.keys(geographic.properties)).toEqual([
+      'countries',
+      'regions',
+    ]);
+    expect(geographic.description).toContain('remote.region:US,CN');
+    expect(schemaOf('search_alarms').required).toEqual(['query']);
+  });
 });
 
 describe('a call shaped by the schema', () => {

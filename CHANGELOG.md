@@ -1002,6 +1002,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   active. `filters_applied.query` gives the query sent. By default the
   summary now leaves paused rules out, as its schema said; pass
   `active_only: false` to count them.
+- `search_alarms` takes `geographic_filters`, as `search_flows` does:
+  countries of the remote end, sent as `remote.region:US,CN`, the one
+  geographic alarm qualifier the API documents; any other filter is refused
+  before a request. The argument was read by no one, so
+  `{"countries": ["CN"]}` sent the query alone. A response's
+  `meta.geo_enriched` is true only when the response holds geographic data:
+  it was true whenever enrichment was on and did not fail, so
+  `search_alarms` and `search_flows` said true with no geographic field in
+  their results.
 
 ### Removed
 
