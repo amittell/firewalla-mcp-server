@@ -916,13 +916,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A wildcard the client matches itself no longer stalls the server.
   `search_rules`, `search_target_lists` and `search_devices` matched `*`
   with a regular expression, which backtracks: on a stub, 9 wildcards
-  against a 40-character value took 8.5 s in `search_rules`
-  (`target.value:`) and 5.4 s in `search_target_lists` (`name:`), and no
-  other request ran meanwhile. Wildcards are matched without a regular
-  expression now, in time at most the value's length times the pattern's:
-  10 wildcards against 1,000 characters take under 50 ms. The answers are
-  the same, except that a `*` now also matches a line break, which the
-  regular expression's `.` did not.
+  against a 50-character value took 18.3 s in `search_rules`
+  (`target.value:`) and 11.6 s in `search_target_lists` (`name:`) on
+  Node 22.23.1, and no other request ran meanwhile. Wildcards are matched
+  without a regular expression now, in fewer than (n + 1)(m + 1) steps
+  for a value of n characters and a pattern of m, so linear in the
+  value's length: 10 wildcards against 1,000, 2,000 and 4,000 characters
+  take 1,010, 2,010 and 4,010 steps, and those two searches answer within
+  1 s. The answers are the same, except that a `*` now also matches a
+  line break, which the regular expression's `.` did not.
 - A wildcard value may hold any character that is text. Every search tool
   refused a `*` beside anything but letters, digits, `_`, `.`, `:`, `,` and
   `-` as an "Invalid wildcard pattern", so `name:*Disney+*`, `C++*`,
@@ -936,8 +938,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   search tools do. Its query parser turned each wildcard value into a
   regular expression only to check it, and refused four or more wildcards
   (`name:*a*b*c*d*`) as a "dangerous sequence". The value is kept as
-  written, and matched without a regular expression: on a stub, 10
-  wildcards return within 50 ms.
+  written, and matched without a regular expression: on a stub, a
+  10-wildcard `id:` pattern against a 50-character id is matched in fewer
+  than (n + 1)(m + 1) steps, and the search answers within 1 s.
 
 ### Removed
 
