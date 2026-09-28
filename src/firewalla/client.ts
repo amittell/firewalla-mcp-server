@@ -603,6 +603,12 @@ export function checkingReadTool(url: string | undefined): string | undefined {
   return undefined;
 }
 
+/** How long a request's latest attempt has taken, in Date.now() milliseconds */
+function attemptTime(config: { sentAt?: number }): number {
+  const now = Date.now();
+  return Math.max(0, now - (config.sentAt ?? now));
+}
+
 /** Whether request() failed with no answer because its timeout ran out */
 function isApiTimeout(error: unknown): boolean {
   return (
@@ -674,6 +680,13 @@ interface RateLimitedConfig extends InternalAxiosRequestConfig {
   toolDeadline?: number;
   /** When this attempt was sent, in Date.now() milliseconds */
   sentAt?: number;
+  /**
+   * Set on a transient retry: how long it is expected to take, as long as
+   * the attempt that failed. It is sent only while that much time is left
+   * before toolDeadline, checked when it would take a slot of the rate
+   * limiter and again when it would go out (see retryFits).
+   */
+  retryEstimateMs?: number;
   /**
    * Times the request has gone to the API, 429 retries and transient
    * retries included; `attempts` of its ApiRequestError, and what it added
@@ -990,9 +1003,24 @@ export class FirewallaClient {
             undefined,
             config
           );
-        const send = () => {
-          if (request.signal?.aborted) {
-            throw cancelled();
+        // A retry that could no longer answer in time is not sent either
+        const fits = (waitMs: number) => this.retryFits(request, waitMs);
+        const declined = () => {
+          process.stderr.write(
+            `API Request not sent: the retry of ${name} could not answer before its tool gives up\n`
+          );
+          return new CanceledError(
+            `Not sent: the retry of ${name} could not answer before its tool gives up`,
+            undefined,
+            config
+          );
+        };
+        // Takes no slot and counts nothing when it does not send: the
+        // slot taken at `startedAt` is given back
+        const send = (startedAt: number) => {
+          if (request.signal?.aborted || !fits(0)) {
+            this.rateLimiter.release(startedAt);
+            throw request.signal?.aborted ? cancelled() : declined();
           }
           process.stderr.write(`API Request: ${name}\n`);
           request.sentAt = Date.now();
@@ -1009,6 +1037,9 @@ export class FirewallaClient {
         if (request.signal?.aborted) {
           throw cancelled();
         }
+        if (!fits(0)) {
+          throw declined();
+        }
         const refuse = (error: RateLimitError) => {
           process.stderr.write(
             `API Request refused for the rate limit: ${name}; capacity returns in ${Math.max(0, Math.ceil((error.availableAt - this.clock.now()) / 1000))} s\n`
@@ -1017,12 +1048,17 @@ export class FirewallaClient {
         };
         // A free slot is taken at once, so an unthrottled request goes out
         // without waiting a tick
-        if (this.rateLimiter.tryAcquire()) {
-          return send();
+        const startedAt = this.rateLimiter.tryAcquireAt();
+        if (startedAt !== undefined) {
+          return send(startedAt);
         }
         const startAt = this.rateLimiter.nextStartAt();
         if (startAt > deadline) {
           throw refuse(this.rateLimiter.unavailable(startAt));
+        }
+        // A retry whose slot comes too late is not queued for it
+        if (!fits(Math.max(0, startAt - this.clock.now()))) {
+          throw declined();
         }
         // A retry's wait was logged when its 429 came back
         if (request.rateLimitRetries === undefined) {
@@ -1113,22 +1149,44 @@ export class FirewallaClient {
 
   /**
    * Whether a GET sent again could still answer before its tool gives up
-   * (toolDeadline): the longest wait before it, 2 x TRANSIENT_RETRY_DELAY_MS,
-   * plus as long again as the attempt that failed took, must end before the
-   * deadline. A retry that could not answer in time would still cost one of
-   * the API's 100 requests per 5 minutes. An attempt that ran out its
+   * (toolDeadline): from when it could start, after the longest wait before
+   * it (2 x TRANSIENT_RETRY_DELAY_MS) or when the rate limiter next has a
+   * slot, whichever is later, as long again as the attempt that failed took
+   * must be left. A retry that could not answer in time would still cost one
+   * of the API's 100 requests per 5 minutes. An attempt that ran out its
    * timeout took API_TIMEOUT, so with the defaults (API_TIMEOUT and the tool
    * timeout both 30 s) a timed-out GET is never sent again, while a 503 or a
-   * reset that comes back at once is, and a 503 that took 20 s is not.
-   * Measured with Date.now(), the clock the tool's deadline is set with.
+   * reset that comes back at once is, and a 503 that took 20 s is not. The
+   * request interceptor checks again when the retry would take its slot and
+   * when it would go out (retryFits), as other requests or a 429 pause can
+   * move its slot later. Measured with Date.now(), the clock the tool's
+   * deadline is set with.
    */
   private retryFitsToolBudget(error: AxiosError): boolean {
     const config = error.config as RateLimitedConfig;
-    const now = Date.now();
-    const attemptMs = Math.max(0, now - (config.sentAt ?? now));
+    // It starts after the wait, or when the rate limiter next has a slot
+    const limiterWaitMs = Math.max(
+      0,
+      this.rateLimiter.nextStartAt() - this.clock.now()
+    );
+    return this.retryFits(
+      { ...config, retryEstimateMs: attemptTime(config) },
+      Math.max(2 * TRANSIENT_RETRY_DELAY_MS, limiterWaitMs)
+    );
+  }
+
+  /**
+   * Whether a retry starting in `waitMs` could answer before its tool gives
+   * up: at least its retryEstimateMs must be left before toolDeadline then.
+   * Always true for a request that is not a transient retry.
+   */
+  private retryFits(request: RateLimitedConfig, waitMs: number): boolean {
+    if (request.retryEstimateMs === undefined) {
+      return true;
+    }
     return (
-      now + 2 * TRANSIENT_RETRY_DELAY_MS + attemptMs <
-      (config.toolDeadline ?? Number.POSITIVE_INFINITY)
+      Date.now() + waitMs + request.retryEstimateMs <=
+      (request.toolDeadline ?? Number.POSITIVE_INFINITY)
     );
   }
 
@@ -1144,6 +1202,7 @@ export class FirewallaClient {
   private async retryTransient(error: AxiosError): Promise<AxiosResponse> {
     const config = error.config as RateLimitedConfig;
     const retries = config.transientRetries ?? 0;
+    const retryEstimateMs = attemptTime(config);
     const waitMs = TRANSIENT_RETRY_DELAY_MS * (1 + Math.random());
     const failure = error.response?.status ?? error.code ?? 'no answer';
     process.stderr.write(
@@ -1155,6 +1214,7 @@ export class FirewallaClient {
     const retry: RateLimitedConfig = {
       ...config,
       transientRetries: retries + 1,
+      retryEstimateMs,
       onSent: () => {
         sent = true;
         config.onSent?.();

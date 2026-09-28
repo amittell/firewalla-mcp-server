@@ -121,12 +121,31 @@ export class RequestRateLimiter {
    * Returns false, and takes nothing, otherwise.
    */
   tryAcquire(): boolean {
+    return this.tryAcquireAt() !== undefined;
+  }
+
+  /**
+   * As tryAcquire, returning the slot's start time (for release), or
+   * undefined when no slot was taken
+   */
+  tryAcquireAt(): number | undefined {
     const now = this.clock.now();
     if (this.waiting > 0 || this.slotAt(now) > now) {
-      return false;
+      return undefined;
     }
     this.started.push(now);
-    return true;
+    return now;
+  }
+
+  /**
+   * Gives back a slot taken at `startedAt` whose request was then not sent,
+   * so it does not count against the window
+   */
+  release(startedAt: number): void {
+    const index = this.started.lastIndexOf(startedAt);
+    if (index !== -1) {
+      this.started.splice(index, 1);
+    }
   }
 
   /**
@@ -151,16 +170,16 @@ export class RequestRateLimiter {
   }
 
   /**
-   * Resolves once the caller has a slot, after every request queued before
-   * it. Rejects with a RateLimitError if the slot would come after
+   * Resolves, with the slot's start time (for release), once the caller has
+   * a slot, after every request queued before it. Rejects with a RateLimitError if the slot would come after
    * `deadline`, for example because a 429 paused the client meanwhile. When
    * `signal` is aborted (its tool gave up), rejects at once, even mid-wait,
    * and takes no slot: a request that is never sent must not hold one for
    * the window, and must not hold up the requests queued after it.
    */
-  async acquire(deadline: number, signal?: AbortSignal): Promise<void> {
+  async acquire(deadline: number, signal?: AbortSignal): Promise<number> {
     this.waiting++;
-    const turn = this.queue.then(async () => {
+    const turn = this.queue.then(async (): Promise<number> => {
       for (;;) {
         if (signal?.aborted) {
           throw signal.reason instanceof Error
@@ -171,7 +190,7 @@ export class RequestRateLimiter {
         const at = this.slotAt(now);
         if (at <= now) {
           this.started.push(now);
-          return;
+          return now;
         }
         if (at > deadline) {
           throw this.unavailable(at);
@@ -179,9 +198,12 @@ export class RequestRateLimiter {
         await this.sleepUnlessAborted(at - now, signal);
       }
     });
-    this.queue = turn.catch(() => undefined);
+    this.queue = turn.then(
+      () => undefined,
+      () => undefined
+    );
     try {
-      await turn;
+      return await turn;
     } finally {
       this.waiting--;
     }

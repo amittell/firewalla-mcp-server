@@ -419,6 +419,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parameters sent to ...`. Tools no longer wrap a failure in "This is an
   immediate parameter or configuration error, not a timeout" or "This appears
   to be a processing error, not a timeout".
+- A transient retry counts its wait for a slot of the rate limit. Whether it
+  could answer before its tool gives up was checked once, before the 1 to 2 s
+  wait, and not against the rate limiter. A 503 that took 10 s, 15 s into a
+  tool, whose retry then waited 10 s for a slot, was sent 25 s in with 5 s
+  left for an attempt of 10 s, and was cancelled when the tool gave up at 30
+  s after counting against the 100 requests per 5 minutes. A retry whose slot
+  came after the tool's deadline waited in the queue until the tool gave up,
+  so the tool reported a timeout, not the 503. The retry now starts from the
+  later of the wait and the rate limiter's next slot, and is checked again
+  when it would take a slot and when it would go out. One that no longer fits
+  is not sent, takes no slot, and the 503 it was for is reported at once. A
+  request whose tool gives up after it gets a slot and before it is sent
+  gives the slot back; it was not sent or counted before either, but its slot
+  stayed taken for the 5-minute window.
 - The client's response cache holds at most `CACHE_MAX_ENTRIES` responses
   (default 1000); when it is full, expired entries go first, then the least
   recently used. It had no limit, and an entry was removed only when its own
