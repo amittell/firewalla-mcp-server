@@ -21,6 +21,7 @@ import {
   type InternalAxiosRequestConfig,
 } from 'axios';
 import { FirewallaClient } from '../../src/firewalla/client.js';
+import { withToolTimeout } from '../../src/utils/timeout-manager.js';
 import {
   RateLimitError,
   RequestRateLimiter,
@@ -244,6 +245,68 @@ describe('client-side rate limit', () => {
     // Releasing the same slot again gives back nothing more
     limiter.release(first!);
     expect((limiter as any).started).toEqual([second]);
+  });
+
+  it('sends a queued request at once when the slot it waits behind is given back', async () => {
+    const clock = new ManualClock();
+    const limiter = new RequestRateLimiter(1, clock);
+    const taken = limiter.tryAcquireSlot();
+    // Waits for the taken slot to expire, 5 minutes from now
+    const queued = track(limiter.acquire(clock.now() + 600_000));
+    await clock.advance(1_000);
+    expect(queued.settled).toBe(false);
+
+    limiter.release(taken!);
+    await settle();
+    expect(queued.settled).toBe(true);
+    expect(queued.error).toBeUndefined();
+    expect(queued.value?.at).toBe(START + 1_000);
+  });
+
+  it('a retry that no longer fits when its slot comes leaves that slot to the request queued behind it', async () => {
+    // Codex on #78: a retry given its slot and then not sent gave the slot
+    // back after the request queued next had counted it, and that request
+    // slept until another slot freed
+    jest.spyOn(Math, 'random').mockReturnValue(0.5);
+    const unavailable: Reply = { status: 503 };
+    const { client, clock, sent } = makeClient(3, n =>
+      n === 4 ? unavailable : boxes
+    );
+    jest.spyOn(Date, 'now').mockImplementation(() => clock.now());
+    // The window is full: slots at 0, 5 s and 20 s
+    await client.getBoxes('a');
+    await clock.advance(5_000);
+    await client.getBoxes('b');
+    await clock.advance(15_000);
+    await client.getBoxes('c');
+    await clock.advance(265_000);
+    // A tool starting at 285 s (deadline 315 s) reads at 299 s: sent at
+    // 300 s, answered 503 at once; its retry, after 1.5 s, is queued for
+    // the slot freeing at 305 s
+    const read = track(
+      withToolTimeout(async () => {
+        await clock.sleep(14_000);
+        return client.getBoxes('r');
+      }, 'get_boxes')
+    );
+    await clock.advance(17_000);
+    // Queued behind the retry, for the slot freeing at 320 s
+    const queued = track(client.getBoxes('q'));
+    await clock.advance(1_000);
+    // A 429 elsewhere holds every request until 316 s: the retry's slot
+    // comes then, past the tool's deadline, and it is not sent
+    (client as any).rateLimiter.pauseUntil(START + 316_000);
+    await clock.advance(20_000);
+
+    expect(read.error?.message).toContain('503');
+    expect(queued.settled).toBe(true);
+    expect(queued.error).toBeUndefined();
+    expect(sent.map(request => request.at)).toEqual([
+      0, 5_000, 20_000, 300_000, 316_000,
+    ]);
+    expect(stderr.join('')).toContain(
+      'API Request not sent: the retry of GET /v2/boxes could not answer before its tool gives up'
+    );
   });
 
   it('gives up on a queued request when a pause pushes its slot past its deadline, and the queue moves on', async () => {
