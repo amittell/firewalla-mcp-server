@@ -364,11 +364,9 @@ class SafeAccess {
   ensureObject(value: any): Record<string, any>;
 }
 
-class FieldMapper {
-  getCompatibleFields(entityType: string): string[];
-  mapFieldBetweenTypes(field: string, fromType: string, toType: string): string;
-  validateCrossReference(primaryType: string, secondaryType: string, correlationField: string): boolean;
-}
+// src/validation/field-mapper.ts exports functions, not a class
+function getCompatibleFields(primaryType: EntityType, secondaryType: EntityType): string[];
+function getFieldValue(entity: MappableEntity, field: string, entityType: EntityType): FieldValue;
 ```
 
 ### Performance Monitoring System
@@ -405,9 +403,9 @@ interface PerformanceMetrics {
 **Input Sanitization:**
 ```typescript
 class QuerySanitizer {
-  sanitizeSearchQuery(query: string): string;
-  preventInjection(input: string): string;
-  validateQueryLength(query: string, maxLength: number): boolean;
+  static sanitizeSearchQuery(query: string): ValidationResult; // includes the 2000-character limit
+  static validateQueryFields(query: string, entityType: string): ValidationResult;
+  static validateQueryComplexity(query: string): ValidationResult;
 }
 ```
 

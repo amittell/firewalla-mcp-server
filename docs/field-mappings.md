@@ -165,15 +165,18 @@ field:*value    # Ends with
 
 ### Range Operators
 ```bash
-field:[min TO max]    # Inclusive range
-bytes:[1000000 TO 50000000]
+field:min-max         # Inclusive range, the API's form
+total:1000000-50000000
 ```
+
+`field:[min TO max]` is refused before any request, with the API's form as the
+suggestion: the API has no such syntax.
 
 ### Logical Operators
 ```bash
 field1:value1 AND field2:value2    # Both conditions
-field1:value1 OR field2:value2     # Either condition
-NOT field:value                    # Exclude condition
+field:value1 OR field:value2       # Either value of one field, sent as field:value1,value2
+NOT field:value                    # Exclude condition, sent as -field:value
 ```
 
 ## Type Conversions
@@ -210,19 +213,6 @@ online:false
 # device.ip:192.168.1.100 OR ip:192.168.1.100
 # block:true OR blocked:true
 # online:false OR isOnline:false
-```
-
-### Cross-Reference Queries
-```bash
-# Find flows and alarms with same source IP
-primary_query: "source_ip:192.168.1.*"
-secondary_queries: ["severity:high"]
-correlation_field: "source_ip"
-
-# Device and flow correlation
-primary_query: "device_type:mobile"
-secondary_queries: ["bytes:>1000000"]
-correlation_field: "device_ip"
 ```
 
 ### Geographic Queries
@@ -267,15 +257,6 @@ bytes:>1000000
 
 # Good: The system checks multiple API paths
 # bytes, download, upload fields are all checked
-```
-
-### Cross-Reference Compatibility
-```bash
-# Good: Use fields available in both entity types
-correlation_field: "device_ip"  # Available in flows, alarms, devices
-
-# Avoid: Using fields not available in target entities
-correlation_field: "hit_count"  # Only available in rules
 ```
 
 ### Geographic Field Usage

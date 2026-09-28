@@ -155,6 +155,7 @@ MCP_SESSION_IDLE_TIMEOUT_MS=1800000       # HTTP sessions idle this long are clo
 API_TIMEOUT=30000                         # API request timeout in ms (default: 30000, 1000-300000)
 CACHE_TTL=300                             # Response cache TTL in seconds (default: 300, 0-3600)
 CACHE_MAX_ENTRIES=1000                    # Most responses cached; least recently used dropped first (default: 1000, 1-100000)
+RISK_THRESHOLD_FLOW_MIN=7                 # Risk score from which search_flows' geographic analysis counts a flow as high risk (default: 7)
 DEFAULT_PAGE_SIZE=100                     # Default page size (default: 100)
 MAX_PAGE_SIZE=10000                       # Page size ceiling (default: 10000)
 LOG_LEVEL=info                            # error, warn, info or debug (default: info)
