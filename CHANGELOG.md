@@ -808,6 +808,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`PERFORMANCE_THRESHOLDS.TIMEOUT_MS`) said `timed out after 30000ms
   (limit: 10000ms)`, with `timeoutMs: 10000` in its details. The timeout
   error now carries its limit, and all 22 of those answers use it.
+- An `MCP_HTTP_ALLOWED_ORIGINS` entry with a wildcard stops the HTTP server
+  at startup. `*` alone was refused, but `http://*.example.com` parses as an
+  origin whose host is `*.example.com`, so it was accepted, and it matched
+  no browser's `Origin`: every page it was meant to allow got 403. Any entry
+  with `*` is now refused with `MCP_HTTP_ALLOWED_ORIGINS: "<entry>" has a
+  wildcard. There is no wildcard: list each origin, comma-separated, ...`.
 
 ### Removed
 

@@ -324,6 +324,25 @@ describe('parseHttpSecurityConfig', () => {
     }
   });
 
+  it('refuses an allowed origin with a wildcard: each origin must be listed', () => {
+    // http://*.example.com parses as a URL whose host is "*.example.com",
+    // and no browser sends that Origin, so it was accepted and matched none
+    for (const wildcard of [
+      'http://*.example.com',
+      'https://*',
+      'http://app*.example.com',
+      '*',
+    ]) {
+      expect(() =>
+        parseHttpSecurityConfig({
+          MCP_HTTP_ALLOWED_ORIGINS: `http://localhost:6274,${wildcard}`,
+        })
+      ).toThrow(
+        `MCP_HTTP_ALLOWED_ORIGINS: "${wildcard}" has a wildcard. There is no wildcard: list each origin, comma-separated, e.g. http://app.example.com,http://admin.example.com`
+      );
+    }
+  });
+
   it('refuses an MCP_HTTP_ALLOWED_HOSTS entry that is not a host', () => {
     expect(() =>
       parseHttpSecurityConfig({
