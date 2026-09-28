@@ -54,7 +54,12 @@ It reaches the MCP client as the text of the result, with `isError` set:
 }
 ```
 
-Errors are JSON with either `response_format`.
+An error stays compact JSON even when a read tool was called with
+`response_format: "markdown"`: only a successful read is rendered as
+markdown (`toMarkdownResponse` in `src/utils/response-format.ts` returns an
+error unchanged). `response_format` is taken off the arguments before the
+handler runs, and a value other than `json`, `markdown` or `null` is itself
+refused as a `validation_error`.
 
 ## Error Types
 
@@ -85,11 +90,16 @@ The handler puts its own prefix before the client's message, for example
 | 404 | `Request failed: Resource not found. Please check your Box ID.` |
 | 429 | `Rate limit exceeded (HTTP 429): ...`; see [Rate Limit Errors](#rate-limit-errors) |
 | 500 | `Firewalla API answered 500 Internal Server Error: the Firewalla API is experiencing issues` |
-| 502, 503, 504 | `Firewalla API answered 503 Service Unavailable after 2 attempts: the Firewalla API is temporarily down` (a GET is sent again once; see [Retries](#retries)) |
+| 502 | `Firewalla API answered 502 Bad Gateway: a gateway could not reach the Firewalla API server, or the resource ID is invalid` |
+| 503 | `Firewalla API answered 503 Service Unavailable: the Firewalla API is temporarily down` |
+| 504 | `Firewalla API answered 504 Gateway Timeout: a gateway timed out waiting for the Firewalla API` |
 | No answer | `Firewalla API sent no answer (ECONNABORTED: timeout of 30000ms exceeded)`, with `after 2 attempts` when it was sent again |
 
-`after 2 attempts` counts every time the request went to the API, a 429's
-retries included, as `coverage.api_requests` does.
+A GET that got 502, 503 or 504 is sent again once (see [Retries](#retries)), and the
+message then says so after the status: `Firewalla API answered 503 Service
+Unavailable after 2 attempts: ...`. `after 2 attempts` counts every time the
+request went to the API, a 429's retries included, as `coverage.api_requests`
+does.
 
 ## Retries
 
