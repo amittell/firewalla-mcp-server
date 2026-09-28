@@ -228,6 +228,24 @@ describe('client-side rate limit', () => {
     ]);
   });
 
+  it('gives back the slot released, when two were taken in the same millisecond', () => {
+    const clock = new ManualClock();
+    const limiter = new RequestRateLimiter(3, clock);
+    const first = limiter.tryAcquireSlot();
+    const second = limiter.tryAcquireSlot();
+    expect(first?.at).toBe(START);
+    expect(second?.at).toBe(START);
+    expect(first).not.toBe(second);
+
+    limiter.release(first!);
+    const started = (limiter as any).started;
+    expect(started).toHaveLength(1);
+    expect(started[0]).toBe(second);
+    // Releasing the same slot again gives back nothing more
+    limiter.release(first!);
+    expect((limiter as any).started).toEqual([second]);
+  });
+
   it('gives up on a queued request when a pause pushes its slot past its deadline, and the queue moves on', async () => {
     const clock = new ManualClock();
     const limiter = new RequestRateLimiter(1, clock);

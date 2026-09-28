@@ -95,14 +95,24 @@ export function rateLimitError(options: {
 }
 
 /**
+ * A slot of the window, taken by one request. Each is its own object, so a
+ * request gives back the slot it took (release), even when another request
+ * took one in the same millisecond.
+ */
+export interface RateLimitSlot {
+  /** When the request started, in milliseconds since the epoch */
+  readonly at: number;
+}
+
+/**
  * Lets at most `limit` requests start in any rolling window of `windowMs`.
  * A request over the limit waits for a slot, in the order requests asked
  * (FIFO), but only until its deadline. `pauseUntil` holds every request back,
  * for when the API itself has refused one.
  */
 export class RequestRateLimiter {
-  /** When each request in the current window started, oldest first */
-  private readonly started: number[] = [];
+  /** The slot of each request in the current window, oldest first */
+  private readonly started: RateLimitSlot[] = [];
   /** No request starts before this time */
   private pausedUntil = 0;
   /** Requests waiting for a slot */
@@ -121,31 +131,37 @@ export class RequestRateLimiter {
    * Returns false, and takes nothing, otherwise.
    */
   tryAcquire(): boolean {
-    return this.tryAcquireAt() !== undefined;
+    return this.tryAcquireSlot() !== undefined;
   }
 
   /**
-   * As tryAcquire, returning the slot's start time (for release), or
-   * undefined when no slot was taken
+   * As tryAcquire, returning the slot taken (for release), or undefined
+   * when none was taken
    */
-  tryAcquireAt(): number | undefined {
+  tryAcquireSlot(): RateLimitSlot | undefined {
     const now = this.clock.now();
     if (this.waiting > 0 || this.slotAt(now) > now) {
       return undefined;
     }
-    this.started.push(now);
-    return now;
+    return this.take(now);
   }
 
   /**
-   * Gives back a slot taken at `startedAt` whose request was then not sent,
-   * so it does not count against the window
+   * Gives back `slot`, taken by a request that was then not sent, so it
+   * does not count against the window
    */
-  release(startedAt: number): void {
-    const index = this.started.lastIndexOf(startedAt);
+  release(slot: RateLimitSlot): void {
+    const index = this.started.indexOf(slot);
     if (index !== -1) {
       this.started.splice(index, 1);
     }
+  }
+
+  /** Takes a new slot starting at `now` */
+  private take(now: number): RateLimitSlot {
+    const slot: RateLimitSlot = { at: now };
+    this.started.push(slot);
+    return slot;
   }
 
   /**
@@ -161,7 +177,7 @@ export class RequestRateLimiter {
     if (ahead < free) {
       windowAt = now;
     } else if (ahead - free < this.started.length) {
-      windowAt = this.started[ahead - free] + this.windowMs;
+      windowAt = this.started[ahead - free].at + this.windowMs;
     } else {
       // The slot depends on requests not yet started: a window away at least
       windowAt = now + this.windowMs;
@@ -170,16 +186,19 @@ export class RequestRateLimiter {
   }
 
   /**
-   * Resolves, with the slot's start time (for release), once the caller has
-   * a slot, after every request queued before it. Rejects with a RateLimitError if the slot would come after
-   * `deadline`, for example because a 429 paused the client meanwhile. When
+   * Resolves, with the slot taken (for release), once the caller has a
+   * slot, after every request queued before it. Rejects with a
+   * RateLimitError if the slot would come after `deadline`, for example because a 429 paused the client meanwhile. When
    * `signal` is aborted (its tool gave up), rejects at once, even mid-wait,
    * and takes no slot: a request that is never sent must not hold one for
    * the window, and must not hold up the requests queued after it.
    */
-  async acquire(deadline: number, signal?: AbortSignal): Promise<number> {
+  async acquire(
+    deadline: number,
+    signal?: AbortSignal
+  ): Promise<RateLimitSlot> {
     this.waiting++;
-    const turn = this.queue.then(async (): Promise<number> => {
+    const turn = this.queue.then(async (): Promise<RateLimitSlot> => {
       for (;;) {
         if (signal?.aborted) {
           throw signal.reason instanceof Error
@@ -189,8 +208,7 @@ export class RequestRateLimiter {
         const now = this.clock.now();
         const at = this.slotAt(now);
         if (at <= now) {
-          this.started.push(now);
-          return now;
+          return this.take(now);
         }
         if (at > deadline) {
           throw this.unavailable(at);
@@ -252,7 +270,10 @@ export class RequestRateLimiter {
 
   /** Forgets requests that started a whole window ago */
   private expire(now: number): void {
-    while (this.started.length > 0 && this.started[0] + this.windowMs <= now) {
+    while (
+      this.started.length > 0 &&
+      this.started[0].at + this.windowMs <= now
+    ) {
       this.started.shift();
     }
   }
@@ -261,7 +282,9 @@ export class RequestRateLimiter {
   private slotAt(now: number): number {
     this.expire(now);
     const windowAt =
-      this.started.length < this.limit ? now : this.started[0] + this.windowMs;
+      this.started.length < this.limit
+        ? now
+        : this.started[0].at + this.windowMs;
     return Math.max(windowAt, this.pausedUntil);
   }
 }

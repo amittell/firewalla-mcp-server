@@ -111,6 +111,7 @@ import {
   rateLimitPauseMs,
   systemClock,
   type Clock,
+  type RateLimitSlot,
 } from './rate-limit.js';
 
 /**
@@ -1016,10 +1017,10 @@ export class FirewallaClient {
           );
         };
         // Takes no slot and counts nothing when it does not send: the
-        // slot taken at `startedAt` is given back
-        const send = (startedAt: number) => {
+        // slot it took is given back
+        const send = (slot: RateLimitSlot) => {
           if (request.signal?.aborted || !fits(0)) {
-            this.rateLimiter.release(startedAt);
+            this.rateLimiter.release(slot);
             throw request.signal?.aborted ? cancelled() : declined();
           }
           process.stderr.write(`API Request: ${name}\n`);
@@ -1048,9 +1049,9 @@ export class FirewallaClient {
         };
         // A free slot is taken at once, so an unthrottled request goes out
         // without waiting a tick
-        const startedAt = this.rateLimiter.tryAcquireAt();
-        if (startedAt !== undefined) {
-          return send(startedAt);
+        const slot = this.rateLimiter.tryAcquireSlot();
+        if (slot !== undefined) {
+          return send(slot);
         }
         const startAt = this.rateLimiter.nextStartAt();
         if (startAt > deadline) {

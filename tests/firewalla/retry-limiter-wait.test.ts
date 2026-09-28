@@ -103,7 +103,7 @@ function makeClient(answers: Answer[], { rateLimit = 100 } = {}) {
     sleeps,
     limiter,
     /** When each request in the rate limiter's window started */
-    started: (): number[] => [...limiter.started],
+    started: (): number[] => limiter.started.map((slot: any) => slot.at),
   };
 }
 
@@ -211,7 +211,7 @@ describe("a retry's wait for the rate limiter counts", () => {
     await client.getFlowData('device.id:p', undefined, undefined, 5);
     now = start;
     const acquire = limiter.acquire.bind(limiter);
-    const granted: number[] = [];
+    const granted: any[] = [];
     jest
       .spyOn(limiter, 'acquire')
       .mockImplementation(async (...args: unknown[]) => {
@@ -227,7 +227,7 @@ describe("a retry's wait for the rate limiter counts", () => {
     expect(calls).toHaveLength(2);
     expect(trace.sent).toBe(1);
     expect(granted).toHaveLength(1);
-    expect(started()).not.toContain(granted[0]);
+    expect(limiter.started).not.toContain(granted[0]);
   });
 });
 
@@ -258,7 +258,7 @@ describe('an abort between getting a slot and being sent', () => {
     now = start + 299_000;
     const controller = new AbortController();
     const acquire = limiter.acquire.bind(limiter);
-    const granted: number[] = [];
+    const granted: any[] = [];
     jest
       .spyOn(limiter, 'acquire')
       .mockImplementation(async (...args: unknown[]) => {
@@ -281,6 +281,6 @@ describe('an abort between getting a slot and being sent', () => {
     expect(onSent).not.toHaveBeenCalled();
     // The first request's window has passed; the slot granted was given back
     expect(started()).toEqual([]);
-    expect(granted).toEqual([start + 300_000]);
+    expect(granted.map(slot => slot.at)).toEqual([start + 300_000]);
   });
 });
