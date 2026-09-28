@@ -814,6 +814,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no browser's `Origin`: every page it was meant to allow got 403. Any entry
   with `*` is now refused with `MCP_HTTP_ALLOWED_ORIGINS: "<entry>" has a
   wildcard. There is no wildcard: list each origin, comma-separated, ...`.
+- `npm run test:quick`, which the pre-commit hook runs, runs the unit
+  tests: every file in `tests/utils`, `tests/validation`, `tests/search`,
+  `tests/config`, `tests/monitoring`, `tests/prompts` and `tests/resources`
+  but `operator-agreement`, which drives the five search tools through the
+  client and takes 5.5 s by itself. That is 39 files and 1,157 tests, in
+  about 2 s with coverage off. It ran the 23 files whose paths contain
+  `utils` or `validation`, with coverage on, among them two tool tests
+  (`box-gid-validation`, and `cache-invalidation` since "invalidation"
+  contains "validation"), and its ignore patterns (`bulk-operations`,
+  `problematic-tools`, `timeout-retry`) matched no file. It no longer passes `--passWithNoTests`, so a pattern
+  that matches nothing fails instead of passing.
 
 ### Removed
 
