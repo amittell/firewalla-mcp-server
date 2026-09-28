@@ -491,7 +491,7 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           'get_active_alarms',
           error.duration,
-          10000 // default timeout
+          error.timeoutMs
         );
       }
 
@@ -605,7 +605,7 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           'get_specific_alarm',
           error.duration,
-          10000
+          error.timeoutMs
         );
       }
 

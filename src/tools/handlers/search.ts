@@ -615,7 +615,7 @@ export class SearchFlowsHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000 // Default timeout from timeout-manager
+          error.timeoutMs
         );
       }
 
@@ -894,7 +894,11 @@ export class SearchAlarmsHandler extends BaseToolHandler {
         return queryError;
       }
       if (error instanceof TimeoutError) {
-        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          error.timeoutMs
+        );
       }
 
       const errorMessage =
@@ -1050,7 +1054,11 @@ export class SearchRulesHandler extends BaseToolHandler {
         return queryError;
       }
       if (error instanceof TimeoutError) {
-        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          error.timeoutMs
+        );
       }
 
       const errorMessage =
@@ -1240,7 +1248,11 @@ export class SearchDevicesHandler extends BaseToolHandler {
       return this.createUnifiedResponse(unifiedResponseData);
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
-        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          error.timeoutMs
+        );
       }
 
       const errorMessage =
@@ -1380,7 +1392,11 @@ export class SearchTargetListsHandler extends BaseToolHandler {
       return this.createUnifiedResponse(unifiedResponseData);
     } catch (error: unknown) {
       if (error instanceof TimeoutError) {
-        return createTimeoutErrorResponse(this.name, error.duration, 10000);
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          error.timeoutMs
+        );
       }
 
       const errorMessage =

@@ -802,6 +802,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   list 1000. `search_rules` lists its maximum of 1000, where it listed none,
   and `get_network_rules_summary` lists the `limit` it reads (default 200, at
   most 2000), which its schema left out.
+- A tool that times out reports the limit it was stopped at. The search,
+  rules, device, network and security tools passed a fixed 10000 ms into
+  their timeout answer, so a tool stopped at the 30 s default
+  (`PERFORMANCE_THRESHOLDS.TIMEOUT_MS`) said `timed out after 30000ms
+  (limit: 10000ms)`, with `timeoutMs: 10000` in its details. The timeout
+  error now carries its limit, and all 22 of those answers use it.
 
 ### Removed
 

@@ -248,7 +248,7 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000 // Default timeout from timeout-manager
+          error.timeoutMs
         );
       }
 
@@ -369,7 +369,7 @@ export class RenameDeviceHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000,
+          error.timeoutMs,
           error
         );
       }

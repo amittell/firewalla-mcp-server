@@ -490,7 +490,7 @@ export class GetFlowDataHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000 // Default timeout from timeout-manager
+          error.timeoutMs
         );
       }
 
@@ -665,7 +665,7 @@ export class GetBandwidthUsageHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000 // Default timeout from timeout-manager
+          error.timeoutMs
         );
       }
 
@@ -846,7 +846,7 @@ export class GetOfflineDevicesHandler extends BaseToolHandler {
         return createTimeoutErrorResponse(
           this.name,
           error.duration,
-          10000 // Default timeout from timeout-manager
+          error.timeoutMs
         );
       }
 
