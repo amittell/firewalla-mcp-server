@@ -430,7 +430,9 @@ export function createHttpTransportServer(
 
 /**
  * Starts listening on host:port and logs how the server is exposed. Warns
- * when it accepts connections from other machines without a bearer token.
+ * when it accepts connections from other machines without a bearer token,
+ * which the server does only with MCP_HTTP_ALLOW_NO_TOKEN=true (see
+ * httpStartRefusal).
  */
 export async function listenHttpTransport(
   httpServer: HttpServer,
@@ -465,8 +467,10 @@ export async function listenHttpTransport(
     }
   );
   if (!isLoopbackAddress(security.host) && !security.bearerToken) {
-    logger.warn(
-      `HTTP transport is listening on ${security.host}, not only on this machine's loopback, without MCP_HTTP_BEARER_TOKEN: any client that reaches port ${boundPort} can use the Firewalla MSP token through it. Set MCP_HTTP_BEARER_TOKEN; outside a container, MCP_HTTP_HOST=127.0.0.1 keeps the server local.`
+    // A plain line, not through the logger, so that LOG_LEVEL=error does not
+    // hide it
+    process.stderr.write(
+      `firewalla-mcp-server: WARNING: MCP_HTTP_ALLOW_NO_TOKEN=true: the HTTP transport is listening on ${shownHost} port ${boundPort} without MCP_HTTP_BEARER_TOKEN, so any client that reaches that port can call every tool this server lists with the Firewalla MSP token. Use it only on a network no untrusted machine can reach, such as a compose network with no published port; anywhere else, set MCP_HTTP_BEARER_TOKEN (openssl rand -hex 32 makes one).\n`
     );
   }
 }

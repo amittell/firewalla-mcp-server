@@ -18,7 +18,10 @@
  *   request without an Origin header, which is what non-browser MCP clients
  *   send, is accepted; any other Origin is refused.
  * - MCP_HTTP_BEARER_TOKEN: when set, every request must carry
- *   `Authorization: Bearer <token>`
+ *   `Authorization: Bearer <token>`. At least MIN_BEARER_TOKEN_LENGTH
+ *   characters, and required when MCP_HTTP_HOST is not a loopback address
+ * - MCP_HTTP_ALLOW_NO_TOKEN: `true` starts the server beyond loopback without
+ *   a token, for a network no untrusted machine can reach
  */
 
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -27,6 +30,14 @@ import { isIP } from 'node:net';
 
 /** Address the HTTP transport listens on when MCP_HTTP_HOST is not set */
 export const DEFAULT_HTTP_HOST = '127.0.0.1';
+
+/**
+ * Shortest MCP_HTTP_BEARER_TOKEN accepted, in characters. A length cannot
+ * tell a random token from a chosen one, but it refuses the values typed to
+ * try the setting out (x, test, changeme). 16 random hex characters are 64
+ * bits, and `openssl rand -hex 32` prints 64 characters.
+ */
+export const MIN_BEARER_TOKEN_LENGTH = 16;
 
 /** Host header names accepted whatever the configuration */
 const LOOPBACK_HOST_NAMES = ['localhost', '127.0.0.1', '[::1]'];
@@ -57,6 +68,8 @@ export interface HttpSecurityConfig {
   allowedOrigins: ReadonlySet<string>;
   /** Token every request must present, when set */
   bearerToken?: string;
+  /** MCP_HTTP_ALLOW_NO_TOKEN=true: start beyond loopback without a token */
+  allowNoToken: boolean;
 }
 
 /** Why a request was refused: the status and a message for the client */
@@ -192,8 +205,10 @@ export function parseHttpSecurityConfig(
   }
 
   const bearerToken = env.MCP_HTTP_BEARER_TOKEN?.trim() || undefined;
+  const allowNoToken =
+    (env.MCP_HTTP_ALLOW_NO_TOKEN ?? '').trim().toLowerCase() === 'true';
 
-  return { host, allowedHosts, allowedOrigins, bearerToken };
+  return { host, allowedHosts, allowedOrigins, bearerToken, allowNoToken };
 }
 
 /** Whether an address only accepts connections from this machine */
@@ -205,6 +220,34 @@ export function isLoopbackAddress(host: string): boolean {
     name === '[::1]' ||
     /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(name)
   );
+}
+
+/**
+ * Why the HTTP transport must not start with these settings, as one line for
+ * stderr, or undefined to start it.
+ *
+ * Every request can use the MSP token, and call the write tools when they
+ * are on, and the Docker image listens on 0.0.0.0: without a token,
+ * `docker run -p 3000:3000` served anyone who could reach the port. So an
+ * address other than loopback needs MCP_HTTP_BEARER_TOKEN, unless
+ * MCP_HTTP_ALLOW_NO_TOKEN=true says the network is trusted. A token shorter
+ * than MIN_BEARER_TOKEN_LENGTH is refused wherever the server listens.
+ */
+export function httpStartRefusal(
+  config: HttpSecurityConfig
+): string | undefined {
+  const { host, bearerToken, allowNoToken } = config;
+  if (
+    bearerToken !== undefined &&
+    bearerToken.length < MIN_BEARER_TOKEN_LENGTH
+  ) {
+    const unit = bearerToken.length === 1 ? 'character' : 'characters';
+    return `MCP_HTTP_BEARER_TOKEN is ${bearerToken.length} ${unit} long and needs at least ${MIN_BEARER_TOKEN_LENGTH}. Use a random value (openssl rand -hex 32 makes one).`;
+  }
+  if (bearerToken === undefined && !allowNoToken && !isLoopbackAddress(host)) {
+    return `MCP_HTTP_HOST=${host} accepts connections from other machines, and MCP_HTTP_BEARER_TOKEN is empty or not set, so any client that reaches the port could use the Firewalla MSP token. Set MCP_HTTP_BEARER_TOKEN to a random value of at least ${MIN_BEARER_TOKEN_LENGTH} characters (openssl rand -hex 32 makes one) and have clients send Authorization: Bearer <token>. Outside a container, MCP_HTTP_HOST=127.0.0.1 keeps the server on this machine. On a network no untrusted machine can reach, such as a compose network with no published port, MCP_HTTP_ALLOW_NO_TOKEN=true starts it without a token.`;
+  }
+  return undefined;
 }
 
 /**

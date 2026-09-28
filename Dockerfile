@@ -59,9 +59,9 @@ ENV NODE_ENV=production
 
 # With MCP_TRANSPORT=http the server listens on 127.0.0.1 unless told
 # otherwise, which inside a container no published port (-p 3000:3000)
-# reaches. Listen on every interface of the container instead, and set
-# MCP_HTTP_BEARER_TOKEN whenever the port is reachable from other machines.
-# The default stdio transport ignores this.
+# reaches. Listen on every interface of the container instead. On that
+# address the server does not start without MCP_HTTP_BEARER_TOKEN, unless
+# MCP_HTTP_ALLOW_NO_TOKEN=true. The default stdio transport ignores this.
 ENV MCP_HTTP_HOST=0.0.0.0
 
 # Note: MCP servers use stdio, not HTTP ports

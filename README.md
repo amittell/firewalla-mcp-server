@@ -60,10 +60,10 @@ The MCP server acts as a bridge between Claude and your Firewalla firewall, tran
 | Up to 1.5.0 | From 2.0.0 | What to set |
 |---|---|---|
 | `pause_rule`, `resume_rule`, `create_target_list`, `update_target_list` and `delete_target_list` were always registered | All 11 write tools are off; the server lists 24 read-only tools, and a call to a write tool answers "Unknown tool" and sends nothing | `FIREWALLA_ENABLE_WRITE_TOOLS=true` |
-| The HTTP transport listened on every interface | It listens on 127.0.0.1. The Docker image sets `MCP_HTTP_HOST=0.0.0.0`, so a published port works as before | `MCP_HTTP_HOST=0.0.0.0` outside Docker, with `MCP_HTTP_BEARER_TOKEN` |
+| The HTTP transport listened on every interface | It listens on 127.0.0.1. The Docker image sets `MCP_HTTP_HOST=0.0.0.0`, so a published port reaches it once `MCP_HTTP_BEARER_TOKEN` is set | `MCP_HTTP_HOST=0.0.0.0` outside Docker, with `MCP_HTTP_BEARER_TOKEN` |
 | Any `Host` header was served | 403 unless it is `localhost`, `127.0.0.1`, `[::1]` or the `MCP_HTTP_HOST` address; a wildcard `MCP_HTTP_HOST` (`0.0.0.0`, `::`, as in the Docker image) adds nothing, so every other name clients use must be listed | the name clients connect by (a compose service name, a LAN address) in `MCP_HTTP_ALLOWED_HOSTS` |
 | Any `Origin` was served | 403 for a request with an `Origin` header, which browsers send; MCP clients that send none are not affected | the page's exact origin in `MCP_HTTP_ALLOWED_ORIGINS`: scheme, host and port as the browser sends them (`http://localhost:6274`), no path and no wildcard |
-| No token check (`MCP_HTTP_BEARER_TOKEN` did not exist) | With `MCP_HTTP_BEARER_TOKEN` set, 401 without `Authorization: Bearer <token>` | the token in every client, whenever the port is reachable from other machines |
+| No token check (`MCP_HTTP_BEARER_TOKEN` did not exist) | On an address other than loopback, the Docker image's `0.0.0.0` included, the server exits with code 1 at startup unless `MCP_HTTP_BEARER_TOKEN` is set, and it refuses a token shorter than 16 characters wherever it listens. With the token, a request without `Authorization: Bearer <token>` gets 401 | `MCP_HTTP_BEARER_TOKEN` (`openssl rand -hex 32` makes one) and the same token in every client, or `MCP_HTTP_ALLOW_NO_TOKEN=true` on a network no untrusted machine can reach, such as a compose network with no published port |
 | Any path starting with `MCP_HTTP_PATH` was served | Only the configured `MCP_HTTP_PATH` (default `/mcp`) and that path with one trailing slash, with or without a query string; with the default, `/mcpx` and `/mcp/x` get 404 | a client URL that ends in exactly the configured `MCP_HTTP_PATH` |
 | `MCP_TEST_MODE=true` started under any `NODE_ENV` | Refused with `NODE_ENV=production`, which the Docker image sets | `-e NODE_ENV=development` with `-e MCP_TEST_MODE=true` |
 | `API_RATE_LIMIT` was range-checked and not applied | At most `API_RATE_LIMIT` requests start in any 5 minutes (default 100: the MSP API allowed 100 requests per fixed 5-minute window on the one token measured; whether that limit is per token or per account was not measured); a request that cannot start within 20 s fails and says when capacity returns | a lower `API_RATE_LIMIT` when other clients use the same token |
@@ -145,7 +145,8 @@ docker run -d --name firewalla-mcp \
 # The server will be accessible at http://localhost:3000/mcp, and clients
 # send the header: Authorization: Bearer a_long_random_secret
 
-# Using env file (recommended)
+# Using env file (recommended): besides the credentials, .env sets
+# MCP_TRANSPORT=http and MCP_HTTP_BEARER_TOKEN
 docker run -d --name firewalla-mcp \
   -p 3000:3000 \
   --env-file .env \
@@ -177,7 +178,7 @@ EOF
 docker-compose up -d
 ```
 
-The image sets `MCP_HTTP_HOST=0.0.0.0` so that a published port reaches the server. `-p 3000:3000` publishes it on every interface of the Docker host, so anyone on your network can reach it: set `MCP_HTTP_BEARER_TOKEN` (for example `openssl rand -hex 32`) whenever you publish the port, or publish it on this machine only with `-p 127.0.0.1:3000:3000`. The server answers only requests whose `Host` header is `localhost`, `127.0.0.1` or `[::1]`, so a client that connects by another name, such as the host's LAN address or a compose service name, needs that name in `MCP_HTTP_ALLOWED_HOSTS`. See [HTTP transport security](#http-transport-security).
+The image sets `MCP_HTTP_HOST=0.0.0.0` so that a published port reaches the server, and on that address the server does not start without `MCP_HTTP_BEARER_TOKEN` (at least 16 characters; `openssl rand -hex 32` makes one): the container exits with code 1, and `docker logs` shows a `refusing to start` line that says why. `-p 3000:3000` publishes the port on every interface of the Docker host, where anyone on your network can reach it. Publishing it on this machine only (`-p 127.0.0.1:3000:3000`) still needs the token: another container on the same Docker network can connect to the container's own address, and one that did, with `Host: localhost` and no token, got 200 when the check was turned off. `MCP_HTTP_ALLOW_NO_TOKEN=true` turns the check off, for a network no untrusted machine or container can reach, such as a compose network with no published port; the server then prints a warning when it starts. The server answers only requests whose `Host` header is `localhost`, `127.0.0.1` or `[::1]`, so a client that connects by another name, such as the host's LAN address or a compose service name, needs that name in `MCP_HTTP_ALLOWED_HOSTS`. See [HTTP transport security](#http-transport-security).
 
 ### Option C: Install from source
 ```bash
@@ -231,7 +232,8 @@ MCP_TRANSPORT=http
 MCP_HTTP_PORT=3000          # Default: 3000
 MCP_HTTP_PATH=/mcp          # Default: /mcp. Other paths get 404
 MCP_HTTP_HOST=127.0.0.1     # Address to listen on, no port (::1 or [::1] for IPv6). Default: 127.0.0.1 (0.0.0.0 in the Docker image)
-MCP_HTTP_BEARER_TOKEN=      # When set, clients must send Authorization: Bearer <token>
+MCP_HTTP_BEARER_TOKEN=      # Clients must send Authorization: Bearer <token>. Required, 16+ characters, unless MCP_HTTP_HOST is loopback
+MCP_HTTP_ALLOW_NO_TOKEN=    # "true" starts beyond loopback without a token, for a network no untrusted machine can reach
 MCP_HTTP_ALLOWED_HOSTS=     # More Host header names to accept, comma-separated
 MCP_HTTP_ALLOWED_ORIGINS=   # Browser origins to accept, comma-separated, e.g. http://localhost:6274
 ```
@@ -239,8 +241,8 @@ MCP_HTTP_ALLOWED_ORIGINS=   # Browser origins to accept, comma-separated, e.g. h
 <a id="http-transport-security"></a>
 **HTTP transport security**: every request can spend your MSP token, so the HTTP server follows the security rules of the [MCP transport specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports):
 
-- It listens on `127.0.0.1`, this machine only. Set `MCP_HTTP_HOST=0.0.0.0` (or one address) to accept other machines, and set `MCP_HTTP_BEARER_TOKEN` with it: the server logs a warning when it listens beyond loopback without a token.
-- With `MCP_HTTP_BEARER_TOKEN` set, a request without `Authorization: Bearer <token>` gets 401.
+- It listens on `127.0.0.1`, this machine only. Set `MCP_HTTP_HOST=0.0.0.0` (or one address) to accept other machines, and set `MCP_HTTP_BEARER_TOKEN` with it: on any address but loopback (`127.0.0.0/8`, `::1`, `localhost`) the server refuses to start without a token, and exits with code 1 after one line on stderr that says why. `MCP_HTTP_ALLOW_NO_TOKEN=true` starts it without one, for a network no untrusted machine can reach, such as a compose network with no published port; the server then writes a warning to stderr at startup, whatever `LOG_LEVEL` says.
+- With `MCP_HTTP_BEARER_TOKEN` set, a request without `Authorization: Bearer <token>` gets 401. A token shorter than 16 characters stops startup wherever the server listens; `openssl rand -hex 32` makes one of 64.
 - A request whose `Host` header is not `localhost`, `127.0.0.1`, `[::1]`, the `MCP_HTTP_HOST` address or a name in `MCP_HTTP_ALLOWED_HOSTS` gets 403. This stops DNS rebinding, where a web page points its own domain name at your machine.
 - A request with an `Origin` header, which browsers send, gets 403 unless the origin is in `MCP_HTTP_ALLOWED_ORIGINS`. Non-browser MCP clients send no `Origin` and are not affected. An allowed origin gets CORS headers on every answer, refusals such as a 401 for a missing token included, so a web page on it can call the server and read why a request was refused.
 - The MCP endpoint is the `MCP_HTTP_PATH` path exactly: `/mcp`, `/mcp/` and either with a query string. Any other path, such as `/mcpx` or `/mcp/x`, gets 404, CORS preflight requests included.
