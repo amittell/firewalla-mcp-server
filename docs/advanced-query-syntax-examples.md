@@ -1,542 +1,92 @@
-# Advanced Query Syntax Examples for Firewalla MCP Tools
-
-This guide provides comprehensive query syntax examples and patterns for advanced search capabilities across all Firewalla MCP Server tools.
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Basic Query Syntax](#basic-query-syntax)
-- [Logical Operators](#logical-operators)
-- [Field-Specific Queries](#field-specific-queries)
-- [Tool-Specific Query Examples](#tool-specific-query-examples)
-- [Performance-Optimized Queries](#performance-optimized-queries)
-- [Common Query Patterns](#common-query-patterns)
-- [Troubleshooting Query Issues](#troubleshooting-query-issues)
-
-## Overview
-
-The Firewalla MCP Server supports sophisticated query syntax for searching and filtering data across flows, alarms, devices, rules, and other entities. Understanding these patterns enables powerful analysis capabilities while maintaining optimal performance.
-
-### Query Syntax Philosophy
-
-- **Intuitive**: Human-readable field:value patterns
-- **Flexible**: Support for wildcards, ranges, and complex logic
-- **Performant**: Optimized for server-side processing
-- **Safe**: Protected against injection and malformed queries
-- **Consistent**: Same syntax across all search tools
-
-## Basic Query Syntax
-
-### Simple Field Queries
-
-```bash
-# Exact match
-protocol:tcp
-severity:high
-status:active
-online:true
-
-# Case-insensitive matching
-country:china        # Matches "China", "CHINA", "china"
-device_name:laptop   # Matches various laptop naming patterns
-```
-
-### Wildcard Patterns
-
-```bash
-# Prefix matching
-source_ip:192.168.*
-device_name:iPhone*
-target_value:*.facebook.com
-
-# Suffix matching
-mac_address:*:aa:bb:cc
-application:*browser
-
-# Contains matching
-device_name:*laptop*
-user_agent:*Chrome*
-```
-
-### Range Queries
-
-```bash
-# Numeric ranges
-bytes:[1000 TO 50000]
-severity_score:[0.5 TO 1.0]
-port:[80 TO 443]
-hit_count:[10 TO 100]
-
-# Date/time ranges
-timestamp:[2024-01-01 TO 2024-01-31]
-last_seen:[NOW-24h TO NOW]
-created:[NOW-7d TO NOW-1d]
-
-# Open-ended ranges
-bytes:>1000000         # Greater than 1MB
-timestamp:<NOW-1h      # Older than 1 hour
-severity_score:>=0.8   # High severity
-```
-
-### Comparison Operators
-
-```bash
-# Numeric comparisons
-bytes:>10000000        # Larger than 10MB
-duration:<300          # Less than 5 minutes
-hit_count:>=10         # 10 or more hits
-priority:<=2           # Priority 2 or lower
-
-# Date comparisons
-timestamp:>NOW-24h     # Within last 24 hours
-last_seen:<NOW-1h      # Not seen in last hour
-created:>=2024-01-01   # Created this year or later
-```
-
-## Logical Operators
-
-### AND Operations
-
-```bash
-# Basic AND
-severity:high AND protocol:tcp
-online:true AND mac_vendor:Apple
-blocked:true AND country:China
-
-# Multiple field AND
-severity:high AND protocol:tcp AND source_ip:192.168.*
-device_type:laptop AND online:true AND last_seen:>NOW-1h
-```
-
-### OR Operations
-
-```bash
-# Basic OR
-severity:high OR severity:critical
-protocol:tcp OR protocol:udp
-country:China OR country:Russia
-
-# Multiple value OR
-(severity:high OR severity:critical OR severity:medium) AND protocol:tcp
-device_type:phone OR device_type:tablet OR device_type:laptop
-```
-
-### NOT Operations
-
-```bash
-# Basic negation
-NOT blocked:true
-NOT source_ip:192.168.*
-NOT severity:low
-
-# Combined with other operators
-severity:high AND NOT source_ip:192.168.*
-protocol:tcp AND NOT blocked:true AND NOT destination_port:80
-```
-
-### Complex Grouping
-
-```bash
-# Parentheses for grouping
-(severity:high OR severity:critical) AND protocol:tcp
-(source_ip:192.168.* OR source_ip:10.0.*) AND NOT blocked:true
-(device_type:laptop OR device_type:desktop) AND (online:true AND last_seen:>NOW-1h)
-
-# Nested grouping
-((severity:high AND protocol:tcp) OR (severity:critical AND protocol:udp)) AND NOT source_ip:192.168.*
-```
-
-## Field-Specific Queries
-
-### Network Fields
-
-```bash
-# IP addresses and networks
-source_ip:192.168.1.1
-source_ip:192.168.*
-source_ip:[192.168.1.1 TO 192.168.1.255]
-destination_ip:10.0.0.0/8
-
-# Protocols and ports
-protocol:tcp
-protocol:(tcp OR udp)
-port:443
-port:[80 TO 443]
-destination_port:>1024
-
-# Network metrics
-bytes:>1000000
-duration:[10 TO 300]
-packet_count:>100
-bandwidth_usage:>50000000
-```
-
-### Security Fields
-
-```bash
-# Severity and threat scoring
-severity:high
-severity:(high OR critical)
-severity:>=medium
-threat_score:>0.8
-risk_level:high
-
-# Security indicators
-blocked:true
-malware_detected:true
-intrusion_attempt:true
-suspicious_activity:true
-threat_type:malware
-
-# Resolution status
-resolved:false
-acknowledged:true
-priority:urgent
-status:active
-```
-
-### Device Fields
-
-```bash
-# Device identification
-device_id:abc123
-device_name:*iPhone*
-mac_address:aa:bb:cc:dd:ee:ff
-mac_vendor:Apple
-device_type:laptop
-
-# Device status
-online:true
-last_seen:>NOW-1h
-connection_status:connected
-wifi_connected:true
-ethernet_connected:false
-
-# Device characteristics
-os_type:iOS
-browser:Chrome
-user_agent:*Safari*
-hostname:*MacBook*
-```
-
-### Geographic Fields
-
-```bash
-# Country and region
-country:China
-country:(China OR Russia OR Iran)
-continent:Asia
-region:Eastern\ Europe
-city:Beijing
-
-# Network infrastructure
-asn:AS4134
-asn:(AS4134 OR AS8075)
-hosting_provider:cloudflare
-is_cloud_provider:true
-is_vpn:false
-
-# Risk scoring
-geographic_risk_score:>0.7
-high_risk_country:true
-known_threat_source:true
-```
-
-### Temporal Fields
-
-```bash
-# Relative time queries
-timestamp:>NOW-1h        # Last hour
-timestamp:>NOW-24h       # Last 24 hours
-timestamp:>NOW-7d        # Last week
-last_seen:<NOW-1h        # Not seen recently
-
-# Absolute time queries
-timestamp:>2024-01-01
-created:[2024-01-01 TO 2024-01-31]
-last_modified:>=2024-01-15T10:00:00Z
-
-# Time range combinations
-(timestamp:>NOW-24h AND timestamp:<NOW-1h) AND severity:high
-```
-
-## Tool-Specific Query Examples
-
-### Flow Search Queries (`search_flows`)
-
-```bash
-# Network traffic analysis
-search_flows query:"protocol:tcp AND destination_port:443 AND bytes:>1000000"
-
-# Security-focused flow search
-search_flows query:"blocked:true AND (country:China OR country:Russia) AND bytes:>10000000"
-
-# Performance monitoring
-search_flows query:"protocol:tcp AND duration:>30 AND source_ip:192.168.*"
-
-# Application traffic analysis
-search_flows query:"application:torrent OR application:p2p OR destination_port:[6881 TO 6999]"
-
-# Geographic threat analysis
-search_flows query:"(country:China OR country:Russia OR country:Iran) AND severity:>=medium"
-```
-
-### Alarm Search Queries (`search_alarms`)
-
-```bash
-# High-priority security alerts
-search_alarms query:"severity:critical AND NOT resolved:true"
-
-# Intrusion detection
-search_alarms query:"type:intrusion_detection AND source_ip:* AND timestamp:>NOW-24h"
-
-# Malware detection
-search_alarms query:"malware_detected:true AND (country:China OR country:Russia)"
-
-# Network anomaly detection
-search_alarms query:"type:network_anomaly AND bytes:>50000000 AND protocol:tcp"
-
-# False positive filtering
-search_alarms query:"severity:high AND NOT (source_ip:192.168.* OR source_ip:10.0.*)"
-```
-
-### Device Search Queries (`search_devices`)
-
-```bash
-# Device inventory management
-search_devices query:"device_type:laptop AND mac_vendor:Apple AND online:true"
-
-# Offline device detection
-search_devices query:"online:false AND last_seen:<NOW-24h"
-
-# Mobile device management
-search_devices query:"(device_type:phone OR device_type:tablet) AND os_type:iOS"
-
-# Network security audit
-search_devices query:"device_type:unknown OR mac_vendor:unknown OR hostname:*unknown*"
-
-# Performance monitoring
-search_devices query:"bandwidth_usage:>100000000 AND connection_type:wifi"
-```
-
-### Rule Search Queries (`search_rules`)
-
-```bash
-# Active security rules
-search_rules query:"action:block AND status:active AND hit_count:>0"
-
-# Social media blocking rules
-search_rules query:"target_value:*.facebook.com OR target_value:*.twitter.com OR target_value:*.instagram.com"
-
-# Unused rule detection
-search_rules query:"hit_count:0 AND created:<NOW-30d"
-
-# Time-based rule analysis
-search_rules query:"schedule:* AND action:timelimit"
-
-# High-impact rules
-search_rules query:"hit_count:>1000 AND action:block"
-```
-
-### Target List Queries (`search_target_lists`)
-
-```bash
-# Malware domain lists
-search_target_lists query:"category:malware AND owner:global"
-
-# Advertisement blocking
-search_target_lists query:"category:ad AND (owner:user OR owner:custom)"
-
-# Social media categories
-search_target_lists query:"category:social_media AND target_count:>1000"
-
-# Custom rule lists
-search_target_lists query:"owner:custom AND last_updated:>NOW-7d"
-```
-
-## Performance-Optimized Queries
-
-### Time-Bounded Queries
-
-```bash
-# Recent activity focus (fast)
-search_flows query:"timestamp:>NOW-1h AND severity:high" limit:500
-
-# Specific time windows (optimal)
-search_alarms query:"timestamp:[NOW-24h TO NOW-1h] AND severity:critical" limit:100
-
-# Avoid broad time ranges (slow)
-# search_flows query:"ts:>30d" limit:2000  # Refused: over the maximum limit
-```
-
-### Field-Specific Optimizations
-
-```bash
-# Use specific protocols (fast)
-search_flows query:"protocol:tcp AND destination_port:443" limit:1000
-
-# Combine multiple specific filters (efficient)
-search_devices query:"device_type:laptop AND mac_vendor:Apple AND online:true" limit:500
-
-# Avoid broad wildcards (slow)
-# search_flows query:"source_ip:*" limit:2000  # Refused: over the maximum limit
-```
-
-### Limit Optimization Patterns
-
-```bash
-# Progressive limit increase
-# Start small
-search_flows query:"severity:high" limit:100
-
-# If successful, increase gradually
-search_flows query:"severity:high" limit:500
-
-# Use pagination for large datasets
-search_flows query:"severity:high" limit:500 cursor:"eyJ0aW1l..."
-```
-
-## Common Query Patterns
-
-### Security Investigation Patterns
-
-```bash
-# Threat hunting workflow
-# 1. Identify suspicious activity
-search_alarms query:"severity:critical AND NOT resolved:true" limit:50
-
-# 2. Correlate with network flows
-search_flows query:"source_ip:$SUSPICIOUS_IP AND timestamp:>NOW-1h" limit:200
-
-# 3. Check device status
-search_devices query:"device_ip:$SUSPICIOUS_IP OR last_seen:<NOW-1h" limit:10
-
-# 4. Review applicable rules
-search_rules query:"target_value:*$SUSPICIOUS_DOMAIN* OR source_ip:$SUSPICIOUS_IP" limit:20
-```
-
-**Note**: Variables like `$SUSPICIOUS_IP` and `$SUSPICIOUS_DOMAIN` are placeholder values that should be replaced with actual IP addresses or domain names. For example:
-- Replace `$SUSPICIOUS_IP` with `192.168.1.100`
-- Replace `$SUSPICIOUS_DOMAIN` with `example.com`
-
-### Network Performance Analysis
-
-```bash
-# Bandwidth analysis workflow
-# 1. Top bandwidth consumers
-get_bandwidth_usage period:"24h" limit:100
-
-# 2. High-volume flows
-search_flows query:"bytes:>100000000 AND timestamp:>NOW-24h" limit:500
-
-# 3. Performance impact devices
-search_devices query:"bandwidth_usage:>50000000 AND connection_type:wifi" limit:200
-```
-
-### Compliance and Audit Patterns
-
-```bash
-# Rule effectiveness audit
-# 1. Active rules with hits
-search_rules query:"status:active AND hit_count:>0" limit:1000
-
-# 2. Unused rules identification
-search_rules query:"hit_count:0 AND created:<NOW-90d" limit:500
-
-# 3. Recent rule changes
-search_rules query:"last_modified:>NOW-7d" limit:200
-
-# 4. Rule summary analysis
-get_network_rules_summary limit:2000
-```
-
-## Troubleshooting Query Issues
-
-### Common Query Problems
-
-#### 1. Unmatched Parentheses
-```bash
-# Incorrect (will fail)
-search_flows query:"severity:high AND (protocol:tcp"
-
-# Correct
-search_flows query:"severity:high AND (protocol:tcp)"
-```
-
-#### 2. Unmatched Quotes
-```bash
-# Incorrect (will fail)
-search_alarms query:"severity:\"high AND protocol:tcp"
-
-# Correct
-search_alarms query:"severity:high AND protocol:tcp"
-# Or with proper escaping
-search_alarms query:"message:\"threat detected\" AND severity:high"
-```
-
-#### 3. Invalid Field Names
-```bash
-# Incorrect (will fail)
-search_flows query:"invalid_field:value"
-
-# Correct - use documented field names
-search_flows query:"source_ip:192.168.1.1"
-```
-
-#### 4. Range Syntax Errors
-```bash
-# Incorrect (will fail)
-search_flows query:"bytes:1000-50000"
-
-# Correct range syntax
-search_flows query:"bytes:[1000 TO 50000]"
-```
-
-### Performance Troubleshooting
-
-#### Query Timeout Prevention
-
-```bash
-# Refused before any request: over the maximum limit (1000 in the handlers)
-search_flows query:"ts:>30d" limit:2000
-search_devices query:"online:true" limit:5000
-
-# Optimized alternatives
-search_flows query:"timestamp:>NOW-24h AND severity:high" limit:1000
-search_devices query:"online:true AND device_type:laptop" limit:1000
-```
-
-#### Memory Usage Optimization
-
-```bash
-# Refused: get_bandwidth_usage takes at most limit:500
-get_bandwidth_usage period:"30d" limit:1000
-
-# Optimized for memory usage
-get_bandwidth_usage period:"24h" limit:500
-```
-
-### Query Validation Checklist
-
-1. **Syntax Validation**:
-   - All parentheses are matched: `()`, `(())`, etc.
-   - All quotes are matched: `"text"`, `'text'`
-   - Field names are valid and documented
-   - Operators are correctly formatted
-
-2. **Logic Validation**:
-   - AND/OR logic is clear and properly grouped
-   - NOT operations are correctly placed
-   - Range queries use proper syntax: `[min TO max]`
-
-3. **Performance Validation**:
-   - Time ranges are reasonable (prefer <24h for large queries)
-   - Limits are appropriate for query complexity
-   - Wildcard usage is minimal and specific
-
-4. **Field Validation**:
-   - Field names match documented API fields
-   - Value formats match field types (IPs, dates, numbers)
-   - Enum values are valid (severity levels, protocols, etc.)
-
-This comprehensive guide provides the foundation for creating powerful, efficient queries across all Firewalla MCP Server tools while maintaining optimal performance and avoiding common pitfalls.
+# Query workflows
+
+Queries for common investigations, a few tools at a time. The grammar, the
+fields each tool takes and what is refused are in the
+[query syntax guide](query-syntax-guide.md), which also says which forms were
+measured against a live account. This page does not repeat them.
+
+Every call here was run through the tools' handlers on 2026-09-27 with the
+HTTP layer stubbed, so nothing reached the API. "Sent" is the request the
+client made with `FIREWALLA_BOX_ID` unset; with it set, ` box.id:<gid>`
+follows. `<now>` stands for the Unix time of the call and `<now-3600>` for an
+hour before it. The
+IP, MAC address and names are placeholders. `search_devices` and
+`search_target_lists` send no query: they filter what the API returns, and
+were checked against sample devices and lists.
+
+## Forms from earlier versions of this page
+
+Earlier versions used forms the tools refuse, or send although the API does
+not know them. The API answers an unknown field with no results rather than
+an error, so those look like searches that found nothing.
+
+| Earlier form | What happens | Write instead |
+|---|---|---|
+| `severity:high` on alarms | sent; alarms have no severity, so nothing matches | the type meant, e.g. `type:1` for Security Activity |
+| `timestamp:>NOW-1h` | sent as written; `timestamp` is not a qualifier and `NOW-1h` is not a time | `ts:>1h`, sent as `ts:><now-3600>` |
+| `bytes:[1000 TO 50000]` | refused, with `total:1000-50000` suggested | `total:1000-50000` |
+| `country:CN` | refused, with `region:CN` suggested | `region:CN` on flows, `remote.region:CN` on alarms |
+| `country:China`, `continent:Asia` | refused: not qualifiers, and not country codes | the countries' codes, e.g. `region:CN` |
+| `protocol:(tcp OR udp)` | refused as malformed | `protocol:tcp OR protocol:udp`, sent as `protocol:tcp,udp` |
+| `destination_port:443` on flows | refused: not a flow field | `dport:443` |
+| `resolved:false` on alarms | refused | `status:1` |
+| `type:intrusion_detection` | sent; alarm types are the numbers 1 to 16 | the number, e.g. `type:1` |
+| `device_type:laptop` on devices | passes the field check and matches nothing | `name:*laptop*` |
+| `last_seen:<NOW-1h` on devices | refused: `last_seen` takes a number | `online:false` |
+
+## One device
+
+| Step | Call | Sent |
+|---|---|---|
+| Find it by IP | `search_devices` with `ip:192.168.1.100` | `GET /v2/devices`, filtered by the server |
+| Its active alarms | `search_alarms` with `device.ip:192.168.1.100 AND status:1` | `device.ip:192.168.1.100 status:1` |
+| Its flows in the last hour | `search_flows` with `device.id:"AA:BB:CC:DD:EE:01" AND ts:>1h` | `device.id:"AA:BB:CC:DD:EE:01" ts:><now-3600>` |
+| Its traffic by category over 24 hours | `search_flows` with `device.id:"AA:BB:CC:DD:EE:01" AND ts:>24h` and `groupBy: "category"` | the same with `ts:><now-86400>`, plus `groupBy=category` and `sortBy=total:desc` |
+| Rules scoped to it | `search_rules` with `device.id:"AA:BB:CC:DD:EE:01"` | `device.id:"AA:BB:CC:DD:EE:01"` |
+
+`device.id` takes the device's `id` from the first step, its MAC address, in
+quotes. On flows, prefer it (or `device.name`) to `device.ip`: that one is
+sent but is not in the API's flow qualifier table.
+
+## Where blocked traffic goes
+
+| Step | Call | Sent |
+|---|---|---|
+| Top regions by blocked flows | `get_statistics_by_region` | `GET /v2/stats/topRegionsByBlockedFlows`; the API returned at most 5 |
+| Blocked domains over 24 hours | `search_flows` with `status:blocked AND ts:>24h` and `groupBy: "domain"` | `status:blocked ts:><now-86400>`, grouped by domain |
+| Blocked flows to or from two countries | `search_flows` with `status:blocked AND ts:>24h` and `geographic_filters: {"countries": ["CN", "RU"]}` | `status:blocked ts:><now-86400> region:CN,RU` |
+| Security alarms involving them | `search_alarms` with `type:1 AND remote.region:CN,RU` | `type:1 remote.region:CN,RU` |
+
+`region:CN,RU` in the query does the same as `geographic_filters`. The
+[geographic guide](geographic-data-handling-guide.md) lists what else is
+accepted and refused.
+
+## Bandwidth
+
+| Step | Call | Sent |
+|---|---|---|
+| Top devices by bytes | `get_bandwidth_usage` with `period: "24h"` and `limit: 10` | `ts:<now-86400>-<now>`, limit 100: it sums up to 10 times `limit` of the most recent flows |
+| Flows over 100 MB | `search_flows` with `total:>100MB AND ts:>24h` | `total:>100MB ts:><now-86400>` |
+| One device's video, by domain | `search_flows` with `device.name:*tv* AND category:video AND ts:>24h` and `groupBy: "domain"` | `device.name:*tv* category:video ts:><now-86400>`, grouped by domain |
+
+## Content categories
+
+| Step | Call | Sent |
+|---|---|---|
+| Categories, top devices and blocked traffic | `get_flow_insights` with `period: "24h"`, `categories: ["porn", "gamble"]` and `include_blocked: true` | three reads of `/v2/flows` over the period: the largest flows in those categories, the largest flows, and the blocked flows |
+| Active Porn Activity alarms | `search_alarms` with `type:10 AND status:1` | `type:10 status:1` |
+| Such flows that were allowed | `search_flows` with `category:porn,gamble AND NOT status:blocked AND ts:>24h` | `category:porn,gamble -status:blocked ts:><now-86400>` |
+
+## Rules
+
+| Step | Call | Sent |
+|---|---|---|
+| Counts by action, direction, status and target type | `get_network_rules_summary` | `GET /v2/rules` with `limit=200`, counted by the server |
+| Paused rules | `search_rules` with `status:paused` | `status:paused` |
+| Block rules that mention a word | `search_rules` with `tiktok AND action:block` | `action:block`; the server keeps the rules with "tiktok" in their name, notes, action, target or scope |
+| Social target lists | `search_target_lists` with `category:social` | `GET /v2/target-lists`, filtered by the server |
+
+`get_network_rules_summary` sends `limit=200`, which its schema does not
+list, and the API documents no limit for rules, so whether it counts more
+than 200 rules was not measured. Its `active_only` and `rule_type` arguments
+are repeated in the answer and filter nothing (`src/tools/handlers/rules.ts`).
