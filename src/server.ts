@@ -1327,12 +1327,15 @@ export class FirewallaMCPServer {
                 active_only: {
                   type: 'boolean',
                   description:
-                    'Only include active rules in summary (default: true)',
+                    'Leave paused rules out of the summary (default: true)',
                   default: true,
                 },
                 rule_type: {
                   type: 'string',
-                  description: 'Filter by rule type',
+                  enum: ['block', 'allow', 'timelimit', 'all'],
+                  description:
+                    "Summarize only rules with this action (default: 'all')",
+                  default: 'all',
                 },
                 limit: {
                   type: 'number',
