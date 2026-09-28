@@ -114,3 +114,26 @@ export function matchesWildcard(
   }
   return pi === p.length;
 }
+
+/**
+ * Whether free text is found in `value`, as the client-side searches read a
+ * word with no field: anywhere in it, and, when the word holds a `*` and was
+ * not quoted, with each `*` matching any run (*MacBook*, Mac*Air). A `*` in
+ * free text was compared as a character, so search_devices,
+ * search_target_lists and search_rules found nothing for *MacBook* and
+ * *Alex’s* while MacBook and Alex’s found the device.
+ *
+ * @param value - The text searched, lowercased as the word is
+ * @param text - The word or phrase, without its quotes
+ * @param quoted - Whether it was quoted: a quoted `*` is a character, as the
+ *   API grammar reads one
+ */
+export function containsText(
+  value: string,
+  text: string,
+  quoted = false
+): boolean {
+  return !quoted && text.includes('*')
+    ? matchesWildcard(value, `*${text}*`)
+    : value.includes(text);
+}

@@ -8,7 +8,7 @@ import {
   matchesQuery,
   unquoteQueryValue,
 } from '../search/client-filter.js';
-import { matchesWildcard } from './wildcard.js';
+import { containsText, matchesWildcard } from './wildcard.js';
 
 /**
  * The number of entries in a target list: the length of its `targets` when
@@ -162,15 +162,15 @@ export function targetListMatchesQuery(list: unknown, query: string): boolean {
       ? matchesPattern(value, pattern) ||
         value.includes(pattern.replace(/\*/g, ''))
       : value.includes(pattern);
-  const matchesText = (value: string): boolean =>
-    name.includes(value) ||
-    notes.includes(value) ||
-    targets.some(target => target.includes(value));
+  // An unquoted * in free text is a wildcard (containsText)
+  const matchesText = (value: string, quoted: boolean): boolean =>
+    [name, notes, ...targets].some(text => containsText(text, value, quoted));
 
   const matchesTerm = (term: string): boolean => {
     const fieldTerm = /^([\w.]+):(.*)$/.exec(term);
     if (!fieldTerm) {
-      return matchesText(unquoteQueryValue(term));
+      const value = unquoteQueryValue(term);
+      return matchesText(value, value !== term);
     }
     const [, field, rawValue] = fieldTerm;
     const value = unquoteQueryValue(rawValue);
@@ -196,7 +196,8 @@ export function targetListMatchesQuery(list: unknown, query: string): boolean {
       case 'last_updated':
         return matchesTime(item.lastUpdated ?? item.last_updated, value);
       default:
-        return matchesText(term);
+        // The whole term, as literal text
+        return matchesText(term, true);
     }
   };
 

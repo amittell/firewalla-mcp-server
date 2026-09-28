@@ -159,6 +159,12 @@ export class QueryParser {
       at < safeInput.length &&
       (!SYNTAX.test(safeInput[at]) ||
         (safeInput[at] === "'" && followsWordCharacter(safeInput, at)));
+    // A word, or a wildcard in free text: *Alex’s*, Mac*Air and 5* are one
+    // term each. They were split at every *, so *Alex’s* read as the three
+    // terms *, Alex’s and *, while the client-side searches matched the
+    // whole of it.
+    const inTerm = (at: number): boolean =>
+      inWord(at) || safeInput[at] === '*' || safeInput[at] === '?';
 
     // Every pass must consume input; one that does not would loop forever
     let lastIndex = -1;
@@ -350,7 +356,7 @@ export class QueryParser {
         let word = '';
         const start = i;
 
-        while (i < safeInput.length && inWord(i)) {
+        while (i < safeInput.length && inTerm(i)) {
           word += safeInput[i];
           i++;
         }
@@ -358,7 +364,14 @@ export class QueryParser {
         // Operators are uppercase, as toMspQuery reads them: and, or and not
         // are words, as the API reads them. TO, in any case, is a keyword
         // only inside [low TO high], so free text may hold the word to.
-        if (word === 'AND' || word === 'OR' || word === 'NOT') {
+        if (/[*?]/.test(word)) {
+          tokens.push({
+            type: TokenType.WILDCARD,
+            value: word,
+            position: start,
+            length: word.length,
+          });
+        } else if (word === 'AND' || word === 'OR' || word === 'NOT') {
           tokens.push({
             type: TokenType.LOGICAL,
             value: word,
@@ -400,8 +413,12 @@ export class QueryParser {
         // A number followed by a word character is one word: 1990's and
         // 5's (an apostrophe after a digit starts no quote; it opened one
         // that was never closed), 5GB, 3d. A range such as 100-200 is all
-        // number and stays one, and a wildcard run is left as it was.
-        while (!hasWildcard && inWord(i)) {
+        // number and stays one. A wildcard followed by a word is one term
+        // too (*Alex’s*, *MacBook*); a * alone stays alone.
+        while (inTerm(i)) {
+          if (safeInput[i] === '*' || safeInput[i] === '?') {
+            hasWildcard = true;
+          }
           value += safeInput[i];
           i++;
         }
@@ -539,14 +556,20 @@ export class QueryParser {
       return { type: 'text', value: token.value };
     }
 
-    // Wildcard query (standalone *) - treat as match-all
-    if (this.match(TokenType.WILDCARD) && this.previous().value === '*') {
-      // Return a special match-all query that bypasses field validation
-      return {
-        type: 'field',
-        field: '*',
-        value: '*',
-      };
+    // A standalone * matches all; a wildcard word with no field (*Alex’s*,
+    // Mac*Air) is free text, which the client-side searches match with
+    // each unquoted * as any run (containsText)
+    if (this.match(TokenType.WILDCARD)) {
+      const token = this.previous();
+      if (token.value === '*') {
+        // A match-all query that bypasses field validation
+        return {
+          type: 'field',
+          field: '*',
+          value: '*',
+        };
+      }
+      return { type: 'text', value: token.value };
     }
 
     this.errors.push(`Unexpected token: ${this.peek().value}`);

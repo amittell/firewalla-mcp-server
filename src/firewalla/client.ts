@@ -57,7 +57,7 @@ import type {
   GeographicData,
 } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
-import { matchesWildcard } from '../utils/wildcard.js';
+import { containsText, matchesWildcard } from '../utils/wildcard.js';
 import {
   commaListValues,
   ipv4InCidr,
@@ -425,7 +425,10 @@ const ONLINE_VALUES: ReadonlyMap<string, boolean> = new Map([
  * (lowercase) in its name, notes, action, target type or value, or scope
  * type or value, case-insensitively
  */
-function ruleMatchesWords(rule: any, words: string[]): boolean {
+function ruleMatchesWords(
+  rule: any,
+  words: Array<{ text: string; quoted: boolean }>
+): boolean {
   const text = [
     rule?.name,
     rule?.notes,
@@ -437,7 +440,10 @@ function ruleMatchesWords(rule: any, words: string[]): boolean {
   ]
     .filter((value): value is string => typeof value === 'string')
     .map(value => value.toLowerCase());
-  return words.every(word => text.some(value => value.includes(word)));
+  // An unquoted * in a word is a wildcard (containsText)
+  return words.every(word =>
+    text.some(value => containsText(value, word.text, word.quoted))
+  );
 }
 
 /**
@@ -2641,7 +2647,10 @@ export class FirewallaClient {
     const { fields, text } = query
       ? mspSplitText(query)
       : { fields: '', text: [] };
-    const words = text.map(word => unquoteQueryValue(word).toLowerCase());
+    const words = text.map(word => {
+      const unquoted = unquoteQueryValue(word);
+      return { text: unquoted.toLowerCase(), quoted: unquoted !== word };
+    });
     const sent = mspAnd(fields, extraTerm);
     // With words, every rule the other terms match must be checked, so no
     // limit or cursor is sent: a limit would cap the rules read below what
@@ -5288,10 +5297,11 @@ export class FirewallaClient {
               return matchesWildcard(value, pattern);
             };
             // Free text: a word or quoted phrase with no field, found in
-            // the name, IP, MAC or id, vendor, or network or group name
-            const matchesText = (text: string): boolean =>
+            // the name, IP, MAC or id, vendor, or network or group name; an
+            // unquoted * in it is a wildcard (containsText)
+            const matchesText = (text: string, quoted: boolean): boolean =>
               [name, ip, mac, id, macVendor, networkName, groupName].some(
-                value => value.includes(text)
+                value => containsText(value, text, quoted)
               );
 
             // Match one `field:value` term; matchesQuery evaluates AND, OR,
@@ -5299,7 +5309,8 @@ export class FirewallaClient {
             const matchesTerm = (term: string): boolean => {
               const fieldTerm = /^([\w.]+):(.*)$/.exec(term);
               if (!fieldTerm) {
-                return matchesText(unquoteQueryValue(term));
+                const text = unquoteQueryValue(term);
+                return matchesText(text, text !== term);
               }
               const [, field, rawValue] = fieldTerm;
               // A comma list matches any of its values, as in the MSP API
@@ -5351,7 +5362,8 @@ export class FirewallaClient {
                 }
                 default:
                   // Fallback: search the whole term in all text fields
-                  return matchesText(term);
+                  // The whole term, as literal text
+                  return matchesText(term, true);
               }
             };
 
