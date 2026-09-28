@@ -66,7 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `MCP_HTTP_BEARER_TOKEN`: when set, the HTTP transport answers 401, with
   `WWW-Authenticate: Bearer`, to a request without
   `Authorization: Bearer <token>`. The token is compared in constant time.
-  The server logs a warning when it listens beyond loopback without one.
+  Beyond loopback the server does not start without one; see Changed.
 - `MCP_HTTP_ALLOWED_ORIGINS` origins get CORS headers, and answers to their
   preflight requests for the MCP endpoint, so a web page on an allowed
   origin can call the HTTP transport; before, every preflight got 405. The
@@ -182,9 +182,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     included.
 
   Migration: the Docker image sets `MCP_HTTP_HOST=0.0.0.0`, so
-  `docker run -p 3000:3000 -e MCP_TRANSPORT=http ...` serves
-  http://localhost:3000/mcp as before; set `MCP_HTTP_BEARER_TOKEN` too
-  whenever that port is reachable from other machines. A client that
+  `docker run -p 3000:3000 -e MCP_TRANSPORT=http -e MCP_HTTP_BEARER_TOKEN=...`
+  serves http://localhost:3000/mcp; without the token the server does not
+  start, as the next entry says. A client that
   connects by another name, such as a docker-compose service name or the
   host's LAN address, needs that name in `MCP_HTTP_ALLOWED_HOSTS`. Outside
   Docker, set `MCP_HTTP_HOST=0.0.0.0` to accept other machines again. To
@@ -192,6 +192,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `MCP_HTTP_ALLOWED_ORIGINS=http://localhost:6274`. The idea came from the
   HTTP hardening in the fork github.com/matesecurityzach/firewalla-mcp-server;
   this is a separate implementation.
+- With `MCP_TRANSPORT=http` on an address other than loopback, the server
+  refuses to start without `MCP_HTTP_BEARER_TOKEN`: it exits with code 1
+  before it listens, and one line on stderr names `MCP_HTTP_HOST` and
+  `MCP_HTTP_BEARER_TOKEN`, suggests `openssl rand -hex 32` and names the
+  opt-out. Loopback is 127.0.0.0/8, `::1` and `localhost`; `0.0.0.0`, `::`
+  and a LAN address are not. Up to 1.5.0 the HTTP transport listened on
+  every interface without a token check, and the Docker image still listens
+  on every interface (`MCP_HTTP_HOST=0.0.0.0`) so that a published port
+  reaches it. With the token unset by default,
+  `docker run -p 3000:3000 -e MCP_TRANSPORT=http` served every client that
+  reached the port, and let it use the MSP token and, when they are on, the
+  write tools. The server now also refuses a token shorter than 16
+  characters wherever it listens, so `MCP_HTTP_BEARER_TOKEN=x` cannot pass
+  for one: a length cannot tell a random token from a chosen one, but it
+  stops the values typed to try the setting out, and
+  `openssl rand -hex 32` prints 64. Loopback addresses without a token, and
+  the stdio transport, start as before.
+
+  `MCP_HTTP_ALLOW_NO_TOKEN=true` starts the server beyond loopback without a
+  token, for a network no untrusted machine can reach, such as a compose
+  network with no published port. The server then writes a warning to
+  stderr as it starts, not through the logger, so `LOG_LEVEL=error` does
+  not hide it.
+
+  Migration: set `MCP_HTTP_BEARER_TOKEN` where the server runs and the same
+  token in each client. Publishing the port on loopback only
+  (`-p 127.0.0.1:3000:3000`) is not a substitute: with the check turned off,
+  another container on the default bridge network connected to the
+  container's own address with `Host: localhost` and no token, and got 200.
 - The server refuses `MCP_TEST_MODE=true` when `NODE_ENV` is `production`
   (in any case, with surrounding spaces ignored): it exits with code 1 and
   one line on stderr that names both variables and how to fix it, and

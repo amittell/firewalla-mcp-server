@@ -26,7 +26,7 @@
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { realpathSync } from 'node:fs';
+import { realpathSync, writeSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { config } from './config/config.js';
 import { FirewallaClient } from './firewalla/client.js';
@@ -43,7 +43,7 @@ import {
   createHttpTransportServer,
   listenHttpTransport,
 } from './http-transport.js';
-import { parseHttpSecurityConfig } from './http-security.js';
+import { httpStartRefusal, parseHttpSecurityConfig } from './http-security.js';
 import { exitWhenStdioCloses } from './stdio-lifecycle.js';
 import { PACKAGE_VERSION } from './utils/package-version.js';
 import { isWriteTool, writeToolsEnabled } from './config/write-tools.js';
@@ -1415,11 +1415,21 @@ export class FirewallaMCPServer {
   /**
    * Starts the MCP server using HTTP transport with StreamableHTTP. Listens
    * on MCP_HTTP_HOST (default 127.0.0.1) and checks every request's Host,
-   * Origin and bearer token; see http-security.ts.
+   * Origin and bearer token; see http-security.ts. Exits with code 1 before
+   * listening when httpStartRefusal refuses the settings: beyond loopback
+   * without MCP_HTTP_BEARER_TOKEN, or with a token that is too short.
    */
   private async startHttpTransport(): Promise<void> {
     const { port, path } = config.transport;
     const security = parseHttpSecurityConfig();
+    const refusal = httpStartRefusal(security);
+    if (refusal !== undefined) {
+      // One plain line, as for MCP_TEST_MODE in config.ts: not through the
+      // logger, which LOG_LEVEL can silence, and with writeSync because
+      // process.exit does not wait for a pending write to process.stderr.
+      writeSync(2, `firewalla-mcp-server: refusing to start: ${refusal}\n`);
+      process.exit(1);
+    }
 
     const { httpServer, closeSessions } = createHttpTransportServer({
       path,

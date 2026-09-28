@@ -65,9 +65,12 @@ Out of scope:
   is not in `MCP_HTTP_ALLOWED_ORIGINS`, and with `MCP_HTTP_BEARER_TOKEN` set
   answers 401 to a request without that token. It serves the
   `MCP_HTTP_PATH` path only, and closes the connection of a request it
-  answers without reading the body. The Docker image listens on
-  every interface of the container so a published port reaches it: set
-  `MCP_HTTP_BEARER_TOKEN` whenever the port is reachable from other machines.
+  answers without reading the body. On any address but loopback, such as
+  the `0.0.0.0` the Docker image sets so that a published port reaches it,
+  the server does not start without `MCP_HTTP_BEARER_TOKEN`, and it refuses
+  a token shorter than 16 characters. `MCP_HTTP_ALLOW_NO_TOKEN=true` starts
+  it without a token, for a network no untrusted machine can reach, and the
+  server then writes a warning to stderr at startup.
   See [HTTP transport security](README.md#http-transport-security).
 
 ## Untrusted data

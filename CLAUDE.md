@@ -70,7 +70,10 @@ MCP_TRANSPORT=http MCP_HTTP_PORT=3000 npm run mcp:start
 ```
 The HTTP server listens on 127.0.0.1 and checks each request's Host, Origin
 and bearer token before anything else (`src/http-security.ts`, wired in
-`src/http-transport.ts`); see the variables below.
+`src/http-transport.ts`); see the variables below. On any address but
+loopback it refuses to start without `MCP_HTTP_BEARER_TOKEN` unless
+`MCP_HTTP_ALLOW_NO_TOKEN=true` (`httpStartRefusal`, called from
+`startHttpTransport` in `src/server.ts`).
 
 ### Testing
 ```bash
@@ -144,7 +147,8 @@ MCP_TRANSPORT=stdio                       # stdio or http (default: stdio)
 MCP_HTTP_PORT=3000                        # HTTP transport port (default: 3000)
 MCP_HTTP_PATH=/mcp                        # HTTP transport path; other paths get 404 (default: /mcp)
 MCP_HTTP_HOST=127.0.0.1                   # HTTP listen address, no port (default: 127.0.0.1; the Docker image sets 0.0.0.0)
-MCP_HTTP_BEARER_TOKEN=                    # When set, HTTP requests need Authorization: Bearer <token> (else 401)
+MCP_HTTP_BEARER_TOKEN=                    # HTTP requests need Authorization: Bearer <token> (else 401); required, 16+ characters, unless MCP_HTTP_HOST is loopback
+MCP_HTTP_ALLOW_NO_TOKEN=false             # "true" starts beyond loopback without a token, with a warning on stderr (default: off)
 MCP_HTTP_ALLOWED_HOSTS=                   # Host header names accepted besides localhost, 127.0.0.1, [::1] and MCP_HTTP_HOST (else 403)
 MCP_HTTP_ALLOWED_ORIGINS=                 # Browser origins accepted; a request with any other Origin gets 403 (default: none)
 MCP_SESSION_IDLE_TIMEOUT_MS=1800000       # HTTP sessions idle this long are closed (default: 30 min)

@@ -201,7 +201,7 @@ WEBUI_SECRET_KEY=another-long-random-value
 # FIREWALLA_BOX_ID=00000000-0000-0000-0000-000000000000
 ```
 
-If you uncomment `FIREWALLA_BOX_ID` in `compose.yaml`, set it in `.env` too; without a value Compose passes an empty string, and queries cover every box. `openssl rand -hex 32` makes a suitable token. Then `docker compose up -d`. If Open WebUI already runs in another Compose file, add the `firewalla-mcp` service to that file instead, so that the two share a network.
+If you uncomment `FIREWALLA_BOX_ID` in `compose.yaml`, set it in `.env` too; without a value Compose passes an empty string, and queries cover every box. `openssl rand -hex 32` makes a suitable token. Then `docker compose up -d`. The token is required: the image listens on `0.0.0.0`, where the server does not start without `MCP_HTTP_BEARER_TOKEN` or with one shorter than 16 characters, and `docker compose logs firewalla-mcp` shows a `refusing to start` line that says why. If Open WebUI already runs in another Compose file, add the `firewalla-mcp` service to that file instead, so that the two share a network.
 
 ### Connect Open WebUI natively
 
@@ -269,7 +269,7 @@ The version range keeps `npx` from running 1.5.0; until 2.0.0 is published it st
 
 - `MCP_HTTP_HOST=0.0.0.0` accepts connections from other machines and from containers. Without it the server listens on 127.0.0.1 only.
 - `MCP_HTTP_ALLOWED_HOSTS` lists every name or address clients put in the URL, besides `localhost`, `127.0.0.1` and `[::1]`: here `host.docker.internal` for an Open WebUI container on this host, and `192.168.1.10` standing for the host's LAN address. A request with any other `Host` gets 403.
-- `MCP_HTTP_BEARER_TOKEN`: set it whenever the port is reachable from other machines. In Open WebUI, choose **Auth** Bearer with this value.
+- `MCP_HTTP_BEARER_TOKEN`: required with `MCP_HTTP_HOST=0.0.0.0`, at least 16 characters; without it the server does not start. In Open WebUI, choose **Auth** Bearer with this value.
 - Port 3001 avoids the `3000:8080` mapping that Open WebUI installs often use.
 
 Then add the connection as in route 2, with **URL** `http://host.docker.internal:3001/mcp` from an Open WebUI container on this host, or `http://192.168.1.10:3001/mcp` from another machine. `FIREWALLA_BOX_ID` and `FIREWALLA_ENABLE_WRITE_TOOLS=true` go on the same command line if you want them.
@@ -286,7 +286,8 @@ Routes 2 and 3 use the HTTP transport. Its checks, and what Open WebUI and mcpo 
 |---------|---------|---------------------|
 | `MCP_HTTP_HOST` | `127.0.0.1`; `0.0.0.0` in the Docker image | nothing; it decides who can connect |
 | `MCP_HTTP_ALLOWED_HOSTS` | only `localhost`, `127.0.0.1`, `[::1]` and the `MCP_HTTP_HOST` address | the host name in the client's URL must be one of these, else 403 `Host not allowed`. Between containers that is the service name |
-| `MCP_HTTP_BEARER_TOKEN` | not set | `Authorization: Bearer <token>`, else 401: **Auth** Bearer in Open WebUI, `headers` in mcpo's `config.json` |
+| `MCP_HTTP_BEARER_TOKEN` | not set; required, at least 16 characters, unless `MCP_HTTP_HOST` is loopback, so the Docker image needs it | `Authorization: Bearer <token>`, else 401: **Auth** Bearer in Open WebUI, `headers` in mcpo's `config.json` |
+| `MCP_HTTP_ALLOW_NO_TOKEN` | `false` | nothing; `true` starts the server beyond loopback without a token. None of these routes uses it |
 | `MCP_HTTP_PATH` | `/mcp` | the URL must end in `/mcp` (or `/mcp/`), else 404 |
 | `MCP_HTTP_ALLOWED_ORIGINS` | none | nothing: Open WebUI's native connection and mcpo connect from their servers, send no `Origin`, and worked with it unset |
 
