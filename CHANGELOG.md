@@ -875,6 +875,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FIREWALLA_ENABLE_WRITE_TOOLS=true`, and the same handlers are registered.
   `dist/` is 48 files and 391,589 bytes smaller (2,994,258 to 2,602,669)
   and the npm tarball 81,251 bytes (782,969 to 701,718).
+- The `axios-retry` dependency. Nothing in `src/`, `scripts/` or `tests/`
+  imported it; reads are retried by the client itself (`retryTransient` in
+  `src/firewalla/client.ts`). `npm install` fetches 2 packages fewer
+  (`axios-retry` and `is-retry-allowed`, which only it needed).
 
 ## [1.5.0] - 2026-09-25
 
