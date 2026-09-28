@@ -1,6 +1,6 @@
 # Firewalla MCP Server with Ollama + MCPO Setup Guide
 
-This guide helps you set up the Firewalla MCP Server with Ollama using MCPO (MCP Proxy for Ollama).
+This guide helps you set up the Firewalla MCP Server with Ollama using mcpo, the MCP-to-OpenAPI proxy from the Open WebUI project.
 
 > The tested guide is [clients/open-webui.md](clients/open-webui.md). The "MCPO server won't start" failure below came from firewalla-mcp-server releases before 1.4.0, which did not start under `npx`; that guide's troubleshooting section has the details.
 
@@ -43,7 +43,8 @@ Create `firewalla-mcp-launcher.sh`:
 # Set your Firewalla credentials here
 export FIREWALLA_MSP_TOKEN="your_msp_token_here"
 export FIREWALLA_MSP_ID="yourdomain.firewalla.net"
-export FIREWALLA_BOX_ID="your-box-id-here"
+# Optional: limit every query to one box
+# export FIREWALLA_BOX_ID="your-box-id-here"
 
 # Path to Firewalla MCP server (adjust this!)
 FIREWALLA_PATH="/path/to/firewalla-mcp-server"
@@ -102,13 +103,15 @@ If the launcher script doesn't work, try this direct configuration:
       "env": {
         "FIREWALLA_MSP_TOKEN": "your_token_here",
         "FIREWALLA_MSP_ID": "yourdomain.firewalla.net",
-        "FIREWALLA_BOX_ID": "your-box-id",
         "NODE_ENV": "production"
       }
     }
   }
 }
 ```
+
+`FIREWALLA_BOX_ID` is optional here and below: without it, queries cover
+every box the token can access.
 
 ### 5. Debugging Steps
 
@@ -117,7 +120,6 @@ If the launcher script doesn't work, try this direct configuration:
    cd /path/to/firewalla-mcp-server
    export FIREWALLA_MSP_TOKEN="your_token"
    export FIREWALLA_MSP_ID="yourdomain.firewalla.net"
-   export FIREWALLA_BOX_ID="your-box-id"
    node dist/server.js
    ```
    
@@ -125,8 +127,8 @@ If the launcher script doesn't work, try this direct configuration:
 
 2. **Check MCPO logs:**
    ```bash
-   # Run MCPO in debug mode
-   uvicorn app:app --host 0.0.0.0 --port 8000 --log-level debug
+   # Run mcpo in the foreground to watch its log
+   uvx --with 'mcp<2' mcpo --port 8000 --api-key "choose-a-long-random-key" --config config.json
    ```
 
 3. **Test with minimal config:**
@@ -139,8 +141,7 @@ If the launcher script doesn't work, try this direct configuration:
          "args": ["/absolute/path/to/firewalla-mcp-server/dist/server.js"],
          "env": {
            "FIREWALLA_MSP_TOKEN": "test_token",
-           "FIREWALLA_MSP_ID": "test.firewalla.net",
-           "FIREWALLA_BOX_ID": "test-box-id"
+           "FIREWALLA_MSP_ID": "test.firewalla.net"
          }
        }
      }
@@ -157,26 +158,27 @@ If the launcher script doesn't work, try this direct configuration:
 
 ### 7. Alternative: Using npx
 
-If direct node execution fails, try using npx:
+If direct node execution fails, run the published package with npx, as the
+[tested guide](clients/open-webui.md) does:
 
 ```json
 {
   "mcpServers": {
     "firewalla": {
-      "command": "sh",
-      "args": [
-        "-c",
-        "cd /path/to/firewalla-mcp-server && npm run start"
-      ],
+      "command": "npx",
+      "args": ["-y", "firewalla-mcp-server"],
       "env": {
         "FIREWALLA_MSP_TOKEN": "your_token",
-        "FIREWALLA_MSP_ID": "yourdomain.firewalla.net",
-        "FIREWALLA_BOX_ID": "your-box-id"
+        "FIREWALLA_MSP_ID": "yourdomain.firewalla.net"
       }
     }
   }
 }
 ```
+
+Do not start it with `npm run start`: npm prints its `> firewalla-mcp-server
+start` banner to stdout, which is the MCP channel (measured with npm 11.16.0;
+`npm run --silent start` prints nothing there).
 
 ## Troubleshooting Checklist
 
