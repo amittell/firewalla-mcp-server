@@ -451,14 +451,20 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
 - Cache key collision prevention with enhanced hashing
 
 ### Rate Limiting
-- The MSP API accepts 100 requests per token in each fixed 5-minute window
-  (measured 2026-09-26) and answers 429 over that. `retry-after` (seconds) and
+- The MSP API accepted 100 requests in each fixed 5-minute window from the
+  one token measured (2026-09-26; per token or per account was not
+  measured) and answers 429 over that. `retry-after` (seconds) and
   `x-ratelimit-reset` (epoch seconds) both give the window's end, up to about
   300 s away. Successful responses carry no rate-limit headers, so the client
   counts its own requests.
 - Limiter (`src/firewalla/rate-limit.ts`): at most `API_RATE_LIMIT` requests
-  start in any rolling 300 s, over every request of the one client instance.
-  Cache hits are not counted.
+  start in any rolling 300 s, over every request of the one client instance
+  (`src/server.ts` makes one per process; HTTP sessions share it), 429
+  retries and the transient retry included. Cache hits are not counted.
+  Another process on the same token, such as a second stdio client's
+  server, has its own count: the processes' values must add up to 100 or
+  less. A request whose tool gives up while it waits is not sent and takes
+  no slot.
 - A request waits at most 20 s for the rate limit (`RATE_LIMIT_MAX_WAIT_MS`;
   tool timeouts default to 30 s), in the queue and on 429 pauses together,
   from when it was first made. Within that it queues first come first served;
