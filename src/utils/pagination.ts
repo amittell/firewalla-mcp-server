@@ -152,7 +152,7 @@ export function decodeCursor(cursor: string): CursorData {
  * Decodes the provided cursor to determine the current offset and page size, sorts the array by the specified field and order if requested, and returns a paginated result with metadata and a next cursor if more items remain.
  *
  * @param items - The array of items to paginate
- * @param cursor - Optional base64-encoded cursor string indicating the current pagination state
+ * @param cursor - Optional base64-encoded cursor string indicating the current pagination state; one that does not decode throws
  * @param page_size - Number of items per page (default: configured DEFAULT_PAGE_SIZE or 100)
  * @param sort_by - Optional field name to sort by
  * @param sort_order - Sort order, either 'asc' or 'desc' (default is 'asc')
@@ -167,19 +167,15 @@ export function paginateArray<T extends object>(
 ): PaginatedResult<T> {
   let offset = 0;
 
-  // Decode cursor if provided
+  // Decode cursor if provided. One that does not decode is refused: it was
+  // read as the first page, so a bad cursor restarted the listing unseen
   if (cursor) {
-    try {
-      const cursorData = decodeCursor(cursor);
-      const { offset: cursorOffset, page_size: cursorPageSize } = cursorData;
-      offset = cursorOffset;
-      // Use cursor's page_size if available and consistent
-      if (cursorPageSize === page_size) {
-        page_size = cursorPageSize;
-      }
-    } catch {
-      // Invalid cursor, start from beginning
-      offset = 0;
+    const cursorData = decodeCursor(cursor);
+    const { offset: cursorOffset, page_size: cursorPageSize } = cursorData;
+    offset = cursorOffset;
+    // Use cursor's page_size if available and consistent
+    if (cursorPageSize === page_size) {
+      page_size = cursorPageSize;
     }
   }
 
