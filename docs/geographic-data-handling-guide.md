@@ -1730,17 +1730,8 @@ const performanceIssues = {
 ### Debugging Geographic Data Issues
 
 ```bash
-# Enable geographic data debugging
-DEBUG=firewalla:geo,firewalla:cache npm run mcp:start
-
-# Monitor data quality
-DEBUG=firewalla:quality npm run mcp:start
-
-# Track cache performance
-DEBUG=firewalla:cache:performance npm run mcp:start
-
-# Full geographic debugging
-DEBUG=firewalla:geo:* npm run mcp:start
+# All debug output; no debug namespace covers geographic lookups
+DEBUG=firewalla:* npm run mcp:start
 ```
 
 ### Performance Monitoring Commands

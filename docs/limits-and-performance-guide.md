@@ -322,14 +322,11 @@ A tool gives up after `TIMEOUT_MS`, 30 s, and cancels its requests. The server h
 Enable performance debugging:
 
 ```bash
-# Enable comprehensive performance monitoring
-DEBUG=firewalla:performance,firewalla:limits npm run mcp:start
+# All debug output
+DEBUG=firewalla:* npm run mcp:start
 
-# Monitor specific limit enforcement
-DEBUG=validation,limits npm run mcp:start
-
-# Track memory usage patterns
-DEBUG=memory,gc npm run mcp:start
+# Input validation only: api and validation are the namespaces the code writes to
+DEBUG=validation npm run mcp:start
 ```
 
 ## Best Practices

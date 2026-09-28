@@ -395,9 +395,8 @@ interface PerformanceMetrics {
 
 **DEBUG Environment Variables:**
 - `DEBUG=firewalla:*` - Enable all debugging
-- `DEBUG=cache,performance` - Specific namespaces
-- `DEBUG=validation,error-handler` - Validation debugging
-- `DEBUG=query,optimization` - Query performance
+- `DEBUG=api` - API request details
+- `DEBUG=validation` - Validation debugging
 
 ### Enhanced Security
 

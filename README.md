@@ -666,7 +666,7 @@ npm run build
 
 Enable detailed logging:
 ```bash
-DEBUG=mcp:* npm run mcp:start
+DEBUG=firewalla:* npm run mcp:start
 ```
 
 For more detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
