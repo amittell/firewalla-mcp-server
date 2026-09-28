@@ -1641,15 +1641,26 @@ Wait until `x-ratelimit-reset` (or for `retry-after`) before retrying.
    }
    ```
 
-2. **Implement exponential backoff for retries** of transient failures such as timeouts and 5xx; a 429 needs a wait until the window ends instead (above). Retry reads only: the API may have applied a write whose answer was lost. Every retry counts against the 100 requests per 5 minutes. `FirewallaClient` sends a failed GET again once, and only when the answer can still come in time (Transient failures, above); the sketch below retries any error
+2. **Retry transient read failures with backoff**, and nothing else. A 429 needs a wait until the window ends instead (above). Never send a POST, PATCH, PUT or DELETE again after a lost answer: the API may have applied it. Every retry counts against the 100 requests per 5 minutes. This sketch sends only GETs and retries only what `FirewallaClient` treats as transient (`TRANSIENT_STATUSES` and `TRANSIENT_CODES` in `src/firewalla/client.ts`): 502, 503 and 504, and no answer with `ECONNABORTED`, `ETIMEDOUT`, `ECONNRESET` or `EPIPE`. `FirewallaClient` itself retries once, and only when the answer can still come in time (Transient failures, above).
    ```javascript
-   async function retryWithBackoff(fn, maxRetries = 3) {
-     for (let i = 0; i < maxRetries; i++) {
+   const TRANSIENT_STATUSES = new Set([502, 503, 504]);
+   const TRANSIENT_CODES = new Set(['ECONNABORTED', 'ETIMEDOUT', 'ECONNRESET', 'EPIPE']);
+
+   function isTransient(error) {
+     const status = error.response?.status;
+     return status !== undefined
+       ? TRANSIENT_STATUSES.has(status)
+       : TRANSIENT_CODES.has(error.code);
+   }
+
+   // Reads only: this function sends GET and nothing else
+   async function getWithRetry(path, params, maxRetries = 2) {
+     for (let attempt = 0; ; attempt++) {
        try {
-         return await fn();
+         return (await apiClient.get(path, { params })).data;
        } catch (error) {
-         if (i === maxRetries - 1) throw error;
-         await delay(Math.pow(2, i) * 1000); // Exponential backoff
+         if (attempt >= maxRetries || !isTransient(error)) throw error;
+         await delay(2 ** attempt * 1000); // 1 s, then 2 s
        }
      }
    }
