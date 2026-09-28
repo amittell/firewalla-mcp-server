@@ -245,8 +245,9 @@ MCP_HTTP_ALLOWED_HOSTS=     # More Host header names to accept, comma-separated
 MCP_HTTP_ALLOWED_ORIGINS=   # Browser origins to accept, comma-separated, e.g. http://localhost:6274
 ```
 
-<a id="http-transport-security"></a>
-**HTTP transport security**: every request can spend your MSP token, so the HTTP server follows the security rules of the [MCP transport specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports):
+#### HTTP transport security
+
+Every request can spend your MSP token, so the HTTP server follows the security rules of the [MCP transport specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports):
 
 - It listens on `127.0.0.1`, this machine only. Set `MCP_HTTP_HOST=0.0.0.0` (or one address) to accept other machines, and set `MCP_HTTP_BEARER_TOKEN` with it: on any address but loopback (`127.0.0.0/8`, `::1`, `localhost`) the server refuses to start without a token, and exits with code 1 after one line on stderr that says why. `MCP_HTTP_ALLOW_NO_TOKEN=true` starts it without one, for a network no untrusted machine can reach, such as a compose network with no published port; the server then writes a warning to stderr at startup, whatever `LOG_LEVEL` says.
 - With `MCP_HTTP_BEARER_TOKEN` set, a request without `Authorization: Bearer <token>` gets 401. A token shorter than 16 characters stops startup wherever the server listens; `openssl rand -hex 32` makes one 64 characters long.
