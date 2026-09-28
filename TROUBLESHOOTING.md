@@ -75,7 +75,6 @@ ps aux | grep firewalla-mcp-server
 - Firewalla device is offline
 - MSP account has no recent data
 - Time range is too narrow
-- API rate limits hit
 
 **Solutions:**
 ```bash
@@ -88,6 +87,10 @@ ps aux | grep firewalla-mcp-server
 # Check specific tools
 "Test connection to Firewalla API"
 ```
+
+### "Rate limit exceeded" errors
+
+Each server process starts at most `API_RATE_LIMIT` requests (default 100) in any 5 minutes. Past that a tool fails with `Rate limit exceeded: the Firewalla API allows 100 requests per 5 minutes (API_RATE_LIMIT); capacity returns in <n> s, at <UTC time>.` rather than returning empty data. Wait until the time it gives. If several MCP clients or scripts use the same MSP token, each has its own count: give each an `API_RATE_LIMIT` so that together they stay at 100 or less. See [docs/rate-limiting-guide.md](docs/rate-limiting-guide.md).
 
 ## Configuration Issues
 

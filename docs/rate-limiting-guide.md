@@ -10,8 +10,9 @@ The official docs do not document rate limits. Measured 2026-09-26 on
 `GET /v2/boxes` with one token (details in
 [firewalla-api-reference.md](firewalla-api-reference.md#rate-limiting)):
 
-- The API accepts 100 requests per token in each fixed 5-minute (300 s)
-  window. A window starts with the first request after the previous one
+- The API accepted 100 requests from that token in each fixed 5-minute
+  (300 s) window. Whether the limit is per token or per account was not
+  measured. A window starts with the first request after the previous one
   ends.
 - Over that, it answers HTTP 429 with the body
   `{"error":{"message":"Too Many Requests"}}`, `retry-after` (seconds),
@@ -25,16 +26,21 @@ The official docs do not document rate limits. Measured 2026-09-26 on
 ## What the client does
 
 **Pacing.** At most `API_RATE_LIMIT` requests (default 100, range 1-1000)
-start in any rolling 5 minutes, counted over every request the client sends.
-The server has one client, which its HTTP sessions share. Answers from the
-response cache are not requests and are not counted. (`API_RATE_LIMIT` used
-to be described as requests per minute, but nothing applied it.)
+start in any rolling 5 minutes, counted over every request the client sends:
+a 429's retries and the one retry of a failed read go through the same
+count. A rolling count never lets through more than the API's fixed window
+of the same length accepts. Each server process has one client, which its
+HTTP sessions share. Answers from the response cache are not requests and
+are not counted. (`API_RATE_LIMIT` used to be described as requests per
+minute, but nothing applied it.)
 
 **Waiting at most 20 s.** Tool handlers give up after 30 s by default, so a
 request waits at most 20 s for the rate limit, in the queue and on 429
 pauses together, counted from when it was first made. A request whose slot
 frees within that waits for it, in the order requests were made. Otherwise it
-is not sent and fails at once.
+is not sent and fails at once. A tool that makes several requests can reach
+its 30 s while one of them still waits: that request is then not sent, takes
+no slot, and does not hold up the requests queued after it.
 
 **After a 429.** The client pauses all its requests until the window ends:
 until `x-ratelimit-reset` when that is epoch seconds within 10 minutes from
@@ -71,6 +77,10 @@ spent. Wait until the time the error gives; every request before then fails
 at once rather than waiting.
 
 **429s from the API although the client paces itself.** The count is per
-process. Another server, script or client using the same token spends the
-same quota without this client counting it. Give each a lower
-`API_RATE_LIMIT`, so that together they stay under 100 per 5 minutes.
+process. Every MCP client that starts the server over stdio (Claude Desktop
+and Claude Code, say) starts its own process with its own count, and any
+other server, script or client using the same token spends the same quota
+without this one counting it. Lowering `API_RATE_LIMIT` in one process does
+not limit the others: give each process its share, so that the values add
+up to 100 or less, and leave room for any client that does not pace itself.
+The client still pauses on a 429 when the total goes over.
