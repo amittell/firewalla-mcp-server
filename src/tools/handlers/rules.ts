@@ -897,15 +897,29 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
       //
       // The limit is validated to ensure reasonable bounds (1-2000) which allows
       // both lightweight queries and comprehensive enterprise-level analysis.
+      // rule_type is the rule's action and active_only leaves out paused
+      // rules. Both were validated and echoed in filters_applied, and
+      // neither filtered: the summary counted every rule read. They are
+      // sent as action: and -status:paused, so limit counts the rules
+      // asked for, and each rule is checked again here; a rule with no
+      // status counts as active, as by_status counts it
+      const ruleQuery = [
+        ruleType !== 'all' ? `action:${ruleType}` : undefined,
+        activeOnly ? '-status:paused' : undefined,
+      ]
+        .filter(Boolean)
+        .join(' ');
       const allRulesResponse = await withToolTimeout(
-        async () => firewalla.getNetworkRules(undefined, limit),
+        async () => firewalla.getNetworkRules(ruleQuery || undefined, limit),
         this.name
       );
-      const allRules = SafeAccess.getNestedValue(
-        allRulesResponse,
-        'results',
-        []
-      ) as any[];
+      const allRules = (
+        SafeAccess.getNestedValue(allRulesResponse, 'results', []) as any[]
+      ).filter(
+        (rule: any) =>
+          (ruleType === 'all' || rule?.action === ruleType) &&
+          (!activeOnly || rule?.status !== 'paused')
+      );
 
       // Group rules by various categories for overview
       const rulesByAction = allRules.reduce(
@@ -1047,6 +1061,8 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
         filters_applied: {
           rule_type: ruleType || 'all',
           active_only: activeOnly,
+          // The query GET /v2/rules was sent, with the box scope
+          query: SafeAccess.getNestedValue(allRulesResponse, 'query', ''),
         },
       };
 

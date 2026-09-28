@@ -993,6 +993,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   wildcard limit (at most 10) is gone: wildcards are matched in linear
   time now, 900 of them in under 4 ms, so `name:*a*b*c*d*e*f*g*h*i*j*` is
   taken.
+- `get_network_rules_summary` applies `active_only` and `rule_type`. Both
+  were validated and echoed in `filters_applied`, and the summary counted
+  every rule it read. `rule_type` (`block`, `allow` or `timelimit`, which
+  the schema now lists) is sent as `action:` and `active_only` (default
+  true) as `-status:paused`, so `limit` counts the rules asked for; each
+  rule is checked again on the client, and one without a status counts as
+  active. `filters_applied.query` gives the query sent. By default the
+  summary now leaves paused rules out, as its schema said; pass
+  `active_only: false` to count them.
 
 ### Removed
 
