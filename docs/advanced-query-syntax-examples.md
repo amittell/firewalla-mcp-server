@@ -366,7 +366,7 @@ search_flows query:"timestamp:>NOW-1h AND severity:high" limit:500
 search_alarms query:"timestamp:[NOW-24h TO NOW-1h] AND severity:critical" limit:100
 
 # Avoid broad time ranges (slow)
-# search_flows query:"timestamp:>NOW-30d" limit:2000  # Can timeout
+# search_flows query:"ts:>30d" limit:2000  # Refused: over the maximum limit
 ```
 
 ### Field-Specific Optimizations
@@ -379,7 +379,7 @@ search_flows query:"protocol:tcp AND destination_port:443" limit:1000
 search_devices query:"device_type:laptop AND mac_vendor:Apple AND online:true" limit:500
 
 # Avoid broad wildcards (slow)
-# search_flows query:"source_ip:*" limit:2000  # Can be very slow
+# search_flows query:"source_ip:*" limit:2000  # Refused: over the maximum limit
 ```
 
 ### Limit Optimization Patterns
@@ -497,8 +497,8 @@ search_flows query:"bytes:[1000 TO 50000]"
 #### Query Timeout Prevention
 
 ```bash
-# High-risk queries (may timeout)
-search_flows query:"timestamp:>NOW-30d" limit:2000
+# Refused before any request: over the maximum limit (1000 in the handlers)
+search_flows query:"ts:>30d" limit:2000
 search_devices query:"online:true" limit:5000
 
 # Optimized alternatives
@@ -509,7 +509,7 @@ search_devices query:"online:true AND device_type:laptop" limit:1000
 #### Memory Usage Optimization
 
 ```bash
-# Memory-intensive queries
+# Refused: get_bandwidth_usage takes at most limit:500
 get_bandwidth_usage period:"30d" limit:1000
 
 # Optimized for memory usage

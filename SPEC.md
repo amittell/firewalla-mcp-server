@@ -253,8 +253,9 @@ its own. A `duration` argument is ignored, and the response says so.
 - Token rotation support
 
 ### Rate Limiting
-- Respect Firewalla API limits
-- Implement exponential backoff
+- Pace requests to `API_RATE_LIMIT` per rolling 5 minutes (default 100), counted per server process
+- On a 429, pause every request until the API's window ends; send a GET again at most twice, within 20 s
+- Send a failed GET again once, 1 to 2 s later, after a 502, 503, 504, timeout or dropped connection, when it can still answer before the tool gives up; never send a write again
 - Cache frequently accessed data
 
 ### Input Validation
@@ -295,9 +296,9 @@ Fetch raw data from `/flows` or `/alarms` and perform client-side time-bucketing
 **For statistics:**
 Aggregate data from multiple real endpoints (`/boxes`, `/alarms`, `/rules`) instead of using fictional statistics endpoints.
 
-### Mandatory Limit Parameters
+### Limit Parameters
 
-**REQUIRED**: All paginated tools now require explicit `limit` parameter in their schema.
+The schemas require `limit` for `get_device_status`, `get_network_rules` and `get_target_lists`. The other paginated tools take an optional `limit` with a default: 200 for `get_active_alarms`, `get_flow_data`, `search_flows` and `search_alarms`. The v1.0.0 plan below, a required `limit` everywhere, is not what the code does.
 
 **Updated Tool Schemas:**
 ```typescript
@@ -324,13 +325,17 @@ interface GetDeviceStatusParams {
 - `get_network_rules`: requires `limit`
 - All search tools: require both `query` and `limit`
 
-**Error Response for Missing Limit:**
+**Error Response for Missing Limit** (`get_target_lists`, whose handler requires it):
 ```json
 {
   "error": true,
-  "message": "limit parameter is required",
-  "tool": "get_device_status",
-  "validation_errors": ["limit is required"]
+  "message": "Parameter validation failed",
+  "tool": "get_target_lists",
+  "errorType": "validation_error",
+  "validation_errors": [
+    "limit is required but was not provided",
+    "Please provide a numeric value for limit (valid range: 1-1000)"
+  ]
 }
 ```
 
@@ -371,15 +376,11 @@ function getFieldValue(entity: MappableEntity, field: string, entityType: Entity
 
 ### Performance Monitoring System
 
-**Multi-Tier Caching:**
-```typescript
-interface CacheConfig {
-  realTimeData: { ttl: 30_000 };     // Alarms, flows: 30s
-  mediumFrequencyData: { ttl: 120_000 }; // Devices: 2m
-  stableData: { ttl: 600_000 };      // Rules: 10m  
-  staticData: { ttl: 3_600_000 };    // Statistics: 1h
-}
-```
+**Caching** (`src/firewalla/client.ts`):
+- GET answers: `CACHE_TTL` seconds (default 300); `/alarms` and `/flows` endpoints 15 s
+- At most `CACHE_MAX_ENTRIES` answers (default 1000), least recently used dropped first
+- A query with a relative time (`ts:>1h`) is not cached, and any write clears the cache
+- Geographic lookups: 1 h, at most 10000 addresses
 
 **Metrics Collection:**
 ```typescript
@@ -412,7 +413,7 @@ class QuerySanitizer {
 **Enhanced Authentication:**
 - Comprehensive HTTP status code handling
 - Better error messages with context
-- Rate limiting with exponential backoff
+- Rate limiting: pacing to `API_RATE_LIMIT`, and a pause until the window ends after a 429
 - Enhanced token validation
 
 ## Performance Requirements (v1.0.0)

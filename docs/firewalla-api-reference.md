@@ -1641,7 +1641,7 @@ Wait until `x-ratelimit-reset` (or for `retry-after`) before retrying.
    }
    ```
 
-2. **Implement exponential backoff for retries** of transient failures such as timeouts and 5xx; a 429 needs a wait until the window ends instead (above)
+2. **Implement exponential backoff for retries** of transient failures such as timeouts and 5xx; a 429 needs a wait until the window ends instead (above). Retry reads only: the API may have applied a write whose answer was lost. Every retry counts against the 100 requests per 5 minutes. `FirewallaClient` sends a failed GET again once, and only when the answer can still come in time (Transient failures, above); the sketch below retries any error
    ```javascript
    async function retryWithBackoff(fn, maxRetries = 3) {
      for (let i = 0; i < maxRetries; i++) {

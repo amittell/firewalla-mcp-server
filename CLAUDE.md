@@ -443,10 +443,12 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
 ## Performance Considerations
 
 ### Caching System
-- API Responses: 300s TTL (configurable via CACHE_TTL environment variable)
+- API Responses: 300s TTL (configurable via CACHE_TTL environment variable);
+  `/alarms` and `/flows` answers 15 s, even with `CACHE_TTL=0`
 - At most CACHE_MAX_ENTRIES responses (default 1000): when full, expired
-  entries go first, then the least recently used. A cache write drops the
-  expired entries once a minute at most. A query with a relative time
+  entries go first, then the least recently used. A cache write drops every
+  expired entry when a minute has passed since the last sweep, or when the
+  cache is full and an entry may have expired. A query with a relative time
   (`ts:>1h`) is not cached
 - Geographic Data: 1h TTL with LRU eviction, at most 10000 addresses
 - Cache key collision prevention with enhanced hashing
