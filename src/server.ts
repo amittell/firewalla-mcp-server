@@ -307,9 +307,9 @@ export class FirewallaMCPServer {
                 limit: {
                   type: 'number',
                   description:
-                    'Maximum results (optional, default: 200, API maximum: 500)',
+                    'Maximum results (optional, default: 200, at most 1000; read 500 per request, following the cursor)',
                   minimum: 1,
-                  maximum: 500,
+                  maximum: 1000,
                   default: 200,
                 },
                 cursor: {
@@ -778,9 +778,9 @@ export class FirewallaMCPServer {
                 limit: {
                   type: 'number',
                   description:
-                    'Maximum results (optional, default: 200, API maximum: 500)',
+                    'Maximum results (optional, default: 200, at most 1000; read 500 per request, following the cursor)',
                   minimum: 1,
-                  maximum: 500,
+                  maximum: 1000,
                   default: 200,
                 },
                 cursor: {
@@ -870,9 +870,9 @@ export class FirewallaMCPServer {
                 limit: {
                   type: 'number',
                   description:
-                    'Maximum results (optional, default: 200, API maximum: 500)',
+                    'Maximum results (optional, default: 200, at most 1000; read 500 per request, following the cursor)',
                   minimum: 1,
-                  maximum: 500,
+                  maximum: 1000,
                   default: 200,
                 },
                 cursor: {
@@ -904,6 +904,9 @@ export class FirewallaMCPServer {
                 limit: {
                   type: 'number',
                   description: 'Maximum number of rules to return',
+                  minimum: 1,
+                  maximum: 1000,
+                  default: 200,
                 },
               },
               // the handler validates query as required -- advertise it so
@@ -1226,7 +1229,7 @@ export class FirewallaMCPServer {
                   type: 'number',
                   description: 'Maximum number of offline devices to return',
                   minimum: 1,
-                  maximum: 500,
+                  maximum: 1000,
                   default: 100,
                 },
                 sort_by_last_seen: {
@@ -1262,7 +1265,7 @@ export class FirewallaMCPServer {
                 limit: {
                   type: 'number',
                   minimum: 1,
-                  maximum: 500,
+                  maximum: 1000,
                   default: 50,
                   description: 'Maximum number of devices to return',
                 },
@@ -1300,7 +1303,7 @@ export class FirewallaMCPServer {
                 limit: {
                   type: 'number',
                   minimum: 1,
-                  maximum: 500,
+                  maximum: 1000,
                   default: 100,
                   description: 'Maximum number of target lists to return',
                 },
@@ -1330,6 +1333,14 @@ export class FirewallaMCPServer {
                 rule_type: {
                   type: 'string',
                   description: 'Filter by rule type',
+                },
+                limit: {
+                  type: 'number',
+                  description:
+                    'How many rules to read for the summary (default: 200)',
+                  minimum: 1,
+                  maximum: 2000,
+                  default: 200,
                 },
               },
               required: [],
