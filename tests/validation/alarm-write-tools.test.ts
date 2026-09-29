@@ -24,6 +24,7 @@ import * as ts from 'typescript';
 import {
   AlarmNotFoundError,
   ApiRequestError,
+  WriteOutcomeUnknownError,
   BoxSelectionError,
   FirewallaClient,
 } from '../../src/firewalla/client.js';
@@ -40,6 +41,19 @@ import {
   MUTE_TARGET_TYPES,
 } from '../../src/validation/alarm-mute.js';
 import { USER_REQUEST_ONLY } from '../../src/utils/untrusted-text.js';
+
+/** What request() throws for an alarm write sent and not answered */
+function sentNotAnswered(method: string): WriteOutcomeUnknownError {
+  const failure =
+    'Firewalla API sent no answer (ECONNABORTED: timeout of 30000ms exceeded)';
+  return new WriteOutcomeUnknownError(
+    `${method} /v2/alarms/... was sent and not answered (ECONNABORTED: timeout of 30000ms exceeded).`,
+    'ECONNABORTED',
+    1,
+    failure,
+    'get_specific_alarm'
+  );
+}
 
 jest.mock('axios', () => {
   const instance = {
@@ -395,18 +409,31 @@ describe('archiveAlarm', () => {
   it('says the outcome is unknown when the POST gets no HTTP status, and does not retry', async () => {
     const { client, request } = makeClient({
       alarms: { [BOX_A]: ['42'] },
+      // What request() throws for a write sent and not answered
       post: async () => {
-        throw new ApiRequestError(
-          'Firewalla API sent no answer (ECONNABORTED: timeout of 30000ms exceeded)',
-          undefined,
-          'ECONNABORTED'
-        );
+        throw sentNotAnswered('POST');
       },
     });
     await expect(client.archiveAlarm('42', BOX_A)).rejects.toThrow(
       /may or may not have been archived/
     );
     expect(posts(request)).toHaveLength(1);
+  });
+
+  it('says it failed when the POST never reached the API', async () => {
+    const { client } = makeClient({
+      alarms: { [BOX_A]: ['42'] },
+      post: async () => {
+        throw new ApiRequestError(
+          'Could not reach the Firewalla API (ECONNREFUSED: connect ECONNREFUSED 127.0.0.1:443)',
+          undefined,
+          'ECONNREFUSED'
+        );
+      },
+    });
+    await expect(client.archiveAlarm('42', BOX_A)).rejects.toThrow(
+      /^Could not reach the Firewalla API/
+    );
   });
 
   it('drops cached alarm reads after archiving, and nothing else', async () => {
@@ -707,11 +734,7 @@ describe('deleteAlarm', () => {
     const { client, request } = makeClient({
       alarms: { [BOX_A]: ['42'] },
       del: async () => {
-        throw new ApiRequestError(
-          'Firewalla API sent no answer (ECONNABORTED: timeout of 30000ms exceeded)',
-          undefined,
-          'ECONNABORTED'
-        );
+        throw sentNotAnswered('DELETE');
       },
     });
     await expect(client.deleteAlarm('42', BOX_A)).rejects.toThrow(

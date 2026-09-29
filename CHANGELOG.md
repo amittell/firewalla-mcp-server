@@ -1080,6 +1080,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   host name that did not resolve were known to fail before sending. A failed
   handshake (`EPROTO`), a certificate Node does not accept (`CERT_*`,
   `ERR_TLS_*` and the like), `EHOSTUNREACH` and `ENETUNREACH` now count too.
+- `archive_alarm`, `mute_alarm` and `delete_alarm` say an alarm write the
+  API refused failed. One answered 401 said `got no HTTP status (Request
+  failed: Authentication failed ...). The alarm may or may not have been
+  archived`, and one answered `success: false` said the same. A 401 or 404
+  now keeps its status (`ApiRequestError` with `status` 401 or 404, where
+  it was a plain `Error` with "Request failed:" in front), and only a write
+  sent and not answered is reported as maybe applied.
 
 ### Removed
 
