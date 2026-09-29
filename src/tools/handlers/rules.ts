@@ -337,7 +337,8 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
-        `Failed to get network rules: ${errorMessage}`
+        `Failed to get network rules: ${errorMessage}`,
+        ErrorType.API_ERROR
       );
     }
   }
@@ -1117,7 +1118,8 @@ export class GetNetworkRulesSummaryHandler extends BaseToolHandler {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return this.createErrorResponse(
-        `Failed to get network rules summary: ${errorMessage}`
+        `Failed to get network rules summary: ${errorMessage}`,
+        ErrorType.API_ERROR
       );
     }
   }
