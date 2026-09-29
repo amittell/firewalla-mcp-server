@@ -2,7 +2,9 @@ name: CI
 
 # A change to these alone runs nothing. No job reads them: format:check
 # covers src/ only, so a Markdown file there still runs CI. Run the
-# workflow by hand to check one anyway.
+# workflow by hand to check one anyway. scripts/require-main-ci.sh, which
+# publish.yml runs, walks past commits that change only these paths; keep
+# its list in step with this one.
 on:
   push:
     branches: [ main ]
