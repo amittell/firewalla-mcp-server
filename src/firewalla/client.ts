@@ -555,8 +555,9 @@ export class ApiRequestError extends Error {
 
 /**
  * A write (POST, PUT, PATCH or DELETE) that was sent and got no HTTP
- * status: its timeout ran out, or the connection dropped, after the request
- * went out. Firewalla may have applied it, so it is not reported as a
+ * status (its timeout ran out, or the connection dropped, after the request
+ * went out), or got 504 from a gateway that stopped waiting for the API
+ * (`status` 504). Firewalla may have applied it, so it is not reported as a
  * failure, which a caller could answer by sending it again. The message
  * says the outcome is unknown and names `check`, the read that shows
  * whether it was applied (checkingReadTool); `failure` is what request()
@@ -571,12 +572,21 @@ export class WriteOutcomeUnknownError extends ApiRequestError {
     code: string | undefined,
     attempts: number,
     readonly failure: string,
-    readonly check?: string
+    readonly check?: string,
+    status?: number
   ) {
-    super(message, undefined, code, attempts);
+    super(message, status, code, attempts);
     this.name = 'WriteOutcomeUnknownError';
   }
 }
+
+/**
+ * The answer after which a write may still have been applied: a gateway
+ * stopped waiting for the API, which had the request. 502 and 503 are not
+ * here: a gateway that could not reach the API, or an API that turned the
+ * request away, did not act on it.
+ */
+const GATEWAY_TIMEOUT = 504;
 
 /**
  * Node's codes for a request that failed before it reached the API: the
@@ -1792,7 +1802,8 @@ export class FirewallaClient {
         const attempts =
           (error.config as RateLimitedConfig | undefined)?.sends ?? 0;
         const failure = apiFailureMessage(error, attempts);
-        // A write that went out and got no status may have been applied
+        // A write that went out and got no status, or a gateway's 504,
+        // may have been applied
         if (
           method !== 'GET' &&
           status === undefined &&
@@ -1806,6 +1817,17 @@ export class FirewallaClient {
             attempts,
             failure,
             check
+          );
+        }
+        if (method !== 'GET' && status === GATEWAY_TIMEOUT) {
+          const check = checkingReadTool(endpoint);
+          throw new WriteOutcomeUnknownError(
+            `${method} ${endpoint} got 504 Gateway Timeout: a gateway stopped waiting for the Firewalla API, which may still carry it out. ${unknownWriteOutcome(check)}`,
+            error.code,
+            attempts,
+            failure,
+            check,
+            status
           );
         }
         throw new ApiRequestError(failure, status, error.code, attempts);
@@ -3870,11 +3892,12 @@ export class FirewallaClient {
             ? 'check with get_specific_alarm, which answers not found once it is gone,'
             : 'check its status with get_specific_alarm (2 is archived)';
         throw new WriteOutcomeUnknownError(
-          `${method} ${endpoint} got no HTTP status (${error.failure}). The alarm may or may not have been ${ALARM_ACTION_DONE[action]}: ${check} before retrying`,
+          `${method} ${endpoint} got ${error.status === GATEWAY_TIMEOUT ? '504 Gateway Timeout' : 'no HTTP status'} (${error.failure}). The alarm may or may not have been ${ALARM_ACTION_DONE[action]}: ${check} before retrying`,
           error.code,
           error.attempts,
           error.failure,
-          'get_specific_alarm'
+          'get_specific_alarm',
+          error.status
         );
       }
       throw error;
