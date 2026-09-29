@@ -1,19 +1,20 @@
 name: CI
 
-# A change to these alone runs nothing: no job reads them. Run the
+# A change to these alone runs nothing. No job reads them: format:check
+# covers src/ only, so a Markdown file there still runs CI. Run the
 # workflow by hand to check one anyway.
 on:
   push:
     branches: [ main ]
     paths-ignore:
       - 'docs/**'
-      - '**/*.md'
+      - '*.md'
       - 'LICENSE'
   pull_request:
     branches: [ main ]
     paths-ignore:
       - 'docs/**'
-      - '**/*.md'
+      - '*.md'
       - 'LICENSE'
   workflow_dispatch:
 

@@ -16,8 +16,11 @@ import { FirewallaMCPServer } from '../../src/server.js';
 /** When set, the alarms the stub answers instead of the four below */
 let alarmsOverride: unknown[] | undefined;
 
+/** One clock for every answer: two reads a second apart put the flow first */
+const NOW = Math.floor(Date.now() / 1000);
+
 function answer(url: string): unknown {
-  const now = Math.floor(Date.now() / 1000);
+  const now = NOW;
   if (url === '/v2/alarms' && alarmsOverride) {
     return { count: alarmsOverride.length, results: alarmsOverride };
   }
@@ -66,7 +69,8 @@ function answer(url: string): unknown {
       count: 1,
       results: [
         {
-          ts: now,
+          // A minute older than the alarms, so it sorts after them
+          ts: now - 60,
           gid: 'box-a',
           protocol: 'tcp',
           direction: 'outbound',
