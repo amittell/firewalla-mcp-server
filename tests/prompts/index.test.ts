@@ -3,7 +3,9 @@ import { FirewallaClient } from '../../src/firewalla/client';
 
 // Mock the FirewallaClient
 jest.mock('../../src/firewalla/client');
-const MockedFirewallaClient = FirewallaClient as jest.MockedClass<typeof FirewallaClient>;
+const MockedFirewallaClient = FirewallaClient as jest.MockedClass<
+  typeof FirewallaClient
+>;
 
 // Mock Server to capture handler registration
 const mockSetRequestHandler = jest.fn();
@@ -16,7 +18,9 @@ describe('MCP Prompts Setup', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockFirewalla = new MockedFirewallaClient({} as any) as jest.Mocked<FirewallaClient>;
+    mockFirewalla = new MockedFirewallaClient(
+      {} as any
+    ) as jest.Mocked<FirewallaClient>;
   });
 
   it('should register ListPrompts and GetPrompt handlers', () => {
@@ -33,9 +37,7 @@ describe('MCP Prompts Setup', () => {
   it('threat_analysis lists recent active alarms, not a severity search', async () => {
     mockFirewalla.getActiveAlarms.mockResolvedValue({
       count: 1,
-      results: [
-        { type: 1, message: 'Suspicious activity', ts: 1789600000 },
-      ],
+      results: [{ type: 1, message: 'Suspicious activity', ts: 1789600000 }],
     } as any);
     mockFirewalla.getRecentThreats.mockResolvedValue([]);
     mockFirewalla.getNetworkRules.mockResolvedValue({
@@ -132,6 +134,7 @@ describe('prompts fence the API data', () => {
   const threat = {
     timestamp: '2026-09-26T00:00:00.000Z',
     type: `${MARK}-threat`,
+    message: `${MARK}-threat-message`,
     source_ip: `${MARK}-source`,
     destination_ip: `${MARK}-destination`,
     action_taken: `${MARK}-action`,
@@ -224,6 +227,7 @@ describe('prompts fence the API data', () => {
         `${MARK}-type`,
         `${MARK}-message`,
         `${MARK}-threat`,
+        `${MARK}-threat-message`,
         `${MARK}-source`,
         `${MARK}-destination`,
         `${MARK}-action`,

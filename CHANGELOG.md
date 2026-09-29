@@ -1042,6 +1042,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   low and Device Offline (type 7) high. `by_severity` counts only the
   severities the API sent, `without_severity` counts the rest, and
   `severity_note` says why.
+- Each threat in `firewalla://threats/recent` and the security prompts
+  says what it is. Its `type` held the alarm's message, so `by_type`
+  counted each message once (measured 2026-09-29: 100 threats, and keys
+  such as "Device Living Room is watching video on Twitch."); it is now
+  the documented type name (Video Activity), with the text in `message`.
+  Every alarm read there was `action_taken: "blocked"`, because status 1
+  means active, not blocked; an alarm is now "alarm raised", and only a
+  blocked flow is "blocked". The alarms came first and the list was cut
+  to 100, so a day with 100 alarms showed no blocked flow however recent
+  (all 100 were alarms on 2026-09-29); both are now merged newest first.
 - An address the geoip-lite lookup has no data for gets no geographic
   data, where a country was made up for it. Both enrichment paths guessed
   one: from a table of address prefixes (`46.` Germany, `185.` the United

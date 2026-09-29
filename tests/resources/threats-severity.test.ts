@@ -13,8 +13,14 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { FirewallaClient } from '../../src/firewalla/client.js';
 import { FirewallaMCPServer } from '../../src/server.js';
 
+/** When set, the alarms the stub answers instead of the four below */
+let alarmsOverride: unknown[] | undefined;
+
 function answer(url: string): unknown {
   const now = Math.floor(Date.now() / 1000);
+  if (url === '/v2/alarms' && alarmsOverride) {
+    return { count: alarmsOverride.length, results: alarmsOverride };
+  }
   if (url === '/v2/alarms') {
     return {
       count: 4,
@@ -116,12 +122,46 @@ describe('getRecentThreats', () => {
   it('takes an alarm severity from the payload, and null where there is none', async () => {
     const threats = await makeClient().getRecentThreats(24);
     expect(threats.map(threat => [threat.type, threat.severity])).toEqual([
-      ['Security activity', null],
-      ['Device offline', null],
-      ['Porn activity', null],
-      ['Abnormal upload', 'high'],
+      ['Security Activity', null],
+      ['Device Offline', null],
+      ['Porn Activity', null],
+      ['Abnormal Upload', 'high'],
       ['Blocked Connection', null],
     ]);
+  });
+});
+
+describe('getRecentThreats, what each threat says', () => {
+  afterEach(() => {
+    alarmsOverride = undefined;
+  });
+
+  it('names the alarm type, keeps the message, and does not call an alarm blocked', async () => {
+    const threats = await makeClient().getRecentThreats(24);
+    const alarm = threats.find(threat => threat.type === 'Security Activity');
+    expect(alarm).toMatchObject({
+      message: 'Security activity',
+      action_taken: 'alarm raised',
+    });
+    const flow = threats.find(threat => threat.type === 'Blocked Connection');
+    expect(flow).toMatchObject({ message: null, action_taken: 'blocked' });
+  });
+
+  it('keeps a recent blocked flow when the window holds more than 100 older alarms', async () => {
+    const hourAgo = Math.floor(Date.now() / 1000) - 3600;
+    alarmsOverride = Array.from({ length: 120 }, (_, i) => ({
+      aid: i + 1,
+      gid: 'box-a',
+      type: 8,
+      status: 1,
+      ts: hourAgo - i,
+      message: `Video ${i}`,
+    }));
+    const threats = await makeClient().getRecentThreats(24);
+    expect(threats).toHaveLength(100);
+    expect(threats[0].type).toBe('Blocked Connection');
+    const times = threats.map(threat => Date.parse(threat.timestamp));
+    expect(times).toEqual([...times].sort((a, b) => b - a));
   });
 });
 
@@ -152,10 +192,10 @@ describe('firewalla://threats/recent', () => {
         'severity_emoji' in threat,
       ]);
       expect(bySeverity).toEqual([
-        ['Security activity', null, false],
-        ['Device offline', null, false],
-        ['Porn activity', null, false],
-        ['Abnormal upload', 'high', true],
+        ['Security Activity', null, false],
+        ['Device Offline', null, false],
+        ['Porn Activity', null, false],
+        ['Abnormal Upload', 'high', true],
         ['Blocked Connection', null, false],
       ]);
     } finally {
