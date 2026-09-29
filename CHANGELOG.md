@@ -1128,6 +1128,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   search tools. `get_target_lists` had no catch, so its errors came back
   from the dispatcher with no prefix, as `unknown_error`, with the list of
   every tool; it now answers like the others.
+- `get_flow_insights` reports a failed request as a failure. Each of its
+  requests (the category breakdown, the top devices and the blocked
+  summary) replaced an error with no results, so with a bad token it
+  answered `success: true` with no traffic. It now answers `Failed to get
+  flow insights: Authentication failed. Please check your MSP token.`, or
+  the error the request met.
 
 ### Removed
 

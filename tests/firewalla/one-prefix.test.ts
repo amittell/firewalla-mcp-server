@@ -59,6 +59,9 @@ const TOOLS: Array<[string, Record<string, unknown>]> = [
   ['search_devices', { query: 'online:false' }],
   ['search_rules', { query: 'action:block' }],
   ['get_target_lists', { limit: 5 }],
+  // It answered success with empty data: each request's failure was
+  // replaced with no results
+  ['get_flow_insights', { period: '24h', include_blocked: true }],
 ];
 
 async function answer(
