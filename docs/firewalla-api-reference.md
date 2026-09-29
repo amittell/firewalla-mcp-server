@@ -1643,7 +1643,7 @@ Wait until `x-ratelimit-reset` (or for `retry-after`) before retrying.
    }
    ```
 
-2. **Retry a transient read failure once**, and nothing else. A 429 needs a wait until the window ends instead (above). Never send a POST, PATCH, PUT or DELETE again after a lost answer: the API may have applied it. Every retry counts against the 100 requests per 5 minutes. This sketch sends only GETs. Like `FirewallaClient` (`MAX_TRANSIENT_RETRIES = 1`), it sends a failed one again once, 1 to 2 s later, when the failure is one the client treats as transient (`TRANSIENT_STATUSES` and `TRANSIENT_CODES` in `src/firewalla/client.ts`): 502, 503 and 504, and no answer with `ECONNABORTED`, `ETIMEDOUT`, `ECONNRESET` or `EPIPE`. `FirewallaClient` also skips the retry when its answer could not come before the tool gives up (Transient failures, above).
+2. **Retry a transient read failure once**, and nothing else. A 429 needs a wait until the window ends instead (above). Never send a POST, PATCH, PUT or DELETE again after a lost answer: the API may have applied it. Every retry counts against the 100 requests per 5 minutes. This sketch sends only GETs. Like `FirewallaClient` (`MAX_TRANSIENT_RETRIES = 1`), it sends a failed one again once, 1 to 2 s later, when the failure is one the client treats as transient (`TRANSIENT_STATUSES` and `TRANSIENT_CODES` in `src/firewalla/client.ts`): 502, 503 and 504, and no answer with `ECONNABORTED`, `ETIMEDOUT`, `ECONNRESET` or `EPIPE`. Like `FirewallaClient`, it takes a rate-limit slot for the retry, and skips the retry when its answer could not come before the caller's deadline, checked before the backoff and again when the slot comes (Transient failures, above).
    ```javascript
    const TRANSIENT_STATUSES = new Set([502, 503, 504]);
    const TRANSIENT_CODES = new Set(['ECONNABORTED', 'ETIMEDOUT', 'ECONNRESET', 'EPIPE']);
@@ -1655,13 +1655,23 @@ Wait until `x-ratelimit-reset` (or for `retry-after`) before retrying.
        : TRANSIENT_CODES.has(error.code);
    }
 
-   // Reads only: this function sends GET and nothing else, at most twice
-   async function getWithRetry(path, params) {
+   // Reads only: this function sends GET and nothing else, at most twice.
+   // takeSlot() is your rate limiter: it resolves when a request may start
+   // and returns that time (ms), and the retry takes a slot like any request.
+   // deadline is when the caller gives up (ms since the epoch).
+   async function getWithRetry(path, params, { takeSlot, deadline }) {
+     const timeout = apiClient.defaults.timeout; // one request's longest wait
+     await takeSlot();
      try {
        return (await apiClient.get(path, { params })).data;
      } catch (error) {
        if (!isTransient(error)) throw error;
-       await delay(1000 * (1 + Math.random())); // 1 to 2 s
+       const backoff = 1000 * (1 + Math.random()); // 1 to 2 s
+       // Not when the retry's answer could not come before the deadline
+       if (Date.now() + backoff + timeout > deadline) throw error;
+       await delay(backoff);
+       const start = await takeSlot();
+       if (start + timeout > deadline) throw error; // the slot came too late
        return (await apiClient.get(path, { params })).data;
      }
    }
