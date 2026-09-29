@@ -820,10 +820,10 @@ function validateSearchParams(params) {
     errors.push('query parameter is required and must be a string');
   }
 
-  // limit is optional (default 200); the schema allows 1 to 500
+  // limit is optional (default 200); search_flows' schema allows 1 to 1000
   if (params.limit !== undefined &&
-      (!Number.isInteger(params.limit) || params.limit < 1 || params.limit > 500)) {
-    errors.push('limit must be an integer from 1 to 500');
+      (!Number.isInteger(params.limit) || params.limit < 1 || params.limit > 1000)) {
+    errors.push('limit must be an integer from 1 to 1000');
   }
 
   // Query length validation
