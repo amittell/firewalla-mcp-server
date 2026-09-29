@@ -220,7 +220,7 @@ ${threats
   .slice(0, 10)
   .map(
     threat =>
-      `- ${oneLine(threat.type)}: ${oneLine(threat.source_ip)} → ${oneLine(threat.destination_ip)} (${oneLine(threat.action_taken)})`
+      `- ${oneLine(threat.type)}${threat.message ? ` (${oneLine(threat.message)})` : ''}: ${oneLine(threat.source_ip)} → ${oneLine(threat.destination_ip)} (${oneLine(threat.action_taken)})`
   )
   .join('\n')}`)}
 

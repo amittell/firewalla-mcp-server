@@ -55,7 +55,9 @@ import type {
   SimpleStats,
   Statistics,
   GeographicData,
+  AlarmType,
 } from '../types.js';
+import { ALARM_TYPE_NAMES } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
 import { containsText, matchesWildcard } from '../utils/wildcard.js';
 import {
@@ -3182,9 +3184,13 @@ export class FirewallaClient {
   async getRecentThreats(hours = 24): Promise<
     Array<{
       timestamp: string;
+      /** The alarm type's name, or Blocked Connection for a blocked flow */
       type: string;
+      /** The alarm's message; null for a blocked flow */
+      message: string | null;
       source_ip: string;
       destination_ip: string;
+      /** "alarm raised" for an alarm, "blocked" for a blocked flow */
       action_taken: string;
       /** The alarm's severity as the API sent it; null when it sent none */
       severity: string | null;
@@ -3219,10 +3225,17 @@ export class FirewallaClient {
 
       return {
         timestamp,
-        type: alarm.message || 'Security Alert',
+        // type held the message, so by_type counted each message once
+        type:
+          ALARM_TYPE_NAMES[Number(alarm.type) as AlarmType] ??
+          `Alarm type ${String(alarm.type)}`,
+        message: typeof alarm.message === 'string' ? alarm.message : null,
         source_ip: alarm.device?.ip || 'unknown',
         destination_ip: alarm.remote?.ip || 'unknown',
-        action_taken: alarm.status === 1 ? 'blocked' : 'logged',
+        // status 1 is an active alarm, not a blocked connection: every
+        // alarm read here was reported as blocked. The alarm does not say
+        // whether the box blocked anything.
+        action_taken: 'alarm raised',
         // The API's alarm model has no severity. One it sends is kept, and
         // none is made up: it was derived from the type number (5 and up
         // high, 3 and 4 medium, else low), so a Security Activity alarm
@@ -3245,6 +3258,7 @@ export class FirewallaClient {
       return {
         timestamp,
         type: 'Blocked Connection',
+        message: null,
         source_ip: flow.device.ip,
         destination_ip: flow.destination?.ip || 'unknown',
         action_taken: 'blocked',
@@ -3253,7 +3267,15 @@ export class FirewallaClient {
       };
     });
 
-    return [...threats, ...blockedThreats].slice(0, 100); // Limit total results
+    // Newest first across both: with the alarms first, 100 alarms in the
+    // window left no room for a blocked flow however recent
+    const time = (timestamp: string) => {
+      const ms = Date.parse(timestamp);
+      return Number.isNaN(ms) ? -Infinity : ms;
+    };
+    return [...threats, ...blockedThreats]
+      .sort((a, b) => time(b.timestamp) - time(a.timestamp))
+      .slice(0, 100);
   }
 
   async getBoxes(

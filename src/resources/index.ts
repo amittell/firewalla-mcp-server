@@ -311,6 +311,7 @@ export function setupResources(
                     threats: threats.map(threat => ({
                       timestamp: threat.timestamp,
                       type: threat.type,
+                      message: threat.message,
                       source_ip: threat.source_ip,
                       destination_ip: threat.destination_ip,
                       action_taken: threat.action_taken,
