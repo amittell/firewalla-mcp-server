@@ -59,6 +59,14 @@ afterEach(() => {
 const client = () => makeClient(`http://127.0.0.1:${api.port}`);
 const registry = new ToolRegistry({ enableWriteTools: true });
 
+/** Resolves once `ready()` holds, checking every 10 ms, for up to `ms` */
+async function until(ready: () => boolean, ms = 2000) {
+  const deadline = Date.now() + ms;
+  while (!ready() && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
+
 /** Tools give up after `ms` instead of 30 s */
 function toolTimeout(ms: number) {
   const real = TimeoutManager.prototype.withTimeout;
@@ -71,7 +79,9 @@ function toolTimeout(ms: number) {
 
 describe('a request cancelled because its tool gave up', () => {
   it('is not a timeout of the API and is not sent again; the tool says it timed out', async () => {
-    toolTimeout(150);
+    // 500 ms, and waiting on the outcome rather than a fixed 50 ms: under the
+    // full suite's load, a 150 ms limit and a 50 ms wait failed 1 run in 3
+    toolTimeout(500);
     let cancelled: any;
     const outcome = await withToolTimeout(async () => {
       try {
@@ -81,7 +91,7 @@ describe('a request cancelled because its tool gave up', () => {
         throw error;
       }
     }, 'get_boxes').catch(error => error);
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await until(() => cancelled !== undefined && api.received.length > 0);
 
     expect(outcome.name).toBe('TimeoutError');
     expect(cancelled).toBeInstanceOf(ApiRequestError);
