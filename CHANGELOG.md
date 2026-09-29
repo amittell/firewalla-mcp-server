@@ -211,7 +211,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   characters wherever it listens, so `MCP_HTTP_BEARER_TOKEN=x` cannot pass
   for one: a length cannot tell a random token from a chosen one, but it
   stops the values typed to try the setting out, and
-  `openssl rand -hex 32` prints 64. Loopback addresses without a token, and
+  `openssl rand -hex 32` prints 64 characters. Loopback addresses without a token, and
   the stdio transport, start as before.
 
   `MCP_HTTP_ALLOW_NO_TOKEN=true` starts the server beyond loopback without a
