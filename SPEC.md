@@ -176,7 +176,10 @@ it may have been applied.
 | `LOG_LEVEL`, `DEBUG` | `info`, off | Logging to stderr |
 | `MCP_TEST_MODE` | off | Dummy credentials; refused with `NODE_ENV=production` |
 
-`.env.example` has the same variables with longer notes.
+`.env.example` has the same variables with longer notes. `src/` also reads
+`RISK_THRESHOLD_FLOW_MIN` and `FIREWALLA_STREAMING_THRESHOLD`, which change
+nothing a client sees: the first feeds a geographic analysis `search_flows`
+does not return, and the second a streaming default no tool uses.
 
 ## Source layout
 

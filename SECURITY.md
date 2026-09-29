@@ -67,8 +67,8 @@ Out of scope:
   `MCP_HTTP_PATH` path only, and closes the connection of a request it
   answers without reading the body. On any address but loopback, such as
   the `0.0.0.0` the Docker image sets so that a published port reaches it,
-  the server does not start without `MCP_HTTP_BEARER_TOKEN`, and it refuses
-  a token shorter than 16 characters. `MCP_HTTP_ALLOW_NO_TOKEN=true` starts
+  the server does not start without `MCP_HTTP_BEARER_TOKEN`. A token shorter
+  than 16 characters stops it wherever it listens. `MCP_HTTP_ALLOW_NO_TOKEN=true` starts
   it without a token, for a network no untrusted machine can reach, and the
   server then writes a warning to stderr at startup.
   See [HTTP transport security](README.md#http-transport-security).

@@ -22,10 +22,22 @@ npm list -g firewalla-mcp-server
 
 ### 2. Configure MCP Connection
 
-Create or update your Claude Code MCP configuration file:
+Add the server with the Claude Code CLI:
 
-**Linux/macOS**: `~/.config/claude-code/mcp_config.json`
-**Windows**: `%APPDATA%\claude-code\mcp_config.json`
+```bash
+claude mcp add firewalla \
+  -e FIREWALLA_MSP_TOKEN=your_msp_access_token_here \
+  -e FIREWALLA_MSP_ID=yourdomain.firewalla.net \
+  -- npx -y firewalla-mcp-server
+```
+
+The default scope, `local`, adds it for the current project only; `--scope user`
+adds it for every project, and `--scope project` writes it to the project's
+`.mcp.json` for everyone who works on it. `claude mcp list` shows it. Add
+`-e FIREWALLA_BOX_ID=your_box_gid_here` to limit queries to one box, and
+`-e FIREWALLA_ENABLE_WRITE_TOOLS=true` for the 11 write tools.
+
+A project's `.mcp.json` holds the same server as:
 
 ```json
 {
@@ -58,7 +70,7 @@ export FIREWALLA_BOX_ID="your_box_gid_here"
 Start a Claude Code session and test:
 
 ```bash
-claude-code
+claude
 # In Claude Code prompt:
 "Check my Firewalla status and show me any security alerts"
 ```

@@ -155,7 +155,7 @@ MCP_SESSION_IDLE_TIMEOUT_MS=1800000       # HTTP sessions idle this long are clo
 API_TIMEOUT=30000                         # API request timeout in ms (default: 30000, 1000-300000)
 CACHE_TTL=300                             # Response cache TTL in seconds (default: 300, 0-3600)
 CACHE_MAX_ENTRIES=1000                    # Most responses cached; least recently used dropped first (default: 1000, 1-100000)
-RISK_THRESHOLD_FLOW_MIN=7                 # Risk score from which search_flows' geographic analysis counts a flow as high risk (default: 7)
+RISK_THRESHOLD_FLOW_MIN=7                 # High-risk threshold of search_flows' geographic analysis, which its answer does not include, so no visible effect (default: 7)
 DEFAULT_PAGE_SIZE=100                     # Default page size (default: 100)
 MAX_PAGE_SIZE=10000                       # Page size ceiling (default: 10000)
 LOG_LEVEL=info                            # error, warn, info or debug (default: info)
@@ -292,20 +292,18 @@ search_flows query:"category:social" limit:50
 The `get_flow_insights` tool addresses the challenge of analyzing high-volume networks (100k+ flows/day) by using category-based aggregation instead of time-based pagination.
 
 ### Why get_flow_insights?
-- **Scalability**: Handles 338k+ flows/day efficiently with 2-3 API calls instead of 1,690+ pagination requests
+- **Few requests**: 2 reads of `GET /v2/flows` for the period, sorted by total bytes (up to 500 flows for categories, 200 for devices), and a third of up to 50 blocked flows with `include_blocked`, instead of paging through every flow
 - **Real Questions**: Answers "did anyone watch porn?" or "what social media was used?" directly
-- **Performance**: Uses groupBy aggregation at the API level instead of client-side processing
+- **Client-side breakdowns**: The category, domain and device counts are computed from those flows, so on a busy network they cover the period's largest flows, not all of them
 - **Actionable Data**: Returns category breakdowns, top domains, and device-specific usage
 
 ### Implementation Details
 - Uses Firewalla's category classification: porn, social, video, games, shopping, etc.
-- Aggregates data using API-level groupBy instead of fetching all flows
 - Returns both allowed and blocked traffic analysis
 - Provides device-level breakdowns for parental control use cases
 
 ### Recent Flow Activity Tool
-- `get_recent_flow_activity` provides current network state snapshots (last 10-20 minutes)  
-- Returns up to 2000 flows across 4 API pages for immediate analysis
+- `get_recent_flow_activity` reads the 50 most recent flows in one request; the minutes they span depend on how busy the network is
 - Use for current security assessment and real-time activity monitoring
 
 ## API Reference Documentation
