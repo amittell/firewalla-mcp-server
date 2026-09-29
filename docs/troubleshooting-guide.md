@@ -187,14 +187,14 @@ A numeric string such as `"100"` is converted and accepted.
 2. **Use Proper Defaults**: Omit optional parameters rather than setting to null
 3. **Validate Before Calling**: Pre-validate parameters in your code
 
-**Examples**:
+**Examples** (`search_flows`):
 ```javascript
-// ❌ Incorrect - null/undefined values
-{ query: null, limit: undefined, cursor: "" }
+// ❌ Refused: "query is required but was not provided"
+{ query: null, limit: 100 }
 
-// ✅ Correct - valid values or omitted
-{ query: "protocol:tcp", limit: 100 }
-// cursor omitted since it's optional
+// ✅ Accepted: an undefined limit takes the default (200), and an empty
+// cursor is read as no cursor
+{ query: "protocol:tcp", limit: undefined, cursor: "" }
 ```
 
 ## Authentication and Connection Issues
@@ -504,8 +504,10 @@ know with no results.
 
 **Common Issues**:
 - API returns null for some fields
-- Inconsistent field naming (camelCase vs snake_case)
 - Missing geographic data
+
+The tools answer in snake_case (`last_seen`, `mac_vendor`, `public_ip`),
+whatever the API sent.
 
 **Solutions**:
 
@@ -522,16 +524,20 @@ function getDeviceName(device) {
 }
 ```
 
-#### 2. Consistent Field Normalization
+#### 2. Reading Device Fields
+`get_device_status` returns each device with `id` (its MAC address, or
+`ovpn:` / `wg_peer:` for VPN clients), `gid`, `name`, `ip`, `mac_vendor`,
+`online`, `last_seen`, `ip_reserved`, `network`, `group`, `total_download`
+and `total_upload`:
 ```javascript
-function normalizeDeviceData(device) {
+function deviceSummary(device) {
   return {
-    device_id: device?.deviceId || device?.device_id || 'unknown',
-    device_name: device?.deviceName || device?.device_name || device?.name || 'unknown',
-    mac_address: device?.macAddress || device?.mac_address || device?.mac || 'unknown',
-    ip_address: device?.ipAddress || device?.ip_address || device?.ip || 'unknown',
-    status: device?.status || 'unknown',
-    last_seen: device?.lastSeen || device?.last_seen || null
+    id: device?.id ?? 'unknown',
+    name: device?.name || 'unknown',
+    ip: device?.ip || 'unknown',
+    vendor: device?.mac_vendor || 'unknown',
+    online: device?.online === true,
+    network: device?.network?.name || 'unknown'
   };
 }
 ```
@@ -711,8 +717,8 @@ npm run mcp:start 2> server.log
 # Check specific tool errors
 grep "search_flows" server.log | tail -20
 
-# Check authentication errors
-grep "Authentication failed" server.log | tail -10
+# Check authentication errors (a 401 always writes this line)
+grep "API Response Error: 401" server.log | tail -10
 
 # Check timeout errors
 grep "timed out" server.log | tail -10
@@ -814,13 +820,10 @@ function validateSearchParams(params) {
     errors.push('query parameter is required and must be a string');
   }
 
-  if (!params.limit || typeof params.limit !== 'number') {
-    errors.push('limit parameter is required and must be a number');
-  }
-
-  // Range validation
-  if (params.limit < 1 || params.limit > 10000) {
-    errors.push('limit must be between 1 and 10000');
+  // limit is optional (default 200); the schema allows 1 to 500
+  if (params.limit !== undefined &&
+      (!Number.isInteger(params.limit) || params.limit < 1 || params.limit > 500)) {
+    errors.push('limit must be an integer from 1 to 500');
   }
 
   // Query length validation
