@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The npm publish no longer waits forever for CI on a docs-only tag
+  commit. `ci.yml` skips a push that changes only `docs/`, top-level
+  Markdown or `LICENSE` (#85), so such a commit on main has no CI run of
+  its own, and the publish job waited its 30 minutes for one: v2.0.0 was
+  tagged on #87's docs-only commit b8dd6da, and the npm publish went out
+  only after that commit was pushed again with code in the same push.
+  `scripts/require-main-ci.sh` now walks back from the tag commit past
+  docs-only commits to the first with a push run, and requires that run to
+  have passed. A commit that changes anything else is still waited for.
+- A test of a request cancelled by its tool's deadline failed 1 full run
+  in 3 under load: it gave the tool 150 ms and then waited a fixed 50 ms
+  for the cancellation. It gives 500 ms and waits for the outcome.
+- Docker Hub shows a whole page for the image. Its description was the
+  README, and Docker Hub keeps the first 25,000 characters: at 2.0.0 the
+  README had 38,986, so the overview stopped mid-sentence in "Available
+  Tools", without the security, troubleshooting, documentation, license and
+  support sections, and its 20 relative links went nowhere. It is now
+  `DOCKERHUB.md` (4,364 characters): the tags and platforms, stdio and HTTP
+  use with the token rule, the main settings, and links to the rest on
+  GitHub. A manual run of Docker Build and Publish with `description_only`
+  updates it without building.
+- The project's copy of the Docker MCP catalog entry pins v2.0.0
+  (b8dd6da), as its comment says it keeps the last pin submitted; it still
+  held 1.1.0's.
+
 ## [2.0.0] - 2026-09-29
 
 ### Added
