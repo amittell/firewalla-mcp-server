@@ -570,6 +570,7 @@ node dist/server.js
 
 - The CI workflow's `launch` job packs the package and starts it through the global bin, `npx` and `node dist/server.js`: on Linux for a pull request, and on Linux, macOS and Windows for a push to main or a run by hand (Actions, CI, Run workflow). A change to `docs/`, top-level Markdown files or `LICENSE` alone runs no CI; no job reads them (`format:check` covers `src/` only).
 - The Docker Build workflow runs on pull requests that touch the Dockerfile, the package files or the Docker workflows. It builds the image for amd64, arm64 and arm/v7, then runs the amd64 image with `docker run -i --rm` and requires `serverInfo.version` to equal `package.json`'s version. Run the workflow by hand with the `image` input (for example `amittell/firewalla-mcp-server:1.4.1`) to pull and check a published image instead.
+- The Docker Build and Publish workflow, on a release tag, pushes the image and sets its Docker Hub description from `DOCKERHUB.md`, a short page that links here for the rest (Docker Hub keeps only the first 25,000 characters of a description). Run it by hand with `description_only` to update just the description.
 
 To run the Docker check locally:
 
