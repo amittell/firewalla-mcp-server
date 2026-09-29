@@ -255,7 +255,6 @@ export const FIELD_ALIAS_MAP: Record<string, string> = {
   endTime: 'end_time',
   forceRefresh: 'force_refresh',
   includeOffline: 'include_offline',
-  includeAnalytics: 'include_analytics',
   sortOrder: 'sort_order',
 
   // Response metadata
