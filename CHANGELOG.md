@@ -1087,6 +1087,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now keeps its status (`ApiRequestError` with `status` 401 or 404, where
   it was a plain `Error` with "Request failed:" in front), and only a write
   sent and not answered is reported as maybe applied.
+- A write answered 504 Gateway Timeout says its outcome is unknown. A
+  gateway that stops waiting for the Firewalla API answers 504 while the
+  API may still carry the write out, as when the client's own
+  `API_TIMEOUT` runs out, but `create_rule` said `Failed to create rule:
+  Firewalla API answered 504 Gateway Timeout ...`. It now says `POST
+  /v2/rules got 504 Gateway Timeout: a gateway stopped waiting for the
+  Firewalla API, which may still carry it out. The outcome is unknown ...
+  Check with get_network_rules before trying again.`, and the alarm tools
+  say the alarm may or may not have been changed. A 502 or 503 on a write
+  is still a failure, and a read answered 504 is still sent again once.
 
 ### Removed
 
