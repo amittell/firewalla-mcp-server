@@ -135,3 +135,64 @@ export function queryStructureErrors(query: string): string[] {
 
   return errors;
 }
+
+/** The most AND and OR operators a query may hold */
+export const MAX_QUERY_OPERATORS = 20;
+
+/** The most field:value terms a query may hold */
+export const MAX_QUERY_FIELD_TERMS = 15;
+
+/** The most [low TO high] ranges a query may hold */
+export const MAX_QUERY_RANGES = 5;
+
+/**
+ * Which complexity limit a query goes over, one message each naming the
+ * limit, the count and the maximum; empty when it goes over none. Every
+ * search tool refuses such a query before it translates or sends it.
+ * Operators, terms and ranges are counted outside quoted values: "a AND b"
+ * is a phrase. There is no wildcard limit: wildcards are matched in fewer
+ * than (n + 1)(m + 1) steps (matchesWildcard), and the 2,000-character
+ * limit bounds m.
+ *
+ * @param query - The query as given
+ */
+export function queryComplexityErrors(query: string): string[] {
+  const errors: string[] = [];
+  // Each quoted value becomes Q: name:"a b" is one term, name:Q
+  let outside = '';
+  let last = -1;
+  scanOutsideQuotes(query, (character, index) => {
+    if (index !== last + 1) {
+      outside += 'Q';
+    }
+    outside += character;
+    last = index;
+  });
+  if (last !== query.length - 1) {
+    outside += 'Q';
+  }
+  const words = outside.split(/[\s()]+/).filter(Boolean);
+
+  const operators = words.filter(
+    word => word === 'AND' || word === 'OR'
+  ).length;
+  if (operators > MAX_QUERY_OPERATORS) {
+    errors.push(
+      `Too many logical operators: ${operators} (at most ${MAX_QUERY_OPERATORS})`
+    );
+  }
+
+  const terms = words.filter(word => /^-?[\w.]+:/.test(word)).length;
+  if (terms > MAX_QUERY_FIELD_TERMS) {
+    errors.push(
+      `Too many field terms: ${terms} (at most ${MAX_QUERY_FIELD_TERMS})`
+    );
+  }
+
+  const ranges = (outside.match(/\[[^\]]*\bTO\b[^\]]*\]/gi) ?? []).length;
+  if (ranges > MAX_QUERY_RANGES) {
+    errors.push(`Too many ranges: ${ranges} (at most ${MAX_QUERY_RANGES})`);
+  }
+
+  return errors;
+}

@@ -40,7 +40,10 @@ import {
 } from '../../utils/timeout-manager.js';
 import { validateAlarmId } from '../../utils/alarm-id-validation.js';
 import { mspAnd } from '../../utils/msp-query.js';
-import { queryStructureErrors } from '../../utils/query-structure.js';
+import {
+  queryComplexityErrors,
+  queryStructureErrors,
+} from '../../utils/query-structure.js';
 
 /**
  * Map alarm types to severity levels
@@ -267,6 +270,23 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
             structure_errors: structureErrors,
           },
           structureErrors
+        );
+      }
+      // The complexity limits every search tool holds a query to
+      const complexityErrors =
+        typeof queryValidation.sanitizedValue === 'string'
+          ? queryComplexityErrors(queryValidation.sanitizedValue)
+          : [];
+      if (complexityErrors.length > 0) {
+        return this.createErrorResponse(
+          'Query is too complex',
+          ErrorType.VALIDATION_ERROR,
+          {
+            query: queryValidation.sanitizedValue,
+            complexity_errors: complexityErrors,
+            hint: 'Split it into several searches',
+          },
+          complexityErrors
         );
       }
 

@@ -272,6 +272,8 @@ describe('operator counts read uppercase operators only', () => {
     const errors = (query: string) =>
       QuerySanitizer.validateQueryComplexity(query).errors.join(' ');
     expect(errors(words)).not.toContain('Too many logical operators');
-    expect(errors(operators)).toContain('Too many logical operators (21)');
+    expect(errors(operators)).toContain(
+      'Too many logical operators: 21 (at most 20)'
+    );
   });
 });

@@ -6,8 +6,8 @@
 import { FieldValidator } from './field-validator.js';
 import { pathSegmentProblem } from './path-segment.js';
 import {
+  queryComplexityErrors,
   queryStructureErrors,
-  scanOutsideQuotes,
 } from '../utils/query-structure.js';
 import type { ValidationResult } from '../types.js';
 
@@ -1440,11 +1440,8 @@ export class QuerySanitizer {
       };
     }
 
-    // Validate query complexity to prevent performance issues
-    const complexityCheck = QuerySanitizer.validateQueryComplexity(query);
-    if (!complexityCheck.isValid) {
-      return complexityCheck;
-    }
+    // Complexity is checked apart (queryComplexityErrors), by every search
+    // tool: refused here, it was reported as "invalid field names"
 
     return {
       isValid: true,
@@ -1454,76 +1451,13 @@ export class QuerySanitizer {
   }
 
   /**
-   * Validate query complexity to prevent performance issues
+   * The complexity limits every search tool holds a query to
+   * (queryComplexityErrors): each message names the limit, the count and
+   * the maximum
    */
   static validateQueryComplexity(query: string): ValidationResult {
-    if (!query || typeof query !== 'string') {
-      return {
-        isValid: true,
-        errors: []
-      };
-    }
-
-    const complexityIssues: string[] = [];
-
-    // Check for excessive logical operators (potential performance issue)
-    // Uppercase only: and and or are words, as toMspQuery reads them
-    const orCount = (query.match(/\bOR\b/g) || []).length;
-    const andCount = (query.match(/\bAND\b/g) || []).length;
-    const totalLogicalOps = orCount + andCount;
-
-    if (totalLogicalOps > 20) {
-      complexityIssues.push(`Too many logical operators (${totalLogicalOps}). Maximum recommended: 20`);
-    }
-
-    // Check for excessive wildcards (can cause performance issues)
-    const wildcardCount = (query.match(/\*/g) || []).length;
-    if (wildcardCount > 10) {
-      complexityIssues.push(`Too many wildcards (${wildcardCount}). Maximum recommended: 10`);
-    }
-
-    // Check for excessive range queries
-    const rangeCount = (query.match(/\[[^\]]+\s+TO\s+[^\]]+\]/gi) || []).length;
-    if (rangeCount > 5) {
-      complexityIssues.push(`Too many range queries (${rangeCount}). Maximum recommended: 5`);
-    }
-
-    // Check for deeply nested parentheses, outside quoted values
-    let maxDepth = 0;
-    let currentDepth = 0;
-    scanOutsideQuotes(query, char => {
-      if (char === '(') {
-        currentDepth++;
-        maxDepth = Math.max(maxDepth, currentDepth);
-      } else if (char === ')') {
-        currentDepth--;
-      }
-    });
-
-    if (maxDepth > 5) {
-      complexityIssues.push(`Query nesting too deep (${maxDepth} levels). Maximum recommended: 5`);
-    }
-
-    // Check for excessive field:value pairs
-    const fieldValuePairs = (query.match(/\w+:[^:\s]+/g) || []).length;
-    if (fieldValuePairs > 15) {
-      complexityIssues.push(`Too many field:value pairs (${fieldValuePairs}). Maximum recommended: 15`);
-    }
-
-    if (complexityIssues.length > 0) {
-      return {
-        isValid: false,
-        errors: [
-          'Query is too complex and may cause performance issues:',
-          ...complexityIssues,
-          'Consider breaking complex queries into smaller, simpler queries for better performance.'
-        ]
-      };
-    }
-
-    return {
-      isValid: true,
-      errors: []
-    };
+    const errors =
+      typeof query === 'string' && query ? queryComplexityErrors(query) : [];
+    return { isValid: errors.length === 0, errors };
   }
 }

@@ -974,6 +974,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   41,370 queries a set), the two tools on each endpoint now send or refuse
   the same queries, and what they send is one conjunction in the API's
   grammar that translation leaves unchanged.
+- Every search tool holds a query to the same complexity limits, and a
+  refusal names the limit it hit, with the count and the maximum: `Too
+  many logical operators: 21 (at most 20)`, `Too many field terms: 16 (at
+  most 15)`, `Too many ranges: 6 (at most 5)`, under "Query is too
+  complex". The limits ran inside the field check, so a query over one
+  was refused as "Query contains invalid field names"; only in the five
+  `search_*` tools, and not for free text alone; and `search_devices` had a
+  stricter one of its own, which refused
+  `name:*a* OR name:*b* OR name:*c*` as "Query too complex (11)". Operators
+  and terms are counted outside quotes, and a MAC address is one term. The
+  wildcard limit (at most 10) is gone: wildcards are matched in linear
+  time now, 900 of them in under 4 ms, so `name:*a*b*c*d*e*f*g*h*i*j*` is
+  taken.
 
 ### Removed
 
