@@ -1204,6 +1204,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   imported it; reads are retried by the client itself (`retryTransient` in
   `src/firewalla/client.ts`). `npm install` fetches 2 packages fewer
   (`axios-retry` and `is-retry-allowed`, which only it needed).
+- The client methods no tool, test or script called:
+  `searchCrossReference`, `getNetworkRulesSummary`, `getMostActiveRules` and
+  `getRecentRules`, with the private `executeSearchByEntityType`,
+  `inferEntityTypeFromName` and `sanitizeInput` only they used (597 lines
+  of `src/firewalla/client.ts`). `get_network_rules_summary` reads
+  `getNetworkRules`, and its handler is unchanged.
 
 ## [1.5.0] - 2026-09-25
 
