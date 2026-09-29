@@ -274,12 +274,20 @@ export function setupResources(
         case 'firewalla://threats/recent': {
           const threats = await firewalla.getRecentThreats(24);
 
+          // Severities as the API sent them; the MSP API's alarms and
+          // flows carry none, so a threat without one is counted apart
+          const withoutSeverity = threats.filter(
+            threat => threat.severity === null
+          ).length;
           const threatStats = {
             total: threats.length,
             by_severity: threats.reduce((acc, threat) => {
-              acc[threat.severity] = (acc[threat.severity] || 0) + 1;
+              if (threat.severity !== null) {
+                acc[threat.severity] = (acc[threat.severity] || 0) + 1;
+              }
               return acc;
             }, keyedByData<number>()),
+            without_severity: withoutSeverity,
             by_type: threats.reduce((acc, threat) => {
               acc[threat.type] = (acc[threat.type] || 0) + 1;
               return acc;
@@ -296,6 +304,10 @@ export function setupResources(
                     time_period: '24 hours',
                     statistics: threatStats,
                     threat_trend: categorizeThreatLevel(threats.length),
+                    ...(withoutSeverity > 0 && {
+                      severity_note:
+                        'The MSP API sends no severity with alarms or blocked flows, so severity is null for a threat without one and by_severity counts only the severities it sent.',
+                    }),
                     threats: threats.map(threat => ({
                       timestamp: threat.timestamp,
                       type: threat.type,
@@ -303,7 +315,9 @@ export function setupResources(
                       destination_ip: threat.destination_ip,
                       action_taken: threat.action_taken,
                       severity: threat.severity,
-                      severity_emoji: getSeverityEmoji(threat.severity),
+                      ...(threat.severity !== null && {
+                        severity_emoji: getSeverityEmoji(threat.severity),
+                      }),
                       time_ago: getTimeAgo(threat.timestamp),
                     })),
                     recommendations: generateThreatRecommendations(threatStats),

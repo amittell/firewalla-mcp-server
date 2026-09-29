@@ -3186,7 +3186,8 @@ export class FirewallaClient {
       source_ip: string;
       destination_ip: string;
       action_taken: string;
-      severity: string;
+      /** The alarm's severity as the API sent it; null when it sent none */
+      severity: string | null;
     }>
   > {
     // Optimized: Use server-side timestamp filtering instead of client-side filtering
@@ -3222,7 +3223,14 @@ export class FirewallaClient {
         source_ip: alarm.device?.ip || 'unknown',
         destination_ip: alarm.remote?.ip || 'unknown',
         action_taken: alarm.status === 1 ? 'blocked' : 'logged',
-        severity: alarm.type >= 5 ? 'high' : alarm.type >= 3 ? 'medium' : 'low',
+        // The API's alarm model has no severity. One it sends is kept, and
+        // none is made up: it was derived from the type number (5 and up
+        // high, 3 and 4 medium, else low), so a Security Activity alarm
+        // (type 1) was low and Device Offline (type 7) high
+        severity:
+          typeof alarm.severity === 'string' && alarm.severity.trim()
+            ? alarm.severity.trim()
+            : null,
       };
     });
 
@@ -3240,7 +3248,8 @@ export class FirewallaClient {
         source_ip: flow.device.ip,
         destination_ip: flow.destination?.ip || 'unknown',
         action_taken: 'blocked',
-        severity: 'medium',
+        // A flow carries no severity; every blocked flow was "medium"
+        severity: null,
       };
     });
 
