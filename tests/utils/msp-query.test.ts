@@ -243,6 +243,26 @@ describe('toMspQuery', () => {
   });
 });
 
+describe('a value and an exclusion on one field', () => {
+  // Measured 2026-09-29 (docs/firewalla-api-reference.md, Measured Query
+  // Behavior): the API reads them as AND. protocol:tcp -protocol:udp and
+  // protocol:tcp each matched 20,770 flows in one hour, region:US
+  // -region:CN and region:US 29,492, where OR would have been every flow
+  // but the 7 in region:CN. The exclusion is sent, not dropped as
+  // implied: domain:apple.com also matches cdn-apple.com (measured), so a
+  // value does not always imply an exclusion of another.
+  it.each([
+    ['protocol:tcp -protocol:udp', 'protocol:tcp -protocol:udp'],
+    ['region:US AND NOT region:CN', 'region:US -region:CN'],
+    [
+      'domain:apple.com -domain:cdn-apple.com',
+      'domain:apple.com -domain:cdn-apple.com',
+    ],
+  ])('%s is sent as %s', (query, sent) => {
+    expect(toMspQuery(query)).toBe(sent);
+  });
+});
+
 describe('suggestions for an OR the API cannot run', () => {
   // One query per disjunct of the query's disjunctive normal form, in API
   // form; run together, their results are the query's

@@ -238,6 +238,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   starts as before. The Docker image sets `NODE_ENV=production`, so
   `docker run -e MCP_TEST_MODE=true ...` is now refused; add
   `-e NODE_ENV=development` to run the image in test mode.
+- `docs/firewalla-api-reference.md` records that a value and an exclusion
+  on one field both hold. Measured 2026-09-29 over one hour of flows,
+  `protocol:tcp -protocol:udp` and `protocol:tcp` each matched 20,770, and
+  `region:US -region:CN` and `region:US` each matched 29,492, where an OR
+  would have matched every flow but the 7 in `region:CN`. So
+  `region:US AND NOT region:CN`, sent as `region:US -region:CN`, means
+  what it says.
 
 ### Fixed
 - The stdio server exits cleanly when its client goes away mid-write. Writing
