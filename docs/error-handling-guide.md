@@ -71,7 +71,7 @@ refused as a `validation_error`.
 | `timeout_error` | The tool passed its time limit, 30 s by default |
 | `rate_limit_error` | The API answered 429, or the client refused to send a request for the rate limit; see [Rate Limit Errors](#rate-limit-errors) |
 | `network_error` | A write tool's request went out and got no HTTP status, or 504: its outcome is unknown. `details.write` is `unknown`; see [Failed API Requests](#failed-api-requests) |
-| `authentication_error` | Only `pause_rule`, for a failure whose message has 401, 403 or "permission": a 403 (`Forbidden (HTTP 403)`), not a 401, whose message is `Authentication failed. ...` |
+| `authentication_error` | Only `pause_rule` and `resume_rule`, including the rule-status read each makes first, for a 401 (`Authentication failed. Please check your MSP token.`) or a 403 (`Forbidden (HTTP 403)`: a read-only token, another account's rule, or a rule ID the API does not know). They decide by the error's status, not its text. Every other tool answers a 401 as `api_error`, or `search_error` from a search tool |
 | `unknown_error` | An error no handler caught, such as a call to a tool that is not registered: `Unknown tool: <name>. Available tools: ...` (a write tool without `FIREWALLA_ENABLE_WRITE_TOOLS=true`, for one) |
 
 The `ErrorType` enum also has `cache_error`, `correlation_error`,
