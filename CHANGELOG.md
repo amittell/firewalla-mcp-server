@@ -927,6 +927,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FIREWALLA_MSP_BASE_URL`, and `deploy.sh` `ENABLE_METRICS` and
   `ENABLE_HEALTH_CHECKS`, which nothing reads. The README's npm, Docker and
   source setups and `.env.example` remain.
+- Five scripts in `scripts/` that no npm script, workflow or doc runs:
+  `docker-publish.sh` built the image for the machine it ran on and pushed
+  it as `:latest` and `:<version>`, which would replace the three-platform
+  image (linux/amd64, linux/arm64, linux/arm/v7) that the Docker Build and
+  Publish workflow pushes. `test-rule-pause-resume-api.js` created a rule on the live box,
+  sent it pause and resume requests in several forms and deleted it.
+  `test-problematic-tools.js` stopped at its first line, "require is not
+  defined in ES module scope", since the package is `"type": "module"`.
+  `test-api-auth.js` printed the first 8 characters of
+  `FIREWALLA_MSP_TOKEN`. `comprehensive-test-plan.sh` ran the build, lint
+  and tests, which `npm run ci:full` and CI run.
 - What the server lists is unchanged: `tools/list` from the built server is
   the same JSON before and after, 24 tools and 35 with
   `FIREWALLA_ENABLE_WRITE_TOOLS=true`, and the same handlers are registered.
