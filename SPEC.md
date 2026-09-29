@@ -1,400 +1,191 @@
-# Technical Specification - Firewalla MCP Server
+# Firewalla MCP Server specification
 
-## Overview
-A Model Context Protocol server providing Claude with real-time access to Firewalla firewall data through standardized tools, resources, and prompts.
+What the server implements as of 2.0.0. The MCP surface below was measured
+on 2026-09-29 from `node dist/server.js` with `MCP_TEST_MODE=true` (dummy
+credentials); the rest is read from `src/`. Each tool's arguments are in its
+schema (`tools/list`) and in the README's
+[tool list](README.md#available-tools-24-read-only-11-opt-in-write-tools).
+The MSP API the server calls, with measured behavior, is in
+[docs/firewalla-api-reference.md](docs/firewalla-api-reference.md).
 
-## MCP Protocol Implementation
+## Protocol
 
-### Transport
-- **Type**: stdio (Standard Input/Output)
-- **Format**: JSON-RPC 2.0
-- **Client**: Claude Code
-- **Server**: Local Node.js process
+- MCP over stdio, the default, or Streamable HTTP with `MCP_TRANSPORT=http`.
+- `initialize` answers the protocol version the client asks for: measured
+  with `2025-06-18` and with `2024-11-05`. `serverInfo` is
+  `{"name": "firewalla-mcp-server", "version": "2.0.0"}`, the capabilities
+  are `tools`, `resources` and `prompts`, and `instructions` tell the client
+  to treat results as data.
 
-### Initialization
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "method": "initialize",
-  "params": {
-    "protocolVersion": "2024-11-05",
-    "capabilities": {
-      "tools": true,
-      "resources": true,
-      "prompts": true
-    },
-    "clientInfo": {
-      "name": "claude-code",
-      "version": "1.0.0"
-    }
-  }
-}
-```
+## Transports
 
-## Firewalla MSP API Integration
+**stdio.** The client starts the server as a child process. stdout carries
+only JSON-RPC; logs go to stderr. Each client that starts it has its own
+process, and so its own rate-limit count and cache.
 
-### Base Configuration
-- **Base URL**: `https://{msp_domain}/v2/`
-- **Authentication**: Token-based authentication
-- **Rate Limit**: 100 requests in each fixed 5-minute window, measured on one token on 2026-09-26 (whether per token or per account was not measured; see `docs/firewalla-api-reference.md`)
-- **Timeout**: 30 seconds per request
+**HTTP.** `MCP_TRANSPORT=http` serves MCP at `MCP_HTTP_PATH` (default
+`/mcp`) on `MCP_HTTP_PORT` (default 3000). The rules, from
+`src/http-security.ts` and `src/http-transport.ts`:
 
-### API Endpoints
+- It listens on `MCP_HTTP_HOST`, default `127.0.0.1`. On any other address
+  it does not start without `MCP_HTTP_BEARER_TOKEN`, unless
+  `MCP_HTTP_ALLOW_NO_TOKEN=true`. A token shorter than 16 characters stops
+  startup wherever it listens. With a token, a request without
+  `Authorization: Bearer <token>` gets 401.
+- A `Host` header other than `localhost`, `127.0.0.1`, `[::1]`, the
+  `MCP_HTTP_HOST` address (a wildcard such as `0.0.0.0` adds nothing) or a
+  name in `MCP_HTTP_ALLOWED_HOSTS` gets 403.
+- A request with an `Origin` header gets 403 unless the origin is in
+  `MCP_HTTP_ALLOWED_ORIGINS`, compared as URL origins. An entry with a
+  wildcard stops startup.
+- Only the configured path, and it with one trailing slash, is served;
+  other paths get 404.
+- A body may be at most 1 MB, and a client has 10 s for the headers and 30 s
+  for the whole request.
+- A session (`Mcp-Session-Id`) ends on DELETE, after
+  `MCP_SESSION_IDLE_TIMEOUT_MS` without a request (default 30 minutes), or
+  when the server restarts.
 
-#### Flow Data
-```http
-GET /v2/boxes/{box_gid}/flows
-Query Parameters:
-- page: number (pagination)
-- limit: number (max 100)
-- start_time: ISO 8601 timestamp
-- end_time: ISO 8601 timestamp
-```
+The README's [HTTP transport security](README.md#http-transport-security)
+section has the details and the error texts.
 
-#### Active Alarms
-```
-GET /v2/boxes/{box_gid}/alarms
-Query Parameters:
-- status: active|resolved
-- type: number (1-16)
-- limit: number (max 50)
-```
+## Tools
 
-#### Device Status
-```
-GET /v2/boxes/{box_gid}/devices
-Response includes online/offline status, IP addresses, MAC addresses
-```
+24 read-only tools are always registered. `FIREWALLA_ENABLE_WRITE_TOOLS=true`
+(any case) registers 11 more, for 35: `create_rule`, `delete_rule`,
+`pause_rule`, `resume_rule`, `create_target_list`, `update_target_list`,
+`delete_target_list`, `rename_device`, `archive_alarm`, `mute_alarm` and
+`delete_alarm`. Only those 11 have `readOnlyHint: false`. Without the flag
+they are not listed, and a call to one answers `Unknown tool`.
 
-#### Bandwidth Usage
-```http
-GET /v2/boxes/{box_gid}/bandwidth
-Query Parameters:
-- period: 1h|24h|7d|30d
-- limit: number (required, max 100)
-```
+| Area | Tools |
+|---|---|
+| Alarms | `get_active_alarms`, `get_specific_alarm` |
+| Flows | `get_flow_data`, `get_recent_flow_activity`, `get_bandwidth_usage` |
+| Devices and boxes | `get_device_status`, `get_offline_devices`, `get_boxes` |
+| Rules | `get_network_rules`, `get_network_rules_summary` |
+| Target lists | `get_target_lists`, `get_specific_target_list` |
+| Search | `search_flows`, `search_alarms`, `search_rules`, `search_devices`, `search_target_lists` |
+| Statistics and trends | `get_simple_statistics`, `get_statistics_by_region`, `get_statistics_by_box`, `get_flow_insights`, `get_flow_trends`, `get_alarm_trends`, `get_rule_trends` |
 
-## MCP Tools (Actions)
+Every read-only tool also takes `response_format`: `json`, the default, or
+`markdown`. The query grammar the search tools take, and what they refuse,
+is in [docs/query-syntax-guide.md](docs/query-syntax-guide.md).
 
-### get_active_alarms
-**Purpose**: Retrieve current security alerts
-**Parameters**:
-- `query` (optional): Filter by alarm type (e.g., "type:1" for Security Activity)
-- `limit` (optional): Maximum number of results (default: 20)
+## Resources
 
-**Response Schema**:
-```typescript
-interface Alarm {
-  id: string;
-  timestamp: string;
-  type: number; // 1-16, see alarm type documentation
-  description: string;
-  source_ip?: string;
-  destination_ip?: string;
-  status: 'active' | 'resolved';
-}
-```
+| URI | Contents |
+|---|---|
+| `firewalla://summary` | Box online status and device, alarm and rule counts per box, plus blocked flows in a recent sample |
+| `firewalla://devices` | The device inventory with status |
+| `firewalla://metrics/security` | Security statistics and trends |
+| `firewalla://topology` | Network structure and device relationships |
+| `firewalla://threats/recent` | Recent alarms and blocked flows, newest first |
 
-### get_flow_data
-**Purpose**: Query network traffic flows
-**Parameters**:
-- `start_time` (optional): Start time for query
-- `end_time` (optional): End time for query
-- `limit` (optional): Maximum results (default: 50)
-- `page` (optional): Page number for pagination
+All are `application/json`. There are no resource templates.
 
-**Response Schema**:
-```typescript
-interface FlowData {
-  flows: Flow[];
-  pagination: {
-    page: number;
-    total_pages: number;
-    total_count: number;
-  };
-}
+## Prompts
 
-interface Flow {
-  timestamp: string;
-  source_ip: string;
-  destination_ip: string;
-  source_port: number;
-  destination_port: number;
-  protocol: string;
-  bytes: number;
-  packets: number;
-  duration: number;
-}
-```
+| Prompt | Arguments |
+|---|---|
+| `security_report` | `period` |
+| `threat_analysis` | `period` |
+| `bandwidth_analysis` | `period` (required), `threshold_mb` |
+| `device_investigation` | `device_id` (required), `lookback_hours` |
+| `network_health_check` | none |
 
-### get_device_status
-**Purpose**: Check device online/offline status
-**Parameters**:
-- `device_id` (optional): Specific device ID
-- `include_offline` (optional): Include offline devices (default: true)
+## Results and errors
 
-### get_bandwidth_usage
-**Purpose**: Get top bandwidth consuming devices
-**Parameters**:
-- `period`: Time period ('1h', '24h', '7d', '30d')
-- `limit` (required): Maximum number of devices to return
+A tool's result is one text block of compact JSON. A read answers
+`{"success": true, "data": ..., "meta": ...}`, except a streamed
+`get_flow_data` chunk ([docs/pagination-guide.md](docs/pagination-guide.md)).
 
-### get_network_rules
-**Purpose**: Retrieve firewall rules
-**Parameters**:
-- `rule_type` (optional): Filter by rule type
-- `active_only` (optional): Only active rules (default: true)
+A failure is a tool result with `isError: true`, not a JSON-RPC error. Its
+text is:
 
-### pause_rule
-**Purpose**: Pause a specific firewall rule until `resume_rule` reactivates it.
-A write tool: registered only with `FIREWALLA_ENABLE_WRITE_TOOLS=true`.
-**Parameters**:
-- `rule_id`: Rule identifier to pause
-
-The MSP API pause endpoint takes no duration, so a pause does not expire on
-its own. A `duration` argument is ignored, and the response says so.
-
-### get_target_lists
-**Purpose**: Access security target lists
-**Parameters**:
-- `list_type` (optional): 'cloudflare' | 'crowdsec' | 'all'
-
-## MCP Resources (Data Access)
-
-### firewall_summary
-**URI**: `firewalla://summary`
-**Description**: Real-time firewall health and status overview
-**MIME Type**: `application/json`
-
-### device_inventory
-**URI**: `firewalla://devices`
-**Description**: Complete list of managed devices with metadata
-**MIME Type**: `application/json`
-
-### security_metrics
-**URI**: `firewalla://metrics/security`
-**Description**: Aggregated security statistics and trends
-**MIME Type**: `application/json`
-
-### network_topology
-**URI**: `firewalla://topology`
-**Description**: Network structure and device relationships
-**MIME Type**: `application/json`
-
-### recent_threats
-**URI**: `firewalla://threats/recent`
-**Description**: Latest security events and blocked attempts
-**MIME Type**: `application/json`
-
-## MCP Prompts (Templates)
-
-### security_report
-**Name**: Generate Security Report
-**Description**: Create comprehensive security overview
-**Arguments**:
-- `period`: Time period for report ('24h', '7d', '30d')
-- `include_resolved`: Include resolved issues (default: false)
-
-### threat_analysis
-**Name**: Analyze Threats
-**Description**: Deep dive into recent security threats and patterns
-**Arguments**:
-- `type_filter`: Alarm type to analyze (1-16)
-
-### bandwidth_analysis
-**Name**: Bandwidth Usage Analysis
-**Description**: Investigate high bandwidth usage patterns
-**Arguments**:
-- `period`: Analysis period ('1h', '24h', '7d')
-- `threshold_mb`: Minimum bandwidth threshold in MB
-
-### device_investigation
-**Name**: Device Investigation
-**Description**: Detailed analysis of specific device activity
-**Arguments**:
-- `device_id`: Target device identifier
-- `lookback_hours`: Hours to look back (default: 24)
-
-### network_health_check
-**Name**: Network Health Assessment
-**Description**: Overall network status and performance check
-**Arguments**: None
-
-## Error Handling
-
-### API Error Codes
-- `401`: Authentication failed - check MSP token
-- `403`: Insufficient permissions
-- `404`: Resource not found (invalid box_id)
-- `429`: Rate limit exceeded
-- `500`: Internal server error
-
-### MCP Error Responses
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "error": {
-    "code": -32603,
-    "message": "Internal error",
-    "data": {
-      "details": "Firewalla API authentication failed"
-    }
-  }
-}
-```
-
-## Security Considerations
-
-### Credential Management
-- MSP tokens stored in environment variables only
-- No credentials in code or logs
-- Token rotation support
-
-### Rate Limiting
-- Pace requests to `API_RATE_LIMIT` per rolling 5 minutes (default 100), counted per server process
-- On a 429, pause every request until the API's window ends; send a GET again at most twice, within 20 s
-- Send a failed GET again once, 1 to 2 s later, after a 502, 503, 504, timeout or dropped connection, when it can still answer before the tool gives up; never send a write again
-- Cache frequently accessed data
-
-### Input Validation
-- Sanitize all user inputs
-- Validate parameter types and ranges
-- Prevent injection attacks
-
-## v1.0.0 Implementation Features
-
-### CRITICAL: Correct API Endpoint Patterns
-
-**DO NOT use these non-existent endpoints:**
-- ❌ `/stats/topDevicesByBandwidth` - DOES NOT EXIST
-- ❌ `/stats/simple` - DOES NOT EXIST  
-- ❌ `/trends/flows` - DOES NOT EXIST
-- ❌ `/trends/alarms` - DOES NOT EXIST
-
-**ALWAYS use these real endpoints:**
-- ✅ `/v2/boxes/{box_gid}/flows` - Real endpoint for flow data
-- ✅ `/v2/boxes/{box_gid}/alarms` - Real endpoint for alarm data
-- ✅ `/v2/boxes/{box_gid}/devices` - Real endpoint for device data
-- ✅ `/v2/boxes/{box_gid}/rules` - Real endpoint for rule data
-
-**For bandwidth usage:**
-Use `/flows` endpoint with:
-```javascript
-{
-  query: "ts:begin-end",
-  groupBy: "device",
-  sortBy: "download+upload:desc",
-  limit: N
-}
-```
-
-**For trends:**
-Fetch raw data from `/flows` or `/alarms` and perform client-side time-bucketing aggregation.
-
-**For statistics:**
-Aggregate data from multiple real endpoints (`/boxes`, `/alarms`, `/rules`) instead of using fictional statistics endpoints.
-
-### Limit Parameters
-
-The schemas require `limit` for `get_device_status`, `get_network_rules` and `get_target_lists` (1 to 1000). The other tools that take one make it optional, with a default: 200 for `get_active_alarms`, `get_flow_data`, `search_flows` and `search_alarms`, 100 for `get_offline_devices` and `search_target_lists`, 50 for `search_devices`, 10 for `get_bandwidth_usage` and 5 for `get_statistics_by_region` and `get_statistics_by_box`. The search tools require `query`. `docs/limits-and-performance-guide.md` gives each tool's maximum. The v1.0.0 plan to require `limit` everywhere was not carried out.
-
-**Error Response for Missing Limit** (`get_target_lists`, whose handler requires it):
 ```json
 {
   "error": true,
-  "message": "Parameter validation failed",
-  "tool": "get_target_lists",
+  "message": "Invalid query structure",
+  "tool": "search_flows",
   "errorType": "validation_error",
-  "validation_errors": [
-    "limit is required but was not provided",
-    "Please provide a numeric value for limit (valid range: 1-1000)"
-  ]
+  "timestamp": "2026-09-29T21:44:12.925Z",
+  "details": { "query": "(protocol:tcp" },
+  "validation_errors": ["Query opens a parenthesis '(' at position 0 that is never closed"]
 }
 ```
 
-## New Architecture (v1.0.0)
+`details` and `validation_errors` appear when there is something to put in
+them. The `errorType` values, and what each tool answers with, are in
+[docs/error-handling-guide.md](docs/error-handling-guide.md).
 
-### Validation Framework
+## MSP API use
 
-**Standardized Error Format:**
-All tools now return consistent error structure:
-```typescript
-interface StandardError {
-  error: true;
-  message: string;
-  tool: string;
-  details?: any;
-  validation_errors?: string[];
-}
-```
+Requests go to `https://<FIREWALLA_MSP_ID>/v2/` with
+`Authorization: Token <FIREWALLA_MSP_TOKEN>`. The client reads
+`/v2/boxes`, `/v2/alarms`, `/v2/flows`, `/v2/devices`, `/v2/rules`,
+`/v2/target-lists`, `/v2/stats/*` and `/v2/trends/*`. The write tools
+`POST`, `PATCH` or `DELETE` rules, target lists, devices
+(`/v2/boxes/{gid}/devices/{id}`) and alarms (`/v2/alarms/{gid}/{aid}`).
 
-**Validation Classes:**
-```typescript
-class ParameterValidator {
-  validateRequiredString(value: any, name: string): ValidationResult;
-  validateNumber(value: any, name: string, options?: NumberOptions): ValidationResult;
-  validateEnum(value: any, name: string, allowedValues: string[]): ValidationResult;
-}
+**Rate limiting** (`src/firewalla/rate-limit.ts`, details in
+[docs/rate-limiting-guide.md](docs/rate-limiting-guide.md)):
 
-class SafeAccess {
-  getNestedValue<T>(obj: any, path: string, defaultValue: T): T;
-  ensureArray<T>(value: any): T[];
-  ensureObject(value: any): Record<string, any>;
-}
+- Each process starts at most `API_RATE_LIMIT` requests (default 100,
+  1 to 1000) in any rolling 5 minutes. Retries count; cache hits do not.
+- A request waits at most 20 s for a slot, then fails with
+  `rate_limit_error`.
+- After a 429 every request pauses until the API's window ends (at most 10
+  minutes). A GET is sent again at most twice, and only when the pause ends
+  within its 20 s. A write is never sent again.
+- A GET that got 502, 503 or 504, or no answer (`ECONNABORTED`, `ETIMEDOUT`,
+  `ECONNRESET`, `EPIPE`), is sent again once, 1 to 2 s later, when its answer
+  can still come before the tool gives up.
 
-// src/validation/field-mapper.ts exports functions, not a class
-function getCompatibleFields(primaryType: EntityType, secondaryType: EntityType): string[];
-function getFieldValue(entity: MappableEntity, field: string, entityType: EntityType): FieldValue;
-```
+**Caching** (`src/firewalla/client.ts`): a GET answer is kept for `CACHE_TTL`
+seconds (default 300, 0 to 3600), and answers from `/alarms` and `/flows`
+endpoints for 15 s. The cache holds at most `CACHE_MAX_ENTRIES` answers
+(default 1000), dropping the least recently used. A query with a relative
+time (`ts:>1h`) is not cached, and any write clears the cache. Geographic
+lookups are local (`geoip-lite`), kept for 1 hour, at most 10,000 addresses.
 
-### Performance Monitoring System
+**Timeouts.** Each request has `API_TIMEOUT` ms (default 30000). A tool
+gives up after 30 s (`PERFORMANCE_THRESHOLDS.TIMEOUT_MS`) and cancels its
+requests; `archive_alarm`, `mute_alarm` and `delete_alarm` are not under that
+limit. A write that timed out, or went out and got no answer, says whether
+it may have been applied.
 
-**Caching** (`src/firewalla/client.ts`):
-- GET answers: `CACHE_TTL` seconds (default 300); `/alarms` and `/flows` endpoints 15 s
-- At most `CACHE_MAX_ENTRIES` answers (default 1000), least recently used dropped first
-- A query with a relative time (`ts:>1h`) is not cached, and any write clears the cache
-- Geographic lookups: 1 h, at most 10000 addresses
+## Configuration
 
-**Metrics Collection:**
-```typescript
-interface PerformanceMetrics {
-  response_time_ms: number;
-  cache_hit_rate: number;
-  error_rate: number;
-  memory_usage_mb: number;
-  api_calls_per_minute: number;
-}
-```
+| Variable | Default | Effect |
+|---|---|---|
+| `FIREWALLA_MSP_TOKEN`, `FIREWALLA_MSP_ID` | required | Credentials and MSP domain; without them the server exits with code 1 |
+| `FIREWALLA_BOX_ID` | none | Scope every query to one box |
+| `FIREWALLA_DEFAULT_BOX_ID` | none | Box for tools that act on one box, such as `get_specific_alarm`, `archive_alarm`, `mute_alarm`, `create_rule` and `rename_device`, without scoping queries |
+| `FIREWALLA_ENABLE_WRITE_TOOLS` | off | `true` registers the 11 write tools |
+| `MCP_TRANSPORT` | `stdio` | `stdio` or `http` |
+| `MCP_HTTP_PORT`, `MCP_HTTP_PATH`, `MCP_HTTP_HOST` | 3000, `/mcp`, `127.0.0.1` | HTTP listener |
+| `MCP_HTTP_BEARER_TOKEN` | none | Required beyond loopback, 16 characters or more |
+| `MCP_HTTP_ALLOW_NO_TOKEN` | `false` | `true` starts beyond loopback without a token |
+| `MCP_HTTP_ALLOWED_HOSTS`, `MCP_HTTP_ALLOWED_ORIGINS` | none | Extra `Host` names and browser origins to accept |
+| `MCP_SESSION_IDLE_TIMEOUT_MS` | 1800000 | HTTP session idle limit |
+| `API_TIMEOUT` | 30000 | Per-request timeout, ms |
+| `API_RATE_LIMIT` | 100 | Requests per rolling 5 minutes, per process |
+| `CACHE_TTL`, `CACHE_MAX_ENTRIES` | 300, 1000 | Response cache |
+| `DEFAULT_PAGE_SIZE`, `MAX_PAGE_SIZE` | 100, 10000 | Rows in a markdown table, and the page-size ceiling |
+| `LOG_LEVEL`, `DEBUG` | `info`, off | Logging to stderr |
+| `MCP_TEST_MODE` | off | Dummy credentials; refused with `NODE_ENV=production` |
 
-**DEBUG Environment Variables:**
-- `DEBUG=firewalla:*` - Enable all debugging
-- `DEBUG=api` - API request details
-- `DEBUG=validation` - Validation debugging
+`.env.example` has the same variables with longer notes.
 
-### Enhanced Security
+## Source layout
 
-**Input Sanitization:**
-```typescript
-class QuerySanitizer {
-  static sanitizeSearchQuery(query: string): ValidationResult; // includes the 2000-character limit
-  static validateQueryFields(query: string, entityType: string): ValidationResult;
-  static validateQueryComplexity(query: string): ValidationResult;
-}
-```
-
-**Enhanced Authentication:**
-- Comprehensive HTTP status code handling
-- Better error messages with context
-- Rate limiting: pacing to `API_RATE_LIMIT`, and a pause until the window ends after a 429
-- Enhanced token validation
-
-## Performance Requirements (v1.0.0)
-- Response time: < 2 seconds for cached operations, < 5 seconds for uncached
-- Concurrent requests: Support up to 20 simultaneous requests  
-- Memory usage: < 150MB under normal load with caching
-- Cache hit ratio: > 85% for repeated queries
-- P95 response time: < 3 seconds
-- P99 response time: < 8 seconds
-- Error rate: < 1% under normal conditions
+| Path | What it holds |
+|---|---|
+| `src/server.ts` | The MCP server: tool schemas, stdio and HTTP startup |
+| `src/tools/registry.ts`, `src/tools/handlers/` | One handler per tool |
+| `src/firewalla/client.ts`, `src/firewalla/rate-limit.ts` | The MSP API client: requests, retries, cache, rate limit |
+| `src/utils/msp-query.ts` | The query rewrite into the API's grammar |
+| `src/http-transport.ts`, `src/http-security.ts` | The HTTP transport and its checks |
+| `src/resources/`, `src/prompts/` | Resources and prompts |
+| `src/config/` | Environment, limits and the write-tool flag |
