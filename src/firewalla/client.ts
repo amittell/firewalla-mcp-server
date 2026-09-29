@@ -579,15 +579,33 @@ export class WriteOutcomeUnknownError extends ApiRequestError {
 }
 
 /**
- * axios's codes for a request that failed before it reached the API: the
- * connection was refused, or the host name did not resolve. A write that
- * failed this way was not applied, and keeps its ordinary error.
+ * Node's codes for a request that failed before it reached the API: the
+ * connection was refused or its host unreachable, the host name did not
+ * resolve, or the TLS handshake failed (EPROTO when the other end does not
+ * speak TLS; see TLS_FAILURE for a certificate it did not accept). Nothing
+ * was sent, so a write that failed this way was not applied and keeps its
+ * ordinary error, and the message says the API could not be reached.
  */
 const NOT_DELIVERED_CODES: ReadonlySet<string> = new Set([
   'ECONNREFUSED',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
   'ENOTFOUND',
   'EAI_AGAIN',
+  'EPROTO',
 ]);
+
+/** Node's codes for a certificate it did not accept, and its TLS failures */
+const TLS_FAILURE =
+  /^(CERT_|ERR_TLS_|ERR_SSL_|UNABLE_TO_|DEPTH_ZERO_SELF_SIGNED_CERT$|SELF_SIGNED_CERT_IN_CHAIN$)/;
+
+/** Whether a request that failed with axios's `code` never reached the API */
+function neverReachedApi(code: string | undefined): boolean {
+  return (
+    code !== undefined &&
+    (NOT_DELIVERED_CODES.has(code) || TLS_FAILURE.test(code))
+  );
+}
 
 /** Times a GET is sent again after a failure that can pass (see retryTransient) */
 export const MAX_TRANSIENT_RETRIES = 1;
@@ -693,14 +711,18 @@ const STATUS_HINTS: Record<number, (url: string) => string> = {
  * the request was sent more than once. "Firewalla API answered 503 Service
  * Unavailable after 2 attempts: the Firewalla API is temporarily down";
  * "Firewalla API sent no answer after 2 attempts (ECONNABORTED: timeout of
- * 5000ms exceeded)".
+ * 5000ms exceeded)"; "Could not reach the Firewalla API (ECONNREFUSED:
+ * connect ECONNREFUSED ...)" for a request that never reached it
+ * (neverReachedApi).
  */
 function apiFailureMessage(error: AxiosError, attempts: number): string {
   const after = attempts > 1 ? ` after ${attempts} attempts` : '';
   const status = error.response?.status;
   if (status === undefined) {
     const code = error.code ? `${error.code}: ` : '';
-    return `Firewalla API sent no answer${after} (${code}${error.message})`;
+    return neverReachedApi(error.code)
+      ? `Could not reach the Firewalla API${after} (${code}${error.message})`
+      : `Firewalla API sent no answer${after} (${code}${error.message})`;
   }
   const reason = STATUS_CODES[status] ?? error.response?.statusText ?? '';
   const hint = STATUS_HINTS[status]?.(error.config?.url ?? 'the API');
@@ -1765,7 +1787,7 @@ export class FirewallaClient {
           method !== 'GET' &&
           status === undefined &&
           attempts > 0 &&
-          !NOT_DELIVERED_CODES.has(error.code ?? '')
+          !neverReachedApi(error.code)
         ) {
           const check = checkingReadTool(endpoint);
           throw new WriteOutcomeUnknownError(
