@@ -196,11 +196,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refuses to start without `MCP_HTTP_BEARER_TOKEN`: it exits with code 1
   before it listens, and one line on stderr names `MCP_HTTP_HOST` and
   `MCP_HTTP_BEARER_TOKEN`, suggests `openssl rand -hex 32` and names the
-  opt-out. Loopback is 127.0.0.0/8, `::1` and `localhost`; `0.0.0.0`, `::`
-  and a LAN address are not. Up to 1.5.0 the HTTP transport listened on
-  every interface without a token check, and the Docker image still listens
-  on every interface (`MCP_HTTP_HOST=0.0.0.0`) so that a published port
-  reaches it. With the token unset by default,
+  opt-out. Loopback is a valid IPv4 address in 127.0.0.0/8, `::1` in any
+  spelling (`0:0:0:0:0:0:0:1` too) and the name `localhost`; `0.0.0.0`,
+  `::`, a LAN address and any other name are not. That includes
+  `127.999.999.999` and `127.1`, which `net.isIPv4` rejects and `listen`
+  would look up as host names, and `localhost.evil.com`. Up to 1.5.0 the
+  HTTP transport listened on every interface without a token check, and
+  the Docker image still listens on every interface
+  (`MCP_HTTP_HOST=0.0.0.0`) so that a published port reaches it. With the
+  token unset by default,
   `docker run -p 3000:3000 -e MCP_TRANSPORT=http` served every client that
   reached the port, and let it use the MSP token and, when they are on, the
   write tools. The server now also refuses a token shorter than 16
