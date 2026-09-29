@@ -159,18 +159,19 @@ export const MAX_QUERY_RANGES = 5;
  */
 export function queryComplexityErrors(query: string): string[] {
   const errors: string[] = [];
-  // Each quoted value becomes Q: name:"a b" is one term, name:Q
+  // Each quoted value becomes Q with a space after it: name:"a b" is one
+  // term, name:Q, and "a"OR "b" holds an OR, as the parser reads it
   let outside = '';
   let last = -1;
   scanOutsideQuotes(query, (character, index) => {
     if (index !== last + 1) {
-      outside += 'Q';
+      outside += 'Q ';
     }
     outside += character;
     last = index;
   });
   if (last !== query.length - 1) {
-    outside += 'Q';
+    outside += 'Q ';
   }
   const words = outside.split(/[\s()]+/).filter(Boolean);
 

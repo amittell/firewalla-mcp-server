@@ -17,6 +17,11 @@ describe('queryComplexityErrors', () => {
     [OVER.operators, ['Too many logical operators: 21 (at most 20)']],
     [OVER.terms, ['Too many field terms: 16 (at most 15)']],
     [OVER.ranges, ['Too many ranges: 6 (at most 5)']],
+    // An operator right after a quoted value counts
+    [
+      `"a"${'OR "b"'.repeat(21)}`,
+      ['Too many logical operators: 21 (at most 20)'],
+    ],
     // Every operator the syntax check takes after a field makes a term
     [
       Array.from({ length: 16 }, () => 'blocked=true').join(' '),
@@ -45,6 +50,7 @@ describe('queryComplexityErrors', () => {
     // A MAC value is one term: it was counted as three
     Array.from({ length: 15 }, () => 'mac:AA:BB:CC:DD:EE:FF').join(' '),
     Array.from({ length: 15 }, () => 'blocked=true').join(' '),
+    `"a"${'OR "b"'.repeat(20)}`,
     // An exclamation mark alone is not an operator
     Array.from({ length: 16 }, () => 'hello!').join(' '),
     // No wildcard limit
