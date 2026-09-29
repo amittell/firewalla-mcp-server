@@ -103,7 +103,9 @@ describe('a timed-out tool reports its limit', () => {
   it.each(Object.keys(TOOLS))(
     '%s says the limit it was stopped at',
     async name => {
-      // The tool is stopped at 150 ms, so a fixed number cannot pass
+      // The tool is stopped at 150 ms, so a fixed number cannot pass. The
+      // clock is fake, so the 150 ms pass without waiting for them.
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] });
       const realWithTimeout = TimeoutManager.prototype.withTimeout;
       jest
         .spyOn(TimeoutManager.prototype, 'withTimeout')
@@ -113,7 +115,9 @@ describe('a timed-out tool reports its limit', () => {
             timeoutMs: 150,
           });
         });
-      const response = await callTool(name);
+      const answer = callTool(name);
+      await jest.advanceTimersByTimeAsync(150);
+      const response = await answer;
       const text = response.content.map(part => part.text).join('\n');
 
       expect(response.isError).toBe(true);
