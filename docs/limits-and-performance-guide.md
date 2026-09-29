@@ -51,13 +51,16 @@ export const STANDARD_LIMITS = {
 
 ## Tool-Specific Limits
 
-The maximums below are what each tool's handler enforces (`getToolLimit` in
-`src/config/limits.ts`), and what each tool's schema lists: `get_flow_data`,
-`search_flows`, `search_alarms`, `get_offline_devices`, `search_devices` and
-`search_target_lists` take up to 1000, `get_active_alarms` and
-`get_bandwidth_usage` up to 500. `/v2/alarms` and `/v2/flows` return at most
-500 records per request, so a larger limit on the flow and alarm tools is
-read 500 at a time.
+The maximums below are what each tool's handler takes (`getToolLimit` in
+`src/config/limits.ts`): up to 1000 for `get_flow_data`, `search_flows`,
+`search_alarms`, `get_offline_devices`, `search_devices` and
+`search_target_lists`, and up to 500 for `get_active_alarms` and
+`get_bandwidth_usage`. From 2.0.0 each tool's schema lists the same
+maximum. Up to 1.5.0 the schemas list 500 for all eight, and an MCP client
+that checks arguments against the schema refuses a larger limit before the
+server sees it. `/v2/alarms` and `/v2/flows` return at most 500 records per
+request, so a larger limit on the flow and alarm tools is read 500 at a
+time.
 
 ### Basic Data Retrieval Tools (Limit: 1000)
 
@@ -93,7 +96,8 @@ read 500 at a time.
 
 **Example Usage**:
 ```bash
-# Typical search that benefits from 1000 limit
+# Typical search that benefits from 1000 limit (from 2.0.0; 500 at most in
+# the 1.5.0 schema)
 search_flows query:"protocol:tcp AND region:CN" limit:800
 
 # Complex search requiring full limit
