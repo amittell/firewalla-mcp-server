@@ -1035,6 +1035,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   low and Device Offline (type 7) high. `by_severity` counts only the
   severities the API sent, `without_severity` counts the rest, and
   `severity_note` says why.
+- An address the geoip-lite lookup has no data for gets no geographic
+  data, where a country was made up for it. Both enrichment paths guessed
+  one: from a table of address prefixes (`46.` Germany, `185.` the United
+  Kingdom, `202.` China, `8.8.` Google in the United States) and then from
+  the first octet (1-191 the United States, 192-223 the United Kingdom,
+  anything else the United States), with a continent name in the country
+  field. `enrichObjectWithGeo` now sets the `_geo` field to null for such
+  an address, and the enrichment pipeline adds none and remembers the
+  address as unknown.
 
 ### Removed
 

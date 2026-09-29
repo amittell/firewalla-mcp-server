@@ -19,9 +19,6 @@ import {
   getGeographicDataForIP,
   isPrivateIP,
   normalizeIP,
-  calculateRiskScore,
-  mapContinent,
-  COUNTRY_TO_CONTINENT,
   type GeographicCache,
 } from './geographic.js';
 import { logger } from '../monitoring/logger.js';
@@ -40,7 +37,8 @@ export interface EnrichmentStats {
  */
 export interface EnrichmentResult {
   data: GeographicData | null;
-  source: 'cache' | 'primary' | 'secondary' | 'tertiary' | 'default' | 'failed';
+  /** Where the data came from; unknown when the lookup had none */
+  source: 'cache' | 'primary' | 'unknown' | 'failed';
   latencyMs: number;
   success: boolean;
 }
@@ -52,78 +50,6 @@ export interface BatchEnrichmentRequest {
   ip: string;
   fieldPath: string; // e.g., 'source.geo', 'destination.geo'
 }
-
-/**
- * Enhanced IP range mapping for broader coverage
- */
-const IP_RANGE_MAPPING: Record<string, Partial<GeographicData>> = {
-  // Major cloud providers
-  '54.': {
-    country: 'United States',
-    country_code: 'US',
-    continent: 'North America',
-    is_cloud_provider: true,
-  },
-  '52.': {
-    country: 'United States',
-    country_code: 'US',
-    continent: 'North America',
-    is_cloud_provider: true,
-  },
-  '3.': {
-    country: 'United States',
-    country_code: 'US',
-    continent: 'North America',
-    is_cloud_provider: true,
-  },
-  '18.': {
-    country: 'United States',
-    country_code: 'US',
-    continent: 'North America',
-    is_cloud_provider: true,
-  },
-
-  // Major ISP ranges
-  '8.8.': {
-    country: 'United States',
-    country_code: 'US',
-    continent: 'North America',
-    isp: 'Google',
-  },
-  '1.1.': {
-    country: 'United States',
-    country_code: 'US',
-    continent: 'North America',
-    isp: 'Cloudflare',
-  },
-
-  // Regional blocks (examples)
-  '46.': {
-    country: 'Germany',
-    country_code: 'DE',
-    continent: 'Europe',
-    region: 'Western Europe',
-  },
-  '185.': {
-    country: 'United Kingdom',
-    country_code: 'GB',
-    continent: 'Europe',
-    region: 'Northern Europe',
-  },
-};
-
-/**
- * Default geographic data for unknown IPs
- */
-const DEFAULT_GEOGRAPHIC_DATA: GeographicData = {
-  country: 'Unknown',
-  country_code: 'UN',
-  continent: 'Unknown',
-  region: 'Unknown',
-  city: 'Unknown',
-  timezone: 'UTC',
-  geographic_risk_score: 5.0, // Neutral risk score
-};
 
 /**
  * Geographic Enrichment Pipeline
@@ -196,57 +122,19 @@ export class GeographicEnrichmentPipeline {
         );
       }
 
-      // Secondary provider: IP range mapping
-      // Secondary provider fallback
-      {
-        const secondaryResult = this.trySecondaryProvider(normalizedIP);
-        if (secondaryResult) {
-          try {
-            this.geoCache.set(normalizedIP, secondaryResult);
-          } catch (_error) {
-            // Cache set error - continue without caching
-          }
-          logger.debug('Geographic enrichment secondary provider success', {
-            ip: normalizedIP,
-          });
-          return this.createResult(
-            secondaryResult,
-            'secondary',
-            startTime,
-            true
-          );
-        }
-
-        // Tertiary provider: Country-based defaults
-        const tertiaryResult = this.tryTertiaryProvider(normalizedIP);
-        if (tertiaryResult) {
-          try {
-            this.geoCache.set(normalizedIP, tertiaryResult);
-          } catch (_error) {
-            // Cache set error - continue without caching
-          }
-          logger.debug('Geographic enrichment tertiary provider success', {
-            ip: normalizedIP,
-          });
-          return this.createResult(tertiaryResult, 'tertiary', startTime, true);
-        }
-      }
-
-      // Default fallback
+      // The lookup has no data: the address is unknown, and is remembered
+      // as such. Prefix tables and a guess from the first octet made up a
+      // country here, and the last resort was a record with a UTC timezone
+      // and a risk score of 5
       try {
-        this.geoCache.set(normalizedIP, DEFAULT_GEOGRAPHIC_DATA);
+        this.geoCache.set(normalizedIP, null);
       } catch (_error) {
         // Cache set error - continue without caching
       }
-      logger.debug('Geographic enrichment using default fallback', {
+      logger.debug('Geographic enrichment found no data', {
         ip: normalizedIP,
       });
-      return this.createResult(
-        DEFAULT_GEOGRAPHIC_DATA,
-        'default',
-        startTime,
-        true
-      );
+      return this.createResult(null, 'unknown', startTime, false);
     } catch (error) {
       logger.debug('Geographic enrichment failed', {
         ip,
@@ -355,63 +243,6 @@ export class GeographicEnrichmentPipeline {
     } catch (_error) {
       return { data: null, success: false };
     }
-  }
-
-  /**
-   * Try secondary provider (IP range mapping)
-   */
-  private trySecondaryProvider(ip: string): GeographicData | null {
-    for (const [prefix, geoData] of Object.entries(IP_RANGE_MAPPING)) {
-      if (ip.startsWith(prefix)) {
-        return {
-          ...DEFAULT_GEOGRAPHIC_DATA,
-          ...geoData,
-          geographic_risk_score:
-            geoData.geographic_risk_score ??
-            calculateRiskScore(geoData.country_code || 'UN'),
-        };
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Try tertiary provider (country-based defaults using first octet)
-   */
-  private tryTertiaryProvider(ip: string): GeographicData | null {
-    const parts = ip.split('.');
-    if (parts.length < 4) {
-      return null;
-    }
-
-    const firstOctet = parseInt(parts[0], 10);
-    if (isNaN(firstOctet)) {
-      return null;
-    }
-
-    // Very basic geographic inference based on IP allocation
-    let countryCode = 'US'; // Default to US for unknown ranges
-
-    // Basic regional allocation (simplified)
-    if (firstOctet >= 1 && firstOctet <= 126) {
-      countryCode = 'US'; // North America
-    } else if (firstOctet >= 128 && firstOctet <= 191) {
-      countryCode = 'US'; // North America
-    } else if (firstOctet >= 192 && firstOctet <= 223) {
-      countryCode = 'GB'; // Europe/International
-    }
-
-    const continent = mapContinent(countryCode);
-
-    return {
-      country: COUNTRY_TO_CONTINENT[countryCode] || 'Unknown',
-      country_code: countryCode,
-      continent,
-      region: 'Unknown',
-      city: 'Unknown',
-      timezone: 'UTC',
-      geographic_risk_score: calculateRiskScore(countryCode),
-    };
   }
 
   /**
