@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      description_only:
+        description: 'Only update the Docker Hub description from DOCKERHUB.md; build and push nothing'
+        type: boolean
+        default: false
 
 # One build per tag ref. A tag push is the single source of truth for a release
 # (the `release: published` trigger was dropped — it double-fired alongside the
@@ -20,6 +25,7 @@ env:
 
 jobs:
   build-and-push:
+    if: github.event_name != 'workflow_dispatch' || !inputs.description_only
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -65,11 +71,28 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  # Docker Hub keeps the first 25,000 characters of a description, and the
+  # README is longer (38,986 at 2.0.0): the overview stopped at "Available
+  # Tools". DOCKERHUB.md is a short page for the image that links to GitHub
+  # for the rest, and relative links in it are made absolute.
+  description:
+    needs: build-and-push
+    if: >-
+      always() && (needs.build-and-push.result == 'success' ||
+      (github.event_name == 'workflow_dispatch' && inputs.description_only))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Update Docker Hub description
-        uses: peter-evans/dockerhub-description@v3
+        uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
           repository: ${{ env.IMAGE_NAME }}
           short-description: ${{ github.event.repository.description }}
-          readme-filepath: ./README.md
+          readme-filepath: ./DOCKERHUB.md
+          enable-url-completion: true
