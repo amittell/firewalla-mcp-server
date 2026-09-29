@@ -201,22 +201,6 @@ describe('queries reach the API in its grammar', () => {
     expect(flows?.[1]).toMatch(/^status:blocked ts:>=\d+$/);
   });
 
-  it('makeApiCall translates a query in the URL', async () => {
-    const { client, get } = makeClient();
-    await client.makeApiCall(
-      'get',
-      '/v2/alarms?query=type%3A1+AND+status%3A1&limit=5'
-    );
-    expect(get.mock.calls[0][0]).toBe(
-      '/v2/alarms?query=type%3A1+status%3A1&limit=5'
-    );
-  });
-
-  it('makeApiCall leaves other endpoints alone', async () => {
-    const { client, get } = makeClient();
-    await client.makeApiCall('get', '/v2/devices?query=a+AND+b');
-    expect(get.mock.calls[0][0]).toBe('/v2/devices?query=a+AND+b');
-  });
 });
 
 describe('queries the API cannot run', () => {

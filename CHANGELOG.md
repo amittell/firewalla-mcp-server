@@ -1264,6 +1264,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   files and the one test that covered only `BooleanFieldTranslator`. The
   search tools translate booleans with `simple-boolean-translator.ts`,
   whose tests stay.
+- The client methods no tool reaches: `getOfflineDevices` (`get_offline_devices`
+  reads `getDeviceStatus`), `searchAlarms`, `searchRules` and
+  `searchTargetLists` (the search tools go through the search engine, which
+  reads `getActiveAlarms`, `getNetworkRules` and `getTargetLists`),
+  `makeApiCall`, `getCacheStats`, `getGeographicCacheStats`,
+  `clearGeographicCache` and `enrichAlarmWithGeographicData`, with
+  `withMspQueryInUrl`, `isApiTimeout` and `TIMEOUT_CODES`, which only they
+  used (1,015 lines of `src/firewalla/client.ts`). The tests that reached
+  them now go through the tools, or were removed where they tested only the
+  removed method.
 
 ## [1.5.0] - 2026-09-25
 

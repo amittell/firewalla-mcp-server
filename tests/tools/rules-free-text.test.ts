@@ -86,14 +86,24 @@ async function searchRules(query: string) {
     { query, limit: 50 },
     client
   );
-  return { res, get, ids: res.isError ? undefined : (body(res).data.rules as any[]).map(rule => rule.id) };
+  return {
+    res,
+    get,
+    ids: res.isError
+      ? undefined
+      : (body(res).data.rules as any[]).map(rule => rule.id),
+  };
 }
 
 describe('mspSplitText', () => {
   it.each([
     ['tiktok', '', ['tiktok']],
     ['tiktok action:block', 'action:block', ['tiktok']],
-    ['tiktok AND action:block AND NOT status:paused', 'action:block -status:paused', ['tiktok']],
+    [
+      'tiktok AND action:block AND NOT status:paused',
+      'action:block -status:paused',
+      ['tiktok'],
+    ],
     ['"homework site" kids', '', ['"homework site"', 'kids']],
     ['action:block OR action:allow', 'action:block,allow', []],
   ])('%s', (query, fields, text) => {
@@ -146,7 +156,9 @@ describe('search_rules free text', () => {
     expect(sentQueries(get)).toEqual([
       'box.id:00000000-0000-0000-0000-000000000000',
     ]);
-    expect((body(res).data.rules as any[]).map(rule => rule.id)).toEqual(['r1']);
+    expect((body(res).data.rules as any[]).map(rule => rule.id)).toEqual([
+      'r1',
+    ]);
   });
 
   it('refuses an OR with free text, which one request cannot answer', async () => {
@@ -169,28 +181,6 @@ describe('get_network_rules free text', () => {
     const data = body(res).data;
     const rules = data.rules ?? data.results;
     expect(rules.map((rule: any) => rule.id)).toEqual(['r2']);
-  });
-});
-
-describe('FirewallaClient.searchRules free text', () => {
-  // The client's other rule search, which its cross-reference dispatcher
-  // calls; it reads rules through the same code as getNetworkRules
-  it('finds the rule whose target value has the word, without sending the word', async () => {
-    const { client, get } = makeClient();
-    const result = await client.searchRules({ query: 'tiktok', limit: 50 });
-    expect(sentQueries(get)).toEqual([undefined]);
-    expect(result.results.map(rule => rule.id)).toEqual(['r1']);
-    expect(result.count).toBe(1);
-  });
-
-  it('sends the field terms and matches the words among their rules', async () => {
-    const { client, get } = makeClient();
-    const result = await client.searchRules({
-      query: 'homework AND action:allow',
-      limit: 50,
-    });
-    expect(sentQueries(get)).toEqual(['action:allow']);
-    expect(result.results.map(rule => rule.id)).toEqual(['r2']);
   });
 });
 
@@ -308,16 +298,13 @@ describe('free text reads every rule the other terms match', () => {
     }
   );
 
-  it('the client methods apply the limit to the result too', async () => {
-    // With words no limit is sent, so it was not applied at all: both
-    // returned all 300 matches for a limit of 5 or 7
+  it('getNetworkRules applies the limit to the result too', async () => {
+    // With words no limit is sent, so it was not applied at all: it
+    // returned all 300 matches for a limit of 5
     const { client } = cappedClient();
     const rules = await client.getNetworkRules('example', 5);
     expect(rules.results).toHaveLength(5);
     expect(rules.count).toBe(300);
-    const searched = await client.searchRules({ query: 'example', limit: 7 });
-    expect(searched.results).toHaveLength(7);
-    expect(searched.count).toBe(300);
   });
 
   it('sends the limit, and reports no coverage, without free text', async () => {

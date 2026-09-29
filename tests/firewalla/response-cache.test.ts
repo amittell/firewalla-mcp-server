@@ -60,7 +60,8 @@ function makeClient(config: Record<string, unknown> = {}) {
 const readRules = (client: FirewallaClient, n: number | string) =>
   client.getNetworkRules(`action:block target.value:host${n}.example`);
 
-const cacheSize = (client: FirewallaClient) => client.getCacheStats().size;
+const cacheSize = (client: FirewallaClient): number =>
+  (client as any).cache.size;
 
 beforeEach(() => {
   // The client logs each request and response to stderr

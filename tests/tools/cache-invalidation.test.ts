@@ -100,23 +100,4 @@ describe('response cache', () => {
     expect(ruleGets()).toBe(2);
   });
 
-  it('refetches after a write sent through makeApiCall', async () => {
-    const client = makeClient();
-    await client.getNetworkRules();
-
-    api.patch.mockResolvedValue({
-      status: 200,
-      data: { id: 'AA:BB:CC:DD:EE:FF' },
-    });
-    await client.makeApiCall(
-      'patch',
-      `/v2/boxes/${BOX}/devices/AA:BB:CC:DD:EE:FF`,
-      {
-        name: 'renamed',
-      }
-    );
-
-    await client.getNetworkRules();
-    expect(ruleGets()).toBe(2);
-  });
 });
