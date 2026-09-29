@@ -324,23 +324,58 @@ describe('parseHttpSecurityConfig', () => {
     }
   });
 
-  it('refuses an allowed origin with a wildcard: each origin must be listed', () => {
+  /** The message parseHttpSecurityConfig refuses `env` with */
+  function refusalOf(env: Record<string, string>): string {
+    try {
+      parseHttpSecurityConfig(env);
+    } catch (error) {
+      return (error as Error).message;
+    }
+    throw new Error(`accepted: ${JSON.stringify(env)}`);
+  }
+
+  it('refuses an allowed origin whose host has a wildcard: each origin must be listed', () => {
     // http://*.example.com parses as a URL whose host is "*.example.com",
-    // and no browser sends that Origin, so it was accepted and matched none
+    // and no browser sends that Origin, so it was accepted and matched none.
+    // %2A in the host decodes to the same host.
     for (const wildcard of [
       'http://*.example.com',
       'https://*',
       'http://app*.example.com',
-      '*',
+      'https://*.example.com:8443/app',
+      'http://%2A.example.com',
     ]) {
-      expect(() =>
-        parseHttpSecurityConfig({
-          MCP_HTTP_ALLOWED_ORIGINS: `http://localhost:6274,${wildcard}`,
-        })
-      ).toThrow(
-        `MCP_HTTP_ALLOWED_ORIGINS: "${wildcard}" has a wildcard. There is no wildcard: list each origin, comma-separated, e.g. http://app.example.com,http://admin.example.com`
-      );
+      const message = refusalOf({
+        MCP_HTTP_ALLOWED_ORIGINS: `http://localhost:6274,${wildcard}`,
+      });
+      expect(message).toContain('MCP_HTTP_ALLOWED_ORIGINS');
+      expect(message).toContain(`"${wildcard}"`);
+      expect(message).toContain('has a wildcard');
     }
+  });
+
+  it('refuses a * that leaves no http(s) origin as not an origin', () => {
+    for (const bad of ['*', 'http://example.com:*', 'http://[*]']) {
+      const message = refusalOf({ MCP_HTTP_ALLOWED_ORIGINS: bad });
+      expect(message).toContain('MCP_HTTP_ALLOWED_ORIGINS');
+      expect(message).toContain(`"${bad}"`);
+      expect(message).toContain('is not an http(s) origin');
+      expect(message).toContain('wildcard');
+    }
+  });
+
+  it('drops a path, query or fragment with a * in it, as it drops any path', () => {
+    const security = parseHttpSecurityConfig({
+      MCP_HTTP_ALLOWED_ORIGINS:
+        'http://example.com/*, https://app.example/?q=*, http://localhost:6274/#*',
+    });
+    expect(security.allowedOrigins).toEqual(
+      new Set([
+        'http://example.com',
+        'https://app.example',
+        'http://localhost:6274',
+      ])
+    );
   });
 
   it('refuses an MCP_HTTP_ALLOWED_HOSTS entry that is not a host', () => {

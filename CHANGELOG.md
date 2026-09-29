@@ -811,9 +811,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An `MCP_HTTP_ALLOWED_ORIGINS` entry with a wildcard stops the HTTP server
   at startup. `*` alone was refused, but `http://*.example.com` parses as an
   origin whose host is `*.example.com`, so it was accepted, and it matched
-  no browser's `Origin`: every page it was meant to allow got 403. Any entry
-  with `*` is now refused with `MCP_HTTP_ALLOWED_ORIGINS: "<entry>" has a
-  wildcard. There is no wildcard: list each origin, comma-separated, ...`.
+  no browser's `Origin`: every page it was meant to allow got 403. Each
+  entry is parsed first, and one whose host has `*` is now refused with
+  `MCP_HTTP_ALLOWED_ORIGINS: "<entry>" has a wildcard. There is no
+  wildcard: list each origin, comma-separated, ...`; that includes
+  `http://%2A.example.com`, which has the same host. A `*` in a path,
+  query or fragment goes with the path, which is dropped as before:
+  `http://example.com/*` allows `http://example.com`. An entry that is not
+  an http(s) origin, `*` alone among them, is refused as not an http(s)
+  origin, as before.
 - `npm run test:quick`, which the pre-commit hook runs, runs the unit
   tests: every file in `tests/utils`, `tests/validation`, `tests/search`,
   `tests/config`, `tests/monitoring`, `tests/prompts` and `tests/resources`
