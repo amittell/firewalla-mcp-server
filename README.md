@@ -353,10 +353,8 @@ After completing the setup, verify the MCP server is working:
 # Start the server
 npm run mcp:start
 
-# You should see output like:
-# MCP Server starting...
-# Firewalla client initialized
-# Server ready on stdio transport
+# stdout carries only the MCP protocol; stderr shows JSON log lines, the
+# last one with "message":"Firewalla MCP Server running on stdio transport"
 ```
 
 **2. Test with Claude**
@@ -366,7 +364,7 @@ Open Claude Desktop and try these starter queries:
 ```text
 "Can you check my Firewalla status and show me a summary?"
 ```
-*This uses: `firewall_summary` resource + `get_simple_statistics` tool*
+*This uses: the `firewalla://summary` resource and the `get_simple_statistics` tool*
 
 **Security Overview:**
 ```text
@@ -427,7 +425,7 @@ search for: security activity alarms from IP range 10.0.0.* in the last 24 hours
 ```text
 "Find all devices that were online yesterday but are offline now"
 ```
-*Uses: `search_devices` with temporal queries + `get_offline_devices`*
+*Uses: `get_offline_devices`, which lists offline devices most recently seen first, with `last_seen`; `search_devices` takes no time fields*
 
 
 ### Troubleshooting Common Issues
@@ -605,6 +603,7 @@ firewalla-mcp-server/
 - **README.md** (this file) - Setup and basic usage
 - **[USAGE.md](USAGE.md)** - Simple usage guide with examples
 - **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
+- **[SPEC.md](SPEC.md)** - What the server implements: protocol, transports, tools, errors and limits
 - **docs/clients/** - Client-specific setup guides  
 - **CLAUDE.md** - Development guide and commands
 
@@ -627,7 +626,7 @@ See [SECURITY.md](SECURITY.md) to report a vulnerability. For the HTTP transport
 - **Timeline**: Category classification happens at the Firewalla device level and may take time to build up meaningful categorization data.
 
 ### Data Characteristics
-- **Response Sizes**: The `get_recent_flow_activity` tool returns up to 150 recent flows to stay within token limits. For larger datasets or historical analysis, use `search_flows` with time filters for more targeted queries.
+- **Response Sizes**: The `get_recent_flow_activity` tool reads the 50 most recent flows in one request, so it covers minutes on a busy network. For larger datasets or historical analysis, use `search_flows` with time filters for more targeted queries.
 - **Geographic Data**: IP geolocation is enriched by the MCP server and includes country, city, and risk scores when available.
 
 ### API Limitations
