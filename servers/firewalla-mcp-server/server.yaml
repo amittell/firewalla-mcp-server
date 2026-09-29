@@ -18,7 +18,7 @@ source:
   # The catalog builds the commit pinned in docker/mcp-registry's copy of this
   # file. A file cannot name the commit that contains it, so each release's
   # registry PR sets the pin there; this copy keeps the last pin submitted.
-  commit: d6f8c6ac25701a7eb69c3dfdda312817979329e9
+  commit: b8dd6dadbc5b0796b45afd9f50efc756884e3d50
 config:
   description: Configure your Firewalla MSP connection credentials
   secrets:
