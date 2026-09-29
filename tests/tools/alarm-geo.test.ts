@@ -132,10 +132,18 @@ describe('geo_enriched says whether the response holds geographic data', () => {
   };
 
   it.each([
+    // remote_country, from the alarm's remote.region
     [
       'search_alarms',
       SearchAlarmsHandler,
       [ALARM_PUBLIC, ALARM_LOCAL],
+      { query: 'type:1', limit: 10 },
+      true,
+    ],
+    [
+      'search_alarms, a local device only',
+      SearchAlarmsHandler,
+      [ALARM_LOCAL],
       { query: 'type:1', limit: 10 },
       false,
     ],
@@ -146,12 +154,13 @@ describe('geo_enriched says whether the response holds geographic data', () => {
       { query: 'type:1', limit: 10 },
       false,
     ],
+    // destination_country "US", from the client's lookup
     [
       'search_flows',
       SearchFlowsHandler,
       [FLOW_PUBLIC],
       { query: 'protocol:tcp', limit: 10 },
-      false,
+      true,
     ],
     [
       'get_active_alarms, a public remote',

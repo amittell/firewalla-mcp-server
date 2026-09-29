@@ -1044,6 +1044,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   field. `enrichObjectWithGeo` now sets the `_geo` field to null for such
   an address, and the enrichment pipeline adds none and remembers the
   address as unknown.
+- `search_alarms` gives each alarm's remote end and its geography:
+  `remote` as the API sent it, and `remote_country`, `remote_city` and
+  `remote_continent`, as `search_flows` gives `destination_country` and
+  the rest. It returned the remote IP alone, as `source_ip`, and dropped
+  the country the API sends as `remote.region`, and the domain and
+  category. `remote_country` is the API's where it sends one and the
+  geoip-lite lookup's otherwise, and `remote_city` comes from the lookup
+  only when the lookup places the address in that country. `geo_enriched`
+  now counts these flat fields too: `search_flows` said false for a flow
+  whose `destination_country` was `US`.
 
 ### Removed
 
