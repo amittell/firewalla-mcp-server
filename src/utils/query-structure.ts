@@ -53,12 +53,13 @@ export function scanOutsideQuotes(
   return open;
 }
 
-// C0 control characters other than tab, line feed and carriage return, and
-// DEL: the grammar has no use for them, the API gets the value decoded,
-// where a NUL can end a string, and the query is quoted back in results
-// and errors
+// The control characters (Unicode Cc: C0, DEL and C1) other than tab, line
+// feed and carriage return: the grammar has no use for them, the API gets
+// the value decoded, where a NUL can end a string, and the query is quoted
+// back in results and errors. The wildcard check reads every Cc as
+// non-text too.
 // eslint-disable-next-line no-control-regex
-const CONTROL_CHARACTER = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
+const CONTROL_CHARACTER = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/;
 
 /**
  * What is structurally wrong with a query, one message each; empty when
@@ -182,7 +183,11 @@ export function queryComplexityErrors(query: string): string[] {
     );
   }
 
-  const terms = words.filter(word => /^-?[\w.]+:/.test(word)).length;
+  // A term is a field with any operator the syntax check takes after it:
+  // blocked=true and total>1MB count as blocked:true and total:>1MB do
+  const terms = words.filter(word =>
+    /^-?[\w.]+(?::|!=|>=|<=|=|>|<)/.test(word)
+  ).length;
   if (terms > MAX_QUERY_FIELD_TERMS) {
     errors.push(
       `Too many field terms: ${terms} (at most ${MAX_QUERY_FIELD_TERMS})`
