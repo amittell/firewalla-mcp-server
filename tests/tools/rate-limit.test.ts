@@ -1,6 +1,6 @@
 /**
- * The MSP API allows 100 requests per fixed 5-minute window per token
- * (measured 2026-09-26). The 101st gets 429 {"error":{"message":"Too Many
+ * The MSP API allowed 100 requests per fixed 5-minute window on the one token
+ * measured (2026-09-26; per token or per account was not measured). The 101st gets 429 {"error":{"message":"Too Many
  * Requests"}} with `retry-after` (seconds) and `x-ratelimit-reset` (epoch
  * seconds), both giving the window's end, up to about 300 s away. Successful
  * responses carry no rate-limit headers. The client never paced itself and

@@ -1328,8 +1328,10 @@ export class FirewallaClient {
   }
 
   /**
-   * Answers a 429. The API's quota is per token, so every request of this
-   * client is paused until the API's window ends (see rateLimitPauseMs). A
+   * Answers a 429. The API counts every request made with the token (measured
+   * on one token; per token or per account was not measured), so every
+   * request of this client is paused until the API's window ends (see
+   * rateLimitPauseMs). A
    * GET is then sent again through the rate limiter, at most
    * MAX_RATE_LIMIT_RETRIES times, and only when the pause ends before the
    * request's deadline (RATE_LIMIT_MAX_WAIT_MS after it was first made). A
