@@ -26,7 +26,7 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
-import { isIP } from 'node:net';
+import { BlockList, isIP, isIPv4, isIPv6 } from 'node:net';
 
 /** Address the HTTP transport listens on when MCP_HTTP_HOST is not set */
 export const DEFAULT_HTTP_HOST = '127.0.0.1';
@@ -211,15 +211,31 @@ export function parseHttpSecurityConfig(
   return { host, allowedHosts, allowedOrigins, bearerToken, allowNoToken };
 }
 
-/** Whether an address only accepts connections from this machine */
+/** 127.0.0.0/8, compared as addresses, not as text */
+const LOOPBACK_IPV4 = new BlockList();
+LOOPBACK_IPV4.addSubnet('127.0.0.0', 8, 'ipv4');
+
+/** ::1, which BlockList matches in any spelling, such as 0:0:0:0:0:0:0:1 */
+const LOOPBACK_IPV6 = new BlockList();
+LOOPBACK_IPV6.addAddress('::1', 'ipv6');
+
+/**
+ * Whether an address only accepts connections from this machine: a valid
+ * IPv4 address in 127.0.0.0/8, ::1 in any valid spelling (with or without
+ * brackets), or the name localhost (in any case). server.listen looks any
+ * other value up as a host name, which can resolve to any address, so none
+ * counts: not 127.999.999.999 or 127.1, which net.isIPv4 rejects, and not
+ * localhost.evil.com.
+ */
 export function isLoopbackAddress(host: string): boolean {
-  const name = host.toLowerCase();
-  return (
-    name === 'localhost' ||
-    name === '::1' ||
-    name === '[::1]' ||
-    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(name)
-  );
+  const address = /^\[(.*)\]$/.exec(host)?.[1] ?? host;
+  if (isIPv4(address)) {
+    return LOOPBACK_IPV4.check(address, 'ipv4');
+  }
+  if (isIPv6(address)) {
+    return LOOPBACK_IPV6.check(address, 'ipv6');
+  }
+  return host.toLowerCase() === 'localhost';
 }
 
 /**

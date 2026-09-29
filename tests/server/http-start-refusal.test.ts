@@ -22,6 +22,7 @@ import { config } from '../../src/config/config';
 import { logger } from '../../src/monitoring/logger';
 import {
   httpStartRefusal,
+  isLoopbackAddress,
   parseHttpSecurityConfig,
 } from '../../src/http-security';
 
@@ -183,6 +184,13 @@ describe('MCP_TRANSPORT=http startup and MCP_HTTP_BEARER_TOKEN', () => {
     ['a LAN IPv4 address', '192.168.1.10'],
     ['a LAN IPv6 address', 'fd00::10'],
     ['a host name', 'mcp.example.lan'],
+    // Names, not IPv4 addresses: net.isIPv4 rejects them, and listen would
+    // look them up, so they could resolve anywhere
+    ['127.999.999.999', '127.999.999.999'],
+    ['127.1', '127.1'],
+    ['localhost.evil.com', 'localhost.evil.com'],
+    ['localhost.', 'localhost.'],
+    ['an IPv4-mapped 127.0.0.1, which is not ::1', '::ffff:127.0.0.1'],
   ])('refuses %s', async (_label, host) => {
     const line = expectRefused(await startHttp({ MCP_HTTP_HOST: host }));
     expect(line).toContain(`MCP_HTTP_HOST=${host.replace(/[[\]]/g, '')}`);
@@ -191,7 +199,10 @@ describe('MCP_TRANSPORT=http startup and MCP_HTTP_BEARER_TOKEN', () => {
   it('treats an empty or blank MCP_HTTP_BEARER_TOKEN as not set', async () => {
     for (const token of ['', '   ']) {
       expectRefused(
-        await startHttp({ MCP_HTTP_HOST: '0.0.0.0', MCP_HTTP_BEARER_TOKEN: token })
+        await startHttp({
+          MCP_HTTP_HOST: '0.0.0.0',
+          MCP_HTTP_BEARER_TOKEN: token,
+        })
       );
     }
   });
@@ -213,6 +224,14 @@ describe('MCP_TRANSPORT=http startup and MCP_HTTP_BEARER_TOKEN', () => {
     ['[::1]', '[::1]', '::1'],
   ])('starts on %s', async (_label, host, bound) => {
     expectStarted(await startHttp({ MCP_HTTP_HOST: host }), bound);
+  });
+
+  it('starts on ::1 spelled out, 0:0:0:0:0:0:0:1', async () => {
+    const result = await startHttp({ MCP_HTTP_HOST: '0:0:0:0:0:0:0:1' });
+    expect(result.exitCode).toBeUndefined();
+    expect(result.stderrLines).toEqual([]);
+    expect(result.listenHost).toBe('0:0:0:0:0:0:0:1');
+    expect(result.address?.address).toBe('::1');
   });
 
   it('starts on 127.0.0.1 when MCP_HTTP_HOST is not set', async () => {
@@ -308,6 +327,39 @@ describe('MCP_TRANSPORT=http startup and MCP_HTTP_BEARER_TOKEN', () => {
     expect(exit).not.toHaveBeenCalled();
     expect(writeSync).not.toHaveBeenCalled();
     expect(listen).not.toHaveBeenCalled();
+  });
+});
+
+describe('isLoopbackAddress', () => {
+  it.each([
+    '127.0.0.1',
+    '127.255.255.254',
+    '::1',
+    '[::1]',
+    '0:0:0:0:0:0:0:1',
+    '0000:0000:0000:0000:0000:0000:0000:0001',
+    '[0:0:0:0:0:0:0:1]',
+    'localhost',
+    'LOCALHOST',
+  ])('counts %s as loopback', host => {
+    expect(isLoopbackAddress(host)).toBe(true);
+  });
+
+  it.each([
+    '127.999.999.999',
+    '127.1',
+    '127.0.0.01',
+    '0127.0.0.1',
+    '128.0.0.1',
+    '0.0.0.0',
+    '::',
+    '::2',
+    '::ffff:127.0.0.1',
+    'localhost.',
+    'localhost.evil.com',
+    'mcp.example.lan',
+  ])('does not count %s as loopback', host => {
+    expect(isLoopbackAddress(host)).toBe(false);
   });
 });
 
