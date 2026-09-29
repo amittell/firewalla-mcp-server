@@ -14,7 +14,7 @@ Every command and file on this page was run on 2026-09-26, with the later change
 ## Prerequisites
 
 - Open WebUI, and a model with tool (function) calling
-- firewalla-mcp-server **1.4.0 or later** for route 1; earlier releases never start under `npx` (see [mcpo never opens its port](#mcpo-never-opens-its-port-port-8000-shows-down)). **2.0.0 or later** for routes 2 and 3, or a build of main until 2.0.0 is published; see Versions above
+- firewalla-mcp-server **1.4.0 or later** for route 1; earlier releases never start under `npx` (see [mcpo never opens its port](#mcpo-never-opens-its-port-port-8000-shows-down)). **2.0.0 or later** for routes 2 and 3; see Versions above
 - For the mcpo routes: mcpo 0.0.20, as the Docker image `ghcr.io/open-webui/mcpo:main` (it includes Node.js 22 and `npx`) or through `uvx`
 - Node.js 18+ if mcpo runs the server with `npx` or `node` outside the mcpo image
 - Docker, for the Docker image and Compose routes
