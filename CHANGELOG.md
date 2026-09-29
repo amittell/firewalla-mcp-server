@@ -953,7 +953,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   oversized one before it translates or sends it, with the same checks
   and messages: parentheses and brackets that do not pair, a quote never
   closed, a control character (C0 other than tab, line feed and carriage
-  return, DEL, and C1, U+0080 to U+009F), more than 5 levels of
+  return, DEL, and C1, U+0080 to U+009F), half a surrogate pair, more than 5 levels of
   parentheses and more than 2,000 characters. On a stub, `search_flows`, `search_alarms`,
   `get_flow_data`, `get_active_alarms` and `get_network_rules` each sent a
   query with an unclosed `[`, a NUL, BEL, ESC or DEL, or 2,001 characters
@@ -1024,8 +1024,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   API's `type` is a number from 1 to 16.
 - `get_device_status` reports `last_seen` as the API's `lastSeen`, and null
   when it sends none, where it gave the time of the request. It refuses a
-  `cursor` it did not issue (one that does not decode, or from a listing
-  sorted another way) as a validation error before any request: such a
+  `cursor` it did not issue (one that does not decode, one whose offset or
+  page size is not a whole number, or one from a listing sorted another
+  way) as a validation error before any request: such a
   cursor was read as the first page, after the device list was read, so
   the listing started over without saying so. `cursor` is in its schema,
   beside the `next_cursor` it returns.
@@ -1111,7 +1112,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   matched "not found" in the text. It now says `Failed to get specific
   alarm: Authentication failed. Please check your MSP token.` or `... Could
   not reach the Firewalla API (ENOTFOUND: ...)`, and a 403 on every box is
-  still reported as forbidden.
+  still reported as forbidden. A 404 from `/v2/boxes`, while it found the
+  boxes to ask, is that failure, not "not found".
 - A tool's error answer carries one prefix, its own. Measured live, a bad
   token gave `Failed to get boxes: Failed to get boxes: Authentication
   failed ...` and `Failed to get device status: Failed to get device

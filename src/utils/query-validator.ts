@@ -338,7 +338,8 @@ export function validateFirewallaQuerySyntax(query: string): ValidationResult {
         // (domain:*apple*,*google*). Only [*\w.:,-] was allowed, which
         // refused name:*Disney+*, C++*, *AT&T* and every non-ASCII name. A
         // control character, or half of a surrogate pair, is not text.
-        if (token.value.includes('*') && NOT_TEXT.test(token.value)) {
+        // ? is a wildcard marker as well (the parser's WILDCARD token)
+        if (/[*?]/.test(token.value) && NOT_TEXT.test(token.value)) {
           errors.push(
             `Invalid wildcard pattern '${token.value}' at position ${token.position}: it has a character that is not text (a control character or half a surrogate pair)`
           );

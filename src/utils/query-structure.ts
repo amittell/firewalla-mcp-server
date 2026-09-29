@@ -78,6 +78,16 @@ export function queryStructureErrors(query: string): string[] {
     );
   }
 
+  // Half a surrogate pair is not text either: a well-formed pair is one
+  // code point, so /u matches only a lone half
+  const surrogate = /\p{Cs}/u.exec(query);
+  if (surrogate) {
+    const code = surrogate[0].charCodeAt(0).toString(16).toUpperCase();
+    errors.push(
+      `Query contains half a surrogate pair (U+${code}) at position ${surrogate.index}`
+    );
+  }
+
   const control = CONTROL_CHARACTER.exec(query);
   if (control) {
     const code = control[0]
