@@ -1102,6 +1102,9 @@ class GeographicCache {
     const cached = this.cache.get(ip);
     if (cached && (Date.now() - cached._cachedAt) < geoCacheConfig.ttl * 1000) {
       this.hitCount++;
+      // Move the hit to the end of the Map, so the front is the least recently used
+      this.cache.delete(ip);
+      this.cache.set(ip, cached);
       // Return without the internal _cachedAt property
       const { _cachedAt, ...geoData } = cached;
       return geoData;
