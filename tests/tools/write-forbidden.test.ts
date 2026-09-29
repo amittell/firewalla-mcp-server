@@ -26,7 +26,6 @@ import {
 import { RenameDeviceHandler } from '../../src/tools/handlers/device.js';
 import { ArchiveAlarmHandler } from '../../src/tools/handlers/alarm-actions.js';
 import type { ToolHandler } from '../../src/tools/handlers/base.js';
-import { ResourceValidator } from '../../src/validation/resource-validator.js';
 
 const BOX = '00000000-0000-0000-0000-000000000000';
 const RULE = `${BOX}:1`;
@@ -94,7 +93,6 @@ function makeClient({ forbidReads = false } = {}) {
 const errorText = (response: any) => response.content[0].text as string;
 
 beforeEach(() => {
-  ResourceValidator.clearCache();
   jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
 });
 

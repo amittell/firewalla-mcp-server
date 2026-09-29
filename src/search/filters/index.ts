@@ -257,13 +257,6 @@ export class FilterFactory {
 
     return result;
   }
-
-  /**
-   * Register a new filter
-   */
-  registerFilter(filter: Filter): void {
-    this.filters.push(filter);
-  }
 }
 
 // Export singleton instance

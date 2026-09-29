@@ -4,7 +4,6 @@
  */
 
 import type { QueryNode } from '../types.js';
-import { matchesWildcard } from '../../utils/wildcard.js';
 
 /**
  * Base filter interface that all filters must implement
@@ -85,57 +84,6 @@ export abstract class BaseFilter implements Filter {
 
   abstract canHandle(node: QueryNode): boolean;
   abstract apply(node: QueryNode, context: FilterContext): FilterResult;
-
-  /**
-   * Create a post-processing function for field-based filtering
-   */
-  protected createFieldFilter(
-    field: string,
-    predicate: (value: any) => boolean
-  ): (items: any[]) => any[] {
-    return (items: any[]) =>
-      items.filter(item => {
-        const value = this.getNestedValue(item, field);
-        return predicate(value);
-      });
-  }
-
-  /**
-   * Get nested value from object using dot notation
-   */
-  protected getNestedValue(obj: any, path: string): any {
-    return path.split('.').reduce((current, key) => current?.[key], obj);
-  }
-
-  /**
-   * Check if a value matches a wildcard pattern
-   */
-  protected matchWildcard(value: string, pattern: string): boolean {
-    if (!value || !pattern) {
-      return false;
-    }
-
-    // * is any run and ? any one character, compared as the i flag does;
-    // no regular expression, which could backtrack for seconds
-    return matchesWildcard(String(value), pattern, {
-      ignoreCase: true,
-      anyChar: true,
-    });
-  }
-
-  /**
-   * Parse numeric value with validation
-   */
-  protected parseNumeric(value: any): number | null {
-    if (typeof value === 'number') {
-      return value;
-    }
-    if (typeof value === 'string') {
-      const parsed = parseFloat(value);
-      return isNaN(parsed) ? null : parsed;
-    }
-    return null;
-  }
 
   /**
    * Parse timestamp value to Unix timestamp with robust detection

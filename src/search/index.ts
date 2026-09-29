@@ -3,7 +3,7 @@
  * Implements complex query parsing and search optimization
  */
 
-import type { SearchFilter, SearchOptions } from '../types.js';
+import type { SearchFilter } from '../types.js';
 import { followsWordCharacter } from '../utils/word-characters.js';
 
 /**
@@ -471,66 +471,6 @@ function optimizeQuery(components: QueryComponent[]): string {
     })
     .join(' ')
     .trim();
-}
-
-const DEFAULT_MAX_COMPLEXITY = 10;
-
-/**
- * Validates the syntax and complexity of a search query.
- *
- * Checks for empty queries and enforces a maximum complexity threshold. Returns an object indicating whether the query is valid and an array of error messages if any issues are found.
- *
- * @param query - The search query string to validate
- * @param maxComplexity - The maximum allowed complexity score for the query (default is 10)
- * @returns An object with a boolean `valid` flag and an array of `errors` describing any validation failures
- */
-export function validateSearchQuery(
-  query: string,
-  maxComplexity: number = DEFAULT_MAX_COMPLEXITY
-): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
-
-  try {
-    const parsed = parseSearchQuery(query);
-
-    // Check for empty query
-    if (!query.trim()) {
-      errors.push('Query cannot be empty');
-    }
-
-    // Check complexity limit
-    if (parsed.complexity > maxComplexity) {
-      errors.push(
-        `Query too complex (${parsed.complexity}). Maximum complexity is ${maxComplexity}.`
-      );
-    }
-  } catch (error) {
-    errors.push(
-      `Parse error: ${error instanceof Error ? error.message : 'Unknown error'}`
-    );
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
-}
-
-/**
- * Constructs a `SearchOptions` object by combining filters from a parsed query with any additional options provided.
- *
- * @param parsedQuery - The parsed query containing filters to apply
- * @param additionalOptions - Optional additional search options to merge
- * @returns The combined search options object
- */
-export function buildSearchOptions(
-  parsedQuery: ParsedQuery,
-  additionalOptions: Partial<SearchOptions> = {}
-): SearchOptions {
-  return {
-    filters: parsedQuery.filters,
-    ...additionalOptions,
-  };
 }
 
 /**

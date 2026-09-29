@@ -13,7 +13,6 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { FirewallaMCPServer } from '../../src/server.js';
 import { logger } from '../../src/monitoring/logger.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
-import { ResourceValidator } from '../../src/validation/resource-validator.js';
 import { WRITE_TOOL_NAMES } from '../../src/config/write-tools.js';
 
 const BOX = '11111111-2222-3333-4444-555555555555';
@@ -324,7 +323,6 @@ describe('write tools called without FIREWALLA_ENABLE_WRITE_TOOLS', () => {
   beforeEach(() => {
     requests.length = 0;
     ruleStatus = 'active';
-    ResourceValidator.clearCache();
   });
 
   it.each(WRITE_TOOLS)(
@@ -351,7 +349,6 @@ describe('annotations agree with the requests each tool sends', () => {
   beforeEach(() => {
     requests.length = 0;
     ruleStatus = 'active';
-    ResourceValidator.clearCache();
   });
 
   it.each(names)('%s', async name => {

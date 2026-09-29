@@ -140,16 +140,6 @@ export interface SearchResult<T = any> {
 }
 
 /**
- * Query parsing context
- */
-export interface ParseContext {
-  input: string;
-  position: number;
-  errors: string[];
-  tokens: Token[];
-}
-
-/**
  * Token types for lexical analysis
  */
 export interface Token {
@@ -176,19 +166,6 @@ export const TokenType = {
 } as const;
 
 export type TokenTypeValue = (typeof TokenType)[keyof typeof TokenType];
-
-/**
- * Filter application result
- */
-export interface FilterResult {
-  apiParams: Record<string, any>;
-  postProcessing: Array<(items: any[]) => any[]>;
-  metadata: {
-    filtersApplied: string[];
-    optimizations: string[];
-    cacheKey?: string;
-  };
-}
 
 /**
  * Supported search fields by entity type

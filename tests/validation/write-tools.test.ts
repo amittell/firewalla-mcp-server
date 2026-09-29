@@ -11,7 +11,6 @@ import {
 } from '../../src/tools/handlers/rules.js';
 import { RenameDeviceHandler } from '../../src/tools/handlers/device.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
-import { ResourceValidator } from '../../src/validation/resource-validator.js';
 import { writeToolsEnabled } from '../../src/config/write-tools.js';
 
 jest.mock('axios', () => {
@@ -66,7 +65,6 @@ const writes = (request: jest.Mock) =>
 
 const parse = (res: any) => JSON.parse(res.content[0].text);
 
-beforeEach(() => ResourceValidator.clearCache());
 
 describe('create_rule', () => {
   it('refuses on a multi-box account without gid or a default box, and writes nothing', async () => {

@@ -40,7 +40,6 @@ import {
   pathSegment,
   pathSegmentProblem,
 } from '../../src/validation/path-segment.js';
-import { ResourceValidator } from '../../src/validation/resource-validator.js';
 import { ParameterValidator } from '../../src/validation/error-handler.js';
 
 const BOX = '00000000-0000-0000-0000-000000000000';
@@ -99,7 +98,6 @@ function makeClient() {
 const parse = (res: any) => JSON.parse(res.content[0].text);
 
 beforeEach(() => {
-  ResourceValidator.clearCache();
   // The client logs each request to stderr
   jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
 });

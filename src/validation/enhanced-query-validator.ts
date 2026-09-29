@@ -5,7 +5,7 @@
 
 import { queryParser } from '../search/parser.js';
 import { SEARCH_FIELDS, type QueryNode, type FieldQuery, type ComparisonQuery, type RangeQuery } from '../search/types.js';
-import { FIELD_MAPPINGS, type EntityType, type CorrelationFieldName } from './field-mapper.js';
+import { FIELD_MAPPINGS, type EntityType } from './field-mapper.js';
 import { QuerySanitizer } from './error-handler.js';
 import { scanOutsideQuotes } from '../utils/query-structure.js';
 import type { ValidationResult } from '../types.js';
@@ -937,57 +937,4 @@ export class EnhancedQueryValidator {
     return '';
   }
 
-  /**
-   * Validate correlation field compatibility between entity types
-   */
-  static validateCorrelationFields(
-    fields: CorrelationFieldName[], 
-    primaryEntityType: EntityType, 
-    secondaryEntityTypes: EntityType[]
-  ): ValidationResult & { compatibleFields?: CorrelationFieldName[]; suggestions?: string[] } {
-    const errors: string[] = [];
-    const suggestions: string[] = [];
-    const compatibleFields: CorrelationFieldName[] = [];
-
-    const primaryMapping = FIELD_MAPPINGS[primaryEntityType];
-    
-    for (const field of fields) {
-      // Check if field exists in primary entity
-      if (primaryMapping[field]) {
-        // Check if field exists in all secondary entities
-        const existsInAllSecondary = secondaryEntityTypes.every(entityType => 
-          FIELD_MAPPINGS[entityType][field]
-        );
-        
-        if (existsInAllSecondary) {
-          compatibleFields.push(field);
-        } else {
-          const incompatibleTypes = secondaryEntityTypes.filter(entityType => 
-            !FIELD_MAPPINGS[entityType][field]
-          );
-          errors.push(`Field '${field}' is not available in entity types: ${incompatibleTypes.join(', ')}`);
-        }
-      } else {
-        errors.push(`Field '${field}' is not available in primary entity type '${primaryEntityType}'`);
-      }
-    }
-
-    // Generate suggestions for alternative fields
-    if (compatibleFields.length === 0 && fields.length > 0) {
-      const commonFields = Object.keys(primaryMapping).filter(field =>
-        secondaryEntityTypes.every(entityType => FIELD_MAPPINGS[entityType][field])
-      );
-      
-      if (commonFields.length > 0) {
-        suggestions.push(`Consider using these compatible fields: ${commonFields.slice(0, 5).join(', ')}`);
-      }
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-      compatibleFields,
-      suggestions
-    };
-  }
 }
