@@ -288,7 +288,7 @@ const performanceImprovements = {
    # For quick overview
    get_active_alarms limit:50
 
-   # For detailed analysis, and the most one call returns
+   # For detailed analysis; 500 is the most a single call returns
    get_active_alarms limit:500
    ```
 
