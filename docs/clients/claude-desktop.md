@@ -75,7 +75,7 @@ Restart Claude Desktop and try:
 
 ```text
 "What are my top 10 bandwidth users this week?"
-"Show me all high-severity security alerts"
+"Show me all active security activity alarms"
 "Are there any offline devices I should know about?"
 "What firewall rules are currently blocking traffic?"
 ```
