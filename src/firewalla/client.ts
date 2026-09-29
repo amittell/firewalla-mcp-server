@@ -6067,21 +6067,14 @@ export class FirewallaClient {
           : undefined
       );
 
-      let categoryData;
-      try {
-        categoryData = await this.searchFlows({
-          query: categoryQuery,
-          group_by: 'category,domain',
-          sort_by: 'bytes:desc',
-          limit: 500,
-        });
-      } catch (error) {
-        logger.error(
-          'Failed to get category data in getFlowInsights:',
-          error instanceof Error ? error : new Error(String(error))
-        );
-        categoryData = { results: [], count: 0 };
-      }
+      // A failure is the tool's failure: an empty breakdown in its place
+      // read as a network with no traffic (a bad token answered success)
+      const categoryData = await this.searchFlows({
+        query: categoryQuery,
+        group_by: 'category,domain',
+        sort_by: 'bytes:desc',
+        limit: 500,
+      });
 
       // Process category breakdown
       const categoryMap = new Map<
@@ -6118,21 +6111,12 @@ export class FirewallaClient {
       });
 
       // Get top devices by bandwidth with error handling
-      let deviceData;
-      try {
-        deviceData = await this.searchFlows({
-          query: `ts:${begin}-${end}`,
-          group_by: 'device,category',
-          sort_by: 'bytes:desc',
-          limit: 200,
-        });
-      } catch (error) {
-        logger.error(
-          'Failed to get device data in getFlowInsights:',
-          error instanceof Error ? error : new Error(String(error))
-        );
-        deviceData = { results: [], count: 0 };
-      }
+      const deviceData = await this.searchFlows({
+        query: `ts:${begin}-${end}`,
+        group_by: 'device,category',
+        sort_by: 'bytes:desc',
+        limit: 200,
+      });
 
       // Process device data
       const deviceMap = new Map<
@@ -6169,31 +6153,20 @@ export class FirewallaClient {
       // Get blocked flows summary if requested with error handling
       let blockedSummary;
       if (options?.includeBlocked) {
-        try {
-          const blockedData = await this.searchFlows({
-            query: `ts:${begin}-${end} status:blocked`,
-            group_by: 'category',
-            sort_by: 'count:desc',
-            limit: 50,
-          });
+        const blockedData = await this.searchFlows({
+          query: `ts:${begin}-${end} status:blocked`,
+          group_by: 'category',
+          sort_by: 'count:desc',
+          limit: 50,
+        });
 
-          blockedSummary = {
-            totalBlocked: blockedData.count,
-            byCategory: blockedData.results.map((item: any) => ({
-              category: flowCategory(item),
-              count: item.count || 0,
-            })),
-          };
-        } catch (error) {
-          logger.error(
-            'Failed to get blocked data in getFlowInsights:',
-            error instanceof Error ? error : new Error(String(error))
-          );
-          blockedSummary = {
-            totalBlocked: 0,
-            byCategory: [],
-          };
-        }
+        blockedSummary = {
+          totalBlocked: blockedData.count,
+          byCategory: blockedData.results.map((item: any) => ({
+            category: flowCategory(item),
+            count: item.count || 0,
+          })),
+        };
       }
 
       // Format results
