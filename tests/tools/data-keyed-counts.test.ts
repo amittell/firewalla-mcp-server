@@ -165,7 +165,7 @@ describe('the search aggregations by group value', () => {
 });
 
 describe('firewalla://threats/recent counts threats by type', () => {
-  it('keys by an alarm message named for an Object.prototype member', async () => {
+  it('keys by the type name, and keeps a message named for an Object.prototype member', async () => {
     const server = (new FirewallaMCPServer() as any).server as Server;
     const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'data-keys-test', version: '0.0.0' });
@@ -176,14 +176,13 @@ describe('firewalla://threats/recent counts threats by type', () => {
       });
       const [resource] = contents;
       const text = 'text' in resource ? resource.text : '';
-      const { statistics } = JSON.parse(text).recent_threats;
+      const { statistics, threats } = JSON.parse(text).recent_threats;
       expect(statistics.total).toBe(5);
-      expect(entries(statistics.by_type)).toEqual([
-        ['__proto__', 2],
-        ['constructor', 1],
-        ['hasOwnProperty', 1],
-        ['toString', 1],
-      ]);
+      // by_type held the message, so these names were its keys
+      expect(entries(statistics.by_type)).toEqual([['Security Activity', 5]]);
+      expect(
+        threats.map((threat: { message: string }) => threat.message)
+      ).toEqual([...NAMES, '__proto__']);
     } finally {
       await client.close();
     }
