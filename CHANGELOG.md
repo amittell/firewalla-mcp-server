@@ -1103,6 +1103,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   back as `api_error` (`get_flow_data`, `get_boxes`, `get_active_alarms`,
   `create_rule` and the rest) or `search_error` (`search_flows`), so a
   client waiting for `rate_limit_error` to back off never saw one.
+- `get_specific_alarm` says "Alarm not found" only when every box it asked
+  answered 404. With a bad token (401) or an MSP host that did not resolve,
+  it said `Alarm not found: 999999999. The alarm may have been deleted or
+  the ID may be incorrect.` (measured live 2026-09-29): the client turned
+  any failure into "Alarm not found: tried N box(es) ..." and the tool
+  matched "not found" in the text. It now says `Failed to get specific
+  alarm: Authentication failed. Please check your MSP token.` or `... Could
+  not reach the Firewalla API (ENOTFOUND: ...)`, and a 403 on every box is
+  still reported as forbidden.
 
 ### Removed
 

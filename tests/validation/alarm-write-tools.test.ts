@@ -42,6 +42,14 @@ import {
 } from '../../src/validation/alarm-mute.js';
 import { USER_REQUEST_ONLY } from '../../src/utils/untrusted-text.js';
 
+/** What request() throws for a 404 */
+function notFound(): ApiRequestError {
+  return new ApiRequestError(
+    'Resource not found. Please check your Box ID.',
+    404
+  );
+}
+
 /** What request() throws for an alarm write sent and not answered */
 function sentNotAnswered(method: string): WriteOutcomeUnknownError {
   const failure =
@@ -133,9 +141,7 @@ function makeClient({
             remote: { domain: 'twitch.tv', ip: '151.101.2.167' },
           };
         }
-        throw new Error(
-          `Resource not found: /v2/alarms/${gid}/${aid} does not exist`
-        );
+        throw notFound();
       }
       if (method === 'POST') {
         return post ? post() : {};
@@ -398,7 +404,7 @@ describe('archiveAlarm', () => {
     const { client } = makeClient({
       alarms: { [BOX_A]: ['42'] },
       post: async () => {
-        throw new Error('Resource not found: /v2/alarms/x/42/archive does not exist');
+        throw notFound();
       },
     });
     await expect(client.archiveAlarm('42', BOX_A)).rejects.toThrow(
@@ -747,7 +753,7 @@ describe('deleteAlarm', () => {
     const { client } = makeClient({
       alarms: { [BOX_A]: ['42'] },
       del: async () => {
-        throw new Error('Resource not found: /v2/alarms/x/42 does not exist');
+        throw notFound();
       },
     });
     await expect(client.deleteAlarm('42', BOX_A)).rejects.toThrow(

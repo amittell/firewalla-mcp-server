@@ -78,7 +78,11 @@ function makeClient({
       if ((alarms[gid] || []).includes(aid)) {
         return { aid: Number(aid), type: 1, status: 1, message: 'alarm' };
       }
-      throw new Error('Request failed with status code 404');
+      // What request() throws for a 404
+      throw new ApiRequestError(
+        'Resource not found. Please check your Box ID.',
+        404
+      );
     }
     if (method === 'GET' && endpoint === '/v2/flows') {
       return {
