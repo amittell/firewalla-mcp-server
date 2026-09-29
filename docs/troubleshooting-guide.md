@@ -82,7 +82,7 @@ The MCP server categorizes errors into specific types to help with troubleshooti
 
 #### 3. Authentication Errors
 - **Cause**: Invalid or expired credentials, or a token without access
-- **Type**: an invalid token (HTTP 401) is `api_error` with `Authentication failed. Please check your MSP token.`; only `pause_rule` answers `authentication_error`, for a 403 or a message with "permission"
+- **Type**: an invalid token (HTTP 401) is `api_error` (`search_error` from a search tool) with `Authentication failed. Please check your MSP token.`; only `pause_rule` and `resume_rule` answer `authentication_error`, for a 401 or a 403
 - **Recovery**: Fix authentication configuration
 - **Examples**: Invalid MSP token, insufficient permissions
 
