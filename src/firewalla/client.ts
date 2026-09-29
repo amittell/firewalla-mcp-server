@@ -475,17 +475,6 @@ export class BoxSelectionError extends Error {
   }
 }
 
-/**
- * The alarm an alarm write names is not on the box it was looked for on, or
- * on any box when each box was checked.
- */
-export class AlarmNotFoundError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'AlarmNotFoundError';
-  }
-}
-
 /** The alarm an alarm write acted on, and the API's answer */
 export interface AlarmActionResult {
   gid: string;
@@ -508,11 +497,13 @@ const ALARM_ACTION_DONE = {
 } as const;
 
 /**
- * request() reports an HTTP 404 as "Resource not found: ..."; the MSP API's
- * 404 body is an empty CloudFront error page, so the status is all there is.
+ * Whether request() failed with a 404: an ApiRequestError with status 404.
+ * The MSP API's 404 body is an empty CloudFront error page, so the status is
+ * all there is. Decided by the status, not the message, which can name an
+ * ID holding "404".
  */
 function isNotFoundError(error: unknown): boolean {
-  return error instanceof Error && /\b404\b|not found/i.test(error.message);
+  return error instanceof ApiRequestError && error.status === 404;
 }
 
 /** "type 8, 'A device watched ...'" for naming an alarm in a message */
@@ -550,6 +541,18 @@ export class ApiRequestError extends Error {
   ) {
     super(message);
     this.name = 'ApiRequestError';
+  }
+}
+
+/**
+ * The alarm is not on the box it was looked for on, or on any box when each
+ * box was checked: every GET of it answered 404 (status 404). Thrown by the
+ * alarm writes and by getSpecificAlarm.
+ */
+export class AlarmNotFoundError extends ApiRequestError {
+  constructor(message: string, attempts = 1) {
+    super(message, 404, undefined, attempts);
+    this.name = 'AlarmNotFoundError';
   }
 }
 
@@ -3463,11 +3466,12 @@ export class FirewallaClient {
         debugInfo,
       });
 
-      let lastError: Error | null = null;
       let response: any = null;
       let foundGid: string | undefined;
       let attempts = 0;
-      let forbidden = 0;
+      // The first failure that was not a 404: a 401, a 403, an API it could
+      // not reach. The alarm is "not found" only when every box said 404.
+      let firstFailure: unknown;
 
       // Try each box, and each ID variation on it, until one succeeds
       for (const validatedGid of validatedGids) {
@@ -3492,17 +3496,13 @@ export class FirewallaClient {
             );
             break;
           } catch (error) {
-            lastError =
-              error instanceof Error ? error : new Error(String(error));
             attempts++;
-            if (error instanceof ForbiddenError) {
-              forbidden++;
+            if (!isNotFoundError(error)) {
+              firstFailure ??= error;
             }
             logger.debug(`Failed to find alarm with ID ${validatedAlarmId}:`, {
-              error: lastError.message,
+              error: error instanceof Error ? error.message : String(error),
             });
-
-            // Skip invalid variations
           }
         }
         if (response) {
@@ -3510,20 +3510,22 @@ export class FirewallaClient {
         }
       }
 
-      // Every box refused the token (403): say so, not "not found"
-      if (!response && attempts > 0 && forbidden === attempts) {
-        throw lastError;
-      }
-
-      // If no variation worked, throw the last error
       if (!response) {
-        const errorMessage = `Alarm not found: tried ${validatedGids.length} box(es) and ${idVariations.length} ID variation(s). Last error: ${lastError?.message || 'Unknown error'}`;
-        logger.warn('All alarm ID variations failed', {
+        // A failure other than a 404 comes through as it was, with its
+        // class and status: a bad token is not a missing alarm
+        if (firstFailure !== undefined) {
+          throw firstFailure;
+        }
+        logger.warn('Alarm not found on any box asked', {
           originalId: alarmId,
-          variations: idVariations,
-          lastError: lastError?.message,
+          boxes: validatedGids.length,
         });
-        throw new Error(errorMessage);
+        throw new AlarmNotFoundError(
+          validatedGids.length === 1
+            ? `Alarm ${alarmId} not found on box ${validatedGids[0]}`
+            : `Alarm ${alarmId} not found on any of the ${validatedGids.length} boxes`,
+          attempts
+        );
       }
 
       // Enhanced null/undefined checks for response
@@ -3634,34 +3636,19 @@ export class FirewallaClient {
         next_cursor: undefined,
       };
     } catch (error) {
-      if (error instanceof BoxSelectionError) {
-        throw error; // the handler reports it as a validation error
+      // Thrown as it came, with its class and status: the handler says
+      // "Alarm not found" for an AlarmNotFoundError (404) and adds its one
+      // prefix to anything else
+      if (
+        !(error instanceof BoxSelectionError) &&
+        !(error instanceof AlarmNotFoundError)
+      ) {
+        logger.error(
+          'Error in getSpecificAlarm:',
+          error instanceof Error ? error : new Error(String(error))
+        );
       }
-      logger.error(
-        'Error in getSpecificAlarm:',
-        error instanceof Error ? error : new Error(String(error))
-      );
-      if (error instanceof ForbiddenError) {
-        throw error;
-      }
-      // Enhanced error handling
-      if (error instanceof Error) {
-        if (
-          error.message.includes('Invalid') ||
-          error.message.includes('validation')
-        ) {
-          throw error; // Re-throw validation errors
-        }
-        if (
-          error.message.includes('404') ||
-          error.message.includes('not found')
-        ) {
-          throw new Error(`Alarm with ID '${alarmId}' not found`);
-        }
-      }
-      throw new Error(
-        `Failed to get specific alarm: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw error;
     }
   }
 

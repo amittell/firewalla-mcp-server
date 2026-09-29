@@ -9,6 +9,7 @@ import {
   type ToolResponse,
 } from './base.js';
 import {
+  ApiRequestError,
   BoxSelectionError,
   readTrace,
   type FirewallaClient,
@@ -509,8 +510,9 @@ export class GetSpecificAlarmHandler extends BaseToolHandler {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
 
-      // Check for specific API error patterns
-      if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+      // Not found only when every box asked answered 404 (AlarmNotFoundError
+      // carries status 404); a 401 or a host it could not reach is not
+      if (error instanceof ApiRequestError && error.status === 404) {
         return this.createErrorResponse(
           `Alarm not found: ${args?.alarm_id}. The alarm may have been deleted or the ID may be incorrect.`,
           ErrorType.API_ERROR,
