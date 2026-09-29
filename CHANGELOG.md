@@ -439,7 +439,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   transient retry's estimate, how long the 503 before it took, and when
   that stopped it the read failed with `Firewalla API sent no answer
   (ERR_CANCELED: Not sent: ...)` and `attempts` 0, though two requests had
-  been sent and the API had answered 429.
+  been sent and the API had answered 429. A request waiting for the rate
+  limit takes no slot once its 20 s wait is over, even with a slot free:
+  the wait was checked only while no slot was free, so one whose turn came
+  after its deadline, behind a request that waited out a 429, took a free
+  slot 5 s late on a stub. Nor is a request sent after its tool's deadline
+  when it wakes before the tool's own timer has run.
 - A write that went out and got no HTTP status says its outcome is unknown,
   not that it failed. When a shorter `API_TIMEOUT` ran out or the
   connection was reset after the request was written, `create_rule` and the

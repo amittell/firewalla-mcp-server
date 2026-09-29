@@ -1037,7 +1037,12 @@ export class FirewallaClient {
           };
           budget.writes.push(request.toolWrite);
         }
-        // A request the tool gave up on is not sent, nor counted
+        // A request the tool gave up on is not sent, nor counted. Its
+        // deadline is checked as well as its signal: a request that wakes
+        // after the deadline, before the tool's timer has run, is not sent
+        const toolGaveUp = () =>
+          request.signal?.aborted === true ||
+          (budget !== undefined && Date.now() >= budget.deadline);
         const cancelled = () =>
           new CanceledError(
             `Not sent: the tool gave up before ${name} was sent`,
@@ -1057,9 +1062,9 @@ export class FirewallaClient {
         // Takes no slot and counts nothing when it does not send: the
         // slot it took is given back
         const send = (slot: RateLimitSlot) => {
-          if (request.signal?.aborted || !fits(0)) {
+          if (toolGaveUp() || !fits(0)) {
             this.rateLimiter.release(slot);
-            throw request.signal?.aborted ? cancelled() : declined();
+            throw toolGaveUp() ? cancelled() : declined();
           }
           process.stderr.write(`API Request: ${name}\n`);
           request.sentAt = Date.now();
@@ -1073,7 +1078,7 @@ export class FirewallaClient {
           request.onSent?.();
           return config;
         };
-        if (request.signal?.aborted) {
+        if (toolGaveUp()) {
           throw cancelled();
         }
         if (!fits(0)) {
@@ -1109,7 +1114,7 @@ export class FirewallaClient {
           .acquire(deadline, request.signal as AbortSignal | undefined)
           .then(send, error => {
             // The tool gave up while it waited: no slot was taken
-            if (request.signal?.aborted) {
+            if (toolGaveUp()) {
               throw cancelled();
             }
             throw error instanceof RateLimitError ? refuse(error) : error;
