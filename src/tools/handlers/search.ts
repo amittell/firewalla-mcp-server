@@ -23,16 +23,13 @@ import {
   ParameterValidator,
   createErrorResponse,
   ErrorType,
+  queryShapeRefusal,
 } from '../../validation/error-handler.js';
 import { getLimitValidationConfig } from '../../config/limits.js';
 import {
   validateFirewallaQuerySyntax,
   getExampleQueries,
 } from '../../utils/query-validator.js';
-import {
-  queryComplexityErrors,
-  queryStructureErrors,
-} from '../../utils/query-structure.js';
 import {
   withToolTimeout,
   TimeoutError,
@@ -163,44 +160,15 @@ function validateCommonSearchParameters(
   }
 
   // Balanced parentheses, brackets and quotes, the nesting and length
-  // limits, and no control characters, for every search tool before any
-  // translation or request. search_flows and search_alarms sent an
-  // unclosed [, a NUL and a 2,001-character query to the API; the other
-  // search tools refused them only after parsing.
-  const structureErrors = queryStructureErrors(args.query);
-  if (structureErrors.length > 0) {
-    return {
-      isValid: false,
-      response: createErrorResponse(
-        toolName,
-        'Invalid query structure',
-        ErrorType.VALIDATION_ERROR,
-        { query: args.query, structure_errors: structureErrors },
-        structureErrors
-      ),
-    };
-  }
-
-  // The complexity limits, the same for every search tool, each message
-  // naming the limit it hit. They ran in the field check, so a query over
-  // one was refused as "Query contains invalid field names", and not at
-  // all for free text alone or in get_flow_data and get_active_alarms.
-  const complexityErrors = queryComplexityErrors(args.query);
-  if (complexityErrors.length > 0) {
-    return {
-      isValid: false,
-      response: createErrorResponse(
-        toolName,
-        'Query is too complex',
-        ErrorType.VALIDATION_ERROR,
-        {
-          query: args.query,
-          complexity_errors: complexityErrors,
-          hint: 'Split it into several searches',
-        },
-        complexityErrors
-      ),
-    };
+  // limits, no control characters, and the complexity limits, each message
+  // naming the limit it hit, before any translation or request; every tool
+  // that takes a query runs the same checks (queryShapeRefusal).
+  // search_flows and search_alarms sent an unclosed [, a NUL and a
+  // 2,001-character query to the API, and the complexity limits ran in the
+  // field check, refusing as "Query contains invalid field names".
+  const shapeRefusal = queryShapeRefusal(toolName, args.query);
+  if (shapeRefusal) {
+    return { isValid: false, response: shapeRefusal };
   }
 
   // [low TO high] ranges: the API's are field:low-high. The suggestion has

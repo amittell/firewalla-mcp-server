@@ -1,7 +1,8 @@
 /**
  * The complexity limits: each refusal names the limit it hit, with the
- * count and the maximum, and every search tool answers a query the same
- * way. Live, search_devices refused name:*a*b*c*d*e*f*g*h*i*j* (11
+ * count and the maximum, and every tool that takes a query (the five
+ * search_* tools, get_flow_data, get_active_alarms and get_network_rules,
+ * which ran no check before #82's review) answers a query the same way. Live, search_devices refused name:*a*b*c*d*e*f*g*h*i*j* (11
  * wildcards) as "Query contains invalid field names": the complexity check
  * ran inside the field check, only in the five search_* tools, and not for
  * free text alone. The wildcard limit is gone: matchesWildcard takes fewer
@@ -19,6 +20,7 @@ import {
 } from '../../src/tools/handlers/search.js';
 import { GetFlowDataHandler } from '../../src/tools/handlers/network.js';
 import { GetActiveAlarmsHandler } from '../../src/tools/handlers/security.js';
+import { GetNetworkRulesHandler } from '../../src/tools/handlers/rules.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -99,6 +101,7 @@ const TOOLS = [
   ['search_devices', SearchDevicesHandler],
   ['search_rules', SearchRulesHandler],
   ['search_target_lists', SearchTargetListsHandler],
+  ['get_network_rules', GetNetworkRulesHandler],
 ] as const;
 
 const OVER = {

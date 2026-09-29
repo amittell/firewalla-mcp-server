@@ -17,6 +17,7 @@ import {
   ParameterValidator,
   SafeAccess,
   ErrorType,
+  queryShapeRefusal,
 } from '../../validation/error-handler.js';
 import {
   unixToISOStringOrNow,
@@ -40,10 +41,6 @@ import {
 } from '../../utils/timeout-manager.js';
 import { validateAlarmId } from '../../utils/alarm-id-validation.js';
 import { mspAnd } from '../../utils/msp-query.js';
-import {
-  queryComplexityErrors,
-  queryStructureErrors,
-} from '../../utils/query-structure.js';
 
 /**
  * Map alarm types to severity levels
@@ -254,40 +251,15 @@ export class GetActiveAlarmsHandler extends BaseToolHandler {
         );
       }
 
-      // The structural checks the search tools run, before the query is
-      // translated or sent: an unclosed [, a NUL, 11 levels of nesting and
-      // a 2,001-character query went to the API
-      const structureErrors =
-        typeof queryValidation.sanitizedValue === 'string'
-          ? queryStructureErrors(queryValidation.sanitizedValue)
-          : [];
-      if (structureErrors.length > 0) {
-        return this.createErrorResponse(
-          'Invalid query structure',
-          ErrorType.VALIDATION_ERROR,
-          {
-            query: queryValidation.sanitizedValue,
-            structure_errors: structureErrors,
-          },
-          structureErrors
-        );
-      }
-      // The complexity limits every search tool holds a query to
-      const complexityErrors =
-        typeof queryValidation.sanitizedValue === 'string'
-          ? queryComplexityErrors(queryValidation.sanitizedValue)
-          : [];
-      if (complexityErrors.length > 0) {
-        return this.createErrorResponse(
-          'Query is too complex',
-          ErrorType.VALIDATION_ERROR,
-          {
-            query: queryValidation.sanitizedValue,
-            complexity_errors: complexityErrors,
-            hint: 'Split it into several searches',
-          },
-          complexityErrors
-        );
+      // The structural checks and complexity limits every tool that takes
+      // a query runs, before it is translated or sent: an unclosed [, a
+      // NUL, 11 levels of nesting and a 2,001-character query went to the API
+      const shapeRefusal = queryShapeRefusal(
+        this.name,
+        queryValidation.sanitizedValue
+      );
+      if (shapeRefusal) {
+        return shapeRefusal;
       }
 
       // Active alarms unless the query names a status. /v2/alarms returns
