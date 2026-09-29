@@ -1027,6 +1027,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GET /v2/target-lists` returns every list and takes no `limit` (measured
   2026-09-25) and the tool applies `limit`, so `total_lists` counted only
   the lists returned and never showed that some were left out.
+- The `firewalla://threats/recent` resource reports an alarm's severity
+  only when the API sends one, and null otherwise. The API's alarm and
+  flow models carry no severity, and `getRecentThreats` derived one from
+  the alarm type number (5 and up high, 3 and 4 medium, else low) and gave
+  every blocked flow `medium`, so a Security Activity alarm (type 1) was
+  low and Device Offline (type 7) high. `by_severity` counts only the
+  severities the API sent, `without_severity` counts the rest, and
+  `severity_note` says why.
 
 ### Removed
 

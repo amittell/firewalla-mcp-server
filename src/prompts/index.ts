@@ -592,7 +592,7 @@ Please assess and provide:
  * @returns An object with counts of threats by type and a distribution of threats by hour (0–23)
  */
 function analyzeThreatPatterns(
-  threats: Array<{ type: string; timestamp: string; severity: string }>
+  threats: Array<{ type: string; timestamp: string; severity: string | null }>
 ): {
   byType: Record<string, number>;
   timeDistribution: Record<number, number>;
