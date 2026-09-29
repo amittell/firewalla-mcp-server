@@ -1242,6 +1242,8 @@ The qualifier tables below are the lists in the official documentation.
 | `transfer.upload` | Upload | Data uploaded (with units) | `transfer.upload:>10MB` |
 | `transfer.total` | Total | Total data transfer (with units) | `transfer.total:>50MB` |
 
+`region:`, the `Region` alias in lower case, returned the same alarms as `remote.region:` (measured 2026-09-29: 18 alarms for `CA` with each, 34 for `DE`).
+
 #### Flow Qualifiers
 
 | Qualifier | Alias | Description | Example |

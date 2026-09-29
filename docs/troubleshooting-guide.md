@@ -491,7 +491,8 @@ function buildCountryQuery(codes) {
 }
 ```
 
-On alarms the qualifier is `remote.region:`. `city:`, `continent:` and
+Alarms take `region:` too, and `remote.region:`, which returned the same
+alarms. `city:`, `continent:` and
 `asn:` are refused the same way, since the API answers a qualifier it does not
 know with no results.
 

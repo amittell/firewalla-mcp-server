@@ -25,8 +25,9 @@ This guide provides comprehensive documentation on geographic data processing, u
 > is configurable. `CACHE_TTL` and `CACHE_MAX_ENTRIES` apply to the response
 > cache only. The MSP API's own geographic field is `region`, an ISO 3166-1
 > alpha-2 code, and the only geographic qualifier a query can use is
-> `region:` on flows and `remote.region:` on alarms
-> (`src/utils/geographic-filters.ts`).
+> `region:`, on flows and on alarms. Alarms also take `remote.region:`, which
+> returned the same alarms (measured 2026-09-29: 18 for `CA` with each, 34
+> for `DE`). See `src/utils/geographic-filters.ts`.
 
 The Firewalla MCP Server implements sophisticated geographic data handling to enrich network flows, security alarms, and device information with location-based intelligence. This system addresses the challenge of inconsistent, missing, or "unknown" geographic data while maintaining performance and reliability.
 
@@ -1625,7 +1626,8 @@ class GeoDataErrorHandler {
 ### Query Optimization
 
 The MSP API's geographic qualifier is `region:`, which holds an ISO 3166-1
-alpha-2 country code, on flows (`remote.region:` on alarms). `country:`,
+alpha-2 country code, on flows and alarms (alarms also take
+`remote.region:`). `country:`,
 `continent:`, `city:`, `asn:` and the like are refused before any request,
 since the API answers a qualifier it does not know with no results.
 
