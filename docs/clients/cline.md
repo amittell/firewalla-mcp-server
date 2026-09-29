@@ -88,7 +88,7 @@ Are there any firewall rules that might block this endpoint?"
 **Automated Security Workflows**
 ```text
 "Set up a daily security check routine that:
-1. Reviews high-severity alerts
+1. Reviews active security activity alarms
 2. Checks for offline devices
 3. Analyzes bandwidth anomalies
 4. Generates a summary report"
@@ -161,7 +161,7 @@ Are there any firewall rules that might block this endpoint?"
 **Production Monitoring**
 ```text
 "Set up continuous monitoring that alerts me to:
-- High-severity security events
+- New security activity alarms
 - Unusual bandwidth consumption
 - Device connectivity problems
 - Geographic-based threats"

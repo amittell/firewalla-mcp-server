@@ -67,17 +67,17 @@ claude-code
 
 **Security Monitoring**
 ```bash
-claude-code "Analyze my network traffic from the last 2 hours and flag any suspicious activity"
+claude -p "Analyze my network traffic from the last 2 hours and flag any suspicious activity"
 ```
 
 **Bandwidth Investigation**
 ```bash
-claude-code "Who are my top bandwidth consumers today? Show me devices and data usage"
+claude -p "Who are my top bandwidth consumers today? Show me devices and data usage"
 ```
 
 **Rule Management**
 ```bash
-claude-code "List all active firewall rules and show me which ones have blocked traffic recently"
+claude -p "List all active firewall rules and show me which ones have blocked traffic recently"
 ```
 
 ## Advanced CLI Usage
@@ -85,16 +85,16 @@ claude-code "List all active firewall rules and show me which ones have blocked 
 **Scripted Analysis**
 ```bash
 # Save network report to file
-claude-code "Generate a comprehensive network security report" > security_report.md
+claude -p "Generate a comprehensive network security report" > security_report.md
 
 # Pipe to other tools
-claude-code "Get high-severity alarms as JSON" | jq '.alarms[] | select(.severity=="high")'
+claude -p "Get today's security alarms as JSON" | jq '.alarms[] | select(.type == 1)'
 ```
 
 **Automated Monitoring**
 ```bash
 # Add to cron for daily reports
-0 9 * * * claude-code "Daily Firewalla security summary" | mail -s "Security Report" admin@company.com
+0 9 * * * claude -p "Daily Firewalla security summary" | mail -s "Security Report" admin@company.com
 ```
 
 ## Troubleshooting

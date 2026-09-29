@@ -21,7 +21,7 @@ Here are practical examples you can try right away:
 #### Security Monitoring
 ```
 "Show me any security alerts from the last hour"
-"What are my high-severity alarms?"
+"What security activity alarms are active?"
 "Are there any blocked attack attempts?"
 ```
 
@@ -187,7 +187,7 @@ Firewalla categorizes traffic into these types:
 
 ## Tips for Best Results
 
-1. **Be Specific**: "Show me high-severity alarms from the last 4 hours" works better than "show alarms"
+1. **Be Specific**: "Show me security activity alarms from the last 4 hours" works better than "show alarms"
 
 2. **Use Limits**: "Top 10 bandwidth users" is faster than "all bandwidth users"
 
