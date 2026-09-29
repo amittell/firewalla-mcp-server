@@ -1,6 +1,6 @@
 /**
  * Boolean translation, which writes blocked:true as blocked:1, leaves quoted
- * text alone, as Copilot's review of #74 at 56d50fc asked. Both translators
+ * text alone, as Copilot's review of #74 at 56d50fc asked. The translator
  * rewrote inside quotes: "blocked:true" became "blocked:1", so search_flows
  * sent domain:"blocked:true" as domain:"blocked:1".
  * The API is stubbed; nothing leaves the process.
@@ -8,7 +8,6 @@
 
 import { FirewallaClient } from '../../src/firewalla/client.js';
 import { SearchFlowsHandler } from '../../src/tools/handlers/search.js';
-import { BooleanFieldTranslator } from '../../src/search/boolean-field-translator.js';
 import { translateBooleanQuery } from '../../src/utils/simple-boolean-translator.js';
 
 jest.mock('axios', () => {
@@ -50,11 +49,6 @@ const sentQueries = (get: jest.Mock): unknown[] =>
 describe('boolean translation leaves quoted text alone', () => {
   const translators = [
     { name: 'translateBooleanQuery', translate: translateBooleanQuery },
-    {
-      name: 'BooleanFieldTranslator',
-      translate: (query: string, entity: string) =>
-        BooleanFieldTranslator.translateQuery(query, entity),
-    },
   ];
 
   it.each(
@@ -85,28 +79,6 @@ describe('boolean translation leaves quoted text alone', () => {
       expect(translate("'a b' online:false", 'devices')).toBe("'a b' online:0");
     }
   );
-
-  it('BooleanFieldTranslator reads a bare field outside quotes only', () => {
-    expect(BooleanFieldTranslator.translateQuery('"blocked"', 'flows')).toBe(
-      '"blocked"'
-    );
-    expect(BooleanFieldTranslator.translateQuery('blocked', 'flows')).toBe(
-      'blocked:1'
-    );
-    expect(
-      BooleanFieldTranslator.needsTranslation('"blocked:true"', 'flows')
-    ).toBe(false);
-    expect(
-      BooleanFieldTranslator.getAlternativeTranslations(
-        '"blocked:true"',
-        'flows'
-      )
-    ).toEqual(['"blocked:true"']);
-    expect(
-      BooleanFieldTranslator.getTranslationDebugInfo('"online"', 'devices')
-        .detectedBooleanFields
-    ).toEqual([]);
-  });
 
   it('search_flows sends a quoted value as written', async () => {
     const { client, get } = makeClient();

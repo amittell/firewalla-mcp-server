@@ -70,28 +70,14 @@ describe('Boolean Syntax Integration Test', () => {
     expect(queryLog).toEqual(['status:blocked']);
   });
 
-  test('untranslated boolean syntax should still work with enhanced translator', async () => {
-    // Mock the translator to not work, simulating old behavior
-    const originalTranslator = require('../../src/search/boolean-field-translator.js').BooleanFieldTranslator;
-    const mockTranslator = {
-      translateQuery: jest.fn().mockImplementation((query) => query), // No translation
-      needsTranslation: jest.fn().mockReturnValue(false)
-    };
-    
-    // Temporarily replace the translator
-    jest.doMock('../../src/search/boolean-field-translator.js', () => ({
-      BooleanFieldTranslator: mockTranslator
-    }));
-
-    // This should fail because the raw "blocked:true" reaches the backend
+  test('raw blocked:true is translated before it reaches the API', async () => {
     const result = await searchTools.search_flows({
       query: 'blocked:true',
-      limit: 1  
+      limit: 1
     });
-    
-    // With enhanced boolean translator, this should now succeed
-    expect(result).toBeDefined();
+
     expect(result).toHaveProperty('boolean_translation');
+    expect(queryLog).toEqual(['status:blocked']);
   });
 
   test('boolean translation debug info is included', async () => {

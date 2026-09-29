@@ -1,10 +1,8 @@
 /**
  * Simple Boolean Translator for Firewalla MCP Server
  *
- * Replaces the over-engineered BooleanFieldTranslator with a minimal solution
- * that solves only the documented problem: Firewalla API requires "blocked:1" not "blocked:true"
- *
- * Philosophy: OSS elegance over complexity, solve real problems minimally
+ * The search tools' boolean translation: the Firewalla API requires
+ * "blocked:1", not "blocked:true"
  */
 
 import { outsideQuotes } from './msp-query.js';

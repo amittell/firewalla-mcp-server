@@ -1256,6 +1256,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `inferEntityTypeFromName` and `sanitizeInput` only they used (597 lines
   of `src/firewalla/client.ts`). `get_network_rules_summary` reads
   `getNetworkRules`, and its handler is unchanged.
+- Four modules no import from `src/server.ts` reaches, and so no tool:
+  `src/search/boolean-field-translator.ts`,
+  `src/validation/operator-validator.ts`,
+  `src/validation/cursor-validator.ts` and
+  `src/validation/progressive-validator.ts` (1,782 lines), with the two test
+  files and the one test that covered only `BooleanFieldTranslator`. The
+  search tools translate booleans with `simple-boolean-translator.ts`,
+  whose tests stay.
 
 ## [1.5.0] - 2026-09-25
 
