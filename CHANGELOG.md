@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `get_network_rules` and `get_network_rules_summary` answer an API failure
+  as `api_error`, as the other read tools that are not searches do. Both
+  gave no error type, so a 401 or an unreachable API came back as
+  `unknown_error`.
 - The npm publish no longer waits forever for CI on a docs-only tag
   commit. `ci.yml` skips a push that changes only `docs/`, top-level
   Markdown or `LICENSE` (#85), so such a commit on main has no CI run of
@@ -33,6 +37,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The project's copy of the Docker MCP catalog entry pins v2.0.0
   (b8dd6da), as its comment says it keeps the last pin submitted; it still
   held 1.1.0's.
+
+### Removed
+
+- `search_flows`' geographic analysis, which its answer never included. It
+  counted countries, ASNs, cloud-provider, VPN and high-risk flows from
+  fields flows do not carry, and the handler dropped the result. With it go
+  `RISK_THRESHOLD_FLOW_MIN`, which only it read, the unlisted
+  `include_analytics` argument, and `query_info.applied_filters.analytics`,
+  which said whether that argument was passed.
 
 ## [2.0.0] - 2026-09-29
 

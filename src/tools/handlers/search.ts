@@ -70,7 +70,6 @@ export interface SearchFlowsArgs extends BaseSearchArgs {
     end?: string;
   };
   geographic_filters?: FlowGeographicFilters;
-  include_analytics?: boolean;
 }
 
 export interface SearchAlarmsArgs extends BaseSearchArgs {
@@ -440,25 +439,6 @@ export class SearchFlowsHandler extends BaseToolHandler {
         );
       }
 
-      // ------------------------------------------------------------
-      // Validate include_analytics parameter if provided
-      // ------------------------------------------------------------
-      const includeAnalyticsValidation = ParameterValidator.validateBoolean(
-        searchArgs.include_analytics,
-        'include_analytics',
-        false
-      );
-
-      if (!includeAnalyticsValidation.isValid) {
-        return createErrorResponse(
-          this.name,
-          'Include analytics parameter validation failed',
-          ErrorType.VALIDATION_ERROR,
-          undefined,
-          includeAnalyticsValidation.errors
-        );
-      }
-
       const searchTools = createSearchTools(firewalla);
       const searchParams: SearchParams = {
         query: finalQuery,
@@ -472,7 +452,6 @@ export class SearchFlowsHandler extends BaseToolHandler {
         time_range: searchArgs.time_range,
         force_refresh: forceRefreshValidation.sanitizedValue as boolean,
         geographic_filters: searchArgs.geographic_filters,
-        include_analytics: includeAnalyticsValidation.sanitizedValue as boolean,
       };
 
       // The read's requests, counted into coverage.api_requests, retries
@@ -612,7 +591,6 @@ export class SearchFlowsHandler extends BaseToolHandler {
             // only when the filters added a term to the query
             geographic: !!geographicTerm,
             time_range: !!searchArgs.time_range,
-            analytics: !!searchArgs.include_analytics,
           },
         },
       };

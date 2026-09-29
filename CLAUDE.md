@@ -155,7 +155,6 @@ MCP_SESSION_IDLE_TIMEOUT_MS=1800000       # HTTP sessions idle this long are clo
 API_TIMEOUT=30000                         # API request timeout in ms (default: 30000, 1000-300000)
 CACHE_TTL=300                             # Response cache TTL in seconds (default: 300, 0-3600)
 CACHE_MAX_ENTRIES=1000                    # Most responses cached; least recently used dropped first (default: 1000, 1-100000)
-RISK_THRESHOLD_FLOW_MIN=7                 # High-risk threshold of search_flows' geographic analysis, which its answer does not include, so no visible effect (default: 7)
 DEFAULT_PAGE_SIZE=100                     # Default page size (default: 100)
 MAX_PAGE_SIZE=10000                       # Page size ceiling (default: 10000)
 LOG_LEVEL=info                            # error, warn, info or debug (default: info)
@@ -170,8 +169,9 @@ MCP_TEST_MODE=false                       # "true" (any case) starts with dummy 
   The registry and ListTools both filter on that list. Without the setting, a
   call to a write tool answers "Unknown tool" and sends nothing.
 - There is no read-only mode, safe mode or cache switch: `MCP_WAVE0_ENABLED`,
-  `MCP_READ_ONLY_MODE`, `MCP_DISABLED_TOOLS`, `MCP_CACHE_ENABLED` and
-  `MCP_DEBUG_MODE` are not read by the code. `API_RATE_LIMIT` (1-1000, default
+  `MCP_READ_ONLY_MODE`, `MCP_DISABLED_TOOLS`, `MCP_CACHE_ENABLED`,
+  `MCP_DEBUG_MODE` and (since 2.0.0) `RISK_THRESHOLD_FLOW_MIN` are not read by
+  the code. `API_RATE_LIMIT` (1-1000, default
   100) is applied: it is how many API requests the client starts in any rolling
   5 minutes (see Rate Limiting below). Check that `src/` reads a variable
   before documenting it.

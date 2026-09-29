@@ -20,7 +20,7 @@ import {
 } from '../utils/timestamp.js';
 import { ParameterValidator, SafeAccess } from '../validation/error-handler.js';
 import { EnhancedQueryValidator } from '../validation/enhanced-query-validator.js';
-import { getFieldValue, type EntityType } from '../validation/field-mapper.js';
+import type { EntityType } from '../validation/field-mapper.js';
 import { ErrorFormatter } from '../validation/error-formatter.js';
 import { enrichObjectWithGeo } from '../utils/geographic.js';
 import { targetListMatchesQuery } from '../utils/target-lists.js';
@@ -79,15 +79,6 @@ function ruleSatisfiesTerm(rule: any, term: MspTerm): boolean | undefined {
     return isTarget ? actual.includes(value) : actual === value;
   });
 }
-
-/**
- * Risk score from which search_flows' geographic analysis counts a flow as
- * high risk (default 7; RISK_THRESHOLD_FLOW_MIN overrides it)
- */
-const HIGH_RISK_FLOW_MIN = parseInt(
-  process.env.RISK_THRESHOLD_FLOW_MIN || '7',
-  10
-);
 
 /**
  * API parameters interface for search requests
@@ -769,12 +760,6 @@ export class SearchEngine {
       results = results.slice(0, params.limit);
     }
 
-    // Add geographic analysis if requested
-    let geographicAnalysis;
-    if (params.include_analytics || params.geographic_filters) {
-      geographicAnalysis = this.analyzeGeographicData(results);
-    }
-
     const result: SearchResult = {
       results,
       count: results.length,
@@ -796,9 +781,6 @@ export class SearchEngine {
     }
 
     // Add optional fields
-    if (geographicAnalysis) {
-      (result as any).geographic_analysis = geographicAnalysis;
-    }
     // Applied only when they restricted the query: filters that ask for
     // nothing ({ countries: [] }) add no term
     if (geographicQuery) {
@@ -1126,101 +1108,6 @@ export class SearchEngine {
    */
   private getNestedValue(obj: any, path: string): any {
     return SafeAccess.getNestedValue(obj, path);
-  }
-
-  /**
-   * Analyze geographic data for patterns and insights
-   */
-  private analyzeGeographicData(results: any[]): any {
-    const analysis = {
-      total_flows: results.length,
-      unique_countries: new Set(),
-      unique_continents: new Set(),
-      unique_asns: new Set(),
-      cloud_provider_flows: 0,
-      vpn_flows: 0,
-      high_risk_flows: 0,
-      top_countries: keyedByData<number>(),
-      top_asns: keyedByData<number>(),
-      geographic_data_available: false,
-      warnings: [] as string[],
-    };
-
-    let hasGeographicData = false;
-
-    results.forEach(flow => {
-      // Extract geographic data using field mapping
-      const country = getFieldValue(flow, 'country', 'flows');
-      const continent = getFieldValue(flow, 'continent', 'flows');
-      const asn = getFieldValue(flow, 'asn', 'flows');
-      const isCloud = getFieldValue(flow, 'is_cloud_provider', 'flows');
-      const isVpn = getFieldValue(flow, 'is_vpn', 'flows');
-      const riskScore = getFieldValue(flow, 'geographic_risk_score', 'flows');
-
-      // Check if any geographic data is available
-      if (country || continent || asn || isCloud || isVpn || riskScore) {
-        hasGeographicData = true;
-      }
-
-      if (country && typeof country === 'string') {
-        analysis.unique_countries.add(country);
-        analysis.top_countries[country] =
-          (analysis.top_countries[country] || 0) + 1;
-      }
-
-      if (continent) {
-        analysis.unique_continents.add(continent);
-      }
-
-      if (asn && typeof asn === 'string') {
-        analysis.unique_asns.add(asn);
-        analysis.top_asns[asn] = (analysis.top_asns[asn] || 0) + 1;
-      }
-
-      if (isCloud) {
-        analysis.cloud_provider_flows++;
-      }
-      if (isVpn) {
-        analysis.vpn_flows++;
-      }
-      if (riskScore && Number(riskScore) >= HIGH_RISK_FLOW_MIN) {
-        analysis.high_risk_flows++;
-      }
-    });
-
-    // Add warnings if no geographic data found
-    analysis.geographic_data_available = hasGeographicData;
-
-    if (!hasGeographicData && results.length > 0) {
-      analysis.warnings.push(
-        'No geographic data found in flow results. Geographic enrichment may be disabled or unavailable.'
-      );
-      analysis.warnings.push(
-        'Consider enabling geographic enrichment in Firewalla settings or check API configuration.'
-      );
-    }
-
-    // Convert sets to counts
-    return {
-      ...analysis,
-      unique_countries: analysis.unique_countries.size,
-      unique_continents: analysis.unique_continents.size,
-      unique_asns: analysis.unique_asns.size,
-      top_countries: Object.entries(analysis.top_countries)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 10)
-        .reduce((acc, [country, count]) => {
-          acc[country] = count;
-          return acc;
-        }, keyedByData<number>()),
-      top_asns: Object.entries(analysis.top_asns)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 5)
-        .reduce((acc, [asn, count]) => {
-          acc[asn] = count;
-          return acc;
-        }, keyedByData<number>()),
-    };
   }
 }
 

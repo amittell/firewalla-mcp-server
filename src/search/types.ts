@@ -106,7 +106,6 @@ export interface SearchParams {
   };
   force_refresh?: boolean; // Bypass cache for real-time data
   geographic_filters?: FlowGeographicFilters; // Flows: search_flows' geographic filters
-  include_analytics?: boolean; // Include geographic analysis in response
   box?: string; // Devices only: box gid to search (default FIREWALLA_BOX_ID)
   owner?: string; // Target lists only: the API's owner filter (global, a box gid, or several)
 }
