@@ -45,6 +45,7 @@ import {
   type FlowGeographicFilters,
 } from '../../utils/geographic-filters.js';
 import { targetListEntryCount } from '../../utils/target-lists.js';
+import { mapContinent } from '../../utils/geographic.js';
 import { bracketRangeError, findBracketRange } from '../../utils/msp-query.js';
 import { translateToMspQualifiers } from '../../utils/msp-qualifiers.js';
 import { commaListValues, ipv4InCidr } from '../../search/client-filter.js';
@@ -645,6 +646,49 @@ export class SearchFlowsHandler extends BaseToolHandler {
   }
 }
 
+/** A string that says something: not empty and not "unknown" */
+function knownText(value: unknown): string | null {
+  return typeof value === 'string' &&
+    value.trim() !== '' &&
+    !/^unknown$/i.test(value.trim())
+    ? value.trim()
+    : null;
+}
+
+/**
+ * An alarm's remote end and its geography, as search_alarms gives them:
+ * remote as the API sent it, without the geo the client's lookup adds;
+ * remote_country the API's remote.region, else the lookup's country;
+ * remote_continent that country's continent; and remote_city the
+ * lookup's, only when the lookup places the address in that country
+ */
+function remoteGeography(alarm: unknown): {
+  remote?: Record<string, unknown>;
+  remote_country: string | null;
+  remote_city: string | null;
+  remote_continent: string | null;
+} {
+  const remote = (alarm as { remote?: unknown })?.remote;
+  if (!remote || typeof remote !== 'object') {
+    return { remote_country: null, remote_city: null, remote_continent: null };
+  }
+  const { geo, ...sent } = remote as Record<string, unknown> & {
+    geo?: Record<string, unknown>;
+  };
+  const lookupCountry =
+    knownText(geo?.country_code)?.toUpperCase() ??
+    knownText(geo?.country)?.toUpperCase() ??
+    null;
+  const country = knownText(sent.region)?.toUpperCase() ?? lookupCountry;
+  return {
+    remote: sent,
+    remote_country: country,
+    remote_city:
+      country && lookupCountry === country ? knownText(geo?.city) : null,
+    remote_continent: country ? knownText(mapContinent(country)) : null,
+  };
+}
+
 export class SearchAlarmsHandler extends BaseToolHandler {
   name = 'search_alarms';
   description =
@@ -783,7 +827,7 @@ export class SearchAlarmsHandler extends BaseToolHandler {
       }
 
       // Process alarm data with enhanced standardization and schema harmonization
-      let processedAlarms = SafeAccess.safeArrayMap(
+      const processedAlarms = SafeAccess.safeArrayMap(
         (result as any).results,
         (alarm: Alarm) => {
           // Try to extract device information from various possible locations
@@ -874,15 +918,14 @@ export class SearchAlarmsHandler extends BaseToolHandler {
                 SafeAccess.getNestedValue(alarm as any, 'dst', 'unknown')
               )
             ),
+            // The remote end and its geography (remoteGeography). The
+            // remote object was dropped, the country the API sends with it
+            // too, and the pipeline enrichment run here on the whole list
+            // found no address in it, so no alarm had any geography
+            ...remoteGeography(alarm),
           };
         }
       );
-
-      // Apply geographic enrichment pipeline for IP addresses in alarms
-      processedAlarms = await this.enrichGeoIfNeeded(processedAlarms, [
-        'source_ip',
-        'destination_ip',
-      ]);
 
       // Create metadata for standardized response
       const metadata: SearchMetadata = {
@@ -917,7 +960,7 @@ export class SearchAlarmsHandler extends BaseToolHandler {
         differences: [
           'Device objects may not be fully populated in search results',
           "Some severity and status fields may show 'unknown' values",
-          'Geographic enrichment is applied but original data may be limited',
+          "remote_country is the API's remote.region where it sends one; the geoip-lite lookup fills in the rest",
         ],
       };
 

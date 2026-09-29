@@ -304,8 +304,12 @@ function generateRequestId(): string {
  */
 
 /**
- * Whether a response holds geographic data: a `geo` or `<field>_geo`
- * object, as the enrichment adds (remote.geo, source_ip_geo), at any depth
+ * Whether a response holds geographic data, at any depth: a `geo` or
+ * `<field>_geo` object, as the enrichment adds (remote.geo,
+ * source_ip_geo), or a known `<end>_country`, `<end>_city` or
+ * `<end>_continent`, as search_flows and search_alarms give them
+ * (destination_country, remote_country). The flat fields were not
+ * counted, so search_flows said false with destination_country "US"
  */
 function hasGeographicData(value: unknown, depth = 0): boolean {
   if (!value || typeof value !== 'object' || depth > 8) {
@@ -319,6 +323,10 @@ function hasGeographicData(value: unknown, depth = 0): boolean {
       ((key === 'geo' || key.endsWith('_geo')) &&
         entry !== null &&
         typeof entry === 'object') ||
+      (/_(country|city|continent)$/.test(key) &&
+        typeof entry === 'string' &&
+        entry.trim() !== '' &&
+        !/^unknown$/i.test(entry.trim())) ||
       hasGeographicData(entry, depth + 1)
   );
 }
