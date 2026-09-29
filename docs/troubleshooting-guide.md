@@ -58,6 +58,7 @@ Run through this checklist to identify the most common issues:
 | "Query is too long" | Query exceeds limits | Shorten or simplify query |
 | "Query contains invalid field names" | Invalid field name | Check valid field names |
 | "Firewalla API sent no answer" | Connectivity issue | Check network. After `ECONNABORTED`, `ETIMEDOUT`, `ECONNRESET` or `EPIPE` a read was already sent again once when time allowed; `ENOTFOUND` (DNS) and `ECONNREFUSED` are not retried |
+| "The outcome is unknown" | A write went out and got no answer; Firewalla may have applied it | Check with the read the message names before sending it again |
 | "Rate limit exceeded" | This process started `API_RATE_LIMIT` requests in 5 minutes, or the API answered 429 | Wait until the time the message gives; see [rate-limiting-guide.md](rate-limiting-guide.md) |
 
 ## Common Error Categories
@@ -86,7 +87,7 @@ The MCP server categorizes errors into specific types to help with troubleshooti
 
 #### 4. Network and API Failures
 - **Cause**: Connectivity or infrastructure issues, or an error answer from the API
-- **Type**: `api_error` (`search_error` for the search tools); nothing sets `network_error`
+- **Type**: `api_error` for a read (`search_error` for the search tools). A write that went out and got no answer is `network_error` instead, with an unknown outcome: `... was sent and not answered (...). The outcome is unknown: Firewalla may have applied the change. Check with <read> before trying again.`
 - **Message**: `Firewalla API sent no answer (ECONNABORTED: timeout of 30000ms exceeded)` or `Firewalla API answered 503 Service Unavailable after 2 attempts: ...`, after the tool's own prefix
 - **Recovery**: The client already sends a failed GET again once, 1 to 2 s later, after a timeout, a dropped connection or a 502, 503 or 504, when the answer could still come before the tool gives up; it never sends a write again. Check the network before trying the tool again
 - **Examples**: DNS failures (`ENOTFOUND`, not retried), connection timeouts
@@ -151,7 +152,7 @@ A numeric string such as `"100"` is converted and accepted.
 **Symptom**: `"limit is too large ... (got 50000, maximum: 1000)"` or `"limit must be a positive number ..."`
 
 **Common Limits**:
-- `limit`: the tool schemas give at most 500 for `get_active_alarms`, `get_flow_data`, `search_flows`, `search_alarms`, `get_bandwidth_usage`, `get_offline_devices`, `search_devices` and `search_target_lists`, and at most 1000 for `get_device_status`, `get_network_rules` and `get_target_lists`. The server itself refuses what is over `getToolLimit` in `src/config/limits.ts`: 500 for `get_active_alarms` and `get_bandwidth_usage`, 2000 for `get_network_rules_summary`, 1000 for the others
+- `limit`: each tool's schema lists the maximum its handler takes (`getToolLimit` in `src/config/limits.ts`): 500 for `get_active_alarms` and `get_bandwidth_usage`, 2000 for `get_network_rules_summary`, none for the two statistics tools, and 1000 for the others. Up to 1.5.0 the schemas listed 500 for `get_flow_data`, `search_flows`, `search_alarms`, `get_offline_devices`, `search_devices` and `search_target_lists`
 - `duration` (`create_rule`): 60 to 31,536,000 seconds
 - `query`: Maximum 2,000 characters
 
@@ -844,8 +845,9 @@ async function safeSearchFlows(params) {
 The server already sends a failed read again once when that can help (see
 Network Timeouts above), and every retry, yours included, counts against the
 100 requests per 5 minutes. This caller-side sketch retries only timeouts,
-decided by `errorType`; nothing sets `network_error`, so a network failure
-arrives as `api_error` with `Firewalla API sent no answer` in the message.
+decided by `errorType`. A read's network failure arrives as `api_error` with
+`Firewalla API sent no answer` in the message; a write's is `network_error`
+with an unknown outcome, which must not be retried blindly.
 ```javascript
 async function resilientOperation(operation, maxRetries = 2) {
   let lastError;
