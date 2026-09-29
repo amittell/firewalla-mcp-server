@@ -1,10 +1,21 @@
 name: CI
 
+# A change to these alone runs nothing: no job reads them. Run the
+# workflow by hand to check one anyway.
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'LICENSE'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -72,7 +83,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # A pull request launches on Linux; a push to main and a run by hand
+        # also launch on macOS and Windows, whose runners cost the most
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') }}
         node: ['18', '24']
 
     steps:
