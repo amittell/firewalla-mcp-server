@@ -38,6 +38,9 @@ const INVISIBLE =
 /** The message of each alarm GET /v2/alarms returns, in order */
 let alarmMessages: string[] = [];
 
+/** The type of each alarm, in order; 1 where none is given */
+let alarmTypes: unknown[] = [];
+
 /** The action of each rule GET /v2/rules returns, in order */
 let ruleActions: string[] = [];
 
@@ -91,7 +94,7 @@ function answer(url: string): unknown {
       results: alarmMessages.map((message, index) => ({
         aid: index + 1,
         gid: BOX,
-        type: 1,
+        type: alarmTypes[index] ?? 1,
         status: 1,
         ts: now,
         message,
@@ -255,21 +258,29 @@ describe('invisible characters are shown as markers', () => {
   ])(
     'in keys that read the same once marked, keeping both counts, %s',
     async (_order, messages) => {
-      // firewalla://threats/recent counts threats by type, and an alarm's
-      // type there is its message
+      // firewalla://threats/recent counts threats by type: a documented
+      // type's name, else "Alarm type <what the API sent>"
       alarmMessages = messages;
-      const { contents } = await client.readResource({
-        uri: 'firewalla://threats/recent',
-      });
-      const [resource] = contents;
-      const text = 'text' in resource ? resource.text : '';
-      expect(text).not.toMatch(INVISIBLE);
-      const { statistics } = JSON.parse(text).recent_threats;
-      expect(statistics.total).toBe(3);
-      expect(statistics.by_type).toEqual({
-        'x<U+200B>': 2,
-        'x<U+200B> <duplicate 2>': 1,
-      });
+      alarmTypes = messages;
+      try {
+        const { contents } = await client.readResource({
+          uri: 'firewalla://threats/recent',
+        });
+        const [resource] = contents;
+        const text = 'text' in resource ? resource.text : '';
+        expect(text).not.toMatch(INVISIBLE);
+        const recent = JSON.parse(text).recent_threats;
+        expect(recent.statistics.total).toBe(3);
+        expect(recent.statistics.by_type).toEqual({
+          'Alarm type x<U+200B>': 2,
+          'Alarm type x<U+200B> <duplicate 2>': 1,
+        });
+        expect(
+          recent.threats.map((threat: { message: string }) => threat.message)
+        ).toEqual(['x<U+200B>', 'x<U+200B>', 'x<U+200B>']);
+      } finally {
+        alarmTypes = [];
+      }
     }
   );
 
