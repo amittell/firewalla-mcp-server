@@ -227,11 +227,15 @@ export class RequestRateLimiter {
         }
         const now = this.clock.now();
         const at = this.slotAt(now);
+        // Checked on every pass, a free slot included: a turn that comes
+        // after the deadline (behind a request that waited out a pause),
+        // or a wake-up after it (a release, or a timer running late),
+        // takes no slot
+        if (Math.max(at, now) > deadline) {
+          throw this.unavailable(Math.max(at, now));
+        }
         if (at <= now) {
           return this.take(now);
-        }
-        if (at > deadline) {
-          throw this.unavailable(at);
         }
         await this.sleepUnlessAborted(at - now, signal);
       }

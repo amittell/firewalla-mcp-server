@@ -53,6 +53,24 @@ class ManualClock implements Clock {
       this.sleepers.push({ at: this.time + Math.max(ms, 0), wake });
     });
 
+  /**
+   * Moves the clock `ms` forward without ending any sleep, as when a timer
+   * runs late; the next advance() ends the sleeps now due
+   */
+  jump(ms: number): void {
+    this.time += ms;
+  }
+
+  /** Ends the sleeps due by now, at the current time, as late timers do */
+  async fireLate(): Promise<void> {
+    const due = this.sleepers.filter(sleeper => sleeper.at <= this.time);
+    this.sleepers = this.sleepers.filter(sleeper => sleeper.at > this.time);
+    for (const sleeper of due) {
+      sleeper.wake();
+    }
+    await settle();
+  }
+
   /** Moves the clock `ms` forward, ending each sleep when its time comes */
   async advance(ms: number): Promise<void> {
     const end = this.time + ms;
@@ -304,9 +322,143 @@ describe('client-side rate limit', () => {
     expect(sent.map(request => request.at)).toEqual([
       0, 5_000, 20_000, 300_000, 316_000,
     ]);
+    // Stopped by the tool's deadline, checked before its budget
     expect(stderr.join('')).toContain(
-      'API Request not sent: the retry of GET /v2/boxes could not answer before its tool gives up'
+      'Not sent: the tool gave up before GET /v2/boxes was sent'
     );
+  });
+
+  describe('a waiter whose turn or wake-up comes after its deadline', () => {
+    // Copilot on 656d0b9: "A queued rate-limit waiter can bypass its
+    // deadline after a release wake-up." The loop checked the deadline only
+    // when no slot was free.
+
+    it('does not take a free slot when its turn comes after its deadline', async () => {
+      // Two slots, at 0 and 5 s. A waits for the one freeing at 300 s; R,
+      // queued behind it with an earlier deadline (305 s), for the one at
+      // 305 s. A 429 then holds every request until 310 s: A takes its slot
+      // then, and R's turn comes 5 s after its deadline, with a slot free.
+      const clock = new ManualClock();
+      const limiter = new RequestRateLimiter(2, clock);
+      limiter.tryAcquireSlot();
+      await clock.advance(5_000);
+      limiter.tryAcquireSlot();
+      await clock.advance(285_000);
+      const first = track(limiter.acquire(START + 330_000));
+      const late = track(limiter.acquire(START + 305_000));
+      limiter.pauseUntil(START + 310_000);
+      await clock.advance(20_000);
+
+      expect(first.value?.at).toBe(START + 310_000);
+      expect(late.error).toBeInstanceOf(RateLimitError);
+      expect((limiter as any).started).toHaveLength(1);
+    });
+
+    it('does not take the slot when a release wakes it after its deadline, its own timer late', async () => {
+      const clock = new ManualClock();
+      const limiter = new RequestRateLimiter(1, clock);
+      const taken = limiter.tryAcquireSlot();
+      await clock.advance(290_000);
+      // Due to wake at 300 s, within its deadline of 305 s
+      const waiter = track(limiter.acquire(START + 305_000));
+      await settle();
+      // Its timer runs late; at 306 s a slot is given back
+      clock.jump(16_000);
+      limiter.release(taken!);
+      await settle();
+
+      expect(waiter.error).toBeInstanceOf(RateLimitError);
+      expect((limiter as any).started).toEqual([]);
+    });
+
+    it('does not take the slot when its own timer fires after its deadline', async () => {
+      const clock = new ManualClock();
+      const limiter = new RequestRateLimiter(1, clock);
+      limiter.tryAcquireSlot();
+      await clock.advance(290_000);
+      const waiter = track(limiter.acquire(START + 305_000));
+      await settle();
+      clock.jump(16_000);
+      await clock.fireLate();
+
+      expect(waiter.error).toBeInstanceOf(RateLimitError);
+      expect((limiter as any).started).toHaveLength(0);
+    });
+
+    it('takes no slot when a release wakes it after its tool gave up', async () => {
+      const clock = new ManualClock();
+      const limiter = new RequestRateLimiter(1, clock);
+      const taken = limiter.tryAcquireSlot();
+      const controller = new AbortController();
+      const waiter = track(limiter.acquire(START + 600_000, controller.signal));
+      await clock.advance(1_000);
+      // Both in the same tick: the wake-up finds the signal aborted
+      limiter.release(taken!);
+      controller.abort(new Error('tool gave up'));
+      await settle();
+
+      expect(waiter.error?.message).toBe('tool gave up');
+      expect((limiter as any).started).toEqual([]);
+    });
+
+    it("a request woken after its tool's deadline, before the tool's timer ran, is not sent", async () => {
+      // The tool starts at 275 s (deadline 305 s) and reads at 295 s,
+      // queued for the slot freeing at 310 s. At 307 s a slot is given
+      // back and wakes it; the tool's own timer, a real one, has not run.
+      const { client, clock, sent } = makeClient(1, () => boxes);
+      jest.spyOn(Date, 'now').mockImplementation(() => clock.now());
+      await clock.advance(10_000);
+      await client.getBoxes('a');
+      await clock.advance(265_000);
+      const read = track(
+        withToolTimeout(async () => {
+          await clock.sleep(20_000);
+          return client.getBoxes('r');
+        }, 'get_boxes')
+      );
+      await clock.advance(20_000);
+      await clock.advance(12_000);
+      const limiter = (client as any).rateLimiter;
+      limiter.release(limiter.started[0]);
+      await settle();
+
+      expect(read.error?.message).toContain('Not sent: the tool gave up');
+      expect(sent.map(request => request.at)).toEqual([10_000]);
+      expect(limiter.started).toEqual([]);
+    });
+
+    it('a retry woken after its budget ran out is not sent', async () => {
+      // As in the test above it: a fast 503 at 300 s in a tool with a
+      // 315 s deadline, its retry queued for the slot freeing at 305 s.
+      // Its timer runs late, and a slot given back at 316 s wakes it.
+      jest.spyOn(Math, 'random').mockReturnValue(0.5);
+      const { client, clock, sent } = makeClient(3, n =>
+        n === 4 ? { status: 503 } : boxes
+      );
+      jest.spyOn(Date, 'now').mockImplementation(() => clock.now());
+      await client.getBoxes('a');
+      await clock.advance(5_000);
+      await client.getBoxes('b');
+      await clock.advance(15_000);
+      await client.getBoxes('c');
+      await clock.advance(265_000);
+      const read = track(
+        withToolTimeout(async () => {
+          await clock.sleep(14_000);
+          return client.getBoxes('r');
+        }, 'get_boxes')
+      );
+      await clock.advance(17_000);
+      clock.jump(14_000);
+      const limiter = (client as any).rateLimiter;
+      limiter.release(limiter.started[0]);
+      await settle();
+
+      expect(read.error?.message).toContain('503');
+      expect(sent.map(request => request.at)).toEqual([
+        0, 5_000, 20_000, 300_000,
+      ]);
+    });
   });
 
   it('gives up on a queued request when a pause pushes its slot past its deadline, and the queue moves on', async () => {
