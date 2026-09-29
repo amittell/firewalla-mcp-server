@@ -64,14 +64,14 @@ describe('IP Geolocation Enrichment', () => {
 
   afterEach(() => {
     // Clear geographic cache between tests
-    if (client && client.clearGeographicCache) {
-      client.clearGeographicCache();
+    if (client) {
+      (client as any).geoCache.clear();
     }
   });
 
   describe('Geographic Cache Management', () => {
     test('should initialize geographic cache', () => {
-      const stats = client.getGeographicCacheStats();
+      const stats = (client as any).geoCache.getStats();
       expect(stats.size).toBe(0);
       expect(stats.maxSize).toBe(10000);
       expect(stats.hitRate).toBe(0);
@@ -79,12 +79,12 @@ describe('IP Geolocation Enrichment', () => {
 
     test('should clear geographic cache', () => {
       // Cache should be empty initially
-      const initialStats = client.getGeographicCacheStats();
+      const initialStats = (client as any).geoCache.getStats();
       expect(initialStats.size).toBe(0);
 
-      client.clearGeographicCache();
+      (client as any).geoCache.clear();
       
-      const clearedStats = client.getGeographicCacheStats();
+      const clearedStats = (client as any).geoCache.getStats();
       expect(clearedStats.size).toBe(0);
       expect(clearedStats.hitCount).toBe(0);
       expect(clearedStats.missCount).toBe(0);
@@ -219,7 +219,12 @@ describe('IP Geolocation Enrichment', () => {
         }
       };
 
-      const enrichedAlarm = clientAny.enrichAlarmWithGeographicData(mockAlarm);
+      const enrichedAlarm = clientAny.enrichWithGeographicData(mockAlarm, [
+        'src.ip',
+        'dst.ip',
+        'remote.ip',
+        'device.ip',
+      ]);
 
       // Should have enriched remote IP
       expect(enrichedAlarm.remote.geo).toBeDefined();
@@ -313,7 +318,7 @@ describe('IP Geolocation Enrichment', () => {
       expect(firstLookup).toEqual(secondLookup);
       
       // Cache stats should show entries
-      const stats = client.getGeographicCacheStats();
+      const stats = (client as any).geoCache.getStats();
       expect(stats.size).toBeGreaterThanOrEqual(1);
       
       // If we got valid data, we should have a cache hit
@@ -336,7 +341,7 @@ describe('IP Geolocation Enrichment', () => {
       expect(result3).toBeNull();
       
       // Should be cached (even null results)
-      const stats = client.getGeographicCacheStats();
+      const stats = (client as any).geoCache.getStats();
       expect(stats.size).toBeGreaterThanOrEqual(1);
       expect(stats.hitCount).toBeGreaterThan(0);
     });

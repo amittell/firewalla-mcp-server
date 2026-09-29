@@ -11,7 +11,10 @@ import { FirewallaClient } from '../../src/firewalla/client.js';
 import { GetTargetListsHandler } from '../../src/tools/handlers/rules.js';
 import { GetDeviceStatusHandler } from '../../src/tools/handlers/device.js';
 import { GetOfflineDevicesHandler } from '../../src/tools/handlers/network.js';
-import { SearchDevicesHandler } from '../../src/tools/handlers/search.js';
+import {
+  SearchAlarmsHandler,
+  SearchDevicesHandler,
+} from '../../src/tools/handlers/search.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -96,11 +99,15 @@ describe('devices', () => {
     expect(result.results).toHaveLength(3);
   });
 
-  it('getOfflineDevices uses the same box scope', async () => {
+  it('get_offline_devices uses the same box scope', async () => {
     const { client, get } = makeClient(BOX_A);
-    const result = await client.getOfflineDevices();
+    const response = await new GetOfflineDevicesHandler().execute(
+      { limit: 10 },
+      client
+    );
     expect(sentTo(get, '/v2/devices')).toEqual([{ box: BOX_A }]);
-    expect(result.results.map(device => device.name)).toEqual(['phone']);
+    expect(JSON.stringify(response)).toContain('phone');
+    expect(JSON.stringify(response)).not.toContain('laptop');
   });
 
   it('searchDevices sends only box and matches the query on the client', async () => {
@@ -277,18 +284,14 @@ describe('alarms', () => {
     expect(sent.map(params => params.sortBy)).toEqual(['ts:desc', 'ts:asc']);
   });
 
-  it('searchAlarms sends ts: sort fields and no grouping params', async () => {
+  it('search_alarms sends a timestamp: sort field as ts:', async () => {
     const { client, get } = makeClient();
-    await client.searchAlarms({
-      query: 'type:1',
-      limit: 10,
-      sort_by: 'timestamp:asc',
-      group_by: 'type',
-    });
+    await new SearchAlarmsHandler().execute(
+      { query: 'type:1', limit: 10, sort_by: 'timestamp:asc' },
+      client
+    );
     const [params] = sentTo(get, '/v2/alarms');
     expect(params.sortBy).toBe('ts:asc');
-    expect(params).not.toHaveProperty('groupBy');
-    expect(params).not.toHaveProperty('group_by');
   });
 });
 

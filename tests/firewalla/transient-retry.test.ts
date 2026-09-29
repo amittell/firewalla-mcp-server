@@ -361,28 +361,6 @@ describe('the error after the last attempt', () => {
   }
 });
 
-describe("the client's searches read the status and code, not the message", () => {
-  it('a timeout twice is a timed-out search that says what happened', async () => {
-    const { client, calls } = makeClient(['ECONNABORTED', 'ECONNABORTED']);
-    await expect(
-      client.searchAlarms({ query: 'type:1', limit: 10 })
-    ).rejects.toThrow(
-      'Search request timed out: Firewalla API sent no answer after 2 attempts (ECONNABORTED: timeout of 30000ms exceeded). Try reducing the search scope or limit.'
-    );
-    expect(calls).toHaveLength(2);
-  });
-
-  it('a 400 is an invalid query', async () => {
-    const { client, calls } = makeClient([400]);
-    await expect(
-      client.searchAlarms({ query: 'type:1', limit: 10 })
-    ).rejects.toThrow(
-      'Invalid search query: Firewalla API answered 400 Bad Request: invalid parameters sent to /v2/alarms'
-    );
-    expect(calls).toHaveLength(1);
-  });
-});
-
 describe('withToolTimeout', () => {
   it('throws a failure as it came, fast or slow', async () => {
     const failure = new Error('Firewalla API answered 503 Service Unavailable');

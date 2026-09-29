@@ -5,6 +5,7 @@
  */
 
 import { FirewallaClient } from '../../src/firewalla/client.js';
+import { SearchAlarmsHandler } from '../../src/tools/handlers/search.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -114,13 +115,16 @@ describe('requests to capped list endpoints', () => {
     expect(request.mock.calls.map(call => call[4])).toEqual([false, true]);
   });
 
-  it('searchFlows and searchAlarms send the qualifiers the API accepts', async () => {
+  it('searchFlows and search_alarms send the qualifiers the API accepts', async () => {
     const { client, request } = makeClient(10);
     await client.searchFlows({
       query: 'blocked:true AND bytes:>1MB',
       limit: 10,
     });
-    await client.searchAlarms({ query: 'source_ip:192.168.*', limit: 10 });
+    await new SearchAlarmsHandler().execute(
+      { query: 'source_ip:192.168.*', limit: 10 },
+      client
+    );
     const [flowQuery, alarmQuery] = request.mock.calls.map(
       ([, , params]) => params.query
     );

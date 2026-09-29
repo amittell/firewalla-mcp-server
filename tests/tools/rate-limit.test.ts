@@ -218,12 +218,12 @@ describe('client-side rate limit', () => {
     }));
     const first = [
       track(client.getBoxes('group-1')),
-      track(client.makeApiCall('get', '/v2/devices')),
+      track((client as any).request('GET', '/v2/devices')),
     ];
     await clock.advance(285_000);
     const queued = [
       track(client.getBoxes('group-2')),
-      track(client.makeApiCall('get', '/v2/rules')),
+      track((client as any).request('GET', '/v2/rules')),
     ];
     // Needs a slot the two queued requests have yet to take and free
     const refused = track(client.getBoxes('group-3'));
