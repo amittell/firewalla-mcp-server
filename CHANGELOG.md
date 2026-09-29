@@ -1166,6 +1166,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `npx firewalla-mcp-server --version` and `--test`, flags the server does
   not have, and checked the token with `Authorization: Bearer`, where the API
   takes `Token`.
+- `pause_rule` and `resume_rule` classify a failure by the error's class and
+  status. `pause_rule` looked for "401" and "403" in the message, and a 401
+  now reads `Authentication failed. Please check your MSP token.`, so on a
+  stub a 401 answered `errorType` `api_error` while a 403 was
+  `authentication_error`. `resume_rule` answered `unknown_error` for every
+  failure, and the rule-status read both tools make first `api_error`. A 401,
+  or a 403, is now `authentication_error` in all three, a 404 on the pause
+  gets the advice to check the rule ID, and anything else is `api_error`.
 
 ### Removed
 

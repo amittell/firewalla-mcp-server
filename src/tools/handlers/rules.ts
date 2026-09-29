@@ -9,7 +9,9 @@ import {
   type ToolResponse,
 } from './base.js';
 import {
+  ApiRequestError,
   BoxSelectionError,
+  ForbiddenError,
   type FirewallaClient,
 } from '../../firewalla/client.js';
 import {
@@ -58,6 +60,19 @@ interface RuleStatusInfo {
 /**
  * Check the current status of a rule before performing operations
  */
+/**
+ * The kind of a rule tool's failure, from the error's class and status, not
+ * its message: a 401, or a 403 (ForbiddenError: another account's rule, a
+ * read-only token, or a rule ID the API does not know), is
+ * authentication_error, and anything else api_error
+ */
+function ruleFailureType(error: unknown): ErrorType {
+  return error instanceof ForbiddenError ||
+    (error instanceof ApiRequestError && error.status === 401)
+    ? ErrorType.AUTHENTICATION_ERROR
+    : ErrorType.API_ERROR;
+}
+
 async function checkRuleStatus(
   ruleId: string,
   toolName: string,
@@ -120,7 +135,7 @@ async function checkRuleStatus(
       errorResponse: createErrorResponse(
         toolName,
         `Failed to check rule status: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        ErrorType.API_ERROR,
+        ruleFailureType(error),
         { rule_id: ruleId }
       ),
     };
@@ -471,28 +486,22 @@ export class PauseRuleHandler extends BaseToolHandler {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
 
-      // Provide enhanced error context based on common failure scenarios
-      let errorType = ErrorType.API_ERROR;
+      // By the error's class and status, not its message: a 401 reads
+      // "Authentication failed. ..." with no "401" in it
+      const errorType = ruleFailureType(error);
       const suggestions: string[] = [];
       const context: Record<string, any> = {
         rule_id: args?.rule_id,
         operation: 'pause_rule',
       };
 
-      // Analyze error message for specific guidance
-      if (errorMessage.includes('not found') || errorMessage.includes('404')) {
-        errorType = ErrorType.API_ERROR;
+      if (error instanceof ApiRequestError && error.status === 404) {
         suggestions.push(
           'Verify the rule_id exists by searching rules first: search_rules query:"id:your_rule_id"',
           'Check if the rule was recently deleted or modified',
           'Ensure you have permission to access this rule'
         );
-      } else if (
-        errorMessage.includes('permission') ||
-        errorMessage.includes('401') ||
-        errorMessage.includes('403')
-      ) {
-        errorType = ErrorType.AUTHENTICATION_ERROR;
+      } else if (errorType === ErrorType.AUTHENTICATION_ERROR) {
         suggestions.push(
           'Verify your Firewalla MSP API credentials are valid',
           'Check if your API token has rule management permissions',
@@ -500,10 +509,11 @@ export class PauseRuleHandler extends BaseToolHandler {
           'The MSP API also answers 403 for a rule ID that does not exist; check the ID with get_network_rules'
         );
       } else if (
+        // The API's own words reach the message only from an answer with
+        // success: false ("Request failed: ..."), which has no status
         errorMessage.includes('already paused') ||
         errorMessage.includes('inactive')
       ) {
-        errorType = ErrorType.API_ERROR;
         suggestions.push(
           'Rule may already be paused - check rule status first',
           'Use resume_rule if the rule needs to be reactivated',
@@ -650,7 +660,10 @@ export class ResumeRuleHandler extends BaseToolHandler {
 
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
-      return this.createErrorResponse(`Failed to resume rule: ${errorMessage}`);
+      return this.createErrorResponse(
+        `Failed to resume rule: ${errorMessage}`,
+        ruleFailureType(error)
+      );
     }
   }
 }
