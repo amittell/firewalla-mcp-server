@@ -60,7 +60,8 @@ Rate limit exceeded (HTTP 429): the Firewalla API allows 100 requests per 5 minu
 sentence gives the reason: `Not sent: this client started 100 requests in
 the last 5 minutes, ...`, `Not sent: the API refused an earlier request with
 HTTP 429, ...`, `Gave up after 2 retries.` or `A POST is not retried.` A
-tool's error response includes this message.
+tool's error response includes this message, with `errorType`
+`rate_limit_error`.
 
 ## stderr lines
 

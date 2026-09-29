@@ -69,36 +69,39 @@ refused as a `validation_error`.
 | `api_error` | A request to the MSP API failed, for most tools; the message says what the API answered |
 | `search_error` | The same, for the five search tools |
 | `timeout_error` | The tool passed its time limit, 30 s by default |
-| `network_error` | A write tool's request went out and got no HTTP status: its outcome is unknown. `details.write` is `unknown`; see [Failed API Requests](#failed-api-requests) |
-| `authentication_error` | Only `pause_rule`, for a failure whose message has 401, 403 or "permission" |
+| `rate_limit_error` | The API answered 429, or the client refused to send a request for the rate limit; see [Rate Limit Errors](#rate-limit-errors) |
+| `network_error` | A write tool's request went out and got no HTTP status, or 504: its outcome is unknown. `details.write` is `unknown`; see [Failed API Requests](#failed-api-requests) |
+| `authentication_error` | Only `pause_rule`, for a failure whose message has 401, 403 or "permission": a 403 (`Forbidden (HTTP 403)`), not a 401, whose message is `Authentication failed. ...` |
 | `unknown_error` | An error no handler caught, such as a call to a tool that is not registered: `Unknown tool: <name>. Available tools: ...` (a write tool without `FIREWALLA_ENABLE_WRITE_TOOLS=true`, for one) |
 
-The `ErrorType` enum also has `rate_limit_error`, `cache_error`,
-`correlation_error`, `service_unavailable` and `tool_disabled`, which no tool
-sets. A read's network failure and a rate-limit refusal arrive as
-`api_error` or `search_error`, and the message says which.
+The `ErrorType` enum also has `cache_error`, `correlation_error`,
+`service_unavailable` and `tool_disabled`, which no tool sets. A read's
+network failure arrives as `api_error` or `search_error`, and the message
+says which.
 
 ## Failed API Requests
 
-The handler puts its own prefix before the client's message, for example
-`Failed to get active alarms: ` or `Failed to search flows: `.
+The handler puts one prefix before the client's message, for example
+`Failed to get active alarms: ` or `Failed to search flows: `. The
+unknown-outcome messages below have none.
 
 | The API's answer | Message |
 |---|---|
 | 400 | `Firewalla API answered 400 Bad Request: invalid parameters sent to <path>` |
-| 401 | `Request failed: Authentication failed. Please check your MSP token.` |
+| 401 | `Authentication failed. Please check your MSP token.` |
 | 403 | `Forbidden (HTTP 403): <the API's message>.` It says the request names a box this token cannot access, or the token cannot access the resource, and that `get_boxes` lists the gids the token can access. For a write it adds that the token may be read-only: MSP 2.12 adds read-only tokens |
-| 404 | `Request failed: Resource not found. Please check your Box ID.` |
+| 404 | `Resource not found. Please check your Box ID.` `get_specific_alarm` says `Alarm not found: <id>. The alarm may have been deleted or the ID may be incorrect.`, and only when every box it asked answered 404 |
 | 429 | `Rate limit exceeded (HTTP 429): ...`; see [Rate Limit Errors](#rate-limit-errors) |
 | 500 | `Firewalla API answered 500 Internal Server Error: the Firewalla API is experiencing issues` |
 | 502 | `Firewalla API answered 502 Bad Gateway: a gateway could not reach the Firewalla API server, or the resource ID is invalid` |
 | 503 | `Firewalla API answered 503 Service Unavailable: the Firewalla API is temporarily down` |
-| 504 | `Firewalla API answered 504 Gateway Timeout: a gateway timed out waiting for the Firewalla API` |
+| 504 | `Firewalla API answered 504 Gateway Timeout: a gateway timed out waiting for the Firewalla API`. To a write: `POST /v2/rules got 504 Gateway Timeout: a gateway stopped waiting for the Firewalla API, which may still carry it out. The outcome is unknown: ...`, as `network_error` (below) |
+| Never reached the API | `Could not reach the Firewalla API (ENOTFOUND: ...)`: the connection was refused, the host did not resolve or was unreachable, or TLS failed. Not sent again, and a write that failed this way was not applied |
 | No answer, to a read | `Firewalla API sent no answer (ECONNABORTED: timeout of 30000ms exceeded)`, with `after 2 attempts` when it was sent again |
 | No answer, to a write that went out | `POST /v2/rules was sent and not answered (ECONNABORTED: timeout of 100ms exceeded). The outcome is unknown: Firewalla may have applied the change. Check with get_network_rules before trying again.` as `network_error`, with no prefix, `details.write: "unknown"` and the read in `details.check`. `archive_alarm`, `mute_alarm` and `delete_alarm` say the alarm may or may not have been changed and to check with `get_specific_alarm` |
 
-A write refused before it was written (`ECONNREFUSED`, or a host name that
-did not resolve) was not applied, and fails with the usual prefix.
+A write answered 502 or 503 is a failure and is not sent again: the API
+did not take it.
 
 A GET that got 502, 503 or 504 is sent again once (see [Retries](#retries)), and the
 message then says so after the status: `Firewalla API answered 503 Service
@@ -128,7 +131,8 @@ handlers do not retry on top of the client.
 ## Rate Limit Errors
 
 Each server process starts at most `API_RATE_LIMIT` requests (default 100) in
-any rolling 5 minutes, and a request waits at most 20 s for a slot. The
+any rolling 5 minutes, and a request waits at most 20 s for a slot. Both
+kinds of refusal are `rate_limit_error`, after the tool's prefix. The
 messages:
 
 ```text
@@ -199,11 +203,12 @@ backslash, `?`, `#`, `%`, whitespace or a control character, or is `.` or
 
 | Message | Cause |
 |---|---|
-| `Invalid query syntax` | An unclosed or unmatched parenthesis, or a comma list with a space around a comma (`online:true, false`); `details.syntax_errors` says what, and `details.examples` gives queries that work |
+| `Invalid query structure` | A parenthesis or bracket that is never closed or never opened, a control character (U+0000 to U+001F other than tab, line feed and carriage return, U+007F, or U+0080 to U+009F), or more than 2000 characters, checked outside quotes by every query-taking tool: `Query opens a parenthesis '(' at position 0 that is never closed`, `Query contains a control character (U+0085) at position 12`, `Query is too long (2008 characters; maximum 2000)` |
+| `Invalid query syntax` | A comma list with a space around a comma (`online:true, false`), among others; `details.syntax_errors` says what, and `details.examples` gives queries that work |
+| `Query is too complex` | More than 20 `AND`/`OR`, 15 field terms or 5 `[low TO high]` ranges, counted outside quotes: `Too many logical operators: 21 (at most 20)`, `Too many field terms: 16 (at most 15)`, `Too many ranges: 6 (at most 5)` |
 | `Query contains invalid field names` | A field the tool does not know. [query-syntax-guide.md](query-syntax-guide.md) lists each entity's fields; a bare MAC address gets a hint to write `mac:` (devices) or `device.id:` (others) |
 | `Query "<query>" cannot be sent to the MSP API: ...` | A query with no form in the API's grammar: an `OR` between different fields, `NOT` over an `AND`, or `field:[low TO high]` (the API's ranges are `field:low-high`). `details.suggested_queries` gives runnable queries whose results together are the query's, or the query in API form |
 | Refusal of `country:`, `continent:`, `city:`, `asn:` and the like | The API has no such qualifier and would match nothing. For countries, the suggestion puts `region:` in their place |
-| `Query contains potentially dangerous content` | `search_flows` and `search_alarms` answer it as `search_error` |
 
 ## Configuration Errors
 
@@ -229,7 +234,7 @@ NODE_ENV=production. ...`
 - A read that failed with a 5xx or no answer was already sent again once when
   that could help. A retry of your own counts against the 100 requests per 5
   minutes as well.
-- For `Rate limit exceeded`, wait until the time the message gives.
+- For `rate_limit_error` (`Rate limit exceeded`), wait until the time the message gives.
 - For a write tool's `timeout_error` or `network_error`, read
   `details.write`: `not_sent` changed nothing; `unknown` may have been
   applied, so check with the read the message names before sending it

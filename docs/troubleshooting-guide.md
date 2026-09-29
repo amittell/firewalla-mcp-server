@@ -57,9 +57,10 @@ Run through this checklist to identify the most common issues:
 | "timed out after" | The tool passed its 30 s | Reduce scope or use filters |
 | "Query is too long" | Query exceeds limits | Shorten or simplify query |
 | "Query contains invalid field names" | Invalid field name | Check valid field names |
-| "Firewalla API sent no answer" | Connectivity issue | Check network. After `ECONNABORTED`, `ETIMEDOUT`, `ECONNRESET` or `EPIPE` a read was already sent again once when time allowed; `ENOTFOUND` (DNS) and `ECONNREFUSED` are not retried |
+| "Firewalla API sent no answer" | Connectivity issue | Check network. After `ECONNABORTED`, `ETIMEDOUT`, `ECONNRESET` or `EPIPE` a read was already sent again once when time allowed |
+| "Could not reach the Firewalla API" | The host did not resolve (`ENOTFOUND`), the connection was refused or unreachable, or TLS failed | Check `FIREWALLA_MSP_ID` and the network. It is not sent again, and a write that failed this way was not applied |
 | "The outcome is unknown" | A write went out and got no answer; Firewalla may have applied it | Check with the read the message names before sending it again |
-| "Rate limit exceeded" | This process started `API_RATE_LIMIT` requests in 5 minutes, or the API answered 429 | Wait until the time the message gives; see [rate-limiting-guide.md](rate-limiting-guide.md) |
+| "Rate limit exceeded" (`rate_limit_error`) | This process started `API_RATE_LIMIT` requests in 5 minutes, or the API answered 429 | Wait until the time the message gives; see [rate-limiting-guide.md](rate-limiting-guide.md) |
 
 ## Common Error Categories
 
@@ -79,18 +80,18 @@ The MCP server categorizes errors into specific types to help with troubleshooti
 - **Recovery**: Optimize query or reduce scope. A write tool says whether its write was sent: one not sent changed nothing; one sent and not answered may have been applied, so check with the read it names before trying again
 - **Examples**: Large dataset processing, many pages of flows
 
-#### 3. Authentication Errors (`authentication_error`)
-- **Cause**: Invalid or expired credentials
-- **Response Time**: 200ms - 2 seconds
+#### 3. Authentication Errors
+- **Cause**: Invalid or expired credentials, or a token without access
+- **Type**: an invalid token (HTTP 401) is `api_error` with `Authentication failed. Please check your MSP token.`; only `pause_rule` answers `authentication_error`, for a 403 or a message with "permission"
 - **Recovery**: Fix authentication configuration
 - **Examples**: Invalid MSP token, insufficient permissions
 
 #### 4. Network and API Failures
 - **Cause**: Connectivity or infrastructure issues, or an error answer from the API
-- **Type**: `api_error` for a read (`search_error` for the search tools). A write that went out and got no answer is `network_error` instead, with an unknown outcome: `... was sent and not answered (...). The outcome is unknown: Firewalla may have applied the change. Check with <read> before trying again.`
-- **Message**: `Firewalla API sent no answer (ECONNABORTED: timeout of 30000ms exceeded)` or `Firewalla API answered 503 Service Unavailable after 2 attempts: ...`, after the tool's own prefix
+- **Type**: `api_error` for a read (`search_error` for the search tools), and `rate_limit_error` for a 429 or a rate-limit refusal. A write that went out and got no answer, or got 504, is `network_error` instead, with an unknown outcome: `... was sent and not answered (...). The outcome is unknown: Firewalla may have applied the change. Check with <read> before trying again.`
+- **Message**: `Firewalla API sent no answer (ECONNABORTED: timeout of 30000ms exceeded)`, `Firewalla API answered 503 Service Unavailable after 2 attempts: ...`, or, for a request that never reached the API, `Could not reach the Firewalla API (ENOTFOUND: ...)`, after the tool's one prefix
 - **Recovery**: The client already sends a failed GET again once, 1 to 2 s later, after a timeout, a dropped connection or a 502, 503 or 504, when the answer could still come before the tool gives up; it never sends a write again. Check the network before trying the tool again
-- **Examples**: DNS failures (`ENOTFOUND`, not retried), connection timeouts
+- **Examples**: DNS failures (`Could not reach the Firewalla API (ENOTFOUND: ...)`, not retried), connection timeouts
 
 ## Parameter Validation Issues
 
@@ -527,7 +528,7 @@ function getDeviceName(device) {
 #### 2. Reading Device Fields
 `get_device_status` returns each device with `id` (its MAC address, or
 `ovpn:` / `wg_peer:` for VPN clients), `gid`, `name`, `ip`, `mac_vendor`,
-`online`, `last_seen`, `ip_reserved`, `network`, `group`, `total_download`
+`online`, `last_seen` (null when the API sends none), `ip_reserved`, `network`, `group`, `total_download`
 and `total_upload`:
 ```javascript
 function deviceSummary(device) {
@@ -629,7 +630,7 @@ for (const processedItem of processDataStream(largeDataset)) {
 
 ### DNS Resolution Problems
 
-**Symptom**: `ENOTFOUND` errors
+**Symptom**: `Could not reach the Firewalla API (ENOTFOUND: ...)`
 
 **Diagnostic Steps**:
 ```bash
