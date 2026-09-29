@@ -945,8 +945,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `get_active_alarms` and `get_network_rules`) refuses a malformed or
   oversized one before it translates or sends it, with the same checks
   and messages: parentheses and brackets that do not pair, a quote never
-  closed, a control character, more than 5 levels of parentheses and more
-  than 2,000 characters. On a stub, `search_flows`, `search_alarms`,
+  closed, a control character (C0 other than tab, line feed and carriage
+  return, DEL, and C1, U+0080 to U+009F), more than 5 levels of
+  parentheses and more than 2,000 characters. On a stub, `search_flows`, `search_alarms`,
   `get_flow_data`, `get_active_alarms` and `get_network_rules` each sent a
   query with an unclosed `[`, a NUL, BEL, ESC or DEL, or 2,001 characters
   to the API, and the last three sent 6 and 11 levels of parentheses. Parentheses and
@@ -970,10 +971,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `bytes:>1MB OR NOT -total:>1MB` as an OR between two fields, `bytes` and
   `total`, and `blocked:false OR NOT status:blocked` as an OR with an
   excluded term, quoting `blocked:0`, where `get_flow_data` sent
-  `total:>1MB` and `-status:blocked`. Over every query of up to four
-  pieces from two sets of flow pieces and two of alarm pieces (54,240 and
-  41,370 queries a set), the two tools on each endpoint now send or refuse
-  the same queries, and what they send is one conjunction in the API's
+  `total:>1MB` and `-status:blocked`. Over every query of up to three of
+  15 flow pieces and of 14 alarm pieces (3,615 and 2,954 queries, in
+  `tests/tools/flow-alarm-translation.test.ts`), and in one run over every
+  query of up to four (54,240 and 41,370), the two tools on each endpoint
+  now send or refuse the same queries, and what they send is one conjunction in the API's
   grammar that translation leaves unchanged.
 - Every tool that takes a query holds it to the same complexity limits,
   and a refusal names the limit it hit, with the count and the maximum: `Too
@@ -985,7 +987,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not for free text alone; and `search_devices` had a
   stricter one of its own, which refused
   `name:*a* OR name:*b* OR name:*c*` as "Query too complex (11)". Operators
-  and terms are counted outside quotes, and a MAC address is one term. The
+  and terms are counted outside quotes, a MAC address is one term, and a
+  term is a field with any operator the syntax check takes, so 16
+  `blocked=true` count as 16 `blocked:true` do. The
   wildcard limit (at most 10) is gone: wildcards are matched in linear
   time now, 900 of them in under 4 ms, so `name:*a*b*c*d*e*f*g*h*i*j*` is
   taken.

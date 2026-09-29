@@ -159,6 +159,8 @@ function malformed(field: string): Array<[string, string, RegExp]> {
     ['a BEL', `${field}:x\u0007y`, /control character \(U\+0007\)/],
     ['an ESC', `${field}:x\u001b`, /control character \(U\+001B\)/],
     ['a DEL', `${field}:x\u007f`, /control character \(U\+007F\)/],
+    ['a C1 NEL', `${field}:x\u0085`, /control character \(U\+0085\)/],
+    ['a C1 APC', `${field}:x\u009f`, /control character \(U\+009F\)/],
     [
       '6 levels of parentheses',
       `${'('.repeat(6)}${field}:x${')'.repeat(6)}`,
@@ -194,6 +196,8 @@ describe('queryStructureErrors', () => {
     `${'('.repeat(5)}domain:x${')'.repeat(5)}`,
     `domain:${'a'.repeat(1993)}`,
     'domain:x\ttype:1\nstatus:1\r',
+    // U+00A0, the first character after the C1 block, is text
+    'name:Alex\u00a0Mac',
     '*Alex’s*',
   ])('takes %j', query => {
     expect(queryStructureErrors(query)).toEqual([]);

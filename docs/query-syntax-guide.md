@@ -77,8 +77,8 @@ The search tools also check field names before this. They refuse `resolved:` and
 
 Before any of this, and before any request, every tool that takes a query (the five search tools, `get_flow_data`, `get_active_alarms` and `get_network_rules`) checks its shape the same way:
 
-- **Invalid query structure**: parentheses or brackets that do not pair, a quote that is never closed, a control character, more than 5 levels of parentheses, or more than 2,000 characters. A parenthesis or bracket inside a quoted value is text (`name:"a(b"`). Each message gives the position, as in `Query opens a bracket '[' at position 7 that is never closed`.
-- **Query is too complex**: more than 20 `AND`/`OR`, 15 `field:value` terms or 5 `[low TO high]` ranges, counted outside quotes, so `"rock AND roll"` is a phrase and a MAC address one term. Each message names the limit, the count and the maximum, as in `Too many logical operators: 21 (at most 20)`.
+- **Invalid query structure**: parentheses or brackets that do not pair, a quote that is never closed, a control character other than tab, line feed and carriage return (U+0000 to U+001F, U+007F and the C1 block U+0080 to U+009F), more than 5 levels of parentheses, or more than 2,000 characters. A parenthesis or bracket inside a quoted value is text (`name:"a(b"`). Each message gives the position, as in `Query opens a bracket '[' at position 7 that is never closed`.
+- **Query is too complex**: more than 20 `AND`/`OR`, 15 field terms or 5 `[low TO high]` ranges, counted outside quotes. A field term is a field with any operator the syntax check takes (`protocol:tcp`, `blocked=true`, `total>1MB`, `port!=443`), so `"rock AND roll"` is a phrase and a MAC address one term. Each message names the limit, the count and the maximum, as in `Too many logical operators: 21 (at most 20)`.
 
 There is no limit on the number of wildcards.
 
