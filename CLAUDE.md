@@ -484,7 +484,9 @@ comma-separated list enables these namespaces (a trailing `*` matches a prefix):
   with the read to check (`unknownWriteResponse` in `handlers/base.ts`),
   never as a failure.
 - The error text starts `Rate limit exceeded` (`Rate limit exceeded (HTTP
-  429)` when the API refused the request).
+  429)` when the API refused the request), and a tool's error response for
+  it has `errorType` `rate_limit_error` (`RATE_LIMIT_TEXT`, matched in
+  `createErrorResponse`).
 - Details: "Rate Limiting" in `docs/firewalla-api-reference.md`
 
 ### Monitoring

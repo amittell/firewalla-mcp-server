@@ -1097,6 +1097,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Check with get_network_rules before trying again.`, and the alarm tools
   say the alarm may or may not have been changed. A 502 or 503 on a write
   is still a failure, and a read answered 504 is still sent again once.
+- A tool refused for the rate limit answers `errorType` `rate_limit_error`,
+  as `docs/error-handling-guide.md` says a 429 does. No tool used it: a 429
+  the client gave up on, or a request its own rate limiter refused, came
+  back as `api_error` (`get_flow_data`, `get_boxes`, `get_active_alarms`,
+  `create_rule` and the rest) or `search_error` (`search_flows`), so a
+  client waiting for `rate_limit_error` to back off never saw one.
 
 ### Removed
 
