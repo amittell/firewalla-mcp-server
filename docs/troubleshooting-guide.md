@@ -843,65 +843,49 @@ async function safeSearchFlows(params) {
 ```
 
 #### 2. Graceful Error Handling
-The server already sends a failed read again once when that can help (see
-Network Timeouts above), and every retry, yours included, counts against the
-100 requests per 5 minutes. This caller-side sketch retries only timeouts,
-decided by `errorType`. A read's network failure arrives as `api_error` with
-`Firewalla API sent no answer` in the message; a write's is `network_error`
-with an unknown outcome, which must not be retried blindly.
+A tool error is not thrown: it comes back as a result with `isError: true`
+and the error object as JSON in its text. The server already sends a failed
+read again once when that can help (see Network Timeouts above), and every
+retry, yours included, counts against the 100 requests per 5 minutes. This
+caller-side sketch retries a read tool's `timeout_error` once, and nothing
+else. It never retries a write: a write tool's timeout carries
+`details.write`, and a write whose value is `unknown` may already have been
+applied, so check with the read its message names instead.
 ```javascript
-async function resilientOperation(operation, maxRetries = 2) {
-  let lastError;
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      return await operation();
-    } catch (error) {
-      lastError = error;
-
-      // Don't retry validation errors
-      if (error.errorType === 'validation_error') {
-        throw error;
-      }
-
-      // Don't retry authentication errors
-      if (error.errorType === 'authentication_error') {
-        throw error;
-      }
-
-      // Retry timeouts with backoff
-      if (attempt < maxRetries && error.errorType === 'timeout_error') {
-        const delay = Math.pow(2, attempt - 1) * 1000; // Exponential backoff
-        await new Promise(resolve => setTimeout(resolve, delay));
-        continue;
-      }
-
-      throw error;
-    }
+async function retryReadTimeout(callTool, name, args) {
+  const result = await callTool(name, args);
+  if (!result.isError) {
+    return result;
   }
-
-  throw lastError;
+  const error = JSON.parse(result.content[0].text);
+  // A read's timeout only: a write tool's carries details.write
+  if (error.errorType !== 'timeout_error' || error.details?.write !== undefined) {
+    return result;
+  }
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  return callTool(name, args);
 }
 ```
 
 #### 3. Progressive Enhancement
+`search_flows` is a read, so a narrower query after its timeout is safe:
 ```javascript
-async function getDataWithFallback(primaryParams, fallbackParams) {
-  try {
-    // Try optimal query first
-    return await searchFlows(primaryParams);
-  } catch (error) {
-    if (error.errorType === 'timeout_error') {
-      console.warn('Primary query timed out, trying fallback...');
-      // Use simpler/smaller fallback query
-      return await searchFlows(fallbackParams);
-    }
-    throw error;
+async function searchFlowsWithFallback(callTool, primaryArgs, fallbackArgs) {
+  const result = await callTool('search_flows', primaryArgs);
+  if (!result.isError) {
+    return result;
   }
+  const { errorType } = JSON.parse(result.content[0].text);
+  if (errorType !== 'timeout_error') {
+    return result;
+  }
+  // Use a simpler, smaller query
+  return callTool('search_flows', fallbackArgs);
 }
 
 // Usage
-const results = await getDataWithFallback(
+const result = await searchFlowsWithFallback(
+  callTool,
   { query: "protocol:tcp AND ts:>24h", limit: 500 }, // Optimal
   { query: "protocol:tcp AND ts:>1h", limit: 100 }   // Fallback
 );
