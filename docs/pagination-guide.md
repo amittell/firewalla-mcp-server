@@ -2,7 +2,8 @@
 
 Which tools return more than one page, how to ask for the next one, and
 where each answer puts its cursor. Every shape here was measured on
-2026-09-28 by running the tools' handlers with the HTTP layer stubbed, so
+2026-09-28, and again on 2026-09-29, by running the tools' handlers with
+the HTTP layer stubbed, so
 nothing reached the API; the cursors shown are the stub's.
 
 Every answer is `{success, data, meta}`, except a streamed `get_flow_data`
@@ -16,7 +17,7 @@ chunk, which has its own shape (below).
 | `search_alarms`, `search_flows` | `cursor` | `data.metadata.cursor`, with `data.metadata.has_more` |
 | `get_flow_data`, not streamed | `cursor` | `data.pagination.cursor`, with `data.pagination.has_more` |
 | `get_flow_data`, streamed | `streaming_session_id`, or `cursor` for a plain page | `sessionId` and `nextContinuationToken`, with `isFinalChunk` |
-| `get_device_status` | `cursor`, which its schema does not list | `data.next_cursor`, with `data.has_more` |
+| `get_device_status` | `cursor` | `data.next_cursor`, with `data.has_more` |
 
 The other tools return at most `limit` items in one answer and no cursor:
 `search_rules`, `get_network_rules`, `search_devices`, `search_target_lists`,
@@ -107,15 +108,18 @@ A streamed answer is one chunk of up to `limit` flows:
 `get_device_status` reads the whole device list (`GET /v2/devices`, one
 request, cached for `CACHE_TTL`), sorts it by name, and returns `limit`
 devices. When more remain it returns `next_cursor`, an offset cursor the
-server makes, and `has_more: true`. Its schema does not list `cursor`, but
-the tool reads it: with three sample devices and `limit: 2`, the first
-call answered two devices and a cursor, and the call with that cursor the
-third device, `next_cursor: null` and `has_more: false`.
+server makes, and `has_more: true`: with three sample devices and
+`limit: 2`, the first call answered two devices and a cursor, and the call
+with that cursor the third device, `next_cursor: null` and
+`has_more: false`.
 
 - `total_devices` counts every device; `online_devices`, `offline_devices`
   and `page_size` count the page.
-- A cursor that does not decode is ignored, and the first page comes back
-  again (measured with `%%%` and with base64 that is not JSON).
+- A cursor the tool did not issue is refused before anything is sent, as a
+  `validation_error` with the message `Invalid cursor` (measured with `%%%`
+  and with base64 that is not JSON: `Failed to decode cursor: ...` and
+  `Pass the next_cursor of a previous get_device_status page, or leave
+  cursor out for the first page`).
 
 ## Tools without pages
 
@@ -124,8 +128,10 @@ third device, `next_cursor: null` and `has_more: false`.
 - `search_rules` and `get_network_rules` read `GET /v2/rules`, which
   documents no cursor and returns every matching rule in one response, and
   return up to `limit`.
-- `get_target_lists` returns up to `limit` lists, and its `total_lists`
-  counts the lists it returned. `get_offline_devices` returns up to
-  `limit`, and its `total_offline_devices` counts every offline device.
+- `get_target_lists` returns up to `limit` lists; `total_lists` counts
+  every list, and `has_more` says whether some were left out (two sample
+  lists at `limit: 1`: `total_lists: 2`, `has_more: true`).
+  `get_offline_devices` returns up to `limit`, and its
+  `total_offline_devices` counts every offline device.
 
 For more than one answer holds, narrow the query.
