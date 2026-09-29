@@ -13,9 +13,10 @@
  * - MCP_HTTP_ALLOWED_HOSTS: host names to accept in the Host header, besides
  *   localhost, 127.0.0.1, [::1] and MCP_HTTP_HOST (comma-separated)
  * - MCP_HTTP_ALLOWED_ORIGINS: browser origins to accept (comma-separated,
- *   e.g. http://localhost:6274; no wildcard, so an entry with `*` is
- *   refused at startup). A request without an Origin header, which is
- *   what non-browser MCP clients send, is accepted; any other Origin is refused.
+ *   e.g. http://localhost:6274; a path is dropped, and there is no
+ *   wildcard, so an entry whose host has `*` is refused at startup). A
+ *   request without an Origin header, which is what non-browser MCP clients
+ *   send, is accepted; any other Origin is refused.
  * - MCP_HTTP_BEARER_TOKEN: when set, every request must carry
  *   `Authorization: Bearer <token>`
  */
@@ -172,17 +173,19 @@ export function parseHttpSecurityConfig(
 
   const allowedOrigins = new Set<string>();
   for (const entry of listFromEnv(env.MCP_HTTP_ALLOWED_ORIGINS)) {
-    // http://*.example.com parses as an origin whose host is "*.example.com",
-    // which no browser sends, so it would be accepted here and match nothing
-    if (entry.includes('*')) {
-      throw new Error(
-        `MCP_HTTP_ALLOWED_ORIGINS: "${entry}" has a wildcard. There is no wildcard: list each origin, comma-separated, e.g. http://app.example.com,http://admin.example.com`
-      );
-    }
     const origin = normalizeOrigin(entry);
     if (!origin) {
       throw new Error(
         `MCP_HTTP_ALLOWED_ORIGINS: "${entry}" is not an http(s) origin, e.g. http://localhost:6274; list each origin, there is no wildcard`
+      );
+    }
+    // http://*.example.com parses as an origin whose host is "*.example.com",
+    // which no browser sends, so it would be accepted and match nothing. The
+    // host is checked after parsing: a * in a path is dropped with the path,
+    // and http://%2A.example.com has the same host as http://*.example.com
+    if (new URL(origin).hostname.includes('*')) {
+      throw new Error(
+        `MCP_HTTP_ALLOWED_ORIGINS: "${entry}" has a wildcard. There is no wildcard: list each origin, comma-separated, e.g. http://app.example.com,http://admin.example.com`
       );
     }
     allowedOrigins.add(origin);
