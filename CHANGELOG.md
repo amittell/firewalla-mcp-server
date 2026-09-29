@@ -848,6 +848,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`PERFORMANCE_THRESHOLDS.TIMEOUT_MS`) said `timed out after 30000ms
   (limit: 10000ms)`, with `timeoutMs: 10000` in its details. The timeout
   error now carries its limit, and all 22 of those answers use it.
+- A write tool that gives up gives its limit too. Its answer said how long
+  the tool ran and what became of the write, but not the limit it was
+  stopped at, and had no `timeoutMs` in its details:
+  `pause_rule gave up after <n> ms with POST /v2/rules/<id>/pause sent and not answered...`.
+  It now says `gave up after <n> ms (limit: 30000ms)` with the defaults,
+  written as the other timeout answers write it, and its details have
+  `timeoutMs`. That holds for all three outcomes: sent and not answered,
+  never sent while it waited for the rate limit, and answered before the
+  tool gave up.
 - An `MCP_HTTP_ALLOWED_ORIGINS` entry with a wildcard stops the HTTP server
   at startup. `*` alone was refused, but `http://*.example.com` parses as an
   origin whose host is `*.example.com`, so it was accepted, and it matched

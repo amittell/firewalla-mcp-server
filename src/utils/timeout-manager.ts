@@ -77,14 +77,17 @@ export function unknownWriteOutcome(check?: string): string {
  * waiting for the rate limiter is never sent. One sent and not answered
  * may have reached Firewalla: cancelling it does not undo it, so the caller
  * must check before trying again, or it may pause or create a rule twice.
+ * The limit is written `limit: <ms>ms`, as in every other timeout answer
+ * (see generateTimeoutGuidance).
  */
 function describeWrites(
   toolName: string,
   duration: number,
+  timeoutMs: number,
   writes: ToolWrite[]
 ): Pick<TimeoutError, 'writeOutcome' | 'writeState'> {
   const check = (write: ToolWrite) => checkBeforeRetry(write.check);
-  const gaveUp = `${toolName} gave up after ${duration} ms`;
+  const gaveUp = `${toolName} gave up after ${duration} ms (limit: ${timeoutMs}ms)`;
   const sent = writes.find(write => write.state === 'sent');
   if (sent) {
     return {
@@ -245,7 +248,12 @@ export class TimeoutManager {
           budget.abort(timeoutError);
           Object.assign(
             timeoutError,
-            describeWrites(finalConfig.toolName, duration, toolBudget.writes)
+            describeWrites(
+              finalConfig.toolName,
+              duration,
+              finalConfig.timeoutMs,
+              toolBudget.writes
+            )
           );
           reject(timeoutError);
         }, finalConfig.timeoutMs);
@@ -726,13 +734,14 @@ export function createTimeoutErrorResponse(
   isError: true;
 } {
   // A tool that writes says what became of its write: the generic advice
-  // (a narrower query, a smaller limit) would have the caller send it again
+  // (a narrower query, a smaller limit) would have the caller send it again.
+  // Its limit is the one it was stopped at, as the TimeoutError carries it.
   if (error instanceof TimeoutError && error.writeOutcome) {
     return createErrorResponse(
       toolName,
       error.writeOutcome,
       ErrorType.TIMEOUT_ERROR,
-      { duration, write: error.writeState }
+      { duration, timeoutMs: error.timeoutMs, write: error.writeState }
     );
   }
   const guidance = generateTimeoutGuidance(toolName, duration, timeoutMs);
