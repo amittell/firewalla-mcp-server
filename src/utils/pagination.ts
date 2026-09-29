@@ -130,11 +130,12 @@ export function decodeCursor(cursor: string): CursorData {
       throw new Error('Invalid cursor data structure');
     }
 
-    if (typeof data.offset !== 'number' || data.offset < 0) {
+    // Whole numbers: slice() truncated an offset of 1.5 to 1 and used it
+    if (!Number.isSafeInteger(data.offset) || data.offset < 0) {
       throw new Error('Invalid cursor offset');
     }
 
-    if (typeof data.page_size !== 'number' || data.page_size < 1) {
+    if (!Number.isSafeInteger(data.page_size) || data.page_size < 1) {
       throw new Error('Invalid cursor page_size');
     }
 

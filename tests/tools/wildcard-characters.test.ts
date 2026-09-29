@@ -176,6 +176,8 @@ describe('the query syntax check', () => {
   it.each([
     ['a control character', 'name:*a\u0007b*'],
     ['half a surrogate pair', 'name:*a\ud800b*'],
+    // ? is a wildcard marker too: the check ran only with a *
+    ['half a surrogate pair and a ?', 'name:?a\ud800b?'],
   ])('still refuses a wildcard value with %s', (_what, query) => {
     const { errors } = validateFirewallaQuerySyntax(query);
     expect(errors).toHaveLength(1);

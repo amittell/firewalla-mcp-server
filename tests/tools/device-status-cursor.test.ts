@@ -123,6 +123,17 @@ describe('get_device_status cursor', () => {
     ['an API cursor', 'eyJ0cyI6MTcwMDAwMDAwMH0='],
     ['empty', ''],
     ['a negative offset', encodeCursor({ offset: -1, page_size: 2 } as any)],
+    // slice() truncated 1.5 to 1 and used it
+    [
+      'a fractional offset',
+      encodeCursor({
+        offset: 1.5,
+        page_size: 2,
+        sort_by: 'name',
+        sort_order: 'asc',
+      }),
+    ],
+    ['a fractional page size', encodeCursor({ offset: 0, page_size: 2.5 })],
     [
       'from a listing sorted another way',
       encodeCursor({

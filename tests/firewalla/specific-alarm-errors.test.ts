@@ -27,10 +27,16 @@ const BOX_B = '66666666-7777-8888-9999-000000000000';
 
 /** How each box answers GET /v2/alarms/<gid>/<aid>: a status, or 'found' */
 let answers: Record<string, number | 'found'>;
+/** The status GET /v2/boxes answers with */
+let boxesStatus = 200;
 let api: Awaited<ReturnType<typeof startLocalApi>>;
 
 beforeAll(async () => {
   api = await startLocalApi((_request, response, path) => {
+    if (path === '/v2/boxes' && boxesStatus !== 200) {
+      json(response, boxesStatus, { error: { message: 'no such route' } });
+      return;
+    }
     if (path === '/v2/boxes') {
       json(response, 200, [
         { gid: BOX, name: 'home' },
@@ -54,6 +60,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   answers = {};
+  boxesStatus = 200;
   jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
   jest.spyOn(logger, 'error').mockImplementation(() => undefined);
   jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
@@ -139,6 +146,19 @@ describe('a failure that is not a 404', () => {
     expect(body.message).toBe(
       'Failed to get specific alarm: Authentication failed. Please check your MSP token.'
     );
+  });
+});
+
+describe('a 404 that is not from the alarm', () => {
+  it('a 404 from /v2/boxes, while finding the boxes to ask, is not "not found"', async () => {
+    boxesStatus = 404;
+    const before = api.received.length;
+    const body = await getSpecificAlarm({ alarm_id: '999999999' });
+
+    // Only the box list was asked for; no alarm request was sent
+    expect(api.received.slice(before)).toEqual(['GET /v2/boxes']);
+    expect(body.message).not.toBe(NOT_FOUND);
+    expect(body.message).toMatch(/^Failed to get specific alarm: /);
   });
 });
 
