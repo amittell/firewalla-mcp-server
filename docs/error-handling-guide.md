@@ -69,13 +69,14 @@ refused as a `validation_error`.
 | `api_error` | A request to the MSP API failed, for most tools; the message says what the API answered |
 | `search_error` | The same, for the five search tools |
 | `timeout_error` | The tool passed its time limit, 30 s by default |
+| `network_error` | A write tool's request went out and got no HTTP status: its outcome is unknown. `details.write` is `unknown`; see [Failed API Requests](#failed-api-requests) |
 | `authentication_error` | Only `pause_rule`, for a failure whose message has 401, 403 or "permission" |
 | `unknown_error` | An error no handler caught, such as a call to a tool that is not registered: `Unknown tool: <name>. Available tools: ...` (a write tool without `FIREWALLA_ENABLE_WRITE_TOOLS=true`, for one) |
 
-The `ErrorType` enum also has `network_error`, `rate_limit_error`,
-`cache_error`, `correlation_error`, `service_unavailable` and
-`tool_disabled`, which no tool sets. A network failure or a rate-limit
-refusal arrives as `api_error` or `search_error`, and the message says which.
+The `ErrorType` enum also has `rate_limit_error`, `cache_error`,
+`correlation_error`, `service_unavailable` and `tool_disabled`, which no tool
+sets. A read's network failure and a rate-limit refusal arrive as
+`api_error` or `search_error`, and the message says which.
 
 ## Failed API Requests
 
@@ -93,7 +94,11 @@ The handler puts its own prefix before the client's message, for example
 | 502 | `Firewalla API answered 502 Bad Gateway: a gateway could not reach the Firewalla API server, or the resource ID is invalid` |
 | 503 | `Firewalla API answered 503 Service Unavailable: the Firewalla API is temporarily down` |
 | 504 | `Firewalla API answered 504 Gateway Timeout: a gateway timed out waiting for the Firewalla API` |
-| No answer | `Firewalla API sent no answer (ECONNABORTED: timeout of 30000ms exceeded)`, with `after 2 attempts` when it was sent again |
+| No answer, to a read | `Firewalla API sent no answer (ECONNABORTED: timeout of 30000ms exceeded)`, with `after 2 attempts` when it was sent again |
+| No answer, to a write that went out | `POST /v2/rules was sent and not answered (ECONNABORTED: timeout of 100ms exceeded). The outcome is unknown: Firewalla may have applied the change. Check with get_network_rules before trying again.` as `network_error`, with no prefix, `details.write: "unknown"` and the read in `details.check`. `archive_alarm`, `mute_alarm` and `delete_alarm` say the alarm may or may not have been changed and to check with `get_specific_alarm` |
+
+A write refused before it was written (`ECONNREFUSED`, or a host name that
+did not resolve) was not applied, and fails with the usual prefix.
 
 A GET that got 502, 503 or 504 is sent again once (see [Retries](#retries)), and the
 message then says so after the status: `Firewalla API answered 503 Service
@@ -105,11 +110,15 @@ does.
 
 The client sends a GET again once, 1 to 2 s later, after a 502, 503 or 504,
 or after no answer with `ECONNABORTED`, `ETIMEDOUT`, `ECONNRESET` or `EPIPE`.
-It does so only when the wait plus as long again as the failed attempt took
-ends before the tool gives up, so with the defaults (`API_TIMEOUT` and the tool
-timeout both 30 s) a GET that ran out its timeout is not sent again, while a
-503 that came back at once is. The retry goes through the rate limiter and
-counts against it.
+It does so only when, from the later of that wait and the rate limiter's
+next slot, as long again as the failed attempt took ends before the tool
+gives up. This is checked again when the retry would take a slot and when it
+would go out; a retry that no longer fits is not sent, takes no slot, and
+the failure it was for is reported at once. So with the defaults
+(`API_TIMEOUT` and the tool timeout both 30 s) a GET that ran out its
+timeout is not sent again, while a 503 that came back at once is. The retry
+goes through the rate limiter and counts against it, and a 429 answered to
+it is handled like any 429 (below).
 
 Nothing else is sent again: not a 500 or another 4xx, not `ECONNREFUSED` or
 `ENOTFOUND`, and never a POST, PATCH, PUT or DELETE, which the API may have
@@ -221,6 +230,7 @@ NODE_ENV=production. ...`
   that could help. A retry of your own counts against the 100 requests per 5
   minutes as well.
 - For `Rate limit exceeded`, wait until the time the message gives.
-- For a write tool's timeout, read `details.write`: `not_sent` changed
-  nothing; `unknown` may have been applied, so check with the read the message
-  names before sending it again.
+- For a write tool's `timeout_error` or `network_error`, read
+  `details.write`: `not_sent` changed nothing; `unknown` may have been
+  applied, so check with the read the message names before sending it
+  again.
