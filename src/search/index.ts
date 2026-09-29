@@ -546,11 +546,10 @@ export function formatQueryForAPI(query: string): string {
     return '';
   }
 
-  const validation = validateSearchQuery(query);
-  if (!validation.valid) {
-    throw new Error(`Invalid query: ${validation.errors.join(', ')}`);
-  }
-
+  // No complexity score check here: the search tools hold every query to
+  // the same limits first (queryComplexityErrors). This one, a score over
+  // 10, ran for search_devices alone, so it refused name:a OR name:b ...
+  // OR name:g as "Query too complex (11)" where the other tools took it.
   const parsed = parseSearchQuery(query);
   return parsed.optimized || query;
 }

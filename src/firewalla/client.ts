@@ -4942,8 +4942,8 @@ export class FirewallaClient {
 
       const startTime = Date.now();
 
-      // Enhanced query parsing with error handling; formatQueryForAPI throws
-      // on invalid syntax
+      // Enhanced query parsing with error handling (the search tools have
+      // checked the query's structure and complexity before this)
       let parsed;
       try {
         parsed = parseSearchQuery(trimmedQuery);
@@ -5226,8 +5226,8 @@ export class FirewallaClient {
 
       const startTime = Date.now();
 
-      // Enhanced query parsing with error handling; formatQueryForAPI throws
-      // on invalid syntax
+      // Enhanced query parsing with error handling (the search tools have
+      // checked the query's structure and complexity before this)
       let parsed;
       try {
         parsed = parseSearchQuery(trimmedQuery);

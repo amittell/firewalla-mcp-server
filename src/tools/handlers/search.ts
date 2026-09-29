@@ -29,7 +29,10 @@ import {
   validateFirewallaQuerySyntax,
   getExampleQueries,
 } from '../../utils/query-validator.js';
-import { queryStructureErrors } from '../../utils/query-structure.js';
+import {
+  queryComplexityErrors,
+  queryStructureErrors,
+} from '../../utils/query-structure.js';
 import {
   withToolTimeout,
   TimeoutError,
@@ -174,6 +177,28 @@ function validateCommonSearchParameters(
         ErrorType.VALIDATION_ERROR,
         { query: args.query, structure_errors: structureErrors },
         structureErrors
+      ),
+    };
+  }
+
+  // The complexity limits, the same for every search tool, each message
+  // naming the limit it hit. They ran in the field check, so a query over
+  // one was refused as "Query contains invalid field names", and not at
+  // all for free text alone or in get_flow_data and get_active_alarms.
+  const complexityErrors = queryComplexityErrors(args.query);
+  if (complexityErrors.length > 0) {
+    return {
+      isValid: false,
+      response: createErrorResponse(
+        toolName,
+        'Query is too complex',
+        ErrorType.VALIDATION_ERROR,
+        {
+          query: args.query,
+          complexity_errors: complexityErrors,
+          hint: 'Split it into several searches',
+        },
+        complexityErrors
       ),
     };
   }
