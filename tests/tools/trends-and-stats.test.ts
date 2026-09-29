@@ -170,7 +170,7 @@ describe('getAlarmTrends', () => {
   it('fails instead of inventing points when the API sends no array', async () => {
     const { client } = makeClient({ '/v2/trends/alarms': () => ({}) });
     await expect(client.getAlarmTrends('30d')).rejects.toThrow(
-      /Failed to get alarm trends for period 30d: .*expected an array/
+      /^Unexpected response from \/v2\/trends\/alarms: expected an array/
     );
   });
 });
@@ -442,9 +442,7 @@ describe('box-scoped getAlarmTrends and getFlowTrends', () => {
     });
     await expect(
       client.getAlarmTrends('30d', undefined, BOX_A)
-    ).rejects.toThrow(
-      /Failed to get alarm trends for period 30d: Firewalla API answered 500 Internal Server Error/
-    );
+    ).rejects.toThrow(/^Firewalla API answered 500 Internal Server Error/);
     expect(calls.length).toBeGreaterThan(1);
     expect(calls.length).toBeLessThanOrEqual(1 + 4);
   });
@@ -718,7 +716,7 @@ describe('get_flow_trends', () => {
     const body = parse(res);
     expect(body.errorType).toBe('api_error');
     expect(body.message).toMatch(
-      /^Failed to get flow trends: .*Failed to get flow trends for period 30d: Firewalla API answered 500 Internal Server Error/
+      /^Failed to get flow trends: Firewalla API answered 500 Internal Server Error/
     );
   });
 });
@@ -1011,7 +1009,7 @@ describe('getRuleTrends', () => {
       '/v2/trends/rules': () => new HttpStatus(500),
     });
     await expect(client.getRuleTrends('30d')).rejects.toThrow(
-      /Failed to get rule trends/
+      /^Firewalla API answered 500 Internal Server Error/
     );
     expect(calls.map(call => call.url)).toEqual(['/v2/trends/rules']);
   });

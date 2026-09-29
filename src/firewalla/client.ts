@@ -2314,9 +2314,8 @@ export class FirewallaClient {
         'Error in getDeviceStatus:',
         error instanceof Error ? error : new Error(String(error))
       );
-      throw new Error(
-        `Failed to get device status: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      // As it came, with its class and status: the tool adds its one prefix
+      throw error;
     }
   }
 
@@ -2587,9 +2586,8 @@ export class FirewallaClient {
         'Error in getBandwidthUsage:',
         error instanceof Error ? error : new Error(String(error))
       );
-      throw new Error(
-        `Failed to get bandwidth usage for period ${period}: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      // As it came, with its class and status: the tool adds its one prefix
+      throw error;
     }
   }
 
@@ -3404,9 +3402,8 @@ export class FirewallaClient {
         'Error in getBoxes:',
         error instanceof Error ? error : new Error(String(error))
       );
-      throw new Error(
-        `Failed to get boxes: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      // As it came, with its class and status: the tool adds its one prefix
+      throw error;
     }
   }
 
@@ -3980,9 +3977,8 @@ export class FirewallaClient {
         'Error in getStatisticsByRegion:',
         error instanceof Error ? error : new Error(String(error))
       );
-      throw new Error(
-        `Failed to get statistics by region: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      // As it came, with its class and status: the tool adds its one prefix
+      throw error;
     }
   }
 
@@ -4170,9 +4166,8 @@ export class FirewallaClient {
         'Error in getFlowTrends:',
         error instanceof Error ? error : new Error(String(error))
       );
-      throw new Error(
-        `Failed to get flow trends for period ${period}: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      // As it came, with its class and status: the tool adds its one prefix
+      throw error;
     }
   }
 
@@ -4198,9 +4193,8 @@ export class FirewallaClient {
         'Error in getAlarmTrends:',
         error instanceof Error ? error : new Error(String(error))
       );
-      throw new Error(
-        `Failed to get alarm trends for period ${period}: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      // As it came, with its class and status: the tool adds its one prefix
+      throw error;
     }
   }
 
@@ -4267,9 +4261,8 @@ export class FirewallaClient {
         'Error in getRuleTrends:',
         error instanceof Error ? error : new Error(String(error))
       );
-      throw new Error(
-        `Failed to get rule trends for period ${period}: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      // As it came, with its class and status: the tool adds its one prefix
+      throw error;
     }
   }
 
@@ -4422,9 +4415,8 @@ export class FirewallaClient {
         'Error in getStatisticsByBox:',
         error instanceof Error ? error : new Error(String(error))
       );
-      throw new Error(
-        `Failed to get statistics by box: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      // As it came, with its class and status: the tool adds its one prefix
+      throw error;
     }
   }
 
@@ -5335,158 +5327,138 @@ export class FirewallaClient {
           : trimmedQuery;
 
       // Enhanced API request with better error handling
-      let response;
-      try {
-        // Use correct device endpoint (devices don't have search endpoint)
-        const endpoint = `/v2/devices`;
+      // Use correct device endpoint (devices don't have search endpoint)
+      const endpoint = `/v2/devices`;
 
-        // Device endpoint returns direct array, not search result object
-        const deviceArray = await this.request<any[]>('GET', endpoint, params);
+      // Device endpoint returns direct array, not search result object
+      const deviceArray = await this.request<any[]>('GET', endpoint, params);
 
-        // Apply client-side filtering since devices don't support search queries
-        let filteredDevices = deviceArray || [];
+      // Apply client-side filtering since devices don't support search queries
+      let filteredDevices = deviceArray || [];
 
-        if (searchQuery.query?.trim()) {
-          filteredDevices = filteredDevices.filter(device => {
-            if (!device) {
-              return false;
+      if (searchQuery.query?.trim()) {
+        filteredDevices = filteredDevices.filter(device => {
+          if (!device) {
+            return false;
+          }
+
+          // Device field extraction
+          const name = device.name?.toLowerCase() || '';
+          const ip = device.ip?.toLowerCase() || '';
+          const macVendor = device.macVendor?.toLowerCase() || '';
+          const id = String(device.id ?? '').toLowerCase();
+          // A device id is its MAC address (the API reference's device.id
+          // is a plain MAC), or `mac:<address>` on some devices
+          const macId = id.startsWith('mac:') ? id.slice(4) : id;
+          const mac =
+            device.mac?.toLowerCase() ||
+            (/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(macId) ? macId : '');
+          const gid = device.gid?.toLowerCase() || '';
+          const networkName = device.network?.name?.toLowerCase() || '';
+          const groupName = device.group?.name?.toLowerCase() || '';
+          const isOnline = Boolean(
+            device.online || device.isOnline || device.connected
+          );
+
+          // `id:`, `ip:`, `mac:` and `gid:` take an exact value or a `*`
+          // wildcard (172.16.2.*, AA:BB:*); `ip:` also takes a CIDR block
+          const matchesPattern = (value: string, pattern: string): boolean => {
+            if (!pattern.includes('*')) {
+              return value === pattern;
             }
-
-            // Device field extraction
-            const name = device.name?.toLowerCase() || '';
-            const ip = device.ip?.toLowerCase() || '';
-            const macVendor = device.macVendor?.toLowerCase() || '';
-            const id = String(device.id ?? '').toLowerCase();
-            // A device id is its MAC address (the API reference's device.id
-            // is a plain MAC), or `mac:<address>` on some devices
-            const macId = id.startsWith('mac:') ? id.slice(4) : id;
-            const mac =
-              device.mac?.toLowerCase() ||
-              (/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(macId) ? macId : '');
-            const gid = device.gid?.toLowerCase() || '';
-            const networkName = device.network?.name?.toLowerCase() || '';
-            const groupName = device.group?.name?.toLowerCase() || '';
-            const isOnline = Boolean(
-              device.online || device.isOnline || device.connected
+            return matchesWildcard(value, pattern);
+          };
+          // Free text: a word or quoted phrase with no field, found in
+          // the name, IP, MAC or id, vendor, or network or group name; an
+          // unquoted * in it is a wildcard (containsText)
+          const matchesText = (text: string, quoted: boolean): boolean =>
+            [name, ip, mac, id, macVendor, networkName, groupName].some(value =>
+              containsText(value, text, quoted)
             );
 
-            // `id:`, `ip:`, `mac:` and `gid:` take an exact value or a `*`
-            // wildcard (172.16.2.*, AA:BB:*); `ip:` also takes a CIDR block
-            const matchesPattern = (
-              value: string,
-              pattern: string
-            ): boolean => {
-              if (!pattern.includes('*')) {
-                return value === pattern;
+          // Match one `field:value` term; matchesQuery evaluates AND, OR,
+          // NOT and parentheses between terms
+          const matchesTerm = (term: string): boolean => {
+            const fieldTerm = /^([\w.]+):(.*)$/.exec(term);
+            if (!fieldTerm) {
+              const text = unquoteQueryValue(term);
+              return matchesText(text, text !== term);
+            }
+            const [, field, rawValue] = fieldTerm;
+            // A comma list matches any of its values, as in the MSP API
+            // grammar (name:nas,laptop); it was compared as one value
+            const values = commaListValues(rawValue);
+            const anyValue = (test: (entry: string) => boolean): boolean =>
+              values.some(test);
+
+            switch (field) {
+              case 'id':
+                return anyValue(entry => matchesPattern(id, entry));
+              case 'ip':
+                // An IPv4 CIDR block (192.168.1.0/24), else a pattern
+                return anyValue(entry =>
+                  entry.includes('/')
+                    ? ipv4InCidr(ip, entry) === true
+                    : matchesPattern(ip, entry)
+                );
+              case 'mac':
+                return anyValue(entry => matchesPattern(mac, entry));
+              case 'gid':
+                return anyValue(entry => matchesPattern(gid, entry));
+              case 'mac_vendor':
+                return anyValue(entry => macVendor.includes(entry));
+              case 'name':
+                return anyValue(entry =>
+                  name.includes(entry.replace(/\*/g, ''))
+                );
+              case 'network.name':
+              case 'network_name':
+                return anyValue(entry =>
+                  networkName.includes(entry.replace(/\*/g, ''))
+                );
+              case 'group.name':
+              case 'group_name':
+                return anyValue(entry =>
+                  groupName.includes(entry.replace(/\*/g, ''))
+                );
+              case 'online': {
+                // true or false, or 1/0 and yes/no as the query validator
+                // accepts; a comma list is any of its values. A value
+                // that is none of these matches no device: it matched
+                // every one (online:yes and online:true,true did)
+                const wanted = values.map(entry => ONLINE_VALUES.get(entry));
+                return (
+                  wanted.every(entry => entry !== undefined) &&
+                  wanted.includes(isOnline)
+                );
               }
-              return matchesWildcard(value, pattern);
-            };
-            // Free text: a word or quoted phrase with no field, found in
-            // the name, IP, MAC or id, vendor, or network or group name; an
-            // unquoted * in it is a wildcard (containsText)
-            const matchesText = (text: string, quoted: boolean): boolean =>
-              [name, ip, mac, id, macVendor, networkName, groupName].some(
-                value => containsText(value, text, quoted)
-              );
+              default:
+                // Fallback: search the whole term in all text fields
+                // The whole term, as literal text
+                return matchesText(term, true);
+            }
+          };
 
-            // Match one `field:value` term; matchesQuery evaluates AND, OR,
-            // NOT and parentheses between terms
-            const matchesTerm = (term: string): boolean => {
-              const fieldTerm = /^([\w.]+):(.*)$/.exec(term);
-              if (!fieldTerm) {
-                const text = unquoteQueryValue(term);
-                return matchesText(text, text !== term);
-              }
-              const [, field, rawValue] = fieldTerm;
-              // A comma list matches any of its values, as in the MSP API
-              // grammar (name:nas,laptop); it was compared as one value
-              const values = commaListValues(rawValue);
-              const anyValue = (test: (entry: string) => boolean): boolean =>
-                values.some(test);
-
-              switch (field) {
-                case 'id':
-                  return anyValue(entry => matchesPattern(id, entry));
-                case 'ip':
-                  // An IPv4 CIDR block (192.168.1.0/24), else a pattern
-                  return anyValue(entry =>
-                    entry.includes('/')
-                      ? ipv4InCidr(ip, entry) === true
-                      : matchesPattern(ip, entry)
-                  );
-                case 'mac':
-                  return anyValue(entry => matchesPattern(mac, entry));
-                case 'gid':
-                  return anyValue(entry => matchesPattern(gid, entry));
-                case 'mac_vendor':
-                  return anyValue(entry => macVendor.includes(entry));
-                case 'name':
-                  return anyValue(entry =>
-                    name.includes(entry.replace(/\*/g, ''))
-                  );
-                case 'network.name':
-                case 'network_name':
-                  return anyValue(entry =>
-                    networkName.includes(entry.replace(/\*/g, ''))
-                  );
-                case 'group.name':
-                case 'group_name':
-                  return anyValue(entry =>
-                    groupName.includes(entry.replace(/\*/g, ''))
-                  );
-                case 'online': {
-                  // true or false, or 1/0 and yes/no as the query validator
-                  // accepts; a comma list is any of its values. A value
-                  // that is none of these matches no device: it matched
-                  // every one (online:yes and online:true,true did)
-                  const wanted = values.map(entry => ONLINE_VALUES.get(entry));
-                  return (
-                    wanted.every(entry => entry !== undefined) &&
-                    wanted.includes(isOnline)
-                  );
-                }
-                default:
-                  // Fallback: search the whole term in all text fields
-                  // The whole term, as literal text
-                  return matchesText(term, true);
-              }
-            };
-
-            // Each term is matched in lowercase; the query is not, so AND,
-            // OR and NOT stay operators and and, or and not stay words
-            return matchesQuery(clientQuery, term =>
-              matchesTerm(term.toLowerCase())
-            );
-          });
-        }
-
-        // Apply limit if specified
-        if (searchQuery.limit && searchQuery.limit > 0) {
-          filteredDevices = filteredDevices.slice(0, searchQuery.limit);
-        }
-
-        // Transform to search result format for compatibility
-        response = {
-          count: filteredDevices.length,
-          results: filteredDevices,
-          next_cursor: undefined,
-          aggregations: undefined,
-        };
-      } catch (apiError) {
-        if (apiError instanceof Error) {
-          if (isApiTimeout(apiError)) {
-            throw new Error(
-              `Search request timed out: ${apiError.message}. Try reducing the search scope or limit.`
-            );
-          }
-          if (hasStatus(apiError, 400)) {
-            throw new Error(`Invalid search query: ${apiError.message}`);
-          }
-        }
-        throw new Error(
-          `API request failed: ${apiError instanceof Error ? apiError.message : 'Unknown API error'}`
-        );
+          // Each term is matched in lowercase; the query is not, so AND,
+          // OR and NOT stay operators and and, or and not stay words
+          return matchesQuery(clientQuery, term =>
+            matchesTerm(term.toLowerCase())
+          );
+        });
       }
+
+      // Apply limit if specified
+      if (searchQuery.limit && searchQuery.limit > 0) {
+        filteredDevices = filteredDevices.slice(0, searchQuery.limit);
+      }
+
+      // Transform to search result format for compatibility
+      const response = {
+        count: filteredDevices.length,
+        results: filteredDevices,
+        next_cursor: undefined,
+        aggregations: undefined,
+      };
 
       // Enhanced response validation
       if (!response || typeof response !== 'object') {
@@ -5553,17 +5525,8 @@ export class FirewallaClient {
         'Error in searchDevices:',
         error instanceof Error ? error : new Error(String(error))
       );
-      if (
-        error instanceof Error &&
-        (error.message.includes('SearchQuery') ||
-          error.message.includes('Invalid search') ||
-          error.message.includes('required'))
-      ) {
-        throw error; // Re-throw validation errors
-      }
-      throw new Error(
-        `Failed to search devices: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      // As it came, with its class and status: the tool adds its one prefix
+      throw error;
     }
   }
 
@@ -6445,11 +6408,8 @@ export class FirewallaClient {
         'Error in pauseRule:',
         error instanceof Error ? error : new Error(String(error))
       );
-      // Sent and not answered: the caller is told it may have been applied
-      if (error instanceof WriteOutcomeUnknownError) {
-        throw error;
-      }
-      throw new Error(error instanceof Error ? error.message : 'Unknown error');
+      // As it came, with its class and status: the tool adds its one prefix
+      throw error;
     }
   }
 
@@ -6491,11 +6451,8 @@ export class FirewallaClient {
         'Error in resumeRule:',
         error instanceof Error ? error : new Error(String(error))
       );
-      // Sent and not answered: the caller is told it may have been applied
-      if (error instanceof WriteOutcomeUnknownError) {
-        throw error;
-      }
-      throw new Error(error instanceof Error ? error.message : 'Unknown error');
+      // As it came, with its class and status: the tool adds its one prefix
+      throw error;
     }
   }
 

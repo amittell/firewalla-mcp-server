@@ -732,86 +732,106 @@ export class GetTargetListsHandler extends BaseToolHandler {
     }
 
     // Use timeout wrapper only for the API call and response processing
-    return withToolTimeout(async () => {
-      const listsResponse = await firewalla.getTargetLists(
-        listType,
-        limit,
-        owner
+    try {
+      return await withToolTimeout(async () => {
+        const listsResponse = await firewalla.getTargetLists(
+          listType,
+          limit,
+          owner
+        );
+
+        const startTime = Date.now();
+
+        const lists = Array.isArray(listsResponse.results)
+          ? listsResponse.results
+          : [];
+
+        const unifiedResponseData = {
+          // Every list the owner has: GET /v2/target-lists returns all of
+          // them (it takes no limit or cursor), and limit is applied here.
+          // total_lists counted only the lists returned, so it never said
+          // that limit had left lists out
+          total_lists: listsResponse.total,
+          returned_lists: lists.length,
+          has_more: listsResponse.total > lists.length,
+          limit_applied: limit,
+          categories: Array.from(
+            new Set(
+              SafeAccess.safeArrayMap(listsResponse.results, (l: any) =>
+                SafeAccess.getNestedValue(l, 'category', undefined)
+              ).filter(Boolean)
+            )
+          ),
+          target_lists: SafeAccess.safeArrayMap(
+            listsResponse.results,
+            (list: any) => ({
+              id: SafeAccess.getNestedValue(list, 'id', 'unknown'),
+              name: SafeAccess.getNestedValue(list, 'name', 'Unknown List'),
+              owner: SafeAccess.getNestedValue(list, 'owner', 'unknown'),
+              category: SafeAccess.getNestedValue(list, 'category', 'unknown'),
+              // The targets' length, else the API's count: it sends no
+              // targets for Firewalla-managed lists
+              entry_count: targetListEntryCount(list),
+              // Target List Buffer Strategy: Per-list target limiting
+              //
+              // Problem: Some target lists (especially threat intelligence feeds)
+              // can contain 10,000+ targets, leading to:
+              // - Excessive response payload sizes
+              // - JSON serialization performance issues
+              // - Client-side rendering problems
+              //
+              // Solution: Limit to 500 targets per list while preserving total count.
+              // This balances:
+              // - Useful data visibility (500 targets shows patterns/types)
+              // - Response performance (manageable payload size)
+              // - Client usability (reasonable display limits)
+              //
+              // The 500 limit was chosen as 5x the original 100 limit to provide
+              // better visibility into large lists while maintaining performance.
+              // Per-list target buffer limit; null when the API sent none
+              targets: targetListEntries(list, 500),
+              last_updated: safeUnixToISOString(
+                SafeAccess.getNestedValue(list, 'lastUpdated', undefined) as
+                  number | undefined,
+                undefined
+              ),
+              notes: SafeAccess.getNestedValue(list, 'notes', ''),
+            })
+          ),
+          ...(lists.some(list => targetListEntries(list, 0) === null) && {
+            targets_note:
+              'targets is null for lists whose entries the API does not return, such as Firewalla-managed lists; their entry_count is the count the API reports.',
+          }),
+          ...(lists.some(list => targetListEntryCount(list) === null) && {
+            entry_count_note:
+              "entry_count is null for lists the API sent neither targets nor a count for; get_specific_target_list returns the API's record of one list.",
+          }),
+        };
+
+        const executionTime = Date.now() - startTime;
+        return this.createUnifiedResponse(unifiedResponseData, {
+          executionTimeMs: executionTime,
+        });
+      }, this.name);
+    } catch (error: unknown) {
+      if (error instanceof TimeoutError) {
+        return createTimeoutErrorResponse(
+          this.name,
+          error.duration,
+          error.timeoutMs
+        );
+      }
+      // It had no catch: the error went to the dispatcher and came back with
+      // no prefix, as unknown_error, with the list of every tool
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return createErrorResponse(
+        this.name,
+        `Failed to get target lists: ${errorMessage}`,
+        ErrorType.API_ERROR,
+        { owner }
       );
-
-      const startTime = Date.now();
-
-      const lists = Array.isArray(listsResponse.results)
-        ? listsResponse.results
-        : [];
-
-      const unifiedResponseData = {
-        // Every list the owner has: GET /v2/target-lists returns all of
-        // them (it takes no limit or cursor), and limit is applied here.
-        // total_lists counted only the lists returned, so it never said
-        // that limit had left lists out
-        total_lists: listsResponse.total,
-        returned_lists: lists.length,
-        has_more: listsResponse.total > lists.length,
-        limit_applied: limit,
-        categories: Array.from(
-          new Set(
-            SafeAccess.safeArrayMap(listsResponse.results, (l: any) =>
-              SafeAccess.getNestedValue(l, 'category', undefined)
-            ).filter(Boolean)
-          )
-        ),
-        target_lists: SafeAccess.safeArrayMap(
-          listsResponse.results,
-          (list: any) => ({
-            id: SafeAccess.getNestedValue(list, 'id', 'unknown'),
-            name: SafeAccess.getNestedValue(list, 'name', 'Unknown List'),
-            owner: SafeAccess.getNestedValue(list, 'owner', 'unknown'),
-            category: SafeAccess.getNestedValue(list, 'category', 'unknown'),
-            // The targets' length, else the API's count: it sends no
-            // targets for Firewalla-managed lists
-            entry_count: targetListEntryCount(list),
-            // Target List Buffer Strategy: Per-list target limiting
-            //
-            // Problem: Some target lists (especially threat intelligence feeds)
-            // can contain 10,000+ targets, leading to:
-            // - Excessive response payload sizes
-            // - JSON serialization performance issues
-            // - Client-side rendering problems
-            //
-            // Solution: Limit to 500 targets per list while preserving total count.
-            // This balances:
-            // - Useful data visibility (500 targets shows patterns/types)
-            // - Response performance (manageable payload size)
-            // - Client usability (reasonable display limits)
-            //
-            // The 500 limit was chosen as 5x the original 100 limit to provide
-            // better visibility into large lists while maintaining performance.
-            // Per-list target buffer limit; null when the API sent none
-            targets: targetListEntries(list, 500),
-            last_updated: safeUnixToISOString(
-              SafeAccess.getNestedValue(list, 'lastUpdated', undefined) as
-                number | undefined,
-              undefined
-            ),
-            notes: SafeAccess.getNestedValue(list, 'notes', ''),
-          })
-        ),
-        ...(lists.some(list => targetListEntries(list, 0) === null) && {
-          targets_note:
-            'targets is null for lists whose entries the API does not return, such as Firewalla-managed lists; their entry_count is the count the API reports.',
-        }),
-        ...(lists.some(list => targetListEntryCount(list) === null) && {
-          entry_count_note:
-            "entry_count is null for lists the API sent neither targets nor a count for; get_specific_target_list returns the API's record of one list.",
-        }),
-      };
-
-      const executionTime = Date.now() - startTime;
-      return this.createUnifiedResponse(unifiedResponseData, {
-        executionTimeMs: executionTime,
-      });
-    }, this.name);
+    }
   }
 }
 
