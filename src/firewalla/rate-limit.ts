@@ -71,6 +71,15 @@ export class RateLimitError extends Error {
 }
 
 /**
+ * The text of a rateLimitError(), wherever a handler quotes it: "Rate limit
+ * exceeded: the Firewalla API allows 100 requests ..." or "Rate limit
+ * exceeded (HTTP 429): ...". A tool's error response is given the kind
+ * rate_limit_error when its message holds it (see createErrorResponse).
+ */
+export const RATE_LIMIT_TEXT =
+  /Rate limit exceeded(?: \(HTTP 429\))?: the Firewalla API allows \d+ requests/;
+
+/**
  * A RateLimitError saying how many requests the window allows and when
  * capacity returns, in seconds from `now` and as a UTC time, then `detail`
  */

@@ -9,6 +9,7 @@ import {
   queryComplexityErrors,
   queryStructureErrors,
 } from '../utils/query-structure.js';
+import { RATE_LIMIT_TEXT } from '../firewalla/rate-limit.js';
 import type { ValidationResult } from '../types.js';
 
 /**
@@ -66,6 +67,14 @@ export interface LegacyStandardError {
 }
 
 
+/** The kinds a handler passes for any failure, which a rate limit overrides */
+const GENERIC_ERROR_TYPES: ReadonlySet<ErrorType> = new Set([
+  ErrorType.API_ERROR,
+  ErrorType.SEARCH_ERROR,
+  ErrorType.NETWORK_ERROR,
+  ErrorType.UNKNOWN_ERROR,
+]);
+
 /**
  * Create a standard error response with enhanced error typing
  * 
@@ -88,11 +97,17 @@ export function createErrorResponse(
   content: Array<{ type: string; text: string }>;
   isError: true;
 } {
+  // A rate-limit refusal is a rate_limit_error whatever kind the handler
+  // passed for its failures in general; a more specific kind is kept
+  const kind =
+    GENERIC_ERROR_TYPES.has(errorType) && RATE_LIMIT_TEXT.test(message)
+      ? ErrorType.RATE_LIMIT_ERROR
+      : errorType;
   const errorResponse: StandardError = {
     error: true,
     message,
     tool,
-    errorType,
+    errorType: kind,
     timestamp: new Date().toISOString(),
     ...(details && { details }),
     ...(validationErrors?.length && { validation_errors: validationErrors }),
