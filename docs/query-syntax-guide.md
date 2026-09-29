@@ -75,6 +75,13 @@ The geographic names refused on flows and alarms are `country`, `country_code`, 
 
 The search tools also check field names before this. They refuse `resolved:` and `message:` on alarms, the qualifier aliases listed there, and a bare MAC address in `search_devices` (see [Fields](#fields)).
 
+Before any of this, and before any request, every tool that takes a query (the five search tools, `get_flow_data`, `get_active_alarms` and `get_network_rules`) checks its shape the same way:
+
+- **Invalid query structure**: parentheses or brackets that do not pair, a quote that is never closed, a control character, more than 5 levels of parentheses, or more than 2,000 characters. A parenthesis or bracket inside a quoted value is text (`name:"a(b"`). Each message gives the position, as in `Query opens a bracket '[' at position 7 that is never closed`.
+- **Query is too complex**: more than 20 `AND`/`OR`, 15 `field:value` terms or 5 `[low TO high]` ranges, counted outside quotes, so `"rock AND roll"` is a phrase and a MAC address one term. Each message names the limit, the count and the maximum, as in `Too many logical operators: 21 (at most 20)`.
+
+There is no limit on the number of wildcards.
+
 ## Where the query goes
 
 | Tool | Endpoint | Applies the query | Before sending |
@@ -97,7 +104,7 @@ The first six then send the query through the rewrite above. When `FIREWALLA_BOX
 - A word without a field is free text (`porn`, `"brute force"`); it matched on alarms and was not measured on flows. On rules the API matched none (measured 2026-09-26: a word in one of 98 rules' target value returned 0 rules), so `search_rules` and `get_network_rules` keep free text out of the query and match it themselves. `search_devices` and `search_target_lists` match it too; see [Fields](#fields) for the fields each searches. In a query sent to the API, free text can be ANDed with other terms but not ORed or excluded; `search_devices` and `search_target_lists` evaluate `OR` and `NOT` with it too.
 - `[low TO high]` and `{low TO high}` are refused everywhere, with the `field:low-high` form suggested.
 - With no `ts` term, `/v2/alarms` covers the last 30 days and `/v2/flows` the last 24 hours. `ts` takes Unix seconds, `ts:1790208000-1790294400` (2026-09-24, UTC) or `ts:>=1790208000`, or a relative time, `ts:>1h`, `ts:>=24h` or `ts:<7d` (units `s`, `m`, `h`, `d`, `w`), which `search_alarms`, `search_flows`, `get_active_alarms` and `get_flow_data` send as Unix seconds. `search_rules`, `search_devices` and `search_target_lists` do not accept `ts` (`Invalid field(s) in query: ts`).
-- The search tools refuse a query with more than 10 `*`, 15 `field:value` terms or 20 `AND`/`OR`.
+- A value may hold any number of `*`: wildcards are matched in time linear in the value's length, so there is no wildcard limit. The limits on a query's length, nesting, operators and terms are under [What is refused](#what-is-refused).
 
 ## Fields
 

@@ -111,6 +111,51 @@ export function createErrorResponse(
 }
 
 /**
+ * The refusal every tool that takes a query gives one that fails the
+ * structural checks (queryStructureErrors) or goes over a complexity limit
+ * (queryComplexityErrors), before it translates or sends it; undefined
+ * when the query passes, or is not a string. search_* (through
+ * validateCommonSearchParameters), get_flow_data, get_active_alarms and
+ * get_network_rules all run it, so they refuse a query alike.
+ *
+ * @param tool - The tool's name, for the response
+ * @param query - The query argument as given
+ */
+export function queryShapeRefusal(
+  tool: string,
+  query: unknown
+): ReturnType<typeof createErrorResponse> | undefined {
+  if (typeof query !== 'string') {
+    return undefined;
+  }
+  const structureErrors = queryStructureErrors(query);
+  if (structureErrors.length > 0) {
+    return createErrorResponse(
+      tool,
+      'Invalid query structure',
+      ErrorType.VALIDATION_ERROR,
+      { query, structure_errors: structureErrors },
+      structureErrors
+    );
+  }
+  const complexityErrors = queryComplexityErrors(query);
+  if (complexityErrors.length > 0) {
+    return createErrorResponse(
+      tool,
+      'Query is too complex',
+      ErrorType.VALIDATION_ERROR,
+      {
+        query,
+        complexity_errors: complexityErrors,
+        hint: 'Split it into several searches',
+      },
+      complexityErrors
+    );
+  }
+  return undefined;
+}
+
+/**
  * Create a legacy error response for backward compatibility
  * @deprecated Use createErrorResponse with ErrorType instead
  */

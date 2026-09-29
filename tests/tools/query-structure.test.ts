@@ -1,7 +1,10 @@
 /**
- * Every search tool refuses a structurally malformed or oversized query
- * before it translates or sends it, and they agree on what that is, from
- * the #74 overview: "Flow and alarm paths bypass structural sanitization."
+ * Every tool that takes a query (the five search_* tools, get_flow_data,
+ * get_active_alarms and get_network_rules) refuses a structurally
+ * malformed or oversized query before it translates or sends it, and they
+ * agree on what that is, from the #74 overview: "Flow and alarm paths
+ * bypass structural sanitization." get_network_rules passed its query
+ * straight to the client (#82 review).
  *
  * On a stub, search_flows, search_alarms, get_flow_data and
  * get_active_alarms each sent an unclosed [, a NUL, BEL, ESC or DEL and a
@@ -22,6 +25,7 @@ import {
 } from '../../src/tools/handlers/search.js';
 import { GetFlowDataHandler } from '../../src/tools/handlers/network.js';
 import { GetActiveAlarmsHandler } from '../../src/tools/handlers/security.js';
+import { GetNetworkRulesHandler } from '../../src/tools/handlers/rules.js';
 import { queryStructureErrors } from '../../src/utils/query-structure.js';
 
 jest.mock('axios', () => {
@@ -131,6 +135,11 @@ const TOOLS = [
     name: 'search_target_lists',
     Handler: SearchTargetListsHandler,
     field: 'name',
+  },
+  {
+    name: 'get_network_rules',
+    Handler: GetNetworkRulesHandler,
+    field: 'action',
   },
 ] as const;
 

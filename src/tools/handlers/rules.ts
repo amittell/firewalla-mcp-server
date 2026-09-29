@@ -17,6 +17,7 @@ import {
   SafeAccess,
   createErrorResponse,
   ErrorType,
+  queryShapeRefusal,
 } from '../../validation/error-handler.js';
 import {
   optimizeRuleResponse,
@@ -175,6 +176,13 @@ export class GetNetworkRulesHandler extends BaseToolHandler {
       }
 
       const query = args?.query;
+      // The structural checks and complexity limits every tool that takes
+      // a query runs, before it is translated or sent; get_network_rules
+      // passed its query straight to getNetworkRules
+      const shapeRefusal = queryShapeRefusal(this.name, query);
+      if (shapeRefusal) {
+        return shapeRefusal;
+      }
       const summaryOnly = (args?.summary_only as boolean) ?? false;
       const limit = limitValidation.sanitizedValue! as number;
 

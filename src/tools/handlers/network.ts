@@ -13,6 +13,7 @@ import {
   ParameterValidator,
   SafeAccess,
   ErrorType,
+  queryShapeRefusal,
 } from '../../validation/error-handler.js';
 import {
   unixToISOStringOrNow,
@@ -41,10 +42,6 @@ import {
   type StreamingOperation,
 } from '../../utils/streaming-manager.js';
 import { mspAnd, toMspQuery } from '../../utils/msp-query.js';
-import {
-  queryComplexityErrors,
-  queryStructureErrors,
-} from '../../utils/query-structure.js';
 import type { PagingCoverage } from '../../utils/paging-coverage.js';
 
 /**
@@ -161,33 +158,12 @@ export class GetFlowDataHandler extends BaseToolHandler {
       }
 
       const query = args?.query;
-      // The structural checks the search tools run, before the query is
-      // translated or sent: an unclosed [, a NUL, 11 levels of nesting and
-      // a 2,001-character query went to the API
-      if (typeof query === 'string') {
-        const structureErrors = queryStructureErrors(query);
-        if (structureErrors.length > 0) {
-          return this.createErrorResponse(
-            'Invalid query structure',
-            ErrorType.VALIDATION_ERROR,
-            { query, structure_errors: structureErrors },
-            structureErrors
-          );
-        }
-        // The complexity limits every search tool holds a query to
-        const complexityErrors = queryComplexityErrors(query);
-        if (complexityErrors.length > 0) {
-          return this.createErrorResponse(
-            'Query is too complex',
-            ErrorType.VALIDATION_ERROR,
-            {
-              query,
-              complexity_errors: complexityErrors,
-              hint: 'Split it into several searches',
-            },
-            complexityErrors
-          );
-        }
+      // The structural checks and complexity limits every tool that takes
+      // a query runs, before it is translated or sent: an unclosed [, a
+      // NUL, 11 levels of nesting and a 2,001-character query went to the API
+      const shapeRefusal = queryShapeRefusal(this.name, query);
+      if (shapeRefusal) {
+        return shapeRefusal;
       }
       const groupBy = groupByValidation.sanitizedValue as string | undefined;
       const sortBy = args?.sortBy;
