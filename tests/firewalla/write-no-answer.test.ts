@@ -235,7 +235,7 @@ describe('a write with an ordinary failure keeps its error', () => {
     const body = JSON.parse(response.content[0].text);
 
     expect(body.message).toMatch(
-      /^Failed to create rule: Firewalla API sent no answer \(ECONNREFUSED: /
+      /^Failed to create rule: Could not reach the Firewalla API \(ECONNREFUSED: /
     );
     expect(body.message).not.toContain('outcome is unknown');
   });

@@ -1071,6 +1071,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only when the lookup places the address in that country. `geo_enriched`
   now counts these flat fields too: `search_flows` said false for a flow
   whose `destination_country` was `US`.
+- A request that never reached the API says `Could not reach the Firewalla
+  API (ECONNREFUSED: ...)`, where it said `Firewalla API sent no answer`,
+  and a write that failed this way is reported as failed. A write whose TLS
+  handshake failed, or whose host was unreachable, was reported as "sent and
+  not answered. The outcome is unknown: Firewalla may have applied the
+  change", though nothing had been sent: only a refused connection and a
+  host name that did not resolve were known to fail before sending. A failed
+  handshake (`EPROTO`), a certificate Node does not accept (`CERT_*`,
+  `ERR_TLS_*` and the like), `EHOSTUNREACH` and `ENETUNREACH` now count too.
 
 ### Removed
 
