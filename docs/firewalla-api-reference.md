@@ -1641,7 +1641,7 @@ Wait until `x-ratelimit-reset` (or for `retry-after`) before retrying.
    }
    ```
 
-2. **Retry transient read failures with backoff**, and nothing else. A 429 needs a wait until the window ends instead (above). Never send a POST, PATCH, PUT or DELETE again after a lost answer: the API may have applied it. Every retry counts against the 100 requests per 5 minutes. This sketch sends only GETs and retries only what `FirewallaClient` treats as transient (`TRANSIENT_STATUSES` and `TRANSIENT_CODES` in `src/firewalla/client.ts`): 502, 503 and 504, and no answer with `ECONNABORTED`, `ETIMEDOUT`, `ECONNRESET` or `EPIPE`. `FirewallaClient` itself retries once, and only when the answer can still come in time (Transient failures, above).
+2. **Retry a transient read failure once**, and nothing else. A 429 needs a wait until the window ends instead (above). Never send a POST, PATCH, PUT or DELETE again after a lost answer: the API may have applied it. Every retry counts against the 100 requests per 5 minutes. This sketch sends only GETs. Like `FirewallaClient` (`MAX_TRANSIENT_RETRIES = 1`), it sends a failed one again once, 1 to 2 s later, when the failure is one the client treats as transient (`TRANSIENT_STATUSES` and `TRANSIENT_CODES` in `src/firewalla/client.ts`): 502, 503 and 504, and no answer with `ECONNABORTED`, `ETIMEDOUT`, `ECONNRESET` or `EPIPE`. `FirewallaClient` also skips the retry when its answer could not come before the tool gives up (Transient failures, above).
    ```javascript
    const TRANSIENT_STATUSES = new Set([502, 503, 504]);
    const TRANSIENT_CODES = new Set(['ECONNABORTED', 'ETIMEDOUT', 'ECONNRESET', 'EPIPE']);
@@ -1653,15 +1653,14 @@ Wait until `x-ratelimit-reset` (or for `retry-after`) before retrying.
        : TRANSIENT_CODES.has(error.code);
    }
 
-   // Reads only: this function sends GET and nothing else
-   async function getWithRetry(path, params, maxRetries = 2) {
-     for (let attempt = 0; ; attempt++) {
-       try {
-         return (await apiClient.get(path, { params })).data;
-       } catch (error) {
-         if (attempt >= maxRetries || !isTransient(error)) throw error;
-         await delay(2 ** attempt * 1000); // 1 s, then 2 s
-       }
+   // Reads only: this function sends GET and nothing else, at most twice
+   async function getWithRetry(path, params) {
+     try {
+       return (await apiClient.get(path, { params })).data;
+     } catch (error) {
+       if (!isTransient(error)) throw error;
+       await delay(1000 * (1 + Math.random())); // 1 to 2 s
+       return (await apiClient.get(path, { params })).data;
      }
    }
    ```
