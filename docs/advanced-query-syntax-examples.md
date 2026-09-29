@@ -5,7 +5,7 @@ fields each tool takes and what is refused are in the
 [query syntax guide](query-syntax-guide.md), which also says which forms were
 measured against a live account. This page does not repeat them.
 
-Every call here was run through the tools' handlers on 2026-09-27 with the
+Every call here was run through the tools' handlers on 2026-09-29 with the
 HTTP layer stubbed, so nothing reached the API. "Sent" is the request the
 client made with `FIREWALLA_BOX_ID` unset; with it set, ` box.id:<gid>`
 follows. `<now>` stands for the Unix time of the call and `<now-3600>` for an
@@ -81,12 +81,14 @@ accepted and refused.
 
 | Step | Call | Sent |
 |---|---|---|
-| Counts by action, direction, status and target type | `get_network_rules_summary` | `GET /v2/rules` with `limit=200`, counted by the server |
+| Counts by action, direction, status and target type | `get_network_rules_summary` | `GET /v2/rules` with `limit=200` and `query=-status:paused`, counted by the server |
 | Paused rules | `search_rules` with `status:paused` | `status:paused` |
 | Block rules that mention a word | `search_rules` with `tiktok AND action:block` | `action:block`; the server keeps the rules with "tiktok" in their name, notes, action, target or scope |
 | Social target lists | `search_target_lists` with `category:social` | `GET /v2/target-lists`, filtered by the server |
 
-`get_network_rules_summary` sends `limit=200`, which its schema does not
-list, and the API documents no limit for rules, so whether it counts more
-than 200 rules was not measured. Its `active_only` and `rule_type` arguments
-are repeated in the answer and filter nothing (`src/tools/handlers/rules.ts`).
+`get_network_rules_summary` counts active rules by default: `active_only`
+defaults to true and is sent as `-status:paused`, so paused rules are left
+out; `active_only: false` sends no query and counts both. `rule_type:
+"timelimit"` adds `action:timelimit`. Its `limit` defaults to 200 (at most
+2000), and the API documents no limit for rules, so whether it counts more
+than 200 rules was not measured.
