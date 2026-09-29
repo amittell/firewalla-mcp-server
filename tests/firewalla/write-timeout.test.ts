@@ -8,7 +8,9 @@
  * pause or create a rule twice.
  *
  * The HTTP layer is stubbed, and the tools give up after TOOL_MS instead of
- * 30 s. A write is answered only when it is cancelled, or after 1 s.
+ * 30 s. A write is answered only when it is cancelled, or after 1 s. Each
+ * answer gives that limit, `limit: 200ms` and timeoutMs 200, as every other
+ * timeout answer does: a fixed number, or none, fails.
  */
 
 import {
@@ -127,6 +129,7 @@ async function run(
     isError: response.isError,
     message: body.message as string,
     write: body.details?.write,
+    timeoutMs: body.details?.timeoutMs,
   };
 }
 
@@ -226,10 +229,11 @@ describe('a write sent and not answered when the tool gives up', () => {
       expect(result.isError).toBe(true);
       expect(result.message).toMatch(
         new RegExp(
-          `^${handler.name} gave up after \\d+ ms with ${request.replace(/[/.]/g, '\\$&')} sent and not answered\\. The outcome is unknown: Firewalla may have applied the change\\. Check with ${check} before trying again\\.$`
+          `^${handler.name} gave up after \\d+ ms \\(limit: ${TOOL_MS}ms\\) with ${request.replace(/[/.]/g, '\\$&')} sent and not answered\\. The outcome is unknown: Firewalla may have applied the change\\. Check with ${check} before trying again\\.$`
         )
       );
       expect(result.write).toBe('unknown');
+      expect(result.timeoutMs).toBe(TOOL_MS);
       // The request was cancelled, not sent again
       expect(writes).toEqual([{ request, cancelled: true }]);
     }
@@ -249,9 +253,10 @@ describe('a write still waiting for the rate limiter when the tool gives up', ()
       client
     );
     expect(result.message).toMatch(
-      /^create_target_list gave up after \d+ ms while POST \/v2\/target-lists waited for the rate limit\. It was not sent, so nothing was changed\.$/
+      /^create_target_list gave up after \d+ ms \(limit: 200ms\) while POST \/v2\/target-lists waited for the rate limit\. It was not sent, so nothing was changed\.$/
     );
     expect(result.write).toBe('not_sent');
+    expect(result.timeoutMs).toBe(TOOL_MS);
     // The rate limiter's wait ends later; the write is still not sent
     await delay(700);
     expect(writes).toEqual([]);
@@ -277,8 +282,9 @@ describe('a write answered before the tool gave up', () => {
       await delay(1000);
     }, 'pause_rule').catch(error => error);
     expect(failure.writeState).toBe('applied');
+    expect(failure.timeoutMs).toBe(TOOL_MS);
     expect(failure.writeOutcome).toMatch(
-      /^pause_rule gave up after \d+ ms, after POST \/v2\/rules\/r-1\/pause was answered HTTP 200: the change was made\. Check with get_network_rules before trying again\.$/
+      /^pause_rule gave up after \d+ ms \(limit: 200ms\), after POST \/v2\/rules\/r-1\/pause was answered HTTP 200: the change was made\. Check with get_network_rules before trying again\.$/
     );
   });
 });
