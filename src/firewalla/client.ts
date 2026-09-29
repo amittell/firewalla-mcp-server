@@ -1177,16 +1177,26 @@ export class FirewallaClient {
           `API Response Error: ${error.response?.status} ${error.message}\n`
         );
 
+        // Thrown with their status: request() passes an ApiRequestError on
+        const sends = (error.config as RateLimitedConfig | undefined)?.sends;
         if (error.response?.status === 401) {
-          throw new Error(
-            'Authentication failed. Please check your MSP token.'
+          throw new ApiRequestError(
+            'Authentication failed. Please check your MSP token.',
+            401,
+            error.code,
+            sends
           );
         }
         if (error.response?.status === 403) {
           throw new ForbiddenError(forbiddenMessage(error));
         }
         if (error.response?.status === 404) {
-          throw new Error('Resource not found. Please check your Box ID.');
+          throw new ApiRequestError(
+            'Resource not found. Please check your Box ID.',
+            404,
+            error.code,
+            sends
+          );
         }
         if (error.response?.status === 429) {
           return this.retryRateLimited(error);
@@ -1801,9 +1811,14 @@ export class FirewallaClient {
         throw new ApiRequestError(failure, status, error.code, attempts);
       }
 
-      // A 403 from the response interceptor carries its own explanation, and
-      // a rate-limit refusal says when capacity returns
-      if (error instanceof ForbiddenError || error instanceof RateLimitError) {
+      // A 403 from the response interceptor carries its own explanation, a
+      // rate-limit refusal says when capacity returns, and a 401 or 404
+      // keeps its status
+      if (
+        error instanceof ForbiddenError ||
+        error instanceof RateLimitError ||
+        error instanceof ApiRequestError
+      ) {
         throw error;
       }
 
@@ -3839,7 +3854,6 @@ export class FirewallaClient {
         false
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
       if (isNotFoundError(error)) {
         throw new Error(
           action === 'delete'
@@ -3847,22 +3861,19 @@ export class FirewallaClient {
             : `POST ${endpoint} returned 404 although the alarm exists (GET returned it). ${action} needs MSP 2.11.0 or later, and the API's 404 does not say whether the endpoint or the alarm was missing`
         );
       }
-      // No answer came, or the error did not come from the API's answer
-      if (
-        (error instanceof ApiRequestError && error.status === undefined) ||
-        message.startsWith('Request failed:')
-      ) {
+      // Sent and not answered (request() tells): it may have been applied.
+      // Any other failure, a status or "Request failed:" included, means
+      // the API answered or the request never reached it.
+      if (error instanceof WriteOutcomeUnknownError) {
         const check =
           action === 'delete'
             ? 'check with get_specific_alarm, which answers not found once it is gone,'
             : 'check its status with get_specific_alarm (2 is archived)';
-        const failure =
-          error instanceof WriteOutcomeUnknownError ? error.failure : message;
         throw new WriteOutcomeUnknownError(
-          `${method} ${endpoint} got no HTTP status (${failure}). The alarm may or may not have been ${ALARM_ACTION_DONE[action]}: ${check} before retrying`,
-          error instanceof ApiRequestError ? error.code : undefined,
-          error instanceof ApiRequestError ? error.attempts : 1,
-          failure,
+          `${method} ${endpoint} got no HTTP status (${error.failure}). The alarm may or may not have been ${ALARM_ACTION_DONE[action]}: ${check} before retrying`,
+          error.code,
+          error.attempts,
+          error.failure,
           'get_specific_alarm'
         );
       }
