@@ -148,7 +148,6 @@ export interface PerformanceMetrics {
  * Timeout error class for actual timeout situations
  */
 export class TimeoutError extends Error {
-  public readonly isTimeout = true;
   public readonly duration: number;
   public readonly toolName: string;
   /** The limit the operation was stopped at, in milliseconds */
@@ -176,7 +175,6 @@ export class TimeoutError extends Error {
  * Performance warning class for monitoring
  */
 export class PerformanceWarning extends Error {
-  public readonly isWarning = true;
   public readonly duration: number;
   public readonly toolName: string;
 
@@ -334,18 +332,6 @@ export class TimeoutManager {
   }
 
   /**
-   * Create a timeout-wrapped version of an async function
-   */
-  wrapWithTimeout<T extends any[], R>(
-    fn: (...args: T) => Promise<R>,
-    config: Partial<TimeoutConfig> = {}
-  ): (...args: T) => Promise<R> {
-    return async (...args: T): Promise<R> => {
-      return this.withTimeout(async () => fn(...args), config);
-    };
-  }
-
-  /**
    * Record performance metrics
    */
   private recordMetrics(metrics: PerformanceMetrics): void {
@@ -355,87 +341,6 @@ export class TimeoutManager {
     if (this.metrics.length > this.maxMetrics) {
       this.metrics.splice(0, this.metrics.length - this.maxMetrics);
     }
-  }
-
-  /**
-   * Get performance metrics for a specific tool
-   */
-  getMetrics(toolName?: string): PerformanceMetrics[] {
-    if (toolName) {
-      return this.metrics.filter(m => m.toolName === toolName);
-    }
-    return [...this.metrics];
-  }
-
-  /**
-   * Get performance statistics
-   */
-  getPerformanceStats(toolName?: string): {
-    totalOperations: number;
-    successRate: number;
-    timeoutRate: number;
-    warningRate: number;
-    averageDuration: number;
-    maxDuration: number;
-    minDuration: number;
-  } {
-    const relevantMetrics = this.getMetrics(toolName);
-
-    if (relevantMetrics.length === 0) {
-      return {
-        totalOperations: 0,
-        successRate: 0,
-        timeoutRate: 0,
-        warningRate: 0,
-        averageDuration: 0,
-        maxDuration: 0,
-        minDuration: 0,
-      };
-    }
-
-    const durations = relevantMetrics
-      .filter(m => m.duration !== undefined)
-      .map(m => m.duration!);
-
-    return {
-      totalOperations: relevantMetrics.length,
-      successRate:
-        relevantMetrics.filter(m => m.success).length / relevantMetrics.length,
-      timeoutRate:
-        relevantMetrics.filter(m => m.timedOut).length / relevantMetrics.length,
-      warningRate:
-        relevantMetrics.filter(m => m.warning).length / relevantMetrics.length,
-      averageDuration:
-        durations.length > 0
-          ? durations.reduce((a, b) => a + b, 0) / durations.length
-          : 0,
-      maxDuration: durations.length > 0 ? Math.max(...durations) : 0,
-      minDuration: durations.length > 0 ? Math.min(...durations) : 0,
-    };
-  }
-
-  /**
-   * Clear all metrics (useful for testing)
-   */
-  clearMetrics(): void {
-    this.metrics = [];
-  }
-
-  /**
-   * Cancel all active timeouts (useful for cleanup)
-   */
-  cancelAllTimeouts(): void {
-    for (const timeoutId of this.activeTimeouts.values()) {
-      clearTimeout(timeoutId);
-    }
-    this.activeTimeouts.clear();
-  }
-
-  /**
-   * Get the number of active operations
-   */
-  getActiveOperationsCount(): number {
-    return this.activeTimeouts.size;
   }
 }
 
@@ -482,89 +387,6 @@ export async function withToolTimeout<T>(
     }
     throw error;
   }
-}
-
-/**
- * Generate actionable guidance for validation errors
- */
-function generateValidationGuidance(
-  toolName: string,
-  duration: number,
-  originalError: string
-): string[] {
-  const guidance: string[] = [];
-
-  // General validation guidance
-  guidance.push(
-    `Validation failed immediately (${duration}ms).`,
-    'This is a parameter or configuration error, not a performance issue.',
-    `Original error: ${originalError}`
-  );
-
-  // Tool-specific validation guidance
-  guidance.push(
-    '',
-    '🔧 Common Parameter Issues:',
-    '• Check that all required parameters are provided',
-    '• Verify parameter types match the expected format',
-    '• Ensure numeric parameters are within valid ranges',
-    '• Check that enum values are from the allowed list',
-    '• Verify API credentials and box configuration'
-  );
-
-  if (originalError.toLowerCase().includes('limit')) {
-    guidance.push(
-      '',
-      '📊 Limit Parameter Issues:',
-      '• The limit parameter is required for most tools',
-      '• Limit must be a positive integer',
-      '• Consider reasonable limits (10-1000 for most operations)',
-      '• Some tools have maximum limit restrictions'
-    );
-  }
-
-  if (
-    originalError.toLowerCase().includes('auth') ||
-    originalError.toLowerCase().includes('credential')
-  ) {
-    guidance.push(
-      '',
-      '🔐 Authentication Issues:',
-      '• Verify FIREWALLA_MSP_TOKEN is set correctly',
-      '• Check FIREWALLA_MSP_ID matches your domain',
-      '• Ensure FIREWALLA_BOX_ID is the correct box identifier',
-      '• Confirm the API token has necessary permissions'
-    );
-  }
-
-  // Add tool-specific validation guidance
-  if (toolName.includes('search')) {
-    guidance.push(
-      '',
-      '🔍 Search Tool Validation:',
-      '• Ensure query syntax is correct',
-      '• Check that search fields are valid',
-      '• Verify time range format (ISO 8601)'
-    );
-  } else if (toolName.includes('rule')) {
-    guidance.push(
-      '',
-      '🛡️ Rule Tool Validation:',
-      '• Confirm rule IDs exist',
-      '• Check rule action values (block, allow, timelimit)',
-      '• Verify target format matches expected pattern'
-    );
-  } else if (toolName.includes('device')) {
-    guidance.push(
-      '',
-      '📱 Device Tool Validation:',
-      '• Check device ID format',
-      '• Verify network scope parameters',
-      '• Ensure status filters are valid'
-    );
-  }
-
-  return guidance;
 }
 
 /**
@@ -667,61 +489,6 @@ function generateTimeoutGuidance(
 }
 
 /**
- * Create a standardized validation error response for MCP tools
- */
-export function createValidationErrorResponse(
-  toolName: string,
-  duration: number,
-  originalError: string
-): {
-  content: Array<{ type: string; text: string }>;
-  isError: true;
-} {
-  const guidance = generateValidationGuidance(
-    toolName,
-    duration,
-    originalError
-  );
-
-  return createErrorResponse(
-    toolName,
-    guidance.join('\n'),
-    ErrorType.VALIDATION_ERROR,
-    {
-      duration,
-      originalError,
-      validation_context: {
-        was_immediate: duration < 50,
-        error_category: originalError.toLowerCase().includes('limit')
-          ? 'missing_parameter'
-          : originalError.toLowerCase().includes('auth')
-            ? 'authentication'
-            : 'parameter_validation',
-        operation_category: toolName.includes('search')
-          ? 'search'
-          : toolName.includes('rule')
-            ? 'rule_management'
-            : toolName.includes('device')
-              ? 'device_monitoring'
-              : 'general',
-      },
-      documentation: {
-        validation_guide: '/docs/error-handling-guide.md#validation-errors',
-        parameter_guide: '/docs/firewalla-api-reference.md#parameters',
-        authentication_guide: '/docs/firewalla-api-reference.md#authentication',
-      },
-    },
-    [
-      'Parameter validation failed - this is not a timeout',
-      'Check the specific error message for parameter requirements',
-      'Verify all required parameters are provided',
-      'Ensure parameter values match expected types and ranges',
-      'See the validation troubleshooting guide for common fixes',
-    ]
-  );
-}
-
-/**
  * Create a standardized timeout error response for MCP tools with enhanced guidance
  */
 export function createTimeoutErrorResponse(
@@ -778,15 +545,4 @@ export function createTimeoutErrorResponse(
       'See the timeout troubleshooting guide for detailed recovery steps',
     ]
   );
-}
-
-/**
- * Create a performance warning response for MCP tools
- */
-export function createPerformanceWarningResponse(
-  toolName: string,
-  duration: number,
-  threshold: number
-): string {
-  return `Performance warning: ${toolName} took ${duration}ms (threshold: ${threshold}ms). Consider optimizing your query.`;
 }

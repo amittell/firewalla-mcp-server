@@ -18,7 +18,6 @@ import {
   PauseRuleHandler,
   ResumeRuleHandler,
 } from '../../src/tools/handlers/rules.js';
-import { ResourceValidator } from '../../src/validation/resource-validator.js';
 
 jest.mock('axios', () => {
   const instance = {
@@ -97,7 +96,6 @@ const posts = () =>
 
 const parse = (res: any) => JSON.parse(res.content[0].text);
 
-beforeEach(() => ResourceValidator.clearCache());
 
 describe('FirewallaClient pauseRule / resumeRule', () => {
   it('pauseRule POSTs /v2/rules/{id}/pause with no body and no query', async () => {

@@ -14,7 +14,6 @@ import { FirewallaMCPServer } from '../../src/server.js';
 import { logger } from '../../src/monitoring/logger.js';
 import { GetDeviceStatusHandler } from '../../src/tools/handlers/device.js';
 import { PauseRuleHandler } from '../../src/tools/handlers/rules.js';
-import { ResourceValidator } from '../../src/validation/resource-validator.js';
 
 const BOX = '11111111-2222-3333-4444-555555555555';
 const START = 1790000000;
@@ -135,7 +134,6 @@ afterAll(() => {
 beforeEach(() => {
   bodies = {};
   requests.length = 0;
-  ResourceValidator.clearCache();
 });
 
 describe('tools/list', () => {

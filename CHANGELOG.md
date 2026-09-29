@@ -1274,6 +1274,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   used (1,015 lines of `src/firewalla/client.ts`). The tests that reached
   them now go through the tools, or were removed where they tested only the
   removed method.
+- What was left of the cross-reference feature and the existence checks,
+  none of it reached from a tool (3,112 lines of `src/`):
+  `src/validation/enhanced-correlation.ts`
+  and `src/config/correlation-patterns.ts`; the correlation functions of
+  `src/validation/field-mapper.ts` (`validateCrossReference`,
+  `performMultiFieldCorrelation`, `extractCorrelationValues`,
+  `CORRELATION_FIELDS` and 20 more); `ResourceValidator`'s
+  `checkRuleExists`, `checkAlarmExists`, `checkDeviceExists`, their cache
+  and `validateRuleExists`/`validateAlarmExists`, which decided "not found"
+  from the text of the error; `TimeoutManager`'s unused statistics and
+  `createValidationErrorResponse`; unused filter and search helpers; and 10
+  types of `src/types.ts`, `CrossReferenceResult` among them.
+  `ResourceValidator` keeps `createResourceNotFoundResponse`, which the rule
+  tools use.
 
 ## [1.5.0] - 2026-09-25
 

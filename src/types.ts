@@ -374,23 +374,6 @@ export interface AlarmGroup {
 }
 
 /**
- * Paginated network flow data response
- * @interface FlowData
- * @deprecated Consider using StandardPaginatedResponse<Flow> for consistent pagination
- */
-export interface FlowData {
-  /** Array of network flows */
-  flows: Flow[];
-  /** Pagination information */
-  pagination: {
-    /** Cursor for next page of results */
-    next_cursor?: string;
-    /** Whether there are more pages */
-    has_more: boolean;
-  };
-}
-
-/**
  * Network device managed by Firewalla - Data Model Compliant
  * @interface Device
  */
@@ -873,59 +856,6 @@ export interface SearchResult<T> {
 }
 
 /**
- * Cross-reference search result for correlation queries
- * @interface CrossReferenceResult
- */
-export interface CrossReferenceResult {
-  /** Primary search results */
-  primary: SearchResult<any>;
-  /** Secondary search results correlated with primary */
-  secondary: Record<string, SearchResult<any>>;
-  /** Correlation statistics */
-  correlations: {
-    /** Field used for correlation */
-    correlation_field: string;
-    /** Number of correlated items */
-    correlated_count: number;
-    /** Correlation strength (0-1) */
-    correlation_strength?: number;
-  };
-}
-
-/**
- * Standard response type definitions for response format standardization
- *
- * Defines consistent response structures across all MCP tools with enhanced
- * metadata and backward compatibility support.
- */
-
-/**
- * Category of response indicating the type of operation
- */
-export type ResponseCategory =
-  'search' | 'paginated' | 'statistical' | 'correlation' | 'status';
-
-/**
- * Base metadata included in all standardized responses
- */
-export interface BaseResponseMetadata {
-  /** Query execution time in milliseconds */
-  execution_time_ms: number;
-
-  /** Whether the response was served from cache */
-  cached: boolean;
-
-  /** Entity type being returned (flows, alarms, devices, etc.) */
-  entity_type: string;
-
-  /** Response category */
-  category: ResponseCategory;
-
-  /** Timestamp when response was generated */
-  generated_at: string;
-}
-
-/**
  * Search-specific metadata for search operations
  */
 export interface SearchMetadata {
@@ -1157,98 +1087,6 @@ export interface StandardStatisticalResponse<T> {
 }
 
 /**
- * Correlation-specific metadata for cross-reference operations
- */
-export interface CorrelationMetadata extends BaseResponseMetadata {
-  /** Fields used for correlation */
-  correlation_fields: string[];
-
-  /** Type of correlation performed */
-  correlation_type: 'AND' | 'OR';
-
-  /** Number of entities correlated */
-  correlated_entities: number;
-
-  /** Correlation strength (0.0 - 1.0) */
-  correlation_strength?: number;
-
-  /** Minimum confidence score applied */
-  minimum_confidence?: number;
-
-  /** Whether fuzzy matching was enabled */
-  fuzzy_matching_enabled?: boolean;
-}
-
-/**
- * Standard response format for correlation operations
- */
-export interface StandardCorrelationResponse {
-  /** Primary search results */
-  primary_results: any[];
-
-  /** Secondary correlated results */
-  secondary_results: Record<string, any[]>;
-
-  /** Correlation metadata */
-  correlation_metadata: CorrelationMetadata;
-
-  /** Correlation statistics */
-  correlation_stats: {
-    /** Total correlations found */
-    total_correlations: number;
-
-    /** High confidence correlations (≥0.8) */
-    high_confidence_correlations: number;
-
-    /** Medium confidence correlations (≥0.5) */
-    medium_confidence_correlations: number;
-
-    /** Low confidence correlations (<0.5) */
-    low_confidence_correlations: number;
-  };
-}
-
-/**
- * Union type for all standard response formats
- */
-export type StandardResponse<T> =
-  | StandardSearchResponse<T>
-  | StandardPaginatedResponse<T>
-  | StandardStatisticalResponse<T>
-  | StandardCorrelationResponse;
-
-/**
- * Legacy response format mapping for backward compatibility
- */
-export interface LegacyResponseMapping {
-  /** Map standard field names to legacy field names */
-  fieldMapping: Record<string, string>;
-
-  /** Fields to exclude from legacy response */
-  excludeFields: string[];
-
-  /** Additional legacy fields to include */
-  additionalFields: Record<string, any>;
-}
-
-/**
- * Configuration for response format transformation
- */
-export interface ResponseTransformConfig {
-  /** Whether to use standard format */
-  useStandardFormat: boolean;
-
-  /** Legacy mapping configuration */
-  legacyMapping?: LegacyResponseMapping;
-
-  /** Whether to include metadata in legacy format */
-  includeMetadataInLegacy: boolean;
-
-  /** Metadata fields to include in legacy format */
-  legacyMetadataFields?: string[];
-}
-
-/**
  * Data Validation and Normalization Types
  * Re-exported from data validation utilities for convenience
  */
@@ -1258,20 +1096,6 @@ export type {
   TypeValidationResult,
   ValidationResult,
 } from './utils/data-validator.js';
-
-/**
- * Configuration for data normalization behavior
- */
-export interface NormalizationConfig {
-  /** Default value to use when normalizing unknown fields */
-  defaultUnknownValue: string;
-  /** Whether to preserve null values or convert them */
-  preserveNull: boolean;
-  /** Whether to convert empty strings to null */
-  emptyStringToNull: boolean;
-  /** Whether to trim whitespace from string values */
-  trimStrings: boolean;
-}
 
 /**
  * Result of field value sanitization
