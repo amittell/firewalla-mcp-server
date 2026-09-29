@@ -1112,6 +1112,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   alarm: Authentication failed. Please check your MSP token.` or `... Could
   not reach the Firewalla API (ENOTFOUND: ...)`, and a 403 on every box is
   still reported as forbidden.
+- A tool's error answer carries one prefix, its own. Measured live, a bad
+  token gave `Failed to get boxes: Failed to get boxes: Authentication
+  failed ...` and `Failed to get device status: Failed to get device
+  status: Failed to create paginated response: Authentication failed ...`,
+  and on a stub `search_devices` said `Failed to search devices: devices
+  search failed: Failed to search devices: API request failed: ...`: the
+  client methods, the pagination helper and the search engine each wrapped
+  the error in a new plain `Error` with their own prefix, losing its class
+  and status. They now pass it on as it came, so `get_boxes` says `Failed
+  to get boxes: Authentication failed. Please check your MSP token.` and
+  the client's error is still an `ApiRequestError` with status 401. The
+  same holds for `get_device_status`, `get_offline_devices`,
+  `get_bandwidth_usage`, the statistics and trends tools, and the five
+  search tools. `get_target_lists` had no catch, so its errors came back
+  from the dispatcher with no prefix, as `unknown_error`, with the list of
+  every tool; it now answers like the others.
 
 ### Removed
 

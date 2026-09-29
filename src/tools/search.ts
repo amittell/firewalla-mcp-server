@@ -25,7 +25,6 @@ import { ErrorFormatter } from '../validation/error-formatter.js';
 import { enrichObjectWithGeo } from '../utils/geographic.js';
 import { targetListMatchesQuery } from '../utils/target-lists.js';
 import {
-  MspQueryError,
   mspAnd,
   mspTerms,
   withNotForMinus,
@@ -36,10 +35,7 @@ import { translateToMspQualifiers } from '../utils/msp-qualifiers.js';
 import { dataKeyed } from '../utils/field-normalizer.js';
 import { keyedByData } from '../utils/data-keys.js';
 import { matchesWildcard } from '../utils/wildcard.js';
-import {
-  GeographicFilterError,
-  geographicFiltersToMspQuery,
-} from '../utils/geographic-filters.js';
+import { geographicFiltersToMspQuery } from '../utils/geographic-filters.js';
 
 /**
  * Rule fields search_rules re-checks on the client, by the names its schema
@@ -453,218 +449,203 @@ export class SearchEngine {
   ): Promise<SearchResult> {
     const startTime = Date.now();
 
-    try {
-      // Get strategy for entity type
-      const strategy = this.strategies.get(entityType);
-      if (!strategy) {
-        throw new Error(
-          `No search strategy found for entity type: ${entityType}`
-        );
-      }
+    // Get strategy for entity type
+    const strategy = this.strategies.get(entityType);
+    if (!strategy) {
+      throw new Error(
+        `No search strategy found for entity type: ${entityType}`
+      );
+    }
 
-      // Use standardized parameter validation
-      this.validateSearchParams(params, entityType, validationConfig);
+    // Use standardized parameter validation
+    this.validateSearchParams(params, entityType, validationConfig);
 
-      // The validator and parser know NOT but not the API's `-` prefix
-      // (-status:paused), which the query sent to the API keeps
-      const booleanQuery = withNotForMinus(params.query);
+    // The validator and parser know NOT but not the API's `-` prefix
+    // (-status:paused), which the query sent to the API keeps
+    const booleanQuery = withNotForMinus(params.query);
 
-      // Enhanced query validation with detailed error messages and comprehensive checks
-      const enhancedValidation = EnhancedQueryValidator.validateQuery(
+    // Enhanced query validation with detailed error messages and comprehensive checks
+    const enhancedValidation = EnhancedQueryValidator.validateQuery(
+      booleanQuery,
+      entityType as EntityType
+    );
+
+    if (!enhancedValidation.isValid) {
+      // Try instance method for detailed position tracking if static method fails
+      const enhancedValidator = new EnhancedQueryValidator();
+      const detailedValidation = enhancedValidator.validateQuery(
         booleanQuery,
         entityType as EntityType
       );
 
-      if (!enhancedValidation.isValid) {
-        // Try instance method for detailed position tracking if static method fails
-        const enhancedValidator = new EnhancedQueryValidator();
-        const detailedValidation = enhancedValidator.validateQuery(
-          booleanQuery,
-          entityType as EntityType
+      // Use detailed errors if available, otherwise use standard errors
+      if (detailedValidation.detailedErrors?.length) {
+        const errorReport = ErrorFormatter.formatMultipleErrors(
+          detailedValidation.detailedErrors
         );
+        const formattedText = ErrorFormatter.formatReportAsText(errorReport);
 
-        // Use detailed errors if available, otherwise use standard errors
-        if (detailedValidation.detailedErrors?.length) {
-          const errorReport = ErrorFormatter.formatMultipleErrors(
-            detailedValidation.detailedErrors
-          );
-          const formattedText = ErrorFormatter.formatReportAsText(errorReport);
+        throw new Error(`Enhanced query validation failed:\n${formattedText}`);
+      } else {
+        // Fallback to standard enhanced validation format
+        const errorDetails = [
+          ...enhancedValidation.errors,
+          ...(enhancedValidation.fieldIssues?.map(
+            issue =>
+              `Field '${issue.field}': ${issue.issue}${issue.suggestion ? ` - ${issue.suggestion}` : ''}`
+          ) || []),
+        ];
 
-          throw new Error(
-            `Enhanced query validation failed:\n${formattedText}`
-          );
-        } else {
-          // Fallback to standard enhanced validation format
-          const errorDetails = [
-            ...enhancedValidation.errors,
-            ...(enhancedValidation.fieldIssues?.map(
-              issue =>
-                `Field '${issue.field}': ${issue.issue}${issue.suggestion ? ` - ${issue.suggestion}` : ''}`
-            ) || []),
-          ];
+        let errorMessage = `Query validation failed: ${errorDetails.join(', ')}`;
 
-          let errorMessage = `Query validation failed: ${errorDetails.join(', ')}`;
-
-          if (enhancedValidation.suggestions?.length) {
-            errorMessage += ` | Suggestions: ${enhancedValidation.suggestions.join(', ')}`;
-          }
-
-          if (enhancedValidation.correctedQuery) {
-            errorMessage += ` | Try: "${enhancedValidation.correctedQuery}"`;
-          }
-
-          throw new Error(errorMessage);
-        }
-      }
-
-      // Use corrected query if available
-      const finalQuery =
-        enhancedValidation.correctedQuery ||
-        (enhancedValidation.sanitizedValue as string) ||
-        booleanQuery;
-
-      // Validate entityType before parsing
-      const validEntityTypes = [
-        'flows',
-        'alarms',
-        'rules',
-        'devices',
-        'target_lists',
-      ] as const;
-      if (!validEntityTypes.includes(entityType as any)) {
-        throw new Error(`Invalid entity type: ${entityType}`);
-      }
-
-      const validation = queryParser.parse(
-        finalQuery,
-        entityType as (typeof validEntityTypes)[number]
-      );
-      if (!validation.isValid || !validation.ast) {
-        // Provide enhanced error messages for syntax issues not caught by enhanced validator
-        let enhancedError = `Invalid query syntax: ${validation.errors.join(', ')}`;
-
-        if (validation.suggestions && validation.suggestions.length > 0) {
-          enhancedError += `\n\nSuggestions:\n${validation.suggestions.map(s => `• ${s}`).join('\n')}`;
+        if (enhancedValidation.suggestions?.length) {
+          errorMessage += ` | Suggestions: ${enhancedValidation.suggestions.join(', ')}`;
         }
 
-        throw new Error(enhancedError);
+        if (enhancedValidation.correctedQuery) {
+          errorMessage += ` | Try: "${enhancedValidation.correctedQuery}"`;
+        }
+
+        throw new Error(errorMessage);
       }
-
-      // Set up filter context (entityType already validated above)
-      const context: FilterContext = {
-        entityType: entityType as (typeof validEntityTypes)[number],
-        apiParams: {},
-        postProcessing: [],
-        metadata: {
-          filtersApplied: [],
-          optimizations: [],
-        },
-      };
-
-      const filterResult = this.applyFiltersRecursively(
-        validation.ast,
-        context
-      );
-
-      // Prepare API parameters
-      const apiParams: ApiParameters = {
-        ...filterResult.apiParams,
-        limit: params.limit,
-        start_time: params.time_range?.start,
-        end_time: params.time_range?.end,
-        queryString: filterResult.queryString,
-      };
-
-      // Prepare search options
-      const searchOptions: SearchOptions = {};
-      if (entityType === 'devices') {
-        searchOptions.include_resolved = true;
-      }
-
-      // Time range handling is done within individual strategies to avoid duplication
-
-      // Execute API call using strategy
-      const response = await strategy.executeApiCall(
-        this.firewalla,
-        params,
-        apiParams,
-        searchOptions
-      );
-
-      // Process results
-      let results = response.results || [];
-
-      // Apply post-processing filters
-      if (filterResult.postProcessing && results.length > 0) {
-        results = filterResult.postProcessing(results);
-      }
-
-      // Apply strategy-specific result processing
-      if (strategy.processResults) {
-        results = strategy.processResults(results, params);
-      }
-
-      // Apply sorting
-      if (params.sort_by) {
-        results = this.sortResults(results, params.sort_by, params.sort_order);
-      }
-
-      // Apply pagination (for non-cursor based)
-      if (params.offset && entityType !== 'devices') {
-        results = results.slice(params.offset);
-      }
-
-      // Generate aggregations
-      const aggregations = params.aggregate
-        ? this.generateAggregations(results, params.group_by)
-        : undefined;
-
-      // Build result object
-      const result: SearchResult = {
-        results,
-        // The rule and target-list strategies filter on the client,
-        // so the API's count can include records they dropped. Devices keep
-        // the API's count: their strategy only pages.
-        count:
-          entityType === 'devices'
-            ? response.count || results.length
-            : results.length,
-        limit: params.limit || 100,
-        offset: params.offset || 0,
-        // For rules, the query sent to the API (their free text is matched
-        // on the client). Devices and target lists send none: their query is
-        // the one the client matched them against, as the caller wrote it.
-        // It was the validator's rewrite (-name:nas as NOT name:nas, spaces
-        // around a colon dropped), not the query the matcher read.
-        query: response.query ?? params.query.trim(),
-        execution_time_ms: Date.now() - startTime,
-        aggregations,
-      };
-
-      // Rules searched with free text: how many rules were checked, and
-      // whether they were all the rules the other terms match
-      if (entityType === 'rules' && response.free_text_coverage) {
-        result.free_text_coverage = response.free_text_coverage;
-      }
-
-      // Add cursor for devices with proper typing
-      if (entityType === 'devices' && response.next_cursor) {
-        const resultWithCursor = result as SearchResult & {
-          next_cursor?: string;
-        };
-        resultWithCursor.next_cursor = response.next_cursor;
-      }
-
-      return result;
-    } catch (error) {
-      // A query the API cannot run is reported as it is
-      if (error instanceof MspQueryError) {
-        throw error;
-      }
-      throw new Error(
-        `${entityType} search failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
     }
+
+    // Use corrected query if available
+    const finalQuery =
+      enhancedValidation.correctedQuery ||
+      (enhancedValidation.sanitizedValue as string) ||
+      booleanQuery;
+
+    // Validate entityType before parsing
+    const validEntityTypes = [
+      'flows',
+      'alarms',
+      'rules',
+      'devices',
+      'target_lists',
+    ] as const;
+    if (!validEntityTypes.includes(entityType as any)) {
+      throw new Error(`Invalid entity type: ${entityType}`);
+    }
+
+    const validation = queryParser.parse(
+      finalQuery,
+      entityType as (typeof validEntityTypes)[number]
+    );
+    if (!validation.isValid || !validation.ast) {
+      // Provide enhanced error messages for syntax issues not caught by enhanced validator
+      let enhancedError = `Invalid query syntax: ${validation.errors.join(', ')}`;
+
+      if (validation.suggestions && validation.suggestions.length > 0) {
+        enhancedError += `\n\nSuggestions:\n${validation.suggestions.map(s => `• ${s}`).join('\n')}`;
+      }
+
+      throw new Error(enhancedError);
+    }
+
+    // Set up filter context (entityType already validated above)
+    const context: FilterContext = {
+      entityType: entityType as (typeof validEntityTypes)[number],
+      apiParams: {},
+      postProcessing: [],
+      metadata: {
+        filtersApplied: [],
+        optimizations: [],
+      },
+    };
+
+    const filterResult = this.applyFiltersRecursively(validation.ast, context);
+
+    // Prepare API parameters
+    const apiParams: ApiParameters = {
+      ...filterResult.apiParams,
+      limit: params.limit,
+      start_time: params.time_range?.start,
+      end_time: params.time_range?.end,
+      queryString: filterResult.queryString,
+    };
+
+    // Prepare search options
+    const searchOptions: SearchOptions = {};
+    if (entityType === 'devices') {
+      searchOptions.include_resolved = true;
+    }
+
+    // Time range handling is done within individual strategies to avoid duplication
+
+    // Execute API call using strategy
+    const response = await strategy.executeApiCall(
+      this.firewalla,
+      params,
+      apiParams,
+      searchOptions
+    );
+
+    // Process results
+    let results = response.results || [];
+
+    // Apply post-processing filters
+    if (filterResult.postProcessing && results.length > 0) {
+      results = filterResult.postProcessing(results);
+    }
+
+    // Apply strategy-specific result processing
+    if (strategy.processResults) {
+      results = strategy.processResults(results, params);
+    }
+
+    // Apply sorting
+    if (params.sort_by) {
+      results = this.sortResults(results, params.sort_by, params.sort_order);
+    }
+
+    // Apply pagination (for non-cursor based)
+    if (params.offset && entityType !== 'devices') {
+      results = results.slice(params.offset);
+    }
+
+    // Generate aggregations
+    const aggregations = params.aggregate
+      ? this.generateAggregations(results, params.group_by)
+      : undefined;
+
+    // Build result object
+    const result: SearchResult = {
+      results,
+      // The rule and target-list strategies filter on the client,
+      // so the API's count can include records they dropped. Devices keep
+      // the API's count: their strategy only pages.
+      count:
+        entityType === 'devices'
+          ? response.count || results.length
+          : results.length,
+      limit: params.limit || 100,
+      offset: params.offset || 0,
+      // For rules, the query sent to the API (their free text is matched
+      // on the client). Devices and target lists send none: their query is
+      // the one the client matched them against, as the caller wrote it.
+      // It was the validator's rewrite (-name:nas as NOT name:nas, spaces
+      // around a colon dropped), not the query the matcher read.
+      query: response.query ?? params.query.trim(),
+      execution_time_ms: Date.now() - startTime,
+      aggregations,
+    };
+
+    // Rules searched with free text: how many rules were checked, and
+    // whether they were all the rules the other terms match
+    if (entityType === 'rules' && response.free_text_coverage) {
+      result.free_text_coverage = response.free_text_coverage;
+    }
+
+    // Add cursor for devices with proper typing
+    if (entityType === 'devices' && response.next_cursor) {
+      const resultWithCursor = result as SearchResult & {
+        next_cursor?: string;
+      };
+      resultWithCursor.next_cursor = response.next_cursor;
+    }
+
+    return result;
   }
 
   /**
@@ -681,165 +662,150 @@ export class SearchEngine {
   ): Promise<SearchResult> {
     const startTime = Date.now();
 
-    try {
-      // Validate basic search parameters
-      this.validateBasicSearchParams(params, 'searchFlows');
+    // Validate basic search parameters
+    this.validateBasicSearchParams(params, 'searchFlows');
 
-      // No SQL or HTML patterns: the query goes into the query string of an
-      // HTTPS request and reaches no SQL, HTML or script
-      // (QuerySanitizer.sanitizeSearchQuery says the same)
+    // No SQL or HTML patterns: the query goes into the query string of an
+    // HTTPS request and reaches no SQL, HTML or script
+    // (QuerySanitizer.sanitizeSearchQuery says the same)
 
-      if (
-        !params.limit ||
-        typeof params.limit !== 'number' ||
-        params.limit < 1 ||
-        params.limit > 1000
-      ) {
+    if (
+      !params.limit ||
+      typeof params.limit !== 'number' ||
+      params.limit < 1 ||
+      params.limit > 1000
+    ) {
+      throw new Error(
+        'limit parameter is required and must be between 1 and 1000'
+      );
+    }
+
+    // Apply boolean and relative-time translation before building query
+    // string. The client sees only the seconds, so it is told the query
+    // was relative, and does not cache its pages.
+    if (hasRelativeTimestamp(params.query)) {
+      trace.relativeTime = true;
+    }
+    // The qualifier renames (bytes: to total:, blocked:false to
+    // -status:blocked) come before mspAnd, as in get_flow_data: mspAnd
+    // translates, and read bytes:>1MB OR total:>1MB as an OR between two
+    // fields and refused it, where get_flow_data sent total:>1MB
+    const translatedQuery = translateToMspQualifiers(
+      translateRelativeTimestamps(translateBooleanQuery(params.query, 'flows')),
+      'flows'
+    );
+
+    // The query, time range and geographic filters, ANDed in the API's
+    // grammar: a space, with no parentheses (the API has neither AND nor
+    // parentheses, and answered `ts:a-b AND (query)` with HTTP 400)
+    let timeQuery: string | undefined;
+    if (params.time_range?.start && params.time_range?.end) {
+      const startDate = new Date(params.time_range.start);
+      const endDate = new Date(params.time_range.end);
+
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
         throw new Error(
-          'limit parameter is required and must be between 1 and 1000'
+          'Parameter validation failed: time_range must contain valid ISO 8601 dates'
         );
       }
 
-      // Apply boolean and relative-time translation before building query
-      // string. The client sees only the seconds, so it is told the query
-      // was relative, and does not cache its pages.
-      if (hasRelativeTimestamp(params.query)) {
-        trace.relativeTime = true;
-      }
-      // The qualifier renames (bytes: to total:, blocked:false to
-      // -status:blocked) come before mspAnd, as in get_flow_data: mspAnd
-      // translates, and read bytes:>1MB OR total:>1MB as an OR between two
-      // fields and refused it, where get_flow_data sent total:>1MB
-      const translatedQuery = translateToMspQualifiers(
-        translateRelativeTimestamps(
-          translateBooleanQuery(params.query, 'flows')
-        ),
-        'flows'
-      );
-
-      // The query, time range and geographic filters, ANDed in the API's
-      // grammar: a space, with no parentheses (the API has neither AND nor
-      // parentheses, and answered `ts:a-b AND (query)` with HTTP 400)
-      let timeQuery: string | undefined;
-      if (params.time_range?.start && params.time_range?.end) {
-        const startDate = new Date(params.time_range.start);
-        const endDate = new Date(params.time_range.end);
-
-        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-          throw new Error(
-            'Parameter validation failed: time_range must contain valid ISO 8601 dates'
-          );
-        }
-
-        if (startDate >= endDate) {
-          throw new Error('time_range.start must be before time_range.end');
-        }
-
-        const startTs = Math.floor(startDate.getTime() / 1000);
-        const endTs = Math.floor(endDate.getTime() / 1000);
-        timeQuery = `ts:${startTs}-${endTs}`;
+      if (startDate >= endDate) {
+        throw new Error('time_range.start must be before time_range.end');
       }
 
-      // Geographic filters: countries as the documented region: qualifier;
-      // a filter with no documented equivalent throws GeographicFilterError
-      const geographicQuery = geographicFiltersToMspQuery(
-        params.geographic_filters
-      );
+      const startTs = Math.floor(startDate.getTime() / 1000);
+      const endTs = Math.floor(endDate.getTime() / 1000);
+      timeQuery = `ts:${startTs}-${endTs}`;
+    }
 
-      const queryString = mspAnd(timeQuery, translatedQuery, geographicQuery);
+    // Geographic filters: countries as the documented region: qualifier;
+    // a filter with no documented equivalent throws GeographicFilterError
+    const geographicQuery = geographicFiltersToMspQuery(
+      params.geographic_filters
+    );
 
-      // Call API directly without complex validation/parsing
-      const response = await this.firewalla.getFlowData(
-        queryString,
-        params.group_by,
-        params.sort_by || 'ts:desc',
-        params.limit,
-        params.cursor,
-        trace
-      );
+    const queryString = mspAnd(timeQuery, translatedQuery, geographicQuery);
 
-      // Grouped: the API returned groups, not flows
-      if (response.groups) {
-        return {
-          results: [],
-          groups: response.groups,
-          group_by: response.group_by,
-          count: response.groups.length,
-          limit: params.limit,
-          offset: 0,
-          // The query sent: getFlowData renames qualifiers (bytes: goes out
-          // as total:) and adds the box scope
-          query: response.query ?? queryString,
-          execution_time_ms: Date.now() - startTime,
-          next_cursor: response.next_cursor,
-        };
-      }
+    // Call API directly without complex validation/parsing
+    const response = await this.firewalla.getFlowData(
+      queryString,
+      params.group_by,
+      params.sort_by || 'ts:desc',
+      params.limit,
+      params.cursor,
+      trace
+    );
 
-      // Apply client-side offset if needed (for backward compatibility)
-      let results = response.results || [];
-
-      // Enrich results with geographic data (filtering out null entries)
-      results = results
-        .filter(flow => flow !== null && flow !== undefined)
-        .map(flow => enrichObjectWithGeo(flow));
-      if (params.offset && !params.cursor) {
-        results = results.slice(params.offset);
-      }
-
-      // Apply client-side limit enforcement to ensure exact limit compliance
-      if (results.length > params.limit) {
-        results = results.slice(0, params.limit);
-      }
-
-      // Add geographic analysis if requested
-      let geographicAnalysis;
-      if (params.include_analytics || params.geographic_filters) {
-        geographicAnalysis = this.analyzeGeographicData(results);
-      }
-
-      const result: SearchResult = {
-        results,
-        count: results.length,
+    // Grouped: the API returned groups, not flows
+    if (response.groups) {
+      return {
+        results: [],
+        groups: response.groups,
+        group_by: response.group_by,
+        count: response.groups.length,
         limit: params.limit,
-        offset: params.offset || 0,
+        offset: 0,
+        // The query sent: getFlowData renames qualifiers (bytes: goes out
+        // as total:) and adds the box scope
         query: response.query ?? queryString,
         execution_time_ms: Date.now() - startTime,
         next_cursor: response.next_cursor,
-        coverage: response.coverage,
       };
-
-      // Add boolean translation debug info if translation was applied
-      if (translatedQuery !== params.query) {
-        (result as any).boolean_translation = {
-          original_query: params.query,
-          translated_query: translatedQuery,
-          translation_applied: true,
-        };
-      }
-
-      // Add optional fields
-      if (geographicAnalysis) {
-        (result as any).geographic_analysis = geographicAnalysis;
-      }
-      // Applied only when they restricted the query: filters that ask for
-      // nothing ({ countries: [] }) add no term
-      if (geographicQuery) {
-        (result as any).geographic_filters_applied = true;
-      }
-
-      return result;
-    } catch (error) {
-      // A query or filter the API cannot run is reported as it is
-      if (
-        error instanceof MspQueryError ||
-        error instanceof GeographicFilterError
-      ) {
-        throw error;
-      }
-      throw new Error(
-        `search_flows failed: ${error instanceof Error ? error.message : String(error)}`
-      );
     }
+
+    // Apply client-side offset if needed (for backward compatibility)
+    let results = response.results || [];
+
+    // Enrich results with geographic data (filtering out null entries)
+    results = results
+      .filter(flow => flow !== null && flow !== undefined)
+      .map(flow => enrichObjectWithGeo(flow));
+    if (params.offset && !params.cursor) {
+      results = results.slice(params.offset);
+    }
+
+    // Apply client-side limit enforcement to ensure exact limit compliance
+    if (results.length > params.limit) {
+      results = results.slice(0, params.limit);
+    }
+
+    // Add geographic analysis if requested
+    let geographicAnalysis;
+    if (params.include_analytics || params.geographic_filters) {
+      geographicAnalysis = this.analyzeGeographicData(results);
+    }
+
+    const result: SearchResult = {
+      results,
+      count: results.length,
+      limit: params.limit,
+      offset: params.offset || 0,
+      query: response.query ?? queryString,
+      execution_time_ms: Date.now() - startTime,
+      next_cursor: response.next_cursor,
+      coverage: response.coverage,
+    };
+
+    // Add boolean translation debug info if translation was applied
+    if (translatedQuery !== params.query) {
+      (result as any).boolean_translation = {
+        original_query: params.query,
+        translated_query: translatedQuery,
+        translation_applied: true,
+      };
+    }
+
+    // Add optional fields
+    if (geographicAnalysis) {
+      (result as any).geographic_analysis = geographicAnalysis;
+    }
+    // Applied only when they restricted the query: filters that ask for
+    // nothing ({ countries: [] }) add no term
+    if (geographicQuery) {
+      (result as any).geographic_filters_applied = true;
+    }
+
+    return result;
   }
 
   /**
@@ -850,130 +816,120 @@ export class SearchEngine {
   async searchAlarms(params: SearchParams): Promise<SearchResult> {
     const startTime = Date.now();
 
-    try {
-      // Validate basic search parameters
-      this.validateBasicSearchParams(params, 'searchFlows');
+    // Validate basic search parameters
+    this.validateBasicSearchParams(params, 'searchFlows');
 
-      // No SQL or HTML patterns: the query goes into the query string of an
-      // HTTPS request and reaches no SQL, HTML or script
-      // (QuerySanitizer.sanitizeSearchQuery says the same)
+    // No SQL or HTML patterns: the query goes into the query string of an
+    // HTTPS request and reaches no SQL, HTML or script
+    // (QuerySanitizer.sanitizeSearchQuery says the same)
 
-      if (
-        !params.limit ||
-        typeof params.limit !== 'number' ||
-        params.limit < 1 ||
-        params.limit > 5000
-      ) {
+    if (
+      !params.limit ||
+      typeof params.limit !== 'number' ||
+      params.limit < 1 ||
+      params.limit > 5000
+    ) {
+      throw new Error(
+        'limit parameter is required and must be between 1 and 5000'
+      );
+    }
+
+    // Apply boolean field translation before building query string
+    // The qualifier renames come before mspAnd, as in get_active_alarms
+    const translatedQuery = translateToMspQualifiers(
+      translateBooleanQuery(params.query, 'alarms'),
+      'alarms'
+    );
+
+    // The query and time range, ANDed in the API's grammar (a space, no
+    // parentheses). Alarms have no severity qualifier, so none is added.
+    let timeQuery: string | undefined;
+    if (params.time_range?.start && params.time_range?.end) {
+      const startDate = new Date(params.time_range.start);
+      const endDate = new Date(params.time_range.end);
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
         throw new Error(
-          'limit parameter is required and must be between 1 and 5000'
+          'Parameter validation failed: time_range must contain valid ISO 8601 dates'
         );
       }
-
-      // Apply boolean field translation before building query string
-      // The qualifier renames come before mspAnd, as in get_active_alarms
-      const translatedQuery = translateToMspQualifiers(
-        translateBooleanQuery(params.query, 'alarms'),
-        'alarms'
-      );
-
-      // The query and time range, ANDed in the API's grammar (a space, no
-      // parentheses). Alarms have no severity qualifier, so none is added.
-      let timeQuery: string | undefined;
-      if (params.time_range?.start && params.time_range?.end) {
-        const startDate = new Date(params.time_range.start);
-        const endDate = new Date(params.time_range.end);
-        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-          throw new Error(
-            'Parameter validation failed: time_range must contain valid ISO 8601 dates'
-          );
-        }
-        if (startDate >= endDate) {
-          throw new Error('time_range.start must be before time_range.end');
-        }
-        timeQuery = `ts:${Math.floor(startDate.getTime() / 1000)}-${Math.floor(endDate.getTime() / 1000)}`;
+      if (startDate >= endDate) {
+        throw new Error('time_range.start must be before time_range.end');
       }
-      // geographic_filters as the remote end's country (remote.region:)
-      const geographicQuery = geographicFiltersToMspQuery(
-        params.geographic_filters,
-        'alarms'
-      );
-      const alarmQuery = mspAnd(timeQuery, translatedQuery, geographicQuery);
+      timeQuery = `ts:${Math.floor(startDate.getTime() / 1000)}-${Math.floor(endDate.getTime() / 1000)}`;
+    }
+    // geographic_filters as the remote end's country (remote.region:)
+    const geographicQuery = geographicFiltersToMspQuery(
+      params.geographic_filters,
+      'alarms'
+    );
+    const alarmQuery = mspAnd(timeQuery, translatedQuery, geographicQuery);
 
-      // Call API directly without complex validation/parsing
-      // mspAnd turned a relative time into seconds; the trace says it was
-      // relative, so the alarms are not cached
-      const response = await this.firewalla.getActiveAlarms(
-        alarmQuery,
-        params.group_by,
-        params.sort_by || 'timestamp:desc',
-        params.limit,
-        params.cursor,
-        false,
-        readTrace(params.query)
-      );
+    // Call API directly without complex validation/parsing
+    // mspAnd turned a relative time into seconds; the trace says it was
+    // relative, so the alarms are not cached
+    const response = await this.firewalla.getActiveAlarms(
+      alarmQuery,
+      params.group_by,
+      params.sort_by || 'timestamp:desc',
+      params.limit,
+      params.cursor,
+      false,
+      readTrace(params.query)
+    );
 
-      // Grouped: the API returned groups, not alarms
-      if (response.groups) {
-        return {
-          results: [],
-          groups: response.groups,
-          group_by: response.group_by,
-          count: response.groups.length,
-          limit: params.limit,
-          offset: 0,
-          // The query sent: getActiveAlarms renames qualifiers
-          // (source_ip: goes out as device.ip:) and adds the box scope
-          query: response.query ?? params.query,
-          execution_time_ms: Date.now() - startTime,
-          next_cursor: response.next_cursor,
-        };
-      }
-
-      // Apply client-side offset if needed (for backward compatibility)
-      let results = response.results || [];
-
-      // Enrich results with geographic data (filtering out null entries)
-      results = results
-        .filter(flow => flow !== null && flow !== undefined)
-        .map(flow => enrichObjectWithGeo(flow));
-      if (params.offset && !params.cursor) {
-        results = results.slice(params.offset);
-      }
-
-      // Apply client-side limit enforcement to ensure exact limit compliance
-      if (results.length > params.limit) {
-        results = results.slice(0, params.limit);
-      }
-
-      const result = {
-        results,
-        count: results.length,
+    // Grouped: the API returned groups, not alarms
+    if (response.groups) {
+      return {
+        results: [],
+        groups: response.groups,
+        group_by: response.group_by,
+        count: response.groups.length,
         limit: params.limit,
-        offset: params.offset || 0,
+        offset: 0,
+        // The query sent: getActiveAlarms renames qualifiers
+        // (source_ip: goes out as device.ip:) and adds the box scope
         query: response.query ?? params.query,
         execution_time_ms: Date.now() - startTime,
         next_cursor: response.next_cursor,
       };
-
-      // Add boolean translation debug info if translation was applied
-      if (translatedQuery !== params.query) {
-        (result as any).boolean_translation = {
-          original_query: params.query,
-          translated_query: translatedQuery,
-          translation_applied: true,
-        };
-      }
-
-      return result;
-    } catch (error) {
-      // A query the API cannot run is reported as it is
-      if (error instanceof MspQueryError) {
-        throw error;
-      }
-      throw new Error(
-        `search_alarms failed: ${error instanceof Error ? error.message : String(error)}`
-      );
     }
+
+    // Apply client-side offset if needed (for backward compatibility)
+    let results = response.results || [];
+
+    // Enrich results with geographic data (filtering out null entries)
+    results = results
+      .filter(flow => flow !== null && flow !== undefined)
+      .map(flow => enrichObjectWithGeo(flow));
+    if (params.offset && !params.cursor) {
+      results = results.slice(params.offset);
+    }
+
+    // Apply client-side limit enforcement to ensure exact limit compliance
+    if (results.length > params.limit) {
+      results = results.slice(0, params.limit);
+    }
+
+    const result = {
+      results,
+      count: results.length,
+      limit: params.limit,
+      offset: params.offset || 0,
+      query: response.query ?? params.query,
+      execution_time_ms: Date.now() - startTime,
+      next_cursor: response.next_cursor,
+    };
+
+    // Add boolean translation debug info if translation was applied
+    if (translatedQuery !== params.query) {
+      (result as any).boolean_translation = {
+        original_query: params.query,
+        translated_query: translatedQuery,
+        translation_applied: true,
+      };
+    }
+
+    return result;
   }
 
   /**

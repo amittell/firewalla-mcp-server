@@ -246,12 +246,6 @@ export async function createPaginatedResponse<T extends object>(
   sort_by?: string,
   sort_order: 'asc' | 'desc' = 'asc'
 ): Promise<PaginatedResult<T>> {
-  try {
-    const allItems = await dataFetcher();
-    return paginateArray(allItems, cursor, page_size, sort_by, sort_order);
-  } catch (error) {
-    throw new Error(
-      `Failed to create paginated response: ${error instanceof Error ? error.message : 'Unknown error'}`
-    );
-  }
+  const allItems = await dataFetcher();
+  return paginateArray(allItems, cursor, page_size, sort_by, sort_order);
 }
