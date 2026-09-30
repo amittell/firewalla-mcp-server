@@ -161,7 +161,7 @@ This route needs the 2.0.0 image or later. Do not use `1.5.0` or `1` here: they 
 ```yaml
 services:
   firewalla-mcp:
-    image: amittell/firewalla-mcp-server:2.0.0
+    image: amittell/firewalla-mcp-server:2
     environment:
       MCP_TRANSPORT: http
       MCP_HTTP_PORT: "3000"

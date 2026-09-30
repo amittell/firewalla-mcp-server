@@ -7,8 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-09-30
+
 ### Fixed
 
+- The documentation in the package matches 2.0.x. SPEC.md is rewritten
+  from the running server: it listed endpoints, parameters, response
+  shapes and an error format the server does not use. The error guides say
+  `pause_rule` and `resume_rule` answer a 401 or a 403 as
+  `authentication_error`. The Cursor, Cline, Roo Code and VS Code guides
+  follow each client's own MCP documentation: the Cursor guide set up the
+  Claude Code extension, the Cline guide used VS Code settings Cline does
+  not read, the VS Code guide used `mcpServers` and commands that do not
+  exist, and Roo Code's extension was shut down on 2026-05-15, which its
+  guide now says. VERSION_RELEASE_NOTES.md, the 1.2.1 notes, is gone.
 - `get_network_rules` and `get_network_rules_summary` answer an API failure
   as `api_error`, as the other read tools that are not searches do. Both
   gave no error type, so a 401 or an unreachable API came back as
