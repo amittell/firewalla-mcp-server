@@ -31,11 +31,11 @@ This is a community project, not affiliated with Firewalla. It reads your data t
 | Client | Quick Start | Full Guide |
 |--------|-------------|------------|
 | **Claude Desktop** | `npm i -g firewalla-mcp-server` → Configure MCP | [Setup Guide](docs/clients/claude-desktop.md) |
-| **Claude Code** | `npm i -g firewalla-mcp-server` → CLI integration | [Setup Guide](docs/clients/claude-code.md) |
-| **VS Code** | Install MCP extension → Configure server | [Setup Guide](docs/clients/vscode.md) |
-| **Cursor** | Install Claude Code → VSIX method | [Setup Guide](docs/clients/cursor.md) |
-| **Roocode** | Install MCP support → Configure server | [Setup Guide](docs/clients/roocode.md) |
-| **Cline** | Configure in VS Code → Enable MCP | [Setup Guide](docs/clients/cline.md) |
+| **Claude Code** | `claude mcp add firewalla -e ... -- npx -y firewalla-mcp-server` | [Setup Guide](docs/clients/claude-code.md) |
+| **VS Code** | Built-in MCP (1.102+): `servers` in `.vscode/mcp.json` | [Setup Guide](docs/clients/vscode.md) |
+| **Cursor** | `~/.cursor/mcp.json` or a project's `.cursor/mcp.json` | [Setup Guide](docs/clients/cursor.md) |
+| **Roo Code** | The extension was shut down on 2026-05-15; the guide covers existing installs | [Setup Guide](docs/clients/roocode.md) |
+| **Cline** | MCP Servers → Configure → `cline_mcp_settings.json` | [Setup Guide](docs/clients/cline.md) |
 | **Open WebUI** | mcpo, or a native MCP connection over HTTP | [Setup Guide](docs/clients/open-webui.md) |
   
 
