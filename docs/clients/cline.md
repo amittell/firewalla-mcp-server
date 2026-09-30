@@ -1,172 +1,112 @@
 # Firewalla MCP × Cline
 
-Integrate Firewalla network security monitoring into Cline for AI-powered security analysis and network management.
+Use your Firewalla data from Cline, in VS Code or another editor Cline supports, or from the Cline CLI.
 
 ## Prerequisites
 
-- Cline extension installed in VS Code
-- Node.js 18+ and npm
-- Active Firewalla MSP account with API access
-- VS Code with Cline properly configured
+- Cline, from your editor's extension marketplace, or the CLI (`npm install -g cline`)
+- Node.js 18 or later, for `npx`
+- A Firewalla MSP account with API access: your MSP domain (`yourdomain.firewalla.net`) and an access token
 
-## Quick Setup
+## Add the server
 
-### 1. Install Firewalla MCP Server
+Cline keeps its MCP servers in its own settings file, `cline_mcp_settings.json`, not in VS Code's settings. To open it in the extension:
 
-```bash
-# Install globally for easy access
-npm install -g firewalla-mcp-server
-
-# Verify installation (the server has no --version flag)
-npm list -g firewalla-mcp-server
-```
-
-### 2. Configure Cline MCP Integration
-
-Update Cline's MCP configuration in VS Code settings:
-
-**File**: VS Code Settings → Extensions → Cline → MCP Servers
+1. In the Cline panel, click the **MCP Servers** icon (the stacked servers in the top toolbar).
+2. Open the **Configure** tab and click **Configure MCP Servers**, near the bottom.
+3. Add the server under `mcpServers`, next to any servers already there:
 
 ```json
 {
-  "cline.mcpServers": {
+  "mcpServers": {
     "firewalla": {
       "command": "npx",
-      "args": ["firewalla-mcp-server"],
+      "args": ["-y", "firewalla-mcp-server"],
       "env": {
         "FIREWALLA_MSP_TOKEN": "your_msp_access_token_here",
-        "FIREWALLA_MSP_ID": "yourdomain.firewalla.net",
-        "FIREWALLA_BOX_ID": "your_box_gid_here"
-      }
+        "FIREWALLA_MSP_ID": "yourdomain.firewalla.net"
+      },
+      "disabled": false,
+      "autoApprove": []
     }
   }
 }
 ```
 
-### 3. Alternative Configuration Method
+- `npx -y` downloads the package from npm the first time it starts, so nothing needs installing first. To run a clone instead, build it (`npm install && npm run build`) and use `"command": "node"` with `"args": ["/full/path/to/firewalla-mcp-server/dist/server.js"]`.
+- `FIREWALLA_BOX_ID` in `env` is optional: it limits every query to that box. Without it, queries cover every box on the account.
+- Put the credentials in `env`, which Cline passes to the server however it starts it. Cline's docs do not say whether a variable exported in your shell reaches the server too.
+- Cline's configuration docs put the file at `~/.cline/data/settings/cline_mcp_settings.json`, shared by the extension, the CLI and the SDK.
 
-Create workspace-specific config in `.vscode/settings.json`:
+In the CLI, `cline mcp` opens a wizard that lists, adds, edits, enables and disables servers. To add this one, choose the server type **Local**, give the command `npx -y firewalla-mcp-server`, and give the environment variables as `FIREWALLA_MSP_TOKEN=your_msp_access_token_here,FIREWALLA_MSP_ID=yourdomain.firewalla.net`.
+
+## Check that it works
+
+The **MCP Servers** view lists `firewalla` once it connects, with its tools: 24 by default. In the CLI, `cline config mcp` lists the configured servers (`--json` for JSON).
+
+Then ask Cline something the tools answer:
+
+```text
+Show me my Firewalla alarms from the last hour
+```
+
+## Write tools
+
+The server is read-only by default. Add `"FIREWALLA_ENABLE_WRITE_TOOLS": "true"` to `env` for the 11 write tools, which change rules, target lists, device names and alarms; see [Write tools](../../README.md#write-tools-opt-in). Keep their names out of `autoApprove`, and review each write call before you approve it.
+
+## Over HTTP
+
+stdio, above, is the default. If the server already runs with the HTTP transport (`MCP_TRANSPORT=http`), use the **Remote Servers** tab of the MCP Servers view: a server name, the URL `http://localhost:3000/mcp`, and the transport type **Streamable HTTP**. In the settings file the same server is:
 
 ```json
 {
-  "cline.mcpServers": {
+  "mcpServers": {
     "firewalla": {
-      "command": "npx",
-      "args": ["firewalla-mcp-server"],
-      "env": {
-        "FIREWALLA_MSP_TOKEN": "${env:FIREWALLA_MSP_TOKEN}",
-        "FIREWALLA_MSP_ID": "${env:FIREWALLA_MSP_ID}",
-        "FIREWALLA_BOX_ID": "${env:FIREWALLA_BOX_ID}"
-      }
+      "type": "streamableHttp",
+      "url": "http://localhost:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer your_mcp_http_bearer_token"
+      },
+      "disabled": false,
+      "autoApprove": []
     }
   }
 }
 ```
 
-### 4. Test Integration
-
-1. Open Cline panel in VS Code (`Ctrl+Shift+P` → "Cline: Start")
-2. Test connection:
-   ```text
-   "Can you check my Firewalla network status and show me any security alerts?"
-   ```
-
-## Cline-Specific Features
-
-**AI-Powered Security Analysis**
-- Intelligent threat pattern recognition
-- Automated security report generation
-- Context-aware network troubleshooting
-
-**Code Integration**
-```typescript
-// Ask Cline while coding:
-"Analyze my network security while I'm developing this API.
-Are there any firewall rules that might block this endpoint?"
-```
-
-**Automated Security Workflows**
-```text
-"Set up a daily security check routine that:
-1. Reviews active security activity alarms
-2. Checks for offline devices
-3. Analyzes bandwidth anomalies
-4. Generates a summary report"
-```
-
-## Advanced Cline Commands
-
-**Comprehensive Security Analysis**
-```text
-"Perform a complete network security audit covering:
-- All security alerts from the last 24 hours
-- Bandwidth usage patterns and anomalies
-- Firewall rule effectiveness
-- Geographic threat analysis
-- Device connectivity status"
-```
-
-**Interactive Network Debugging**
-```text
-"Help me debug a network connectivity issue:
-1. Check if device 192.168.1.100 is online
-2. Review any blocked traffic to/from this device
-3. Analyze recent network flows
-4. Suggest troubleshooting steps"
-```
-
-**Security Compliance Reporting**
-```text
-"Generate a security compliance report for management including:
-- Summary of all threats detected and blocked
-- Network access control effectiveness
-- Bandwidth usage by department/device type
-- Recommendations for security improvements"
-```
+Keep `"type": "streamableHttp"`: without `type`, Cline uses the legacy SSE transport. The header is needed when the server was started with `MCP_HTTP_BEARER_TOKEN`, which it requires on any address but loopback; the token must be 16 characters or more wherever it listens. See [HTTP transport security](../../README.md#http-transport-security).
 
 ## Troubleshooting
 
-**Cline Not Connecting to MCP**
-- Verify Cline extension is up to date
-- Check VS Code's output panel for MCP server logs
-- Restart VS Code after configuration changes
+### The server does not connect
 
-**MCP Server Issues**
-- Test server manually: `MCP_TEST_MODE=true NODE_ENV=development npx firewalla-mcp-server` starts it with dummy credentials (test mode refuses to start with `NODE_ENV=production`); stderr shows `Firewalla MCP Server running on stdio transport` (stop it with Ctrl-C)
-- Verify credentials with: `curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" https://$FIREWALLA_MSP_ID/v2/boxes`
+In the MCP Servers view a server can be restarted, disabled and enabled; restart `firewalla` if it stops answering. In the CLI, `cline dev log` shows the logs.
 
-**Performance Optimization**
-- Use specific time ranges for faster analysis
-- Request reasonable result limits
-- Leverage caching features for repeated queries
+### npx is not found
 
-## AI-Enhanced Security Benefits
+If Cline cannot start `npx`, give `command` its full path: `command -v npx` (macOS, Linux) or `where npx` (Windows) prints it.
 
-- **Intelligent threat analysis** with AI-powered pattern recognition
-- **24 read-only tools** for comprehensive network monitoring, plus 11 write tools with `FIREWALLA_ENABLE_WRITE_TOOLS=true`
-- **Natural language security queries** with advanced search capabilities
-- **Automated security workflows** for proactive monitoring
-- **Context-aware recommendations** based on network patterns
+### Check the server on its own
 
-## Integration Workflow
+`MCP_TEST_MODE=true NODE_ENV=development npx -y firewalla-mcp-server` starts it with dummy credentials (test mode refuses to start with `NODE_ENV=production`); stderr shows `Firewalla MCP Server running on stdio transport`. Stop it with Ctrl-C.
 
-**Development Security**
+### Check the credentials
+
+`curl -H "Authorization: Token $FIREWALLA_MSP_TOKEN" "https://$FIREWALLA_MSP_ID/v2/boxes"` lists your boxes when the token and the domain are right.
+
+## Example prompts
+
 ```text
-"While I'm coding this network service, monitor for:
-- Any security alerts related to the ports I'm using
-- Bandwidth patterns that might indicate issues
-- Firewall rules that could affect deployment"
+Check if device 192.168.1.100 is online, and show me any blocked traffic to or from it
+Review the active alarms, list the offline devices, and summarize both
+Which devices used the most bandwidth in the last 24 hours?
+Are there any firewall rules that might block this endpoint?
 ```
 
-**Production Monitoring**
-```text
-"Set up continuous monitoring that alerts me to:
-- New security activity alarms
-- Unusual bandwidth consumption
-- Device connectivity problems
-- Geographic-based threats"
-```
+## Sources
+
+Checked on 2026-09-29 against Cline's [MCP docs](https://docs.cline.bot/mcp/mcp-overview), [configuration docs](https://docs.cline.bot/getting-started/config) and [install docs](https://docs.cline.bot/getting-started/installing-cline), and, for the CLI wizard's prompts, the source of Cline CLI 3.0.65 ([cline/cline](https://github.com/cline/cline), `apps/cli/src/wizards/mcp/index.ts`).
 
 ---
 
-*Need another client? [Return to main setup guide](../../README.md#client-setup-guides)*
+_Need another client? [Return to main setup guide](../../README.md#client-setup-guides)_
