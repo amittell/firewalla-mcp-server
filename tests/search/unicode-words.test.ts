@@ -1,6 +1,6 @@
 /**
- * Words in any script, and the curly apostrophes device names carry. Live
- * alarms name devices such as "Nora’s MacBook Air" (U+2019). The search
+ * Words in any script, and the curly apostrophes device names carry: live
+ * device names use U+2019, as the invented "Nora’s MacBook Air" here does. The search
  * parser's words were ASCII letters, digits, _, . and - only, so
  * search_devices, search_target_lists and search_rules refused free text
  * such as Nora’s, Café, 客厅 or AT&T as an "Unexpected character", and

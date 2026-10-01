@@ -1111,8 +1111,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `severity_note` says why.
 - Each threat in `firewalla://threats/recent` and the security prompts
   says what it is. Its `type` held the alarm's message, so `by_type`
-  counted each message once (measured 2026-09-29: 100 threats, and keys
-  such as "Device Family Room is watching video on example.com."); it is now
+  counted each message once (measured 2026-09-29: 100 threats, keyed by
+  messages of the form "Device <name> is watching video on <site>."); it is now
   the documented type name (Video Activity), with the text in `message`.
   Every alarm read there was `action_taken: "blocked"`, because status 1
   means active, not blocked; an alarm is now "alarm raised", and only a
