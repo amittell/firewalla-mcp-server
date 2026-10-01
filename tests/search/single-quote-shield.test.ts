@@ -4,7 +4,7 @@
  * toMspQuery and the search tools' first check run before it, skipped only
  * double-quoted text: it read [1 TO 2] as range syntax and refused the
  * query. withNotForMinus had the same gap, and the qualifier renames took
- * an apostrophe (Alex's) for a quote, so a bytes: after one was not
+ * an apostrophe (Nora's) for a quote, so a bytes: after one was not
  * renamed. search_rules matches the phrase on the client; for flows and
  * alarms the phrase is refused for its colon, which the MSP API answers
  * with 400 (quoted-colon.test.ts), not as a range. The API is stubbed;
@@ -126,9 +126,9 @@ describe('single-quoted text is shielded where double-quoted text is', () => {
     expect(translateToMspQualifiers("'bytes:5' bytes:>1MB", 'flows')).toBe(
       "'bytes:5' total:>1MB"
     );
-    // Alex's and it's opened a "quote" that hid the bytes: between them
-    expect(translateToMspQualifiers("Alex's bytes:>1MB it's", 'flows')).toBe(
-      "Alex's total:>1MB it's"
+    // Nora's and it's opened a "quote" that hid the bytes: between them
+    expect(translateToMspQualifiers("Nora's bytes:>1MB it's", 'flows')).toBe(
+      "Nora's total:>1MB it's"
     );
   });
 });

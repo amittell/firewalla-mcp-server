@@ -151,17 +151,17 @@ export class QueryParser {
 
     // Whether the character at `at` continues a word: any character the
     // grammar does not read (SYNTAX), in any script, so Café, 客厅, AT&T
-    // and Alex’s are words; or a ' right after a letter, digit or
-    // underscore, which is an apostrophe in the word (Alex's, 1990's), not
+    // and Nora’s are words; or a ' right after a letter, digit or
+    // underscore, which is an apostrophe in the word (Nora's, 1990's), not
     // a quote. Words were ASCII letters, digits, _, . and - only, and any
     // other character was refused as unexpected.
     const inWord = (at: number): boolean =>
       at < safeInput.length &&
       (!SYNTAX.test(safeInput[at]) ||
         (safeInput[at] === "'" && followsWordCharacter(safeInput, at)));
-    // A word, or a wildcard in free text: *Alex’s*, Mac*Air and 5* are one
-    // term each. They were split at every *, so *Alex’s* read as the three
-    // terms *, Alex’s and *, while the client-side searches matched the
+    // A word, or a wildcard in free text: *Nora’s*, Mac*Air and 5* are one
+    // term each. They were split at every *, so *Nora’s* read as the three
+    // terms *, Nora’s and *, while the client-side searches matched the
     // whole of it.
     const inTerm = (at: number): boolean =>
       inWord(at) || safeInput[at] === '*' || safeInput[at] === '?';
@@ -349,7 +349,7 @@ export class QueryParser {
       }
 
       // Words (fields, values, logical operators). A quote right after a
-      // letter, digit or underscore is an apostrophe in the word (Alex's,
+      // letter, digit or underscore is an apostrophe in the word (Nora's,
       // don't); it opened a quoted string that was never closed. Digits
       // and . start a number below; - starts nothing.
       if (!SYNTAX.test(char) && !/[0-9.-]/.test(char)) {
@@ -414,7 +414,7 @@ export class QueryParser {
         // 5's (an apostrophe after a digit starts no quote; it opened one
         // that was never closed), 5GB, 3d. A range such as 100-200 is all
         // number and stays one. A wildcard followed by a word is one term
-        // too (*Alex’s*, *MacBook*); a * alone stays alone.
+        // too (*Nora’s*, *MacBook*); a * alone stays alone.
         while (inTerm(i)) {
           if (safeInput[i] === '*' || safeInput[i] === '?') {
             hasWildcard = true;
@@ -556,7 +556,7 @@ export class QueryParser {
       return { type: 'text', value: token.value };
     }
 
-    // A standalone * matches all; a wildcard word with no field (*Alex’s*,
+    // A standalone * matches all; a wildcard word with no field (*Nora’s*,
     // Mac*Air) is free text, which the client-side searches match with
     // each unquoted * as any run (containsText)
     if (this.match(TokenType.WILDCARD)) {

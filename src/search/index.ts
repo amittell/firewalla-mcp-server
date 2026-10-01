@@ -9,7 +9,7 @@ import { followsWordCharacter } from '../utils/word-characters.js';
 /**
  * Whether the character at `i` of `text` opens or closes a quote: a double
  * quote, or a single quote that does not follow a letter, digit, combining
- * mark or underscore (in Alex's it is an apostrophe, as the search parser
+ * mark or underscore (in Nora's it is an apostrophe, as the search parser
  * reads it), unless escaped; inside a quote, only the quote that opened it
  * closes it
  */

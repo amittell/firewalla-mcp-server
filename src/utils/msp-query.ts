@@ -186,7 +186,7 @@ export interface BracketRange {
 /**
  * A quoted value: in double quotes, or in single quotes that open where a
  * word could start (a single quote after a letter, digit or underscore is
- * an apostrophe, as in Alex's), backslash escapes included. Split on it,
+ * an apostrophe, as in Nora's), backslash escapes included. Split on it,
  * a query's unquoted text is at the even indexes and its quoted values at
  * the odd ones.
  */
@@ -311,13 +311,13 @@ function doubleQuoted(singleQuoted: string): string {
 
 /**
  * Splits a query into parentheses and words. A word runs to the next space
- * or parenthesis outside quotes, so `name:"living room"` and the colons of
+ * or parenthesis outside quotes, so `name:"family room"` and the colons of
  * `mac:AA:BB:CC:DD:EE:FF` stay in one word. The search parser reads single
  * quotes as quotes too, so a single-quoted value is one word, sent in
  * double quotes: `'rock AND roll'` was split at its spaces and sent as
  * `'rock roll'`, its AND read as an operator. A single quote right after a
  * letter, digit or underscore, in any script, is an apostrophe
- * (`name:Alex's`), as the parser reads it.
+ * (`name:Nora's`), as the parser reads it.
  */
 function tokenize(query: string): Token[] {
   const tokens: Token[] = [];

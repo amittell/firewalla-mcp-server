@@ -53,7 +53,7 @@ describe('markInvisibleCharacters', () => {
 
   it('returns text without them as it is', () => {
     const text =
-      'Living Room TV (192.168.1.20) caf\u{E9} \u{1F7E2} \u{26A0}\u{FE0F} <U+200B>';
+      'Family Room TV (192.168.1.20) caf\u{E9} \u{1F7E2} \u{26A0}\u{FE0F} <U+200B>';
     expect(markInvisibleCharacters(text)).toBe(text);
     expect(markInvisibleCharacters('')).toBe('');
   });

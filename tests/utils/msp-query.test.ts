@@ -80,7 +80,7 @@ describe('toMspQuery', () => {
     ['ts:>=1700000000 AND ts:<=1700086400', 'ts:1700000000-1700086400'],
     ['total:<=50MB total:>=1MB', 'total:1MB-50MB'],
     // Quoted values, wildcards, ranges and comparisons are left alone
-    ['name:"living room" AND status:1', 'name:"living room" status:1'],
+    ['name:"family room" AND status:1', 'name:"family room" status:1'],
     ['box.name:"Gold Plus",Purple', 'box.name:"Gold Plus",Purple'],
     [
       'box.name:"Firewalla,GSE" OR box.name:Purple',
