@@ -8,7 +8,7 @@ The full documentation is on GitHub: https://github.com/amittell/firewalla-mcp-s
 
 ## Tags
 
-- `2.0.1`, `2.0`, `2` and `latest`: the current release. Pin a version for anything you depend on.
+- `2.0.2`, `2.0`, `2` and `latest`: the current release. Pin a version for anything you depend on.
 - Platforms: `linux/amd64`, `linux/arm64` and `linux/arm/v7`.
 - Up to 1.5.0 the HTTP transport has no token or `Host` checks, and five write tools are always registered. Don't expose an HTTP port on those tags. The changes are listed under "Upgrading to 2.0.0": https://github.com/amittell/firewalla-mcp-server#upgrading-to-200
 
