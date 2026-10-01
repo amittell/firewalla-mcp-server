@@ -2,7 +2,7 @@
  * @fileoverview Where a single quote is an apostrophe
  *
  * Every tokenizer of a query reads a ' as an apostrophe when it follows a
- * letter, digit, combining mark or underscore, in any script (Alex's,
+ * letter, digit, combining mark or underscore, in any script (Nora's,
  * Café's, 1990's), and as a quote anywhere else. The regular expressions
  * that do the same (the matchers' token and list patterns, QUOTED_TEXT)
  * use the class WORD_CHARACTER_CLASS gives, with the u flag, so that

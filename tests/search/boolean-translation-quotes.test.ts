@@ -73,8 +73,8 @@ describe('boolean translation leaves quoted text alone', () => {
         'domain:"blocked:true" blocked:1'
       );
       // An apostrophe after a letter opens no quote
-      expect(translate("Alex's blocked:true", 'flows')).toBe(
-        "Alex's blocked:1"
+      expect(translate("Nora's blocked:true", 'flows')).toBe(
+        "Nora's blocked:1"
       );
       expect(translate("'a b' online:false", 'devices')).toBe("'a b' online:0");
     }

@@ -800,9 +800,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   any case as the keyword; outside them it stays a word.
 - A single quote right after a letter, digit or underscore is an
   apostrophe, not the start of a quoted value. `search_devices`,
-  `search_target_lists` and `search_rules` refused `name:Alex's`, `don't`
+  `search_target_lists` and `search_rules` refused `name:Nora's`, `don't`
   and `1990's` as an unclosed quote, and past that check the device and
-  target list matchers would have read `Alex's` as the comma list `alex,s`.
+  target list matchers would have read `Nora's` as the comma list `nora,s`.
   The check counted quote characters, so it also refused an escaped quote
   inside double quotes (`name:"say \"hi"`); it follows the quotes as the
   parser does now.
@@ -817,7 +817,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the qualifier renames skipped only double-quoted text, so
   `'show ts:[1 TO 2]'` was refused as a range; they skip single-quoted
   text too now, and `search_rules` matches that phrase on the client. The
-  renames also took an apostrophe for a quote: in `Alex's bytes:>1MB it's`
+  renames also took an apostrophe for a quote: in `Nora's bytes:>1MB it's`
   the `bytes:` was not renamed to `total:`.
 - An empty phrase (`""`) is refused before a request. It has no text to
   find: `search_devices`, `search_target_lists` and `search_rules` matched
@@ -860,7 +860,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `name:plain`.
 - The search parser reads a word in any script, holding any character the
   query grammar does not use. `search_devices`, `search_target_lists` and
-  `search_rules` refused free text such as `Alex’s` (with the U+2019
+  `search_rules` refused free text such as `Nora’s` (with the U+2019
   apostrophe device names carry in live alarms), `Café`, `客厅` and `AT&T`
   as an "Unexpected character": a word was ASCII letters, digits, `_`, `.`
   and `-`. A `'` after a letter, digit or combining mark in any script is
@@ -905,7 +905,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   quoted text alone. `search_flows` sent `domain:"blocked:true"` as
   `domain:"blocked:1"`, and both translators changed a quoted phrase such
   as `"not blocked:true"` or `'online:true'` the same way. An apostrophe
-  after a letter opens no quote, so `Alex's blocked:true` is still
+  after a letter opens no quote, so `Nora's blocked:true` is still
   translated.
 - The query syntax check refuses two operators with no term between them,
   and an operator with no term beside it inside parentheses, and names
@@ -1021,10 +1021,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   character (U+0000) at position 11`).
 - A `*` in free text is a wildcard, as in a field value.
   `search_devices`, `search_target_lists` and `search_rules` compared it as
-  a character, so `*MacBook*` and `*Alex’s*` (with the U+2019 apostrophe
-  device names carry) found nothing while `MacBook` and `Alex’s` found the
-  device, and the search parser read `*Alex’s*` as the three terms `*`,
-  `Alex’s` and `*`. It is one term now, matched anywhere in the text with
+  a character, so `*MacBook*` and `*Nora’s*` (with the U+2019 apostrophe
+  device names carry) found nothing while `MacBook` and `Nora’s` found the
+  device, and the search parser read `*Nora’s*` as the three terms `*`,
+  `Nora’s` and `*`. It is one term now, matched anywhere in the text with
   each `*` as any run (`Mac*Air` finds `MacBook Air`). A quoted `*` is a
   character, as the API reads one: `"star*box"` finds `star*box` only.
 - `search_flows` and `search_alarms` translate a query as `get_flow_data`
@@ -1102,7 +1102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Each threat in `firewalla://threats/recent` and the security prompts
   says what it is. Its `type` held the alarm's message, so `by_type`
   counted each message once (measured 2026-09-29: 100 threats, and keys
-  such as "Device Living Room is watching video on Twitch."); it is now
+  such as "Device Family Room is watching video on example.com."); it is now
   the documented type name (Video Activity), with the text in `message`.
   Every alarm read there was `action_taken: "blocked"`, because status 1
   means active, not blocked; an alarm is now "alarm raised", and only a

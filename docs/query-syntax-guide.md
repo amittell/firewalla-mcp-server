@@ -302,7 +302,7 @@ The query is not sent; the server filters the device list.
 | `online:true AND ip:192.168.1.*` | online devices in 192.168.1.x |
 | `mac:AA:BB:CC:DD:EE:01` | the device with that MAC address |
 | `id:ovpn:*` | OpenVPN clients |
-| `name:"living room"` | devices whose name contains "living room" |
+| `name:"family room"` | devices whose name contains "family room" |
 | `online:true AND NOT mac_vendor:apple` | online devices from other vendors |
 | `online:false OR name:nas` | offline devices, and devices named like "nas" |
 | `(name:tv OR name:nas) AND online:true` | online devices named like "tv" or "nas" |

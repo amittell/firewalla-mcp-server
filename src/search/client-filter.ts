@@ -14,7 +14,7 @@
 // A term runs to the next space or parenthesis outside quotes, so colons in a
 // value (mac:AA:BB:CC:DD:EE:FF) and spaces in a quoted value stay in the term.
 // A single quote right after a letter, digit or underscore, in any script,
-// is an apostrophe in the word (name:Alex's, Café's), not the start of a
+// is an apostrophe in the word (name:Nora's, Café's), not the start of a
 // quoted value.
 const TOKEN_PATTERN =
   /[()]|(?:"(?:[^"\\]|\\.)*"|(?<![\p{L}\p{N}\p{M}_])'(?:[^'\\]|\\.)*'|[^\s()"])+/gu;
@@ -102,7 +102,7 @@ export function unquoteQueryValue(value: string): string {
 
 // One value of a comma list: quoted values keep their commas, and a single
 // quote right after a letter, digit or underscore is an apostrophe
-// (name:Alex's was read as the list alex,s)
+// (name:Nora's was read as the list nora,s)
 const LIST_VALUE =
   /(?:"(?:[^"\\]|\\.)*"|(?<![\p{L}\p{N}\p{M}_])'(?:[^'\\]|\\.)*'|[^,"])+/gu;
 

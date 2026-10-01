@@ -1,9 +1,9 @@
 /**
  * Words in any script, and the curly apostrophes device names carry. Live
- * alarms name devices such as "Alex’s MacBook Air" (U+2019). The search
+ * alarms name devices such as "Nora’s MacBook Air" (U+2019). The search
  * parser's words were ASCII letters, digits, _, . and - only, so
  * search_devices, search_target_lists and search_rules refused free text
- * such as Alex’s, Café, 客厅 or AT&T as an "Unexpected character", and
+ * such as Nora’s, Café, 客厅 or AT&T as an "Unexpected character", and
  * the tokenizers that read a ' after a letter as an apostrophe knew only
  * ASCII letters, so in Café's it opened a quote that was never closed.
  * The API is stubbed; nothing leaves the process.
@@ -40,7 +40,7 @@ jest.mock('axios', () => {
 });
 
 const NAMES = [
-  'Alex’s MacBook Air',
+  'Nora’s MacBook Air',
   'William‘s iPad',
   "Café's TV",
   '客厅电视',
@@ -126,7 +126,7 @@ async function names(Handler: any, key: string, query: string) {
 }
 
 const WORDS: Array<[string, string]> = [
-  ['Alex’s', 'Alex’s MacBook Air'],
+  ['Nora’s', 'Nora’s MacBook Air'],
   ['William‘s', 'William‘s iPad'],
   ["Café's", "Café's TV"],
   ['客厅', '客厅电视'],
@@ -164,16 +164,16 @@ describe('free text in any script, with any apostrophe', () => {
     expect(sentQueries(get)).toEqual([word]);
   });
 
-  it('search_devices and search_alarms take name:Alex’s', async () => {
-    expect(await names(SearchDevicesHandler, 'devices', 'name:Alex’s')).toEqual(
-      ['Alex’s MacBook Air']
+  it('search_devices and search_alarms take name:Nora’s', async () => {
+    expect(await names(SearchDevicesHandler, 'devices', 'name:Nora’s')).toEqual(
+      ['Nora’s MacBook Air']
     );
     const { client, get } = makeClient();
     await new SearchAlarmsHandler().execute(
-      { query: 'device.name:Alex’s', limit: 10 },
+      { query: 'device.name:Nora’s', limit: 10 },
       client
     );
-    expect(sentQueries(get)).toEqual(['device.name:Alex’s']);
+    expect(sentQueries(get)).toEqual(['device.name:Nora’s']);
   });
 
   it('curly quotes are characters, not quotes', async () => {

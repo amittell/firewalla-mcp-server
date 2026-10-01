@@ -7,7 +7,7 @@
  * stubs `nas or laptop` found every device named nas or laptop, where
  * search_rules found the one rule with all three words; `nas or` was
  * refused by every search tool as ending in an operator; `go to school`
- * was refused for its `to`; `name:Alex's` was refused as an unclosed
+ * was refused for its `to`; `name:Nora's` was refused as an unclosed
  * quote; `'rock AND roll'` was sent to the API as `'rock roll'`; and the
  * empty phrase `""` matched every device and target list. The API is
  * stubbed; nothing leaves the process.
@@ -49,7 +49,7 @@ const NAMES = [
   'nas or laptop box',
   'rock and roll',
   'rock',
-  "Alex's iPhone",
+  "Nora's iPhone",
   'go to school',
   "1990's radio",
   "3d's printer",
@@ -232,21 +232,21 @@ describe('the word to', () => {
 
 describe('an apostrophe in a word', () => {
   it.each([
-    ["name:Alex's", ["Alex's iPhone"]],
-    ["Alex's", ["Alex's iPhone"]],
-    ['name:"Alex\'s iPhone"', ["Alex's iPhone"]],
-    ["name:'Alex\\'s iPhone'", ["Alex's iPhone"]],
+    ["name:Nora's", ["Nora's iPhone"]],
+    ["Nora's", ["Nora's iPhone"]],
+    ['name:"Nora\'s iPhone"', ["Nora's iPhone"]],
+    ["name:'Nora\\'s iPhone'", ["Nora's iPhone"]],
   ])('is not a quote in search_devices %s', async (query, expected) => {
     expect(await devices(query)).toEqual(expected);
   });
 
   it('is not a quote in search_target_lists or search_rules', async () => {
-    expect(await lists("name:Alex's")).toEqual(["Alex's iPhone"]);
-    expect(await rules("Alex's")).toEqual(["Alex's iPhone"]);
+    expect(await lists("name:Nora's")).toEqual(["Nora's iPhone"]);
+    expect(await rules("Nora's")).toEqual(["Nora's iPhone"]);
   });
 
   it.each([
-    ["name:Alex's", "name:Alex's"],
+    ["name:Nora's", "name:Nora's"],
     ["don't", "don't"],
     ["rock'n'roll", "rock'n'roll"],
   ])('is sent as it is: %s', (query, sent) => {
@@ -255,7 +255,7 @@ describe('an apostrophe in a word', () => {
 
   it('passes the query check and the sanitizer', () => {
     for (const query of [
-      "name:Alex's",
+      "name:Nora's",
       "don't",
       "name:O'Brien AND online:true",
     ]) {

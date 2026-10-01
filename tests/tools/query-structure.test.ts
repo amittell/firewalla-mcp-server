@@ -61,7 +61,7 @@ function makeClient() {
           {
             id: 'aa:bb:cc:dd:ee:00',
             gid: 'box-a',
-            name: 'Alex’s MacBook Air',
+            name: 'Nora’s MacBook Air',
             ip: '10.0.0.2',
           },
           {
@@ -85,7 +85,7 @@ function makeClient() {
         data: [
           {
             id: 'l1',
-            name: 'Alex’s list',
+            name: 'Nora’s list',
             owner: 'global',
             targets: ['a.com'],
           },
@@ -104,7 +104,7 @@ function makeClient() {
               action: 'block',
               status: 'active',
               target: { type: 'domain', value: 'x.example' },
-              notes: 'Alex’s rule',
+              notes: 'Nora’s rule',
             },
             {
               id: 'r2',
@@ -196,16 +196,16 @@ describe('queryStructureErrors', () => {
     "domain:'x)'",
     'domain:"[1 TO"',
     'name:"say \\"hi\\" (loud"',
-    "Alex's (MacBook)",
+    "Nora's (MacBook)",
     'Café’s [1 TO 2]',
     `${'('.repeat(5)}domain:x${')'.repeat(5)}`,
     `domain:${'a'.repeat(1993)}`,
     'domain:x\ttype:1\nstatus:1\r',
     // A whole surrogate pair is one character, and text
-    'name:Alex\u{1F600}',
+    'name:Nora\u{1F600}',
     // U+00A0, the first character after the C1 block, is text
-    'name:Alex\u00a0Mac',
-    '*Alex’s*',
+    'name:Nora\u00a0Mac',
+    '*Nora’s*',
   ])('takes %j', query => {
     expect(queryStructureErrors(query)).toEqual([]);
   });

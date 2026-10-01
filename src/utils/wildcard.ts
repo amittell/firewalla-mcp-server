@@ -121,7 +121,7 @@ export function matchesWildcard(
  * not quoted, with each `*` matching any run (*MacBook*, Mac*Air). A `*` in
  * free text was compared as a character, so search_devices,
  * search_target_lists and search_rules found nothing for *MacBook* and
- * *Alex’s* while MacBook and Alex’s found the device.
+ * *Nora’s* while MacBook and Nora’s found the device.
  *
  * @param value - The text searched, lowercased as the word is
  * @param text - The word or phrase, without its quotes

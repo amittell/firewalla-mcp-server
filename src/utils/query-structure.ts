@@ -7,7 +7,7 @@
  * search parser and toMspQuery read them: name:"a(b" is one value. A quote
  * is read as the parser reads it: a backslash escapes the next character
  * inside quotes, and a ' right after a letter, digit, combining mark or
- * underscore is an apostrophe (Alex's), not the start of a quote.
+ * underscore is an apostrophe (Nora's), not the start of a quote.
  */
 
 import { followsWordCharacter } from './word-characters.js';

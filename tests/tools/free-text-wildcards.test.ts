@@ -1,11 +1,11 @@
 /**
  * A * in free text is a wildcard in every layer, from the #74 overview:
  * "Unicode wildcard validation remains inconsistent with the parser."
- * name:*Alex’s*, with the U+2019 apostrophe device names carry, passes
- * every check and parses as one wildcard. Free text *Alex’s* passed every
- * check too, but the parser read it as the three terms *, Alex’s and *,
+ * name:*Nora’s*, with the U+2019 apostrophe device names carry, passes
+ * every check and parses as one wildcard. Free text *Nora’s* passed every
+ * check too, but the parser read it as the three terms *, Nora’s and *,
  * and search_devices, search_target_lists and search_rules compared the *
- * as a character and found nothing, while Alex’s found the device. The API
+ * as a character and found nothing, while Nora’s found the device. The API
  * is stubbed; nothing leaves the process.
  */
 
@@ -56,7 +56,7 @@ function makeClient() {
           {
             id: 'aa:bb:cc:dd:ee:00',
             gid: 'box-a',
-            name: 'Alex’s MacBook Air',
+            name: 'Nora’s MacBook Air',
             ip: '10.0.0.2',
           },
           {
@@ -80,7 +80,7 @@ function makeClient() {
         data: [
           {
             id: 'l1',
-            name: 'Alex’s list',
+            name: 'Nora’s list',
             owner: 'global',
             targets: ['a.com'],
           },
@@ -99,7 +99,7 @@ function makeClient() {
               action: 'block',
               status: 'active',
               target: { type: 'domain', value: 'x.example' },
-              notes: 'Alex’s rule',
+              notes: 'Nora’s rule',
             },
             {
               id: 'r2',
@@ -118,11 +118,11 @@ function makeClient() {
 
 const body = (res: any) => JSON.parse(res.content[0].text);
 
-describe('*Alex’s* is read alike by every check, the parser and the matchers', () => {
+describe('*Nora’s* is read alike by every check, the parser and the matchers', () => {
   it.each(['devices', 'target_lists', 'rules'] as const)(
-    'name:*Alex’s* passes every check and parses as one wildcard for %s',
+    'name:*Nora’s* passes every check and parses as one wildcard for %s',
     entity => {
-      const query = 'name:*Alex’s*';
+      const query = 'name:*Nora’s*';
       expect(validateFirewallaQuerySyntax(query).errors).toEqual([]);
       expect(queryStructureErrors(query)).toEqual([]);
       expect(QuerySanitizer.sanitizeSearchQuery(query).errors).toEqual([]);
@@ -137,13 +137,13 @@ describe('*Alex’s* is read alike by every check, the parser and the matchers',
       expect(parsed.ast).toEqual({
         type: 'wildcard',
         field: 'name',
-        pattern: '*Alex’s*',
+        pattern: '*Nora’s*',
       });
     }
   );
 
   it.each([
-    ['*Alex’s*', '*Alex’s*'],
+    ['*Nora’s*', '*Nora’s*'],
     ['*MacBook*', '*MacBook*'],
     ['Mac*Air', 'Mac*Air'],
     ['5*', '5*'],
@@ -170,12 +170,12 @@ describe('*Alex’s* is read alike by every check, the parser and the matchers',
   };
 
   it.each([
-    ['name:*Alex’s*', ['Alex’s MacBook Air']],
-    ['*Alex’s*', ['Alex’s MacBook Air']],
-    ['*MacBook*', ['Alex’s MacBook Air']],
-    ['Mac*Air', ['Alex’s MacBook Air']],
+    ['name:*Nora’s*', ['Nora’s MacBook Air']],
+    ['*Nora’s*', ['Nora’s MacBook Air']],
+    ['*MacBook*', ['Nora’s MacBook Air']],
+    ['Mac*Air', ['Nora’s MacBook Air']],
     ['Air*Mac', []],
-    ["*Alex's*", []],
+    ["*Nora's*", []],
     ['"*MacBook*"', []],
     ['"star*box"', ['star*box']],
     ['NOT *MacBook*', ['nas', 'star*box']],
@@ -191,12 +191,12 @@ describe('*Alex’s* is read alike by every check, the parser and the matchers',
   });
 
   it.each([
-    ['search_target_lists', SearchTargetListsHandler, ['Alex’s list']],
+    ['search_target_lists', SearchTargetListsHandler, ['Nora’s list']],
     ['search_rules', SearchRulesHandler, ['r1']],
   ] as const)(
-    '%s finds *Alex’s* as it finds Alex’s',
+    '%s finds *Nora’s* as it finds Nora’s',
     async (_name, Handler, expected) => {
-      for (const query of ['*Alex’s*', 'Alex’s']) {
+      for (const query of ['*Nora’s*', 'Nora’s']) {
         const { client } = makeClient();
         const res = await new Handler().execute({ query, limit: 10 }, client);
         expect(res.isError).toBeFalsy();
@@ -209,9 +209,9 @@ describe('*Alex’s* is read alike by every check, the parser and the matchers',
     ['search_flows', SearchFlowsHandler],
     ['search_alarms', SearchAlarmsHandler],
   ] as const)(
-    '%s sends device.name:*Alex’s* and *Alex’s* as written',
+    '%s sends device.name:*Nora’s* and *Nora’s* as written',
     async (_name, Handler) => {
-      for (const query of ['device.name:*Alex’s*', '*Alex’s*']) {
+      for (const query of ['device.name:*Nora’s*', '*Nora’s*']) {
         const { client, get } = makeClient();
         const res = await new Handler().execute({ query, limit: 10 }, client);
         expect(res.isError).toBeFalsy();

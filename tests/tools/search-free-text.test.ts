@@ -49,7 +49,7 @@ const body = (res: any) => JSON.parse(res.content[0].text);
 describe('the search parser reads free text', () => {
   it.each([
     ['nas', { type: 'text', value: 'nas' }],
-    ['"Living Room"', { type: 'text', value: 'Living Room' }],
+    ['"Family Room"', { type: 'text', value: 'Family Room' }],
     ['192.168', { type: 'text', value: '192.168' }],
     ['my-laptop', { type: 'text', value: 'my-laptop' }],
   ])('%s', (query, ast) => {
@@ -134,7 +134,7 @@ describe('search_devices free text', () => {
       ip: '192.168.1.20',
       macVendor: 'Synology',
       online: true,
-      network: { id: 'n1', name: 'Living Room' },
+      network: { id: 'n1', name: 'Family Room' },
       group: { id: 'g1', name: 'Kids' },
     },
     {
@@ -187,7 +187,7 @@ describe('search_devices free text', () => {
     ['"ee:02"', ['laptop']],
     // network and group names
     ['office', ['laptop']],
-    ['"living room"', ['NAS']],
+    ['"family room"', ['NAS']],
     ['kids', ['NAS']],
     // with operators and field terms
     ['name:nas OR laptop', ['NAS', 'laptop']],
