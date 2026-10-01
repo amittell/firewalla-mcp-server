@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-10-01
+
+### Changed
+
+- The examples in the docs, tests, comments and CHANGELOG use invented
+  device names. They had used two real device names from the maintainer's
+  network.
+
+### Fixed
+
+- A test of a request cancelled by its tool's deadline gives the request
+  2 s to reach the test server. Under load the 500 ms from 2.0.1 still let
+  the cancellation come first.
+
 ### Security
 
 - axios is 1.20.0. The lockfile held 1.18.1, inside the range (1.0.0 to
@@ -15,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   GHSA-r4gj-5m52-g5wh, and `npm audit --audit-level=high --omit=dev` failed
   CI. The package.json range is now `^1.20.0`. A fresh `npm install` of
   2.0.1 already resolved 1.20.0; the 2.0.1 Docker image, built from the
-  lockfile, has 1.18.1.
+  lockfile, has 1.18.1; 2.0.2's image has 1.20.0.
 
 ## [2.0.1] - 2026-09-30
 
