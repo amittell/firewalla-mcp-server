@@ -88,7 +88,7 @@
     "@modelcontextprotocol/sdk": "^1.13.0",
     "@types/geoip-lite": "^1.4.4",
     "@types/node": "^24.0.3",
-    "axios": "^1.10.0",
+    "axios": "^1.20.0",
     "dotenv": "^16.5.0",
     "geoip-lite": "^2.0.3",
     "zod": "^3.25.75"

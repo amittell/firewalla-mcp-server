@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- axios is 1.20.0. The lockfile held 1.18.1, inside the range (1.0.0 to
+  1.19.0) of the high-severity advisories published for axios in September
+  2026, among them GHSA-vh66-26gq-q6x8, GHSA-9fr6-4gfg-395g and
+  GHSA-r4gj-5m52-g5wh, and `npm audit --audit-level=high --omit=dev` failed
+  CI. The package.json range is now `^1.20.0`. A fresh `npm install` of
+  2.0.1 already resolved 1.20.0; the 2.0.1 Docker image, built from the
+  lockfile, has 1.18.1.
+
 ## [2.0.1] - 2026-09-30
 
 ### Fixed
