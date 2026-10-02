@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The npm publish waits up to 30 minutes for the registry to serve the new
+  version, not 5. 2.0.0 and 2.0.1 installed about 2.5 minutes after
+  `npm publish`, but 2.0.2 took about 15: the wait ran out, `npm install`
+  failed with ETARGET, and the GitHub release was not created, so the
+  signature check and the release were done by hand. The wait now retries
+  the install itself (`scripts/verify-published.sh`), and the wait, the
+  signature and provenance check and the release are a job of their own,
+  so `gh run rerun <run-id> --failed` retries them without publishing
+  again.
+
 ## [2.0.2] - 2026-10-01
 
 ### Changed
