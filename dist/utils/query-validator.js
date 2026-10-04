@@ -1,0 +1,387 @@
+/**
+ * Firewalla-specific query syntax validation
+ * Validates query syntax and provides helpful error messages
+ *
+ * Accepts the boolean operators (AND, OR, NOT, parentheses) and the MSP
+ * API's own forms: terms separated by spaces, `-field:value` exclusions and
+ * free-text words. src/utils/msp-query.ts translates the operators into the
+ * API's grammar before a query is sent.
+ */
+import { findBracketRange, QUOTED_TEXT } from './msp-query.js';
+/**
+ * Firewalla query syntax patterns
+ */
+const FIELD_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_.]*$/;
+// `:>`, `:>=`, `:<`, `:<=` are the MSP API's numeric comparisons (e.g. `download:>10MB`)
+const OPERATOR_PATTERN = /^(:|=|!=|>|<|>=|<=|:>|:>=|:<|:<=)$/;
+const LOGICAL_OPERATORS = ['AND', 'OR', 'NOT'];
+// A control character, or a surrogate without its pair
+const NOT_TEXT = /[\p{Cc}\p{Cs}]/u;
+/**
+ * Tokenize a Firewalla query string
+ */
+function tokenizeQuery(query) {
+    const tokens = [];
+    let current = 0;
+    while (current < query.length) {
+        // Skip whitespace
+        if (/\s/.test(query[current])) {
+            current++;
+            continue;
+        }
+        // Check for parentheses
+        if (query[current] === '(' || query[current] === ')') {
+            tokens.push({
+                type: 'parenthesis',
+                value: query[current],
+                position: current,
+            });
+            current++;
+            continue;
+        }
+        // Check for quoted strings
+        if (query[current] === '"' || query[current] === "'") {
+            const quote = query[current];
+            let value = '';
+            current++; // Skip opening quote
+            while (current < query.length && query[current] !== quote) {
+                if (query[current] === '\\' && current + 1 < query.length) {
+                    // Handle escaped characters
+                    current++;
+                }
+                value += query[current];
+                current++;
+            }
+            // A quoted phrase with no field before it is free text
+            const type = tokens[tokens.length - 1]?.type === 'operator' ? 'value' : 'text';
+            if (current >= query.length) {
+                // Unclosed quote
+                tokens.push({
+                    type: 'value',
+                    value: quote + value,
+                    position: current - value.length - 1,
+                });
+            }
+            else {
+                current++; // Skip closing quote
+                tokens.push({
+                    type,
+                    value,
+                    position: current - value.length - 2,
+                });
+            }
+            continue;
+        }
+        // Check for operators
+        let operator = '';
+        const operatorStart = current;
+        while (current < query.length && /[:<>=!]/.test(query[current])) {
+            operator += query[current];
+            current++;
+        }
+        // After a field, keep only the operator itself: in `ip:::1` the extra
+        // colons belong to the value
+        const followsField = tokens[tokens.length - 1]?.type === 'field';
+        if (followsField) {
+            while (operator.length > 1 && !OPERATOR_PATTERN.test(operator)) {
+                operator = operator.slice(0, -1);
+                current--;
+            }
+        }
+        if (operator && OPERATOR_PATTERN.test(operator)) {
+            tokens.push({
+                type: 'operator',
+                value: operator,
+                position: operatorStart,
+            });
+            // A value runs to the next space or ')', so the colons in a MAC or
+            // IPv6 address (mac:AA:BB:CC:DD:EE:FF, ip:fe80::1) stay in the value
+            if (followsField &&
+                current < query.length &&
+                !/[\s()"']/.test(query[current])) {
+                const valueStart = current;
+                let value = '';
+                while (current < query.length && !/[\s)]/.test(query[current])) {
+                    value += query[current];
+                    current++;
+                }
+                tokens.push({
+                    type: 'value',
+                    value,
+                    position: valueStart,
+                });
+            }
+            continue;
+        }
+        else if (operator) {
+            // Invalid operator, treat as value
+            tokens.push({
+                type: 'value',
+                value: operator,
+                position: operatorStart,
+            });
+            continue;
+        }
+        // Read word (field, logical operator, or value)
+        let word = '';
+        const wordStart = current;
+        while (current < query.length && !/[\s():<>=!]/.test(query[current])) {
+            word += query[current];
+            current++;
+        }
+        // Operators are uppercase, as toMspQuery reads them: and, or and not
+        // are words, as the API reads them (nas or was refused as ending in OR)
+        if (LOGICAL_OPERATORS.includes(word)) {
+            tokens.push({
+                type: 'logical',
+                value: word,
+                position: wordStart,
+            });
+        }
+        else if (word === '-' && query[current] === '(') {
+            // The API's exclusion of a group, -( ... ), is NOT
+            tokens.push({ type: 'logical', value: 'NOT', position: wordStart });
+        }
+        else if (/[:<>=!]/.test(query[current] ?? '')) {
+            // A word followed by an operator is a field, also right after another
+            // term: a space between terms means AND, as in the API
+            tokens.push({
+                type: 'field',
+                value: word,
+                position: wordStart,
+            });
+        }
+        else if (tokens[tokens.length - 1]?.type === 'operator') {
+            // The value of `field: value`
+            tokens.push({
+                type: 'value',
+                value: word,
+                position: wordStart,
+            });
+        }
+        else {
+            // A word without a field is free text (`porn`)
+            tokens.push({
+                type: 'text',
+                value: word,
+                position: wordStart,
+            });
+        }
+    }
+    return tokens;
+}
+// A quoted value, whose commas and spaces are its own
+const QUOTED = QUOTED_TEXT;
+/**
+ * A comma list broken by a space, such as `online:true, false` or
+ * `region:US ,CN`, as the query with the spaces around its commas removed;
+ * undefined when there is none. A space ends a term, so `online:true, false`
+ * is `online:true,` and then the word `false`: search_devices and
+ * search_target_lists read that word as free text and found nothing
+ * (`category:social, games`), and the check on online: reported 'true,'.
+ */
+function withoutSpacedCommas(query) {
+    const parts = query.split(QUOTED);
+    // Even parts are outside quotes; a quoted value stands in as `q`, so
+    // `notes:a,"b c"` keeps its comma next to a value
+    const unquoted = parts
+        .map((part, index) => (index % 2 === 0 ? part : 'q'))
+        .join('');
+    const trailing = /(?:^|[\s(])-?[A-Za-z_][\w.]*:\S*,(?=\s|$)/.test(unquoted);
+    const leading = /(?:^|\s),/.test(unquoted);
+    if (!trailing && !leading) {
+        return undefined;
+    }
+    return parts
+        .map((part, index) => index % 2 === 0 ? part.replace(/\s*,\s*/g, ',') : part)
+        .join('')
+        .trim();
+}
+/**
+ * Validate Firewalla query syntax
+ */
+export function validateFirewallaQuerySyntax(query) {
+    if (!query || typeof query !== 'string') {
+        return {
+            isValid: true,
+            errors: [],
+            sanitizedValue: '',
+        };
+    }
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+        return {
+            isValid: true,
+            errors: [],
+            sanitizedValue: '',
+        };
+    }
+    const errors = [];
+    const tokens = tokenizeQuery(trimmedQuery);
+    // [low TO high] reads as a term and two free-text words; the API's
+    // ranges are field:low-high
+    const bracketRange = findBracketRange(trimmedQuery);
+    if (bracketRange) {
+        errors.push(`Range syntax '${bracketRange.part}' is not supported: write field:low-high${bracketRange.replacement ? ` (${bracketRange.replacement})` : ''}; a range includes both ends`);
+    }
+    const spaced = withoutSpacedCommas(trimmedQuery);
+    if (spaced !== undefined) {
+        errors.push(`A comma list takes no spaces around its commas: a space ends the term, so the rest would be read as another term. Write "${spaced}".`);
+    }
+    // Check for balanced parentheses
+    let parenCount = 0;
+    for (const token of tokens) {
+        if (token.value === '(') {
+            parenCount++;
+        }
+        if (token.value === ')') {
+            parenCount--;
+        }
+        if (parenCount < 0) {
+            errors.push(`Unmatched closing parenthesis at position ${token.position}`);
+        }
+    }
+    if (parenCount > 0) {
+        errors.push(`Unclosed parenthesis in query`);
+    }
+    // Validate token sequence
+    for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i];
+        const nextToken = tokens[i + 1];
+        const prevToken = tokens[i - 1];
+        switch (token.type) {
+            case 'field':
+                // Validate field name format; `-` excludes (-status:blocked)
+                if (!FIELD_PATTERN.test(token.value.replace(/^-/, ''))) {
+                    errors.push(`Invalid field name '${token.value}' at position ${token.position}. Field names must start with a letter and contain only letters, numbers, underscores, and dots.`);
+                }
+                // Field must be followed by operator
+                if (nextToken && nextToken.type !== 'operator') {
+                    errors.push(`Field '${token.value}' at position ${token.position} must be followed by an operator (: = != > < >= <=)`);
+                }
+                break;
+            case 'operator':
+                // Operator must be between field and value
+                if (!prevToken || prevToken.type !== 'field') {
+                    errors.push(`Operator '${token.value}' at position ${token.position} must be preceded by a field name`);
+                }
+                if (!nextToken ||
+                    (nextToken.type !== 'value' && nextToken.value !== '(')) {
+                    errors.push(`Operator '${token.value}' at position ${token.position} must be followed by a value`);
+                }
+                break;
+            case 'value':
+                // Value must follow operator
+                if (!prevToken || prevToken.type !== 'operator') {
+                    errors.push(`Value '${token.value}' at position ${token.position} must be preceded by an operator`);
+                }
+                // A wildcard value may hold any character that is text: the
+                // client matches * without a regular expression (matchesWildcard),
+                // and of the characters in a value the API grammar gives a meaning
+                // only to quotes and to whitespace, a comma, an asterisk and a
+                // colon, which a literal must quote (docs/firewalla-api-reference.md,
+                // "Quoted Search"); a comma list of wildcards is any of them
+                // (domain:*apple*,*google*). Only [*\w.:,-] was allowed, which
+                // refused name:*Disney+*, C++*, *AT&T* and every non-ASCII name. A
+                // control character, or half of a surrogate pair, is not text.
+                // ? is a wildcard marker as well (the parser's WILDCARD token)
+                if (/[*?]/.test(token.value) && NOT_TEXT.test(token.value)) {
+                    errors.push(`Invalid wildcard pattern '${token.value}' at position ${token.position}: it has a character that is not text (a control character or half a surrogate pair)`);
+                }
+                break;
+            case 'logical':
+                // Logical operators must be between complete expressions; NOT can
+                // open a query
+                if ((i === 0 && token.value !== 'NOT') || i === tokens.length - 1) {
+                    errors.push(`Logical operator '${token.value}' at position ${token.position} cannot be at the beginning or end of query`);
+                }
+                else if (nextToken?.type === 'logical' && nextToken.value !== 'NOT') {
+                    // x AND AND y, x OR AND y, x NOT OR y: the parser and toMspQuery
+                    // refuse them, and this check let them through to say
+                    // "Unexpected token: AND". AND NOT, OR NOT and NOT NOT are fine.
+                    errors.push(`Logical operators '${token.value}' and '${nextToken.value}' at positions ${token.position} and ${nextToken.position} have no term between them`);
+                }
+                else if (nextToken?.value === ')') {
+                    errors.push(`Logical operator '${token.value}' at position ${token.position} has no term after it, before ')'`);
+                }
+                else if (token.value !== 'NOT' && prevToken?.value === '(') {
+                    errors.push(`Logical operator '${token.value}' at position ${token.position} has no term before it, after '('`);
+                }
+                break;
+            case 'parenthesis':
+                // Parentheses are handled in the balanced parentheses check above
+                break;
+            case 'text':
+                // Free text needs no field. A - excludes the term it starts
+                // (-laptop, -name:x); one before nothing (- laptop, x -) passed
+                // here, and the search parser refused it as an "Unexpected
+                // character '-'"
+                if (/^-(?![\p{L}\p{N}\p{M}_*?"'])/u.test(token.value)) {
+                    errors.push(`'-' at position ${token.position} starts no term: write it right before the term to exclude (-laptop, -name:x), or drop it`);
+                }
+                break;
+        }
+    }
+    // Check for empty parentheses
+    for (let i = 0; i < tokens.length - 1; i++) {
+        if (tokens[i].value === '(' && tokens[i + 1].value === ')') {
+            errors.push(`Empty parentheses at position ${tokens[i].position}`);
+        }
+    }
+    // Provide helpful suggestions for common mistakes
+    if (trimmedQuery.includes('@') ||
+        trimmedQuery.includes('#') ||
+        trimmedQuery.includes('$')) {
+        errors.push(`Query contains invalid special characters. Use field:value syntax (e.g., protocol:tcp, device.ip:192.168.*)`);
+    }
+    return {
+        isValid: errors.length === 0,
+        errors,
+        sanitizedValue: trimmedQuery,
+    };
+}
+/**
+ * Get example queries for a specific entity type
+ */
+export function getExampleQueries(entityType) {
+    // Every example runs as the MSP API reads it once translated: AND is a
+    // space, and OR joins values of one field (sent as a comma list)
+    const examples = {
+        flows: [
+            'protocol:tcp AND status:blocked',
+            'region:US AND total:>1MB',
+            'domain:facebook.com',
+            'category:social OR category:games',
+            'device.ip:192.168.1.* AND -status:blocked',
+        ],
+        alarms: [
+            'type:1 AND status:1',
+            'type:8 OR type:9',
+            'device.ip:192.168.* AND status:1',
+            'porn',
+            'type:10 AND NOT status:2',
+        ],
+        rules: [
+            'action:block AND target.value:*.social.com',
+            'status:paused',
+            'action:block OR action:timelimit',
+            'action:block AND NOT status:paused',
+            'notes:"temporary rule"',
+        ],
+        devices: [
+            'online:false AND mac_vendor:Apple',
+            'ip:192.168.1.* AND name:*phone*',
+            'mac:AA:BB:*',
+            'network.name:"Guest Network"',
+            'online:true AND group.name:*kids*',
+        ],
+        target_lists: [
+            'category:social',
+            'owner:global AND name:*Block*',
+            'targets:*.gaming.com',
+            'notes:"custom blocklist"',
+        ],
+    };
+    return examples[entityType] || [];
+}
+//# sourceMappingURL=query-validator.js.map

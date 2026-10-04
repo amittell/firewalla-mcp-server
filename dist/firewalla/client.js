@@ -1,0 +1,3951 @@
+/**
+ * @fileoverview Firewalla API Client for MSP Integration
+ *
+ * Provides comprehensive access to Firewalla MSP APIs with enterprise-grade features:
+ * - **Authentication**: Token-based MSP API authentication with error handling
+ * - **Caching**: Intelligent response caching with configurable TTL
+ * - **Rate Limiting**: Paces requests to `API_RATE_LIMIT` per 5 minutes and
+ *   fails fast, or retries a GET, when the API refuses one with HTTP 429
+ * - **Error Handling**: Comprehensive error mapping and recovery strategies
+ * - **Monitoring**: Request/response logging and performance tracking
+ *
+ * The client supports all major Firewalla data types including alarms, flows,
+ * devices, rules, bandwidth analytics, and advanced search capabilities with
+ * cross-reference correlation and trend analysis.
+ *
+ * @version 1.0.0
+ * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
+ * @since 2025-06-21
+ */
+import axios, { CanceledError, } from 'axios';
+import { createHash } from 'crypto';
+import { STATUS_CODES } from 'node:http';
+import { ALARM_TYPE_NAMES, } from '../types.js';
+import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
+import { containsText, matchesWildcard } from '../utils/wildcard.js';
+import { commaListValues, ipv4InCidr, matchesQuery, unquoteQueryValue, } from '../search/client-filter.js';
+import { translateSortBy, translateToMspQualifiers, } from '../utils/msp-qualifiers.js';
+import { mspAnd, mspBoxScope, mspSplitText, mspValue, toMspQuery, refuseColonInQuotedText, } from '../utils/msp-query.js';
+import { createPaginatedResponse } from '../utils/pagination.js';
+import { pagingCoverage, } from '../utils/paging-coverage.js';
+import { refuseUndocumentedGeoQualifiers } from '../utils/geographic-filters.js';
+import { logger } from '../monitoring/logger.js';
+import { GeographicCache, getGeographicDataForIP, normalizeIP, } from '../utils/geographic.js';
+import { safeAccess, safeValue } from '../utils/data-normalizer.js';
+import { validateAlarmId } from '../utils/alarm-id-validation.js';
+import { currentToolBudget, unknownWriteOutcome, } from '../utils/timeout-manager.js';
+import { PERFORMANCE_THRESHOLDS } from '../config/limits.js';
+import { normalizeTimestamps } from '../utils/data-validator.js';
+import { hasRelativeTimestamp } from '../utils/timestamp.js';
+import { checkMuteRequest, } from '../validation/alarm-mute.js';
+import { pathSegment } from '../validation/path-segment.js';
+import { DEFAULT_RATE_LIMIT, MAX_RATE_LIMIT_RETRIES, RATE_LIMIT_MAX_WAIT_MS, RateLimitError, RequestRateLimiter, rateLimitError, rateLimitPauseMs, systemClock, } from './rate-limit.js';
+/**
+ * A flow's content category. The MSP API sends it as a string ("games",
+ * "social", or "" when uncategorized); older data models describe an object
+ * with a name, so both are read.
+ */
+function flowCategory(item) {
+    const category = typeof item?.category === 'string' ? item.category : item?.category?.name;
+    return category || 'uncategorized';
+}
+/**
+ * The fields of a grouped /v2/alarms or /v2/flows item that identify its
+ * group: every field but its totals. An empty object is left out: grouped
+ * flows carry `device: {}` unless they are grouped by device.
+ */
+function groupKey(item, totals) {
+    const key = {};
+    for (const [field, value] of Object.entries(item)) {
+        const isEmptyObject = value !== null &&
+            typeof value === 'object' &&
+            !Array.isArray(value) &&
+            Object.keys(value).length === 0;
+        if (!totals.includes(field) && !isEmptyObject) {
+            key[field] = value;
+        }
+    }
+    return key;
+}
+/**
+ * The sortBy of a grouped request. Groups have no `ts`, and the API answers a
+ * grouped request sorted by `ts` with no groups: measured 2026-09-25,
+ * `groupBy=category` on /v2/flows with `sortBy=ts:desc` or `ts:asc`, and
+ * `groupBy=type` on /v2/alarms with `sortBy=ts:desc`, returned count 0, and
+ * the same requests with `total:desc` or `count:desc` returned groups. Sort
+ * terms on `ts` are dropped, and with none left the largest groups come
+ * first (`largest`).
+ */
+function groupedSortBy(sortBy, largest) {
+    const terms = String(sortBy ?? '')
+        .split(',')
+        .map(term => term.trim())
+        .filter(term => term && term.split(':')[0] !== 'ts');
+    return terms.length > 0 ? terms.join(',') : largest;
+}
+/** Flow groups from the items of a grouped GET /v2/flows */
+function toFlowGroups(items) {
+    return items
+        .filter((item) => Boolean(item && typeof item === 'object'))
+        .map(item => ({
+        key: groupKey(item, ['count', 'download', 'upload', 'total']),
+        count: Number(item.count) || 0,
+        download: Number(item.download) || 0,
+        upload: Number(item.upload) || 0,
+        total: Number(item.total) || 0,
+    }));
+}
+/**
+ * A flow's byte counts. GET /v2/flows sends download, upload and total on
+ * every flow; total is not in the official Flow Model (measured
+ * 2026-09-25: on 200 of 200 flows, total equaled download + upload).
+ * Without a total, it is download + upload; bytes is the same figure.
+ */
+function flowBytes(item) {
+    const download = Number(item.download) || 0;
+    const upload = Number(item.upload) || 0;
+    const total = Number.isFinite(item.total)
+        ? Number(item.total)
+        : download + upload;
+    return { download, upload, total, bytes: total };
+}
+/** Alarm groups from the items of a grouped GET /v2/alarms */
+function toAlarmGroups(items) {
+    return items
+        .filter((item) => Boolean(item && typeof item === 'object'))
+        .map(item => ({
+        key: groupKey(item, ['count']),
+        count: Number(item.count) || 0,
+    }));
+}
+/** Largest `limit` the MSP API accepts on its /v2 list endpoints */
+const MAX_API_PAGE_SIZE = 500;
+/**
+ * Most responses the client keeps cached when the config gives no
+ * cacheMaxEntries (CACHE_MAX_ENTRIES). One client serves every HTTP
+ * session, so the cache lives as long as the process.
+ */
+export const DEFAULT_CACHE_MAX_ENTRIES = 1000;
+/** A cache write drops every expired entry when this long has passed since the last sweep */
+const CACHE_SWEEP_INTERVAL_MS = 60000;
+const DAY_SECONDS = 24 * 60 * 60;
+/** Days in a /v2/trends series (measured 2026-09-25) */
+const TREND_DAYS = 30;
+/**
+ * Per-day count requests a box-scoped trend has in flight at once. A 30-day
+ * series is 31 requests, and the API allows 100 per 5-minute window.
+ */
+const BOX_TREND_CONCURRENCY = 4;
+/**
+ * `fn` over `items` with at most `limit` calls in flight, results in the
+ * order of `items`. After a call fails no new call starts, and the first
+ * failure is thrown once the calls in flight settle.
+ */
+async function mapWithConcurrency(items, limit, fn) {
+    const results = new Array(items.length);
+    let next = 0;
+    let failed = false;
+    let firstError;
+    const worker = async () => {
+        while (!failed && next < items.length) {
+            const i = next++;
+            try {
+                results[i] = await fn(items[i]);
+            }
+            catch (error) {
+                if (!failed) {
+                    failed = true;
+                    firstError = error;
+                }
+            }
+        }
+    };
+    await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker));
+    if (failed) {
+        throw firstError;
+    }
+    return results;
+}
+/** Length of each period the trend tools accept */
+const TREND_PERIOD_SECONDS = {
+    '1h': 60 * 60,
+    '24h': DAY_SECONDS,
+    '7d': 7 * DAY_SECONDS,
+    '30d': 30 * DAY_SECONDS,
+};
+function validTrendPeriod(period) {
+    return typeof period === 'string' && period in TREND_PERIOD_SECONDS
+        ? period
+        : '30d';
+}
+/**
+ * Keep the days of an ascending daily series that overlap the last `period`,
+ * so the days returned cover all of it: 24h returns yesterday and today. A
+ * day runs to the next point's ts, and the last day to `now`.
+ */
+function selectTrendDays(points, period, now, about) {
+    const since = now - TREND_PERIOD_SECONDS[period];
+    const results = points.filter((_point, i) => {
+        const end = i + 1 < points.length ? points[i + 1].ts : now;
+        return end > since;
+    });
+    const last = results[results.length - 1];
+    return {
+        count: results.length,
+        results,
+        next_cursor: undefined,
+        source: about.source,
+        scope: about.scope,
+        interval: 'day',
+        window_start: results[0]?.ts,
+        window_end: now,
+        last_point_partial: last !== undefined && last.ts + DAY_SECONDS > now,
+        ...(about.note && { note: about.note }),
+    };
+}
+/**
+ * How many of `times` fall on each day that starts at `starts` (ascending). A
+ * day runs to the next day's start, and the last one to `now` but for no more
+ * than a day; times outside the days are not counted.
+ */
+function countPerDay(times, starts, now) {
+    const counts = new Array(starts.length).fill(0);
+    const last = starts.length - 1;
+    const end = Math.min(now, starts[last] + DAY_SECONDS - 1);
+    for (const ts of times) {
+        if (ts < starts[0] || ts > end) {
+            continue;
+        }
+        let day = last;
+        while (starts[day] > ts) {
+            day--;
+        }
+        counts[day]++;
+    }
+    return starts.map((ts, i) => ({ ts, value: counts[i] }));
+}
+/**
+ * Query parameters the official docs define for a /v2 GET endpoint; a GET to
+ * one of these paths sends no others. Measured 2026-09-25: /v2/devices and
+ * /v2/target-lists answer `query`, `limit` and `sortBy` with 200 and ignore
+ * them, and `box` (devices) and `owner` (target lists) do filter.
+ */
+const DOCUMENTED_GET_PARAMS = new Map([
+    ['/v2/alarms', ['query', 'groupBy', 'sortBy', 'limit', 'cursor']],
+    ['/v2/flows', ['query', 'groupBy', 'sortBy', 'limit', 'cursor']],
+    ['/v2/devices', ['box', 'group']],
+    ['/v2/boxes', ['group']],
+    ['/v2/target-lists', ['owner']],
+]);
+/**
+ * The endpoints whose `query` parameter the MSP API searches with its own
+ * grammar, which has no AND, OR, NOT or parentheses (see
+ * src/utils/msp-query.ts). Every GET to one of them sends its query through
+ * toMspQuery.
+ */
+const MSP_QUERY_ENDPOINTS = new Set([
+    '/v2/alarms',
+    '/v2/flows',
+    '/v2/rules',
+]);
+/**
+ * GET parameters with the query in the MSP API's grammar, for a search
+ * endpoint; other requests are returned unchanged
+ *
+ * @throws {MspQueryError} When the query has no form the API can run
+ */
+function withMspQuery(method, endpoint, params) {
+    if (method !== 'GET' ||
+        !MSP_QUERY_ENDPOINTS.has(endpoint) ||
+        typeof params?.query !== 'string') {
+        return params;
+    }
+    const { query, ...rest } = params;
+    const translated = toMspQuery(query);
+    if (endpoint !== '/v2/rules') {
+        refuseUndocumentedGeoQualifiers(query, endpoint);
+        refuseColonInQuotedText(query);
+    }
+    return translated ? { ...rest, query: translated } : rest;
+}
+/** The values search_devices reads for `online:`, lowercase */
+const ONLINE_VALUES = new Map([
+    ['true', true],
+    ['1', true],
+    ['yes', true],
+    ['false', false],
+    ['0', false],
+    ['no', false],
+]);
+/**
+ * Whether a rule, as GET /v2/rules returns it, has every free-text word
+ * (lowercase) in its name, notes, action, target type or value, or scope
+ * type or value, case-insensitively
+ */
+function ruleMatchesWords(rule, words) {
+    const text = [
+        rule?.name,
+        rule?.notes,
+        rule?.action,
+        rule?.target?.type,
+        rule?.target?.value,
+        rule?.scope?.type,
+        rule?.scope?.value,
+    ]
+        .filter((value) => typeof value === 'string')
+        .map(value => value.toLowerCase());
+    // An unquoted * in a word is a wildcard (containsText)
+    return words.every(word => text.some(value => containsText(value, word.text, word.quoted)));
+}
+/**
+ * A box gid as the MSP API issues them (a UUID). Anything else is refused
+ * before it is put in a query, where a value such as `X OR box.id:Y` would
+ * widen the scope instead of narrowing it.
+ */
+const BOX_GID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+/** Whether `gid` has the shape of a box gid */
+export function isValidBoxGid(gid) {
+    return BOX_GID_PATTERN.test(gid);
+}
+/** Why a box or FIREWALLA_BOX_ID that is not a box gid is refused */
+const INVALID_BOX_GID = `Invalid box gid: expected letters, digits, '-' or '_' only (get_boxes lists the gids)`;
+/**
+ * A single-box operation could not pick a box: the account has several and
+ * none was named, or the token sees none. Handlers report it as a validation
+ * error rather than an API failure.
+ */
+export class BoxSelectionError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'BoxSelectionError';
+    }
+}
+/** Each alarm write in the past tense, for messages */
+const ALARM_ACTION_DONE = {
+    archive: 'archived',
+    mute: 'muted',
+    delete: 'deleted',
+};
+/**
+ * Whether request() failed with a 404: an ApiRequestError with status 404.
+ * The MSP API's 404 body is an empty CloudFront error page, so the status is
+ * all there is. Decided by the status, not the message, which can name an
+ * ID holding "404".
+ */
+function isNotFoundError(error) {
+    return error instanceof ApiRequestError && error.status === 404;
+}
+/** "type 8, 'A device watched ...'" for naming an alarm in a message */
+function describeAlarm(alarm) {
+    const message = String(alarm.message ?? '').slice(0, 80);
+    return `type ${alarm.type ?? 'unknown'}, '${message}'`;
+}
+/**
+ * The MSP API answered HTTP 403. The message says which box the request
+ * named, when it named one, and how to list the boxes the token can access.
+ */
+export class ForbiddenError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'ForbiddenError';
+    }
+}
+/**
+ * A request to the MSP API failed. `status` is the HTTP status the API
+ * answered, undefined when no answer came; `code` is axios's error code
+ * (ECONNABORTED for a request whose timeout ran out, ECONNRESET, ...);
+ * `attempts` is how many times the request went to the API, a 429's
+ * retries and a transient failure's retry included (0 when it was never
+ * sent), as counted in coverage.api_requests. Code that reacts to a failure
+ * reads these, not the message.
+ */
+export class ApiRequestError extends Error {
+    constructor(message, status, code, attempts = 1) {
+        super(message);
+        this.status = status;
+        this.code = code;
+        this.attempts = attempts;
+        this.name = 'ApiRequestError';
+    }
+}
+/**
+ * The alarm is not on the box it was looked for on, or on any box when each
+ * box was checked: every GET of it answered 404 (status 404). Thrown by the
+ * alarm writes and by getSpecificAlarm.
+ */
+export class AlarmNotFoundError extends ApiRequestError {
+    constructor(message, attempts = 1) {
+        super(message, 404, undefined, attempts);
+        this.name = 'AlarmNotFoundError';
+    }
+}
+/**
+ * A write (POST, PUT, PATCH or DELETE) that was sent and got no HTTP
+ * status (its timeout ran out, or the connection dropped, after the request
+ * went out), or got 504 from a gateway that stopped waiting for the API
+ * (`status` 504). Firewalla may have applied it, so it is not reported as a
+ * failure, which a caller could answer by sending it again. The message
+ * says the outcome is unknown and names `check`, the read that shows
+ * whether it was applied (checkingReadTool); `failure` is what request()
+ * would have said of it ("Firewalla API sent no answer (ECONNRESET: socket
+ * hang up)").
+ */
+export class WriteOutcomeUnknownError extends ApiRequestError {
+    constructor(message, code, attempts, failure, check, status) {
+        super(message, status, code, attempts);
+        this.failure = failure;
+        this.check = check;
+        this.writeState = 'unknown';
+        this.name = 'WriteOutcomeUnknownError';
+    }
+}
+/**
+ * The answer after which a write may still have been applied: a gateway
+ * stopped waiting for the API, which had the request. 502 and 503 are not
+ * here: a gateway that could not reach the API, or an API that turned the
+ * request away, did not act on it.
+ */
+const GATEWAY_TIMEOUT = 504;
+/**
+ * Node's codes for a request that failed before it reached the API: the
+ * connection was refused or its host unreachable, the host name did not
+ * resolve, or the TLS handshake failed (EPROTO when the other end does not
+ * speak TLS; see TLS_FAILURE for a certificate it did not accept). Nothing
+ * was sent, so a write that failed this way was not applied and keeps its
+ * ordinary error, and the message says the API could not be reached.
+ */
+const NOT_DELIVERED_CODES = new Set([
+    'ECONNREFUSED',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'EPROTO',
+]);
+/** Node's codes for a certificate it did not accept, and its TLS failures */
+const TLS_FAILURE = /^(CERT_|ERR_TLS_|ERR_SSL_|UNABLE_TO_|DEPTH_ZERO_SELF_SIGNED_CERT$|SELF_SIGNED_CERT_IN_CHAIN$)/;
+/** Whether a request that failed with axios's `code` never reached the API */
+function neverReachedApi(code) {
+    return (code !== undefined &&
+        (NOT_DELIVERED_CODES.has(code) || TLS_FAILURE.test(code)));
+}
+/** Times a GET is sent again after a failure that can pass (see retryTransient) */
+export const MAX_TRANSIENT_RETRIES = 1;
+/** The wait before a GET is sent again: this, plus up to as much again at random */
+export const TRANSIENT_RETRY_DELAY_MS = 1000;
+/**
+ * The answers a GET is sent again after: a gateway or the API itself was
+ * briefly unavailable. Any other status, 500 included, would fail the same
+ * way again; 429 has its own path (retryRateLimited).
+ */
+const TRANSIENT_STATUSES = new Set([502, 503, 504]);
+/**
+ * axios's codes for a GET that got no answer and is sent again: its timeout
+ * ran out (ECONNABORTED, or ETIMEDOUT from the socket), or the connection
+ * was dropped while it was sent (ECONNRESET, EPIPE). A kept-alive socket
+ * that the server closes mid-request fails with ECONNRESET. ECONNREFUSED is
+ * not here: it comes from connecting a new socket, and the next attempt
+ * would connect the same way.
+ */
+const TRANSIENT_CODES = new Set([
+    'ECONNABORTED',
+    'ETIMEDOUT',
+    'ECONNRESET',
+    'EPIPE',
+]);
+/** Whether a failed request might succeed if sent again: see TRANSIENT_STATUSES and TRANSIENT_CODES */
+function isTransientFailure(error) {
+    const status = error.response?.status;
+    if (status !== undefined) {
+        return TRANSIENT_STATUSES.has(status);
+    }
+    return typeof error.code === 'string' && TRANSIENT_CODES.has(error.code);
+}
+/**
+ * The read tool that shows whether a write to `url` was applied, named in the
+ * error of a tool that gave up with the write sent and not answered
+ */
+export function checkingReadTool(url) {
+    const path = url ?? '';
+    if (path.startsWith('/v2/rules')) {
+        return 'get_network_rules';
+    }
+    if (path.startsWith('/v2/target-lists')) {
+        return 'get_target_lists';
+    }
+    if (/^\/v2\/boxes\/[^/]+\/devices\//.test(path)) {
+        return 'get_device_status';
+    }
+    if (path.startsWith('/v2/alarms/')) {
+        return 'get_specific_alarm';
+    }
+    return undefined;
+}
+/** How long a request's latest attempt has taken, in Date.now() milliseconds */
+function attemptTime(config) {
+    const now = Date.now();
+    return Math.max(0, now - (config.sentAt ?? now));
+}
+/** Whether request() failed with this HTTP status */
+function hasStatus(error, status) {
+    return error instanceof ApiRequestError && error.status === status;
+}
+/** What request() adds to the status line of a failed answer */
+const STATUS_HINTS = {
+    400: url => `invalid parameters sent to ${url}`,
+    401: () => 'invalid or expired MSP token',
+    404: url => `${url} does not exist`,
+    429: () => 'too many requests, wait before trying again',
+    500: () => 'the Firewalla API is experiencing issues',
+    502: () => 'a gateway could not reach the Firewalla API server, or the resource ID is invalid',
+    503: () => 'the Firewalla API is temporarily down',
+    504: () => 'a gateway timed out waiting for the Firewalla API',
+};
+/**
+ * The message for a request that failed: the HTTP status and its reason,
+ * or axios's error code when no answer came, and the number of attempts when
+ * the request was sent more than once. "Firewalla API answered 503 Service
+ * Unavailable after 2 attempts: the Firewalla API is temporarily down";
+ * "Firewalla API sent no answer after 2 attempts (ECONNABORTED: timeout of
+ * 5000ms exceeded)"; "Could not reach the Firewalla API (ECONNREFUSED:
+ * connect ECONNREFUSED ...)" for a request that never reached it
+ * (neverReachedApi).
+ */
+function apiFailureMessage(error, attempts) {
+    const after = attempts > 1 ? ` after ${attempts} attempts` : '';
+    const status = error.response?.status;
+    if (status === undefined) {
+        const code = error.code ? `${error.code}: ` : '';
+        return neverReachedApi(error.code)
+            ? `Could not reach the Firewalla API${after} (${code}${error.message})`
+            : `Firewalla API sent no answer${after} (${code}${error.message})`;
+    }
+    const reason = STATUS_CODES[status] ?? error.response?.statusText ?? '';
+    const hint = STATUS_HINTS[status]?.(error.config?.url ?? 'the API');
+    return `Firewalla API answered ${status}${reason ? ` ${reason}` : ''}${after}${hint ? `: ${hint}` : ''}`;
+}
+/**
+ * A RequestTrace for a read of `query` as its caller gave it, before any
+ * translation: it notes a relative time (`ts:>1h`), which mspAnd and
+ * translateRelativeTimestamps turn into seconds before the client sees it
+ */
+export function readTrace(query) {
+    return {
+        sent: 0,
+        cached: 0,
+        ...(hasRelativeTimestamp(query) && { relativeTime: true }),
+    };
+}
+/**
+ * The trace of a read that resolves its query's relative time itself, so
+ * that request() sees only seconds: the caller's trace, or a new one, noting
+ * the relative time as readTrace does, so the read is not cached
+ */
+function relativeReadTrace(query, trace) {
+    if (!hasRelativeTimestamp(query)) {
+        return trace;
+    }
+    if (!trace) {
+        return readTrace(query);
+    }
+    trace.relativeTime = true;
+    return trace;
+}
+/**
+ * Whether a request names a box: a `box` parameter, a `box` or `gid` in
+ * its body, or a gid in an /v2/alarms/{gid}/... or /v2/boxes/{gid}/... path
+ */
+function namesBox(config) {
+    const named = (value) => typeof value === 'string' && value.trim() !== '';
+    let body = config?.data;
+    if (typeof body === 'string') {
+        try {
+            body = JSON.parse(body);
+        }
+        catch {
+            // A body that is not JSON names no box
+            body = undefined;
+        }
+    }
+    const fields = body;
+    return (named(config?.params?.box) ||
+        named(fields?.box) ||
+        named(fields?.gid) ||
+        /^\/v2\/(?:alarms|boxes)\/[^/?]+/.test(config?.url ?? ''));
+}
+/**
+ * The message for an HTTP 403 from the MSP API. Measured 2026-09-25: a box
+ * gid the token cannot access, whether wrong, malformed or another
+ * account's, gets 403 {"error":{"title":"Forbidden","message":"You are not
+ * allowed to access this resource","type":"FORBIDDEN"}} from
+ * GET /v2/devices?box=<gid> and GET /v2/alarms/<gid>/<aid>, while a known
+ * box with an unknown alarm id gets 404. The message used to blame the MSP
+ * subscription. It does not quote the gid: handlers match "404" and
+ * "not found" in error messages, and a gid can contain either.
+ *
+ * A 403 to a request that changes state (anything but a GET) may also come
+ * from a read-only token: Firewalla said on 2026-09-08 that MSP 2.12 adds
+ * read-only API tokens. What the API answers a read-only token's write is
+ * not measured here, so the message says the token may be read-only, not
+ * that it is.
+ */
+export function forbiddenMessage(error) {
+    const apiMessage = error.response?.data?.error?.message;
+    const detail = typeof apiMessage === 'string' && apiMessage.trim()
+        ? `: ${apiMessage.trim()}`
+        : '';
+    const method = (error.config?.method ?? 'GET').toUpperCase();
+    const readOnly = method === 'GET'
+        ? ''
+        : ` This request changes state (${method}), so the token may be read-only: MSP 2.12 adds read-only API tokens, which cannot make changes. The write tools need a token with write access.`;
+    const cause = namesBox(error.config)
+        ? 'The MSP API answers 403 when a request names a box this token cannot access, and this request names one: check that its gid is right and belongs to this account.'
+        : "This MSP token cannot access the requested resource. The MSP API answers 403 when a request names a box the token cannot access (a wrong gid, or another account's).";
+    return `Forbidden (HTTP 403)${detail}.${readOnly} ${cause} get_boxes lists the box gids this token can access; if get_boxes is refused as well, the token itself lacks access.`;
+}
+/**
+ * Firewalla API Client for MSP Integration
+ *
+ * Main client class providing authenticated access to Firewalla MSP APIs.
+ * Handles authentication, caching, rate limiting and error handling for the
+ * MCP server's tools.
+ *
+ * Features:
+ * - Automatic token-based authentication with the MSP API
+ * - Intelligent caching with configurable TTL policies
+ * - Paces requests to `rateLimit` per 5 minutes; after a 429, pauses and
+ *   retries a GET when the wait is short
+ * - Comprehensive error handling with meaningful error messages
+ * - Request/response logging for debugging and monitoring
+ *
+ * @example
+ * ```typescript
+ * const config = getConfig();
+ * const client = new FirewallaClient(config);
+ *
+ * // Get recent alarms
+ * const alarms = await client.getActiveAlarms({ limit: 50 });
+ *
+ * // Search for high-severity flows
+ * const flows = await client.searchFlows({
+ *   query: 'severity:high AND bytes:>1000000',
+ *   limit: 100
+ * });
+ * ```
+ *
+ * @class
+ * @public
+ */
+export class FirewallaClient {
+    /**
+     * Creates a new Firewalla API client instance
+     *
+     * @param config - Configuration object containing MSP credentials and settings
+     * @param clock - Time and waiting for rate limiting; tests pass their own
+     * @throws {Error} If configuration is invalid or authentication fails
+     */
+    constructor(config, clock = systemClock) {
+        this.config = config;
+        this.clock = clock;
+        /** @private When the next cache write drops the expired entries */
+        this.nextCacheSweepAt = 0;
+        /**
+         * @private No cache entry expires before this: the earliest expiry at the
+         * last sweep, lowered by each write. Entries removed since only make the
+         * true earliest later, so a full cache is swept only once an entry may
+         * have expired.
+         */
+        this.earliestCacheExpiry = Number.POSITIVE_INFINITY;
+        this.transformDevice = (item) => {
+            const device = {
+                id: item.id || item.mac || item._id || 'unknown',
+                gid: item.gid || this.config.boxId,
+                name: item.name || item.hostname || item.deviceName || 'Unknown Device',
+                ip: item.ip || item.ipAddress || item.localIP || 'unknown',
+                online: Boolean(item.online || item.isOnline || item.connected),
+                ipReserved: Boolean(item.ipReserved),
+                network: {
+                    id: item.network?.id || 'unknown',
+                    name: item.network?.name || 'Unknown Network',
+                },
+                totalDownload: item.totalDownload || 0,
+                totalUpload: item.totalUpload || 0,
+            };
+            if (item.mac || item.macAddress || item.hardwareAddr) {
+                device.mac = item.mac || item.macAddress || item.hardwareAddr;
+            }
+            if (item.macVendor || item.manufacturer || item.vendor) {
+                device.macVendor = item.macVendor || item.manufacturer || item.vendor;
+            }
+            if (item.lastSeen || item.onlineTs || item.lastActivity) {
+                // Handle different timestamp formats
+                const timestamp = item.lastSeen || item.onlineTs || item.lastActivity;
+                device.lastSeen =
+                    typeof timestamp === 'number' && timestamp > 1000000000000
+                        ? Math.floor(timestamp / 1000)
+                        : timestamp;
+            }
+            if (item.group) {
+                device.group = {
+                    id: item.group.id || 'unknown',
+                    name: item.group.name || 'Unknown Group',
+                };
+            }
+            if (item.deviceType || item.device_type) {
+                device.deviceType = item.deviceType || item.device_type;
+            }
+            if (item.isFirewalla !== undefined) {
+                device.isFirewalla = Boolean(item.isFirewalla);
+            }
+            if (item.isRouter !== undefined) {
+                device.isRouter = Boolean(item.isRouter);
+            }
+            if (item.monitoring !== undefined) {
+                device.monitoring = Boolean(item.monitoring);
+            }
+            return device;
+        };
+        const { rateLimit } = config;
+        this.rateLimiter = new RequestRateLimiter(Number.isFinite(rateLimit) && rateLimit >= 1
+            ? Math.floor(rateLimit)
+            : DEFAULT_RATE_LIMIT, clock);
+        this.cache = new Map();
+        const { cacheMaxEntries } = config;
+        this.cacheMaxEntries =
+            typeof cacheMaxEntries === 'number' &&
+                Number.isFinite(cacheMaxEntries) &&
+                cacheMaxEntries >= 1
+                ? Math.floor(cacheMaxEntries)
+                : DEFAULT_CACHE_MAX_ENTRIES;
+        this.geoCache = new GeographicCache({
+            maxSize: 10000,
+            ttlMs: 3600000, // 1 hour cache for geographic data
+            enableStats: process.env.NODE_ENV === 'development' ||
+                process.env.NODE_ENV === 'test',
+        });
+        // Use mspBaseUrl if provided, otherwise construct from mspId
+        const baseURL = config.mspBaseUrl || `https://${config.mspId}`;
+        this.api = axios.create({
+            baseURL,
+            timeout: config.apiTimeout,
+            headers: {
+                Authorization: `Token ${config.mspToken}`,
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                Accept: 'application/json, text/plain, */*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                Connection: 'keep-alive',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+            },
+        });
+        this.setupInterceptors();
+    }
+    /**
+     * Sets up Axios request and response interceptors for logging and error handling
+     *
+     * Configures interceptors to:
+     * - Hold each request until the rate limiter has a slot for it, or refuse
+     *   it when the slot is more than RATE_LIMIT_MAX_WAIT_MS away
+     * - Log all API requests and responses for debugging
+     * - Pause on a 429 and retry a GET (see retryRateLimited)
+     * - Send a GET again once after a timeout, a dropped connection or a
+     *   502, 503 or 504 (see retryTransient)
+     * - Transform HTTP error codes into meaningful error messages
+     * - Handle authentication and authorization failures
+     * - Provide specific guidance for common error scenarios
+     *
+     * @private
+     * @returns {void}
+     */
+    setupInterceptors() {
+        /** Marks a write answered in its tool's budget */
+        const answered = (config, status) => {
+            const write = config?.toolWrite;
+            if (write) {
+                write.state = 'answered';
+                write.status = status;
+            }
+        };
+        this.api.interceptors.request.use((config) => {
+            const request = config;
+            const deadline = (request.rateLimitDeadline ?? (request.rateLimitDeadline = this.clock.now() + RATE_LIMIT_MAX_WAIT_MS));
+            // The tool's time: a request is cancelled when the tool gives up
+            const budget = currentToolBudget();
+            if (budget) {
+                request.signal ?? (request.signal = budget.signal);
+                request.toolDeadline ?? (request.toolDeadline = budget.deadline);
+            }
+            const name = `${config.method?.toUpperCase()} ${config.url}`;
+            // A write is recorded in the tool's budget, so a tool that gives up
+            // can say whether it was sent (see describeWrites)
+            if (budget &&
+                !request.toolWrite &&
+                config.method?.toUpperCase() !== 'GET') {
+                request.toolWrite = {
+                    request: name,
+                    check: checkingReadTool(config.url),
+                    state: 'queued',
+                };
+                budget.writes.push(request.toolWrite);
+            }
+            // A request the tool gave up on is not sent, nor counted. Its
+            // deadline is checked as well as its signal: a request that wakes
+            // after the deadline, before the tool's timer has run, is not sent
+            const toolGaveUp = () => request.signal?.aborted === true ||
+                (budget !== undefined && Date.now() >= budget.deadline);
+            const cancelled = () => new CanceledError(`Not sent: the tool gave up before ${name} was sent`, config);
+            // A retry that could no longer answer in time is not sent either
+            const fits = (waitMs) => this.retryFits(request, waitMs);
+            const declined = () => {
+                process.stderr.write(`API Request not sent: the retry of ${name} could not answer before its tool gives up\n`);
+                return new CanceledError(`Not sent: the retry of ${name} could not answer before its tool gives up`, config);
+            };
+            // Takes no slot and counts nothing when it does not send: the
+            // slot it took is given back
+            const send = (slot) => {
+                if (toolGaveUp() || !fits(0)) {
+                    this.rateLimiter.release(slot);
+                    throw toolGaveUp() ? cancelled() : declined();
+                }
+                process.stderr.write(`API Request: ${name}\n`);
+                request.sentAt = Date.now();
+                // Outside a tool, the budget starts at the first send
+                request.toolDeadline ?? (request.toolDeadline = request.sentAt + PERFORMANCE_THRESHOLDS.TIMEOUT_MS);
+                request.sends = (request.sends ?? 0) + 1;
+                if (request.toolWrite) {
+                    request.toolWrite.state = 'sent';
+                }
+                request.onSent?.();
+                return config;
+            };
+            if (toolGaveUp()) {
+                throw cancelled();
+            }
+            if (!fits(0)) {
+                throw declined();
+            }
+            const refuse = (error) => {
+                process.stderr.write(`API Request refused for the rate limit: ${name}; capacity returns in ${Math.max(0, Math.ceil((error.availableAt - this.clock.now()) / 1000))} s\n`);
+                return error;
+            };
+            // A free slot is taken at once, so an unthrottled request goes out
+            // without waiting a tick
+            const slot = this.rateLimiter.tryAcquireSlot();
+            if (slot !== undefined) {
+                return send(slot);
+            }
+            const startAt = this.rateLimiter.nextStartAt();
+            if (startAt > deadline) {
+                throw refuse(this.rateLimiter.unavailable(startAt));
+            }
+            // A retry whose slot comes too late is not queued for it
+            if (!fits(Math.max(0, startAt - this.clock.now()))) {
+                throw declined();
+            }
+            // A retry's wait was logged when its 429 came back
+            if (request.rateLimitRetries === undefined) {
+                process.stderr.write(`API Request queued for the rate limit: ${name}\n`);
+            }
+            return this.rateLimiter
+                .acquire(deadline, request.signal)
+                .then(send, error => {
+                // The tool gave up while it waited: no slot was taken
+                if (toolGaveUp()) {
+                    throw cancelled();
+                }
+                throw error instanceof RateLimitError ? refuse(error) : error;
+            });
+        }, async (error) => {
+            process.stderr.write(`API Request Error: ${error.message}\n`);
+            return Promise.reject(error);
+        });
+        this.api.interceptors.response.use(response => {
+            answered(response.config, response.status);
+            process.stderr.write(`API Response: ${response.status} ${response.config.url}\n`);
+            return response;
+        }, async (error) => {
+            // Refused before it was sent; the request interceptor logged it
+            if (error instanceof RateLimitError) {
+                throw error;
+            }
+            if (error.response) {
+                answered(error.config, error.response.status);
+            }
+            process.stderr.write(`API Response Error: ${error.response?.status} ${error.message}\n`);
+            // Thrown with their status: request() passes an ApiRequestError on
+            const sends = error.config?.sends;
+            if (error.response?.status === 401) {
+                throw new ApiRequestError('Authentication failed. Please check your MSP token.', 401, error.code, sends);
+            }
+            if (error.response?.status === 403) {
+                throw new ForbiddenError(forbiddenMessage(error));
+            }
+            if (error.response?.status === 404) {
+                throw new ApiRequestError('Resource not found. Please check your Box ID.', 404, error.code, sends);
+            }
+            if (error.response?.status === 429) {
+                return this.retryRateLimited(error);
+            }
+            if (this.canRetryTransient(error)) {
+                if (this.retryFitsToolBudget(error)) {
+                    return this.retryTransient(error);
+                }
+                process.stderr.write(`API Request failed: ${error.response?.status ?? error.code} GET ${error.config?.url}; not retried, as its answer could not come before the tool gives up\n`);
+            }
+            return Promise.reject(error);
+        });
+    }
+    /**
+     * Whether a failed request is a GET that retryTransient sends again: it
+     * failed in a way that can pass (isTransientFailure) and has not been
+     * sent again for that yet. A POST, PUT, PATCH or DELETE is never sent
+     * again: the API may have applied it before the answer was lost.
+     */
+    canRetryTransient(error) {
+        const config = error.config;
+        return (config !== undefined &&
+            config.method?.toUpperCase() === 'GET' &&
+            !config.signal?.aborted &&
+            (config.transientRetries ?? 0) < MAX_TRANSIENT_RETRIES &&
+            isTransientFailure(error));
+    }
+    /**
+     * Whether a GET sent again could still answer before its tool gives up
+     * (toolDeadline): from when it could start, after the longest wait before
+     * it (2 x TRANSIENT_RETRY_DELAY_MS) or when the rate limiter next has a
+     * slot, whichever is later, as long again as the attempt that failed took
+     * must be left. A retry that could not answer in time would still cost one
+     * of the API's 100 requests per 5 minutes. An attempt that ran out its
+     * timeout took API_TIMEOUT, so with the defaults (API_TIMEOUT and the tool
+     * timeout both 30 s) a timed-out GET is never sent again, while a 503 or a
+     * reset that comes back at once is, and a 503 that took 20 s is not. The
+     * request interceptor checks again when the retry would take its slot and
+     * when it would go out (retryFits), as other requests or a 429 pause can
+     * move its slot later. Measured with Date.now(), the clock the tool's
+     * deadline is set with.
+     */
+    retryFitsToolBudget(error) {
+        const config = error.config;
+        // It starts after the wait, or when the rate limiter next has a slot
+        const limiterWaitMs = Math.max(0, this.rateLimiter.nextStartAt() - this.clock.now());
+        return this.retryFits({ ...config, retryEstimateMs: attemptTime(config) }, Math.max(2 * TRANSIENT_RETRY_DELAY_MS, limiterWaitMs));
+    }
+    /**
+     * Whether a retry starting in `waitMs` could answer before its tool gives
+     * up: more than its retryEstimateMs must be left before toolDeadline then.
+     * Always true for a request that is not a transient retry.
+     */
+    retryFits(request, waitMs) {
+        if (request.retryEstimateMs === undefined) {
+            return true;
+        }
+        return (Date.now() + waitMs + request.retryEstimateMs <
+            (request.toolDeadline ?? Number.POSITIVE_INFINITY));
+    }
+    /**
+     * Sends a GET again after TRANSIENT_RETRY_DELAY_MS plus up to as much
+     * again at random. It goes through the request interceptor like any
+     * request, so the rate limiter releases it and `onSent` counts it in the
+     * read's RequestTrace. When the rate limiter refuses it or the tool gives
+     * up first, it is never sent, and the failure it was for is thrown instead.
+     *
+     * @private
+     */
+    async retryTransient(error) {
+        const config = error.config;
+        const retries = config.transientRetries ?? 0;
+        const retryEstimateMs = attemptTime(config);
+        const waitMs = TRANSIENT_RETRY_DELAY_MS * (1 + Math.random());
+        const failure = error.response?.status ?? error.code ?? 'no answer';
+        process.stderr.write(`API Request failed: ${failure} GET ${config.url}; retrying in ${(waitMs / 1000).toFixed(1)} s (retry ${retries + 1} of ${MAX_TRANSIENT_RETRIES})\n`);
+        await this.clock.sleep(waitMs);
+        let sent = false;
+        const retry = {
+            ...config,
+            transientRetries: retries + 1,
+            retryEstimateMs,
+            onSent: () => {
+                sent = true;
+                config.onSent?.();
+            },
+        };
+        try {
+            return await this.api.request(retry);
+        }
+        catch (retryError) {
+            // Not sent: the rate limiter had no slot, or the tool gave up
+            if (!sent) {
+                throw error;
+            }
+            throw retryError;
+        }
+    }
+    /**
+     * Answers a 429. The API counts every request made with the token (measured
+     * on one token; per token or per account was not measured), so every
+     * request of this client is paused until the API's window ends (see
+     * rateLimitPauseMs). A
+     * GET is then sent again through the rate limiter, at most
+     * MAX_RATE_LIMIT_RETRIES times, and only when the pause ends before the
+     * request's deadline (RATE_LIMIT_MAX_WAIT_MS after it was first made). A
+     * write is never sent again. Otherwise the 429 is thrown as a
+     * RateLimitError saying when capacity returns.
+     *
+     * @private
+     */
+    async retryRateLimited(error) {
+        const config = error.config;
+        const method = config?.method?.toUpperCase() ?? 'request';
+        const now = this.clock.now();
+        const resumeAt = now + rateLimitPauseMs(error.response?.headers, now);
+        this.rateLimiter.pauseUntil(resumeAt);
+        const retries = config?.rateLimitRetries ?? 0;
+        const giveUp = (detail) => rateLimitError({
+            limit: this.rateLimiter.limit,
+            windowMs: this.rateLimiter.windowMs,
+            now,
+            availableAt: resumeAt,
+            detail,
+            status: 429,
+        });
+        if (!config || method !== 'GET') {
+            throw giveUp(`A ${method} is not retried.`);
+        }
+        if (retries >= MAX_RATE_LIMIT_RETRIES) {
+            throw giveUp(`Gave up after ${retries} retries.`);
+        }
+        const deadline = config.rateLimitDeadline ?? now + RATE_LIMIT_MAX_WAIT_MS;
+        if (resumeAt > deadline) {
+            const notRetried = retries === 0
+                ? 'Not retried'
+                : `Not retried again after ${retries} ${retries === 1 ? 'retry' : 'retries'}`;
+            throw giveUp(`${notRetried}, as a request waits at most ${RATE_LIMIT_MAX_WAIT_MS / 1000} s for the rate limit.`);
+        }
+        process.stderr.write(`API Rate Limited: 429 ${method} ${config.url}; retrying in ${Math.ceil((resumeAt - now) / 1000)} s (retry ${retries + 1} of ${MAX_RATE_LIMIT_RETRIES})\n`);
+        const retry = {
+            ...config,
+            rateLimitRetries: retries + 1,
+            // A 429 on a transient retry is retried as any 429 is: the estimate
+            // of the transient retry, how long the 503 before it took, is not
+            // this attempt's
+            retryEstimateMs: undefined,
+        };
+        return this.api.request(retry);
+    }
+    /**
+     * Generates a unique cache key for API requests with enhanced collision prevention
+     *
+     * Creates a cache key that includes the box ID, endpoint, method, and sorted parameters
+     * to ensure uniqueness across different boxes and API calls.
+     *
+     * @param endpoint - API endpoint path
+     * @param params - Optional request parameters
+     * @param method - HTTP method (default: 'GET')
+     * @returns Unique cache key string with collision prevention
+     * @private
+     */
+    getCacheKey(endpoint, params, method = 'GET') {
+        // Sort parameters to ensure consistent key generation regardless of parameter order
+        const sortedParams = params
+            ? Object.keys(params)
+                .sort()
+                .reduce((acc, key) => {
+                acc[key] = params[key];
+                return acc;
+            }, {})
+            : {};
+        // Create hash-like key with multiple components for uniqueness
+        const paramStr = Object.keys(sortedParams).length > 0
+            ? JSON.stringify(sortedParams)
+            : 'no-params';
+        // Include box ID, method, endpoint, and parameters with separators
+        // Use SHA256 hash to ensure unique cache keys without truncation issues
+        const paramHash = createHash('sha256')
+            .update(paramStr)
+            .digest('hex')
+            .substring(0, 32);
+        // Use 'all-boxes' when no box ID is configured to avoid cache key collisions
+        const boxKey = this.config.boxId || 'all-boxes';
+        return `fw:${boxKey}:${method}:${endpoint.replace(/[^a-zA-Z0-9]/g, '_')}:${paramHash}`;
+    }
+    /**
+     * Retrieves data from cache if available and not expired
+     *
+     * @template T - The expected return type
+     * @param key - Cache key to look up
+     * @returns Cached data if available and valid, otherwise null
+     * @private
+     */
+    getFromCache(key) {
+        const cached = this.cache.get(key);
+        this.cache.delete(key);
+        if (!cached || cached.expires <= Date.now()) {
+            return null;
+        }
+        // Inserted again, so it is the most recently used
+        this.cache.set(key, cached);
+        return cached.data;
+    }
+    /**
+     * Caches `data` for `ttlSeconds`, else CACHE_TTL. The cache holds at most
+     * cacheMaxEntries: when it is full, the expired entries go first, then the
+     * least recently used; the entry written is never one of them. A full
+     * cache is swept for expired entries only when one may have expired
+     * (earliestCacheExpiry): a scan on every write cost 1.9 ms per write at
+     * 100,000 entries. Expired entries are also dropped by the first write
+     * CACHE_SWEEP_INTERVAL_MS after the last sweep, since an entry nothing
+     * reads again is otherwise never removed.
+     */
+    setCache(key, data, ttlSeconds) {
+        const ttl = ttlSeconds || this.config.cacheTtl;
+        this.cache.delete(key);
+        if (!(ttl > 0)) {
+            return;
+        }
+        const now = Date.now();
+        if (now >= this.nextCacheSweepAt ||
+            (this.cache.size >= this.cacheMaxEntries &&
+                now >= this.earliestCacheExpiry)) {
+            this.dropExpiredCache(now);
+        }
+        for (const oldest of this.cache.keys()) {
+            if (this.cache.size < this.cacheMaxEntries) {
+                break;
+            }
+            this.cache.delete(oldest);
+        }
+        const expires = now + ttl * 1000;
+        this.cache.set(key, { data, expires });
+        this.earliestCacheExpiry = Math.min(this.earliestCacheExpiry, expires);
+    }
+    /** Drops every expired cache entry, and notes when the next one expires */
+    dropExpiredCache(now) {
+        let earliest = Number.POSITIVE_INFINITY;
+        for (const [key, entry] of this.cache) {
+            if (entry.expires <= now) {
+                this.cache.delete(key);
+            }
+            else {
+                earliest = Math.min(earliest, entry.expires);
+            }
+        }
+        this.earliestCacheExpiry = earliest;
+        this.nextCacheSweepAt = now + CACHE_SWEEP_INTERVAL_MS;
+    }
+    /**
+     * Drops every cached `GET /v2/rules` answer. Called after a rule changes
+     * state, so the next read (and resume_rule's status check after a pause)
+     * sees the new status instead of the cached one.
+     */
+    invalidateRuleCache() {
+        const marker = `:GET:${'/v2/rules'.replace(/[^a-zA-Z0-9]/g, '_')}:`;
+        for (const key of [...this.cache.keys()]) {
+            if (key.includes(marker)) {
+                this.cache.delete(key);
+            }
+        }
+    }
+    /**
+     * Filter parameters for GET requests to /v2/* endpoints to only include allowed scalar fields
+     * Fixes issue where complex objects get serialized as [object Object] causing "Bad Request" errors
+     */
+    filterParametersForDataEndpoints(method, endpoint, params) {
+        // Only filter GET requests to raw /v2/* data endpoints
+        if (method !== 'GET' || !endpoint.startsWith('/v2/') || !params) {
+            return params;
+        }
+        // Skip filtering for /v2/*/search endpoints that accept JSON bodies
+        if (endpoint.includes('/search')) {
+            return params;
+        }
+        // The parameters the official docs give for this endpoint, else the
+        // scalar parameters every other /v2 GET has always been allowed. `group`
+        // (a box group ID) is documented on /v2/boxes, /v2/stats and /v2/trends.
+        const allowedParams = DOCUMENTED_GET_PARAMS.get(endpoint) ?? [
+            'query',
+            'limit',
+            'sortBy',
+            'groupBy',
+            'cursor',
+            'box',
+            'group',
+        ];
+        const filtered = {};
+        for (const [key, value] of Object.entries(params)) {
+            if (allowedParams.includes(key) && value !== undefined) {
+                filtered[key] = value;
+            }
+        }
+        return filtered;
+    }
+    /**
+     * GET up to `limit` results from a /v2 list endpoint, at most
+     * MAX_API_PAGE_SIZE per request, following next_cursor. The MSP API answers
+     * 400 "limit exceeds max allowed value of 500" to a larger limit on
+     * /v2/alarms and /v2/flows. Reports the requests sent to the API (a 429's
+     * retries and a transient failure's retry included; a page from the
+     * response cache sends none), the pages
+     * answered from the cache, and why paging stopped (see PagingStopReason).
+     * A next_cursor this read already sent stops it, with no cursor returned:
+     * following it would fetch the same page again, and the loop would repeat
+     * until `limit` with duplicates.
+     *
+     * @param trace - Counts this read's requests; one passed in keeps its
+     *   earlier counts, and api_requests and cached_pages are its totals
+     */
+    async requestPages(endpoint, params, limit, cacheable = true, trace = { sent: 0, cached: 0 }) {
+        // The API's own default when no usable limit is given
+        const wanted = Number.isFinite(limit) && limit >= 1 ? limit : 200;
+        const results = [];
+        let cursor = params.cursor;
+        const sentCursors = new Set();
+        let first;
+        let stoppedReason;
+        for (;;) {
+            const pageParams = {
+                ...params,
+                limit: Math.min(MAX_API_PAGE_SIZE, wanted - results.length),
+            };
+            if (cursor) {
+                pageParams.cursor = cursor;
+                sentCursors.add(cursor);
+            }
+            const page = await this.request('GET', endpoint, pageParams, undefined, cacheable, trace);
+            if (!first && page && !Array.isArray(page)) {
+                first = page;
+            }
+            const pageResults = Array.isArray(page) ? page : page?.results || [];
+            results.push(...pageResults);
+            cursor = Array.isArray(page) ? undefined : page?.next_cursor;
+            if (!cursor) {
+                stoppedReason = 'no_more_pages';
+                break;
+            }
+            if (sentCursors.has(cursor)) {
+                logger.warn('The API repeated a cursor; paging stopped', {
+                    endpoint,
+                    requests: trace.sent,
+                });
+                stoppedReason = 'repeated_cursor';
+                cursor = undefined;
+                break;
+            }
+            if (pageResults.length === 0) {
+                stoppedReason = 'empty_page';
+                break;
+            }
+            if (results.length >= wanted) {
+                stoppedReason = 'limit_reached';
+                break;
+            }
+        }
+        return {
+            ...first,
+            count: results.length,
+            results,
+            next_cursor: cursor,
+            api_requests: trace.sent,
+            cached_pages: trace.cached,
+            stopped_reason: stoppedReason,
+        };
+    }
+    /**
+     * @param trace - Counts the GET's sends to the API and its cache answers
+     */
+    async request(method, endpoint, params, body, cacheable = true, trace) {
+        // Filter parameters for raw /v2/* data endpoints to prevent "Bad Request"
+        // errors, and send a search query in the API's grammar (AND, OR, NOT and
+        // parentheses are words to the API)
+        const filteredParams = withMspQuery(method, endpoint, this.filterParametersForDataEndpoints(method, endpoint, params));
+        const cacheKey = this.getCacheKey(endpoint, filteredParams, method);
+        // A relative time is sent as seconds from now: a new key every second,
+        // and "the last hour" should be read when it is asked. Known from the
+        // caller's query, here or on the trace when the caller translated it.
+        const useCache = cacheable &&
+            method === 'GET' &&
+            !trace?.relativeTime &&
+            !hasRelativeTimestamp(params?.query);
+        if (useCache) {
+            const cached = this.getFromCache(cacheKey);
+            if (cached) {
+                if (trace) {
+                    trace.cached++;
+                }
+                return cached;
+            }
+        }
+        try {
+            let response;
+            switch (method) {
+                case 'GET': {
+                    const config = { params: filteredParams };
+                    if (trace) {
+                        config.onSent = () => {
+                            trace.sent++;
+                        };
+                    }
+                    response = await this.api.get(endpoint, config);
+                    break;
+                }
+                case 'POST':
+                    response = await this.api.post(endpoint, body, {
+                        params: filteredParams,
+                    });
+                    break;
+                case 'PUT':
+                    response = await this.api.put(endpoint, body, {
+                        params: filteredParams,
+                    });
+                    break;
+                case 'PATCH':
+                    response = await this.api.patch(endpoint, body, {
+                        params: filteredParams,
+                    });
+                    break;
+                case 'DELETE':
+                    response = await this.api.delete(endpoint, {
+                        params: filteredParams,
+                    });
+                    break;
+            }
+            // Log successful API requests
+            logger.debug('API Request completed', {
+                method,
+                endpoint,
+                status: response.status,
+            });
+            // Check if we're getting HTML instead of JSON
+            if (typeof response.data === 'string' &&
+                response.data.includes('<!DOCTYPE html>')) {
+                throw new Error(`Received HTML login page instead of JSON API response. This indicates authentication or API access issues. URL: ${response.config.url}`);
+            }
+            // Handle different response formats from Firewalla API
+            let result;
+            if (response.data &&
+                typeof response.data === 'object' &&
+                'success' in response.data) {
+                // Standard API response format
+                if (!response.data.success) {
+                    throw new Error(response.data.error || 'API request failed');
+                }
+                // For DELETE operations, the response might not have a 'data' field
+                // In this case, return the entire response object as the result
+                result =
+                    response.data.data !== undefined
+                        ? response.data.data
+                        : response.data;
+            }
+            else {
+                // Direct data response (more common with Firewalla API)
+                result = response.data;
+            }
+            if (useCache) {
+                // Use shorter TTL for dynamic data (alarms, flows)
+                const ttlSeconds = endpoint.includes('/alarms') || endpoint.includes('/flows')
+                    ? 15
+                    : undefined;
+                this.setCache(cacheKey, result, ttlSeconds);
+            }
+            return result;
+        }
+        catch (error) {
+            if (axios.isAxiosError(error)) {
+                const status = error.response?.status;
+                if (status === 403) {
+                    throw new ForbiddenError(forbiddenMessage(error));
+                }
+                if (status === 400) {
+                    logger.debug('API 400 Error Details:', {
+                        url: error.config?.url,
+                        params: filteredParams,
+                        response: error.response?.data,
+                    });
+                }
+                // Every time it went to the API, a 429's retries included
+                const attempts = error.config?.sends ?? 0;
+                const failure = apiFailureMessage(error, attempts);
+                // A write that went out and got no status, or a gateway's 504,
+                // may have been applied
+                if (method !== 'GET' &&
+                    status === undefined &&
+                    attempts > 0 &&
+                    !neverReachedApi(error.code)) {
+                    const check = checkingReadTool(endpoint);
+                    throw new WriteOutcomeUnknownError(`${method} ${endpoint} was sent and not answered (${error.code ? `${error.code}: ` : ''}${error.message}). ${unknownWriteOutcome(check)}`, error.code, attempts, failure, check);
+                }
+                if (method !== 'GET' && status === GATEWAY_TIMEOUT) {
+                    const check = checkingReadTool(endpoint);
+                    throw new WriteOutcomeUnknownError(`${method} ${endpoint} got 504 Gateway Timeout: a gateway stopped waiting for the Firewalla API, which may still carry it out. ${unknownWriteOutcome(check)}`, error.code, attempts, failure, check, status);
+                }
+                throw new ApiRequestError(failure, status, error.code, attempts);
+            }
+            // A 403 from the response interceptor carries its own explanation, a
+            // rate-limit refusal says when capacity returns, and a 401 or 404
+            // keeps its status
+            if (error instanceof ForbiddenError ||
+                error instanceof RateLimitError ||
+                error instanceof ApiRequestError) {
+                throw error;
+            }
+            // Handle other types of errors
+            if (error instanceof Error) {
+                throw new Error(`Request failed: ${error.message}`);
+            }
+            throw new Error('Unknown error occurred during API request');
+        }
+        finally {
+            // A write can change what any cached read returns, and one that
+            // failed may still have been applied, so drop cached reads either way
+            if (method !== 'GET') {
+                this.clearCache();
+            }
+        }
+    }
+    /**
+     * Retrieves active security alarms from the Firewalla system
+     *
+     * Fetches current security alerts, alarms, and notifications with support for
+     * advanced filtering, grouping, and pagination.
+     *
+     * @param query - Optional search query for filtering alarms
+     * @param groupBy - Optional fields to group by (e.g., 'type', 'type,box').
+     *   The API then returns groups, not alarms: the result has `groups` and
+     *   `group_by`, and empty `results`.
+     * @param sortBy - Sort order specification (default: 'ts:desc'; `timestamp`
+     *   is sent as `ts`)
+     * @param limit - Maximum number of results to return (required for pagination)
+     * @param cursor - Pagination cursor from previous response
+     * @returns Promise resolving to paginated alarm results with metadata
+     *
+     * @example
+     * ```typescript
+     * // Get recent high-severity alarms
+     * const highSeverityAlarms = await client.getActiveAlarms(
+     *   'severity:high',
+     *   undefined,
+     *   'ts:desc',
+     *   50
+     * );
+     *
+     * // Get alarms grouped by type
+     * const groupedAlarms = await client.getActiveAlarms(
+     *   undefined,
+     *   'type',
+     *   'ts:desc',
+     *   100
+     * );
+     * ```
+     *
+     * @public
+     */
+    async getActiveAlarms(query, groupBy, sortBy = 'ts:desc', limit = 200, cursor, force_refresh = false, trace) {
+        const params = {
+            sortBy: translateSortBy(sortBy, 'alarms'),
+            limit, // Remove artificial limit - let pagination handle large datasets
+        };
+        if (query) {
+            // source_ip: is rejected by /v2/alarms; send it as device.ip:
+            params.query = translateToMspQualifiers(query, 'alarms');
+        }
+        const group = typeof groupBy === 'string' ? groupBy.trim() : undefined;
+        if (group) {
+            params.groupBy = group;
+            // A ts sort returns no groups; see groupedSortBy
+            params.sortBy = groupedSortBy(params.sortBy, 'count:desc');
+        }
+        if (cursor) {
+            params.cursor = cursor;
+        }
+        // Apply box filter through the query parameter
+        params.query = this.addBoxFilter(params.query);
+        // Translated once, so a relative ts:>1h is resolved once: every page
+        // sends this query (request()'s toMspQuery leaves it as it is), and it
+        // is the query reported
+        const sentQuery = typeof params.query === 'string'
+            ? toMspQuery(params.query) || undefined
+            : undefined;
+        params.query = sentQuery;
+        const response = await this.requestPages('/v2/alarms', params, Number(limit), !force_refresh, 
+        // request() now sees ts:>1h only as seconds; the trace keeps the
+        // read out of the cache, as it did when request() saw ts:>1h itself
+        relativeReadTrace(query, trace));
+        // Basic response validation
+        if (!response || typeof response !== 'object') {
+            logger.warn('Invalid alarm response structure');
+            return {
+                count: 0,
+                results: [],
+                next_cursor: undefined,
+                query: sentQuery,
+            };
+        }
+        // Extract alarm data with safe defaults
+        const rawAlarms = Array.isArray(response.results) ? response.results : [];
+        // A grouped response has one { <group fields>, count } item per group
+        // and no ts, aid or message (measured 2026-09-25); mapped as alarms,
+        // they became "Unknown alarm" records stamped with the current time
+        if (group) {
+            const groups = toAlarmGroups(rawAlarms);
+            return {
+                count: groups.length,
+                results: [],
+                groups,
+                group_by: group,
+                next_cursor: response.next_cursor,
+                query: sentQuery,
+            };
+        }
+        // Apply basic safety to the raw alarm data
+        const normalizedAlarms = rawAlarms.map((alarm) => ({
+            ...alarm,
+            message: safeValue(alarm.message, 'Unknown alarm'),
+            direction: safeValue(alarm.direction, 'inbound'),
+            protocol: safeValue(alarm.protocol, 'tcp'),
+            device: alarm.device ? safeAccess(alarm.device) : undefined,
+            remote: alarm.remote ? safeAccess(alarm.remote) : undefined,
+        }));
+        // Map normalized data to Alarm objects
+        const alarms = normalizedAlarms.map((item) => ({
+            ts: item.ts || Math.floor(Date.now() / 1000),
+            gid: item.gid || this.config.boxId,
+            aid: item.aid !== undefined && item.aid !== null ? item.aid : 0,
+            type: item.type || 1,
+            status: item.status || 1,
+            message: item.message,
+            direction: item.direction,
+            protocol: item.protocol,
+            // Conditional properties based on alarm type
+            ...(item.device && { device: item.device }),
+            ...(item.remote && { remote: item.remote }),
+            ...(item.transfer && { transfer: item.transfer }),
+            ...(item.dataPlan && { dataPlan: item.dataPlan }),
+            ...(item.vpn && { vpn: item.vpn }),
+            ...(item.port && { port: item.port }),
+            ...(item.wan && { wan: item.wan }),
+            // The API's alarm model has no severity; one it sends is kept, as
+            // getSpecificAlarm keeps it, and none is made up
+            ...(typeof item.severity === 'string' &&
+                item.severity.trim() && { severity: item.severity.trim() }),
+        }));
+        // Normalize timestamps in the alarm objects
+        const timestampNormalizedAlarms = alarms.map(alarm => {
+            const result = normalizeTimestamps(alarm);
+            if (result.warnings.length > 0) {
+                logger.warn(`Timestamp normalization warnings for alarm ${alarm.aid}:`, { warnings: result.warnings });
+            }
+            return result.data;
+        });
+        return {
+            count: response.count || timestampNormalizedAlarms.length,
+            results: timestampNormalizedAlarms.map(alarm => this.enrichWithGeographicData(alarm, ['remote.ip'])),
+            next_cursor: response.next_cursor,
+            query: sentQuery,
+        };
+    }
+    /**
+     * Get flows from GET /v2/flows
+     *
+     * @param groupBy - Optional fields to group by (e.g., 'category',
+     *   'device', 'category,domain'). The API then returns groups, not flows:
+     *   the result has `groups` and `group_by`, and empty `results`.
+     * @param trace - Counts the read's requests; see requestPages
+     * @returns flows with `coverage`: the oldest and newest `ts` returned, the
+     *   requests made and why paging stopped (no coverage for groups)
+     */
+    async getFlowData(query, groupBy, sortBy = 'ts:desc', limit = 200, cursor, trace) {
+        const params = {
+            // timestamp: and bytes: are rejected by /v2/flows; sent as ts: and total:
+            sortBy: translateSortBy(sortBy, 'flows'),
+            limit, // Remove artificial limit - let pagination handle large datasets
+        };
+        // Simplified: only add query if provided. blocked: and bytes: are
+        // rejected by /v2/flows; send them as status:blocked and total:
+        if (query?.trim()) {
+            params.query = translateToMspQualifiers(query.trim(), 'flows');
+        }
+        const group = typeof groupBy === 'string' ? groupBy.trim() : undefined;
+        if (group) {
+            params.groupBy = group;
+            // A ts sort returns no groups; see groupedSortBy
+            params.sortBy = groupedSortBy(params.sortBy, 'total:desc');
+        }
+        if (cursor) {
+            params.cursor = cursor;
+        }
+        // Apply box filter through the query parameter
+        params.query = this.addBoxFilter(params.query);
+        // Translated once, so a relative ts:>1h is resolved once: every page
+        // sends this query (request()'s toMspQuery leaves it as it is), and it
+        // is the query reported
+        const sentQuery = typeof params.query === 'string'
+            ? toMspQuery(params.query) || undefined
+            : undefined;
+        params.query = sentQuery;
+        const response = await this.requestPages('/v2/flows', params, Number(limit), true, 
+        // request() now sees ts:>1h only as seconds; the trace keeps the
+        // read out of the cache, as it did when request() saw ts:>1h itself
+        relativeReadTrace(query, trace));
+        // A grouped response has one item of totals per group and no ts or gid
+        // (measured 2026-09-25); mapped as flows, they became records stamped
+        // with the current time
+        if (group) {
+            const groups = toFlowGroups(Array.isArray(response.results) ? response.results : []);
+            return {
+                count: groups.length,
+                results: [],
+                groups,
+                group_by: group,
+                next_cursor: response.next_cursor,
+                query: sentQuery,
+            };
+        }
+        // API returns {count, results[], next_cursor} format
+        const flows = (Array.isArray(response.results) ? response.results : []).map((item) => {
+            const parseTimestamp = (ts) => {
+                if (!ts) {
+                    return Math.floor(Date.now() / 1000);
+                }
+                if (typeof ts === 'number') {
+                    return ts > 1000000000000 ? Math.floor(ts / 1000) : ts;
+                }
+                if (typeof ts === 'string') {
+                    const parsed = Date.parse(ts);
+                    return Math.floor(parsed / 1000);
+                }
+                return Math.floor(Date.now() / 1000);
+            };
+            const flow = {
+                ts: parseTimestamp(item.ts || item.timestamp),
+                gid: item.gid || this.config.boxId,
+                protocol: item.protocol || 'tcp',
+                direction: item.direction || 'outbound',
+                block: Boolean(item.block || item.blocked),
+                ...flowBytes(item),
+                duration: item.duration || 0,
+                count: item.count || item.packets || 1,
+                device: {
+                    id: item.device?.id !== null && item.device?.id !== undefined
+                        ? String(item.device.id)
+                        : 'unknown',
+                    ip: item.device?.ip || item.srcIP || 'unknown',
+                    name: item.device?.name || 'Unknown Device',
+                },
+            };
+            if (item.blockType) {
+                flow.blockType = item.blockType;
+            }
+            if (item.device?.network) {
+                flow.device.network = {
+                    id: item.device.network.id,
+                    name: item.device.network.name,
+                };
+            }
+            if (item.source) {
+                flow.source = {
+                    id: item.source.id || 'unknown',
+                    name: item.source.name || 'Unknown',
+                    ip: item.source.ip || item.srcIP || 'unknown',
+                };
+            }
+            if (item.destination) {
+                flow.destination = {
+                    id: item.destination.id || 'unknown',
+                    name: item.destination.name || item.domain || 'Unknown',
+                    ip: item.destination.ip || item.dstIP || 'unknown',
+                };
+            }
+            if (item.region) {
+                flow.region = item.region;
+            }
+            if (item.country) {
+                flow.country = item.country;
+            }
+            if (item.category) {
+                flow.category = item.category;
+            }
+            if (item.domain) {
+                flow.domain = item.domain;
+            }
+            // The flow's network is top-level; the API sends no device.network
+            if (item.network) {
+                flow.network = { id: item.network.id, name: item.network.name };
+            }
+            return flow;
+        });
+        return {
+            count: response.count || flows.length,
+            results: flows.map(flow => this.enrichWithGeographicData(flow, ['destination.ip', 'source.ip'])),
+            next_cursor: response.next_cursor,
+            coverage: pagingCoverage(Array.isArray(response.results) ? response.results : [], response),
+            query: sentQuery,
+        };
+    }
+    async getDeviceStatus(deviceId, includeOffline = true, limit, cursor, box, group) {
+        try {
+            const startTime = Date.now();
+            // Create a data fetcher function for pagination
+            const dataFetcher = async () => {
+                const endpoint = `/v2/devices`;
+                // API returns direct array of devices
+                const response = await this.request('GET', endpoint, this.deviceBoxParams(box, group));
+                // Enhanced null safety and error handling
+                const rawResults = Array.isArray(response) ? response : [];
+                let results = rawResults
+                    .filter(item => item && typeof item === 'object')
+                    .map(item => this.transformDevice(item))
+                    .filter(device => device && device.id && device.id !== 'unknown');
+                // Filter by device ID if provided
+                if (deviceId?.trim()) {
+                    const targetId = deviceId.trim().toLowerCase();
+                    results = results.filter(device => device.id.toLowerCase() === targetId ||
+                        (device.mac &&
+                            device.mac.toLowerCase().replace(/[:-]/g, '') ===
+                                targetId.replace(/[:-]/g, '')));
+                }
+                // Filter by online status if requested
+                if (!includeOffline) {
+                    results = results.filter(device => device.online);
+                }
+                return results;
+            };
+            // Use universal pagination for client-side chunking
+            const pageSize = limit || 100; // Default page size
+            const paginatedResult = await createPaginatedResponse(dataFetcher, cursor, pageSize, 'name', // Sort by name for consistent ordering
+            'asc');
+            process.stderr.write(`Device pagination: ${paginatedResult.results.length}/${paginatedResult.total_count} (${Date.now() - startTime}ms)\n`);
+            return {
+                count: paginatedResult.results.length,
+                results: paginatedResult.results,
+                next_cursor: paginatedResult.next_cursor,
+                total_count: paginatedResult.total_count,
+                has_more: paginatedResult.has_more,
+            };
+        }
+        catch (error) {
+            logger.error('Error in getDeviceStatus:', error instanceof Error ? error : new Error(String(error)));
+            // As it came, with its class and status: the tool adds its one prefix
+            throw error;
+        }
+    }
+    /**
+     * Get top bandwidth consuming devices on the network
+     *
+     * @param period - Time period for analysis ('1h', '24h', '7d', '30d')
+     * @param top - Maximum number of devices to return (default: 10, max: 500)
+     * @returns Promise resolving to bandwidth usage data with device details
+     * @throws {Error} If period is invalid or API request fails
+     * @example
+     * ```typescript
+     * const usage = await client.getBandwidthUsage('24h', 50);
+     * usage.results.forEach(device => {
+     *   console.log(`${device.name}: ${device.total_bytes} bytes`);
+     * });
+     * ```
+     */
+    async getBandwidthUsage(period, top = 10, box) {
+        try {
+            // Enhanced input validation and sanitization
+            if (!period || typeof period !== 'string') {
+                throw new Error('Period parameter is required and must be a string');
+            }
+            const validPeriods = ['1h', '24h', '7d', '30d'];
+            const validatedPeriod = validPeriods.includes(period.toLowerCase())
+                ? period.toLowerCase()
+                : '24h';
+            const validatedTop = Math.max(1, Number(top) || 50);
+            // Calculate time range for the period
+            const end = Math.floor(Date.now() / 1000);
+            let begin;
+            switch (validatedPeriod) {
+                case '1h':
+                    begin = end - 60 * 60;
+                    break;
+                case '24h':
+                    begin = end - 24 * 60 * 60;
+                    break;
+                case '7d':
+                    begin = end - 7 * 24 * 60 * 60;
+                    break;
+                case '30d':
+                    begin = end - 30 * 24 * 60 * 60;
+                    break;
+                default:
+                    begin = end - 24 * 60 * 60;
+            }
+            // Use global endpoint with box parameter for filtering
+            // Note: groupBy parameter conflicts with query+box combination, so we do client-side grouping
+            const params = {
+                query: `ts:${begin}-${end}`,
+                sortBy: 'ts:desc',
+            };
+            // Scope to the box named, else FIREWALLA_BOX_ID, with the query
+            params.query = this.addBoxFilter(params.query, box);
+            // Get more data than `top` for client-side grouping
+            const response = await this.requestPages('/v2/flows', params, Math.min(validatedTop * 10, 1000));
+            // Process and aggregate bandwidth by device
+            const deviceBandwidth = new Map();
+            logger.debug(`Processing ${response.results?.length || 0} flows for bandwidth calculation`);
+            (response.results || []).forEach((flow) => {
+                // Enhanced device ID detection with more fallbacks
+                const deviceId = flow.device?.id ||
+                    flow.deviceId ||
+                    flow.source?.id ||
+                    flow.localIP ||
+                    flow.device?.ip ||
+                    'unknown';
+                const deviceName = flow.device?.name ||
+                    flow.deviceName ||
+                    flow.device?.dns ||
+                    'Unknown Device';
+                const deviceIp = flow.device?.ip || flow.localIP || flow.source?.ip || 'unknown';
+                // Enhanced bandwidth field detection
+                const upload = Number(flow.upload || flow.uploadBytes || flow.tx || flow.bytes_sent || 0);
+                const download = Number(flow.download ||
+                    flow.downloadBytes ||
+                    flow.rx ||
+                    flow.bytes_received ||
+                    0);
+                // More permissive filtering - only skip if BOTH device is unknown AND no traffic
+                if (deviceId === 'unknown' && upload === 0 && download === 0) {
+                    return;
+                }
+                logger.debug(`Flow: deviceId=${deviceId}, upload=${upload}, download=${download}`);
+                if (deviceBandwidth.has(deviceId)) {
+                    const existing = deviceBandwidth.get(deviceId);
+                    existing.bytes_uploaded += upload;
+                    existing.bytes_downloaded += download;
+                    existing.total_bytes =
+                        existing.bytes_uploaded + existing.bytes_downloaded;
+                }
+                else {
+                    deviceBandwidth.set(deviceId, {
+                        device_id: deviceId,
+                        device_name: deviceName,
+                        ip: deviceIp,
+                        bytes_uploaded: upload,
+                        bytes_downloaded: download,
+                        total_bytes: upload + download,
+                        period: validatedPeriod,
+                    });
+                }
+            });
+            // Convert to array and sort by total bandwidth
+            const allDevices = Array.from(deviceBandwidth.values());
+            logger.debug(`Total unique devices found: ${allDevices.length}`);
+            const results = allDevices
+                .filter(device => device.total_bytes > 0)
+                .sort((a, b) => b.total_bytes - a.total_bytes)
+                .slice(0, validatedTop);
+            logger.debug(`Final results after filtering and limiting: ${results.length}`);
+            return {
+                count: results.length,
+                results,
+                next_cursor: response.next_cursor,
+            };
+        }
+        catch (error) {
+            logger.error('Error in getBandwidthUsage:', error instanceof Error ? error : new Error(String(error)));
+            // As it came, with its class and status: the tool adds its one prefix
+            throw error;
+        }
+    }
+    /**
+     * Rules from GET /v2/rules, the box scope applied
+     *
+     * @param query - Rule search terms. Free-text words are not sent: the
+     *   API matched none (measured 2026-09-26: a word in one of 98 rules'
+     *   target value returned 0 rules), so every word must be found here,
+     *   case-insensitively, in the rule's name, notes, action, target type or
+     *   value, or scope type or value.
+     * @param limit - Sent as `limit`, except with words: then every rule the
+     *   other terms match is read, and `free_text_coverage` says how many
+     *   were checked
+     * @throws {MspQueryError} When the query has no form the API can run
+     */
+    async getNetworkRules(query, limit) {
+        const { response, items, matchedWords, coverage, sent } = await this.requestRules(query, limit !== undefined ? { limit } : {});
+        const rules = items.map((item) => ({
+            id: item.id || 'unknown',
+            action: item.action || 'block',
+            target: {
+                type: item.target?.type || 'ip',
+                value: item.target?.value || 'unknown',
+                dnsOnly: item.target?.dnsOnly,
+                port: item.target?.port,
+            },
+            direction: item.direction || 'bidirection',
+            gid: item.gid || this.config.boxId,
+            group: item.group,
+            scope: item.scope
+                ? {
+                    type: item.scope.type || 'ip',
+                    value: item.scope.value || 'unknown',
+                    port: item.scope.port,
+                }
+                : undefined,
+            notes: item.notes,
+            status: item.status,
+            hit: item.hit
+                ? {
+                    count: item.hit.count || 0,
+                    lastHitTs: item.hit.lastHitTs || 0,
+                    statsResetTs: item.hit.statsResetTs,
+                }
+                : undefined,
+            schedule: item.schedule
+                ? {
+                    duration: item.schedule.duration || 0,
+                    cronTime: item.schedule.cronTime,
+                }
+                : undefined,
+            timeUsage: item.timeUsage
+                ? {
+                    quota: item.timeUsage.quota || 0,
+                    used: item.timeUsage.used || 0,
+                }
+                : undefined,
+            protocol: item.protocol,
+            ts: item.ts || Math.floor(Date.now() / 1000),
+            updateTs: item.updateTs || Math.floor(Date.now() / 1000),
+            resumeTs: item.resumeTs,
+        }));
+        return {
+            // The API's count does not know the words matched here, so count
+            // gives every rule that matched them
+            count: matchedWords ? rules.length : response.count || rules.length,
+            // With words the limit was not sent, so it is applied here: at most
+            // `limit` of the rules that matched
+            results: matchedWords && limit !== undefined ? rules.slice(0, limit) : rules,
+            // A read for words sends no cursor, so it has none to pass on
+            next_cursor: matchedWords ? undefined : response.next_cursor,
+            ...(coverage && { free_text_coverage: coverage }),
+            query: sent,
+        };
+    }
+    /**
+     * GET /v2/rules for a rule search, which getNetworkRules and searchRules
+     * both read rules through. Free-text words are not sent: the API matched
+     * none (measured 2026-09-26: a word in one of 98 rules' target value
+     * returned 0 rules), so the other terms are sent, in the API's grammar
+     * and with the box scope, and the rules that come back are kept when they
+     * have every word (ruleMatchesWords).
+     *
+     * @param query - Rule search terms, in the tools' language or the API's
+     * @param params - Other GET parameters
+     * @param extraTerm - A term ANDed to the query the API is sent
+     * @returns The API's response, the rules that have every word, and
+     *   whether there were words (the API's count then does not apply)
+     * @throws {MspQueryError} When the query has no form the API can run
+     */
+    async requestRules(query, params, extraTerm) {
+        const { fields, text } = query
+            ? mspSplitText(query)
+            : { fields: '', text: [] };
+        const words = text.map(word => {
+            const unquoted = unquoteQueryValue(word);
+            return { text: unquoted.toLowerCase(), quoted: unquoted !== word };
+        });
+        const sent = mspAnd(fields, extraTerm);
+        // With words, every rule the other terms match must be checked, so no
+        // limit or cursor is sent: a limit would cap the rules read below what
+        // the account holds (search_rules asked for up to 2,000), and a match
+        // past it would never be seen. The API documents neither for rules.
+        const { limit: _limit, cursor: _cursor, ...unbounded } = params;
+        const request = words.length > 0 ? unbounded : { ...params };
+        // Apply box filter through the query parameter
+        request.query = this.addBoxFilter(sent || undefined);
+        // Translated once: the query sent and the one reported are the same
+        const sentQuery = typeof request.query === 'string' ? toMspQuery(request.query) : '';
+        request.query = sentQuery || undefined;
+        const response = await this.request('GET', `/v2/rules`, request, undefined, true, readTrace(query));
+        // API returns {count, results[]} format
+        const results = Array.isArray(response?.results) ? response.results : [];
+        if (words.length === 0) {
+            return {
+                response,
+                items: results,
+                matchedWords: false,
+                sent: sentQuery,
+            };
+        }
+        const items = results.filter(item => ruleMatchesWords(item, words));
+        // Complete unless the API answered as if it held more rules than it sent
+        const more = Boolean(response?.next_cursor);
+        const counted = typeof response?.count === 'number' && response.count > results.length
+            ? response.count
+            : undefined;
+        const complete = !more && counted === undefined;
+        return {
+            response,
+            items,
+            matchedWords: true,
+            sent: sentQuery,
+            coverage: {
+                rules_checked: results.length,
+                rules_matched: items.length,
+                complete,
+                ...(!complete && {
+                    note: more
+                        ? `GET /v2/rules returned ${results.length} rules and a next_cursor, so rules after them were not checked for the words`
+                        : `GET /v2/rules counted ${counted} rules for the other terms but returned ${results.length}, so the rest were not checked for the words`,
+                }),
+            },
+        };
+    }
+    /**
+     * Get target lists
+     *
+     * @param _listType - Not sent: GET /v2/target-lists has no list type filter
+     * @param limit - Applied on the client; the endpoint takes no `limit`
+     * @param owner - The documented `owner` filter: `global`, a box gid, or a
+     *   comma-separated list such as `global,<box_gid>`. Without it the API
+     *   returns global and Firewalla-managed lists.
+     */
+    async getTargetLists(_listType, limit, owner) {
+        // `owner` is the endpoint's only parameter; it ignores query and limit
+        const params = {};
+        if (owner?.trim()) {
+            params.owner = owner.trim();
+        }
+        const response = await this.request('GET', `/v2/target-lists`, params);
+        // Handle response format
+        const results = Array.isArray(response)
+            ? response
+            : response?.results || [];
+        // Apply client-side limit if not handled by API
+        const limitedResults = limit !== undefined ? results.slice(0, limit) : results;
+        return {
+            count: Array.isArray(limitedResults) ? limitedResults.length : 0,
+            results: Array.isArray(limitedResults) ? limitedResults : [],
+            total: Array.isArray(results) ? results.length : 0,
+        };
+    }
+    /**
+     * Get a specific target list by ID
+     */
+    async getSpecificTargetList(id) {
+        return this.request('GET', `/v2/target-lists/${pathSegment(id, 'id')}`);
+    }
+    /**
+     * Create a new target list
+     */
+    async createTargetList(targetListData) {
+        return this.request('POST', `/v2/target-lists`, {}, targetListData);
+    }
+    /**
+     * Update an existing target list
+     */
+    async updateTargetList(id, updateData) {
+        return this.request('PATCH', `/v2/target-lists/${pathSegment(id, 'id')}`, {}, updateData);
+    }
+    /**
+     * Delete a target list
+     */
+    async deleteTargetList(id) {
+        return this.request('DELETE', `/v2/target-lists/${pathSegment(id, 'id')}`);
+    }
+    /**
+     * The configured default box for single-box operations: FIREWALLA_BOX_ID,
+     * else FIREWALLA_DEFAULT_BOX_ID, if either is set
+     */
+    getDefaultBoxId() {
+        return this.config.boxId ?? this.config.defaultBoxId;
+    }
+    /**
+     * The box a single-box operation acts on: the explicit gid, else the
+     * configured default (getDefaultBoxId), else the account's only box.
+     *
+     * @throws {BoxSelectionError} When the account has several boxes and none
+     *   was named, or the token sees no boxes
+     */
+    async resolveBoxGid(gid) {
+        const named = gid?.trim() || this.getDefaultBoxId();
+        if (named) {
+            return named;
+        }
+        const boxes = await this.getBoxes();
+        if (boxes.results.length === 1) {
+            return boxes.results[0].gid;
+        }
+        if (boxes.results.length === 0) {
+            throw new BoxSelectionError('No boxes are visible to this MSP token');
+        }
+        const listed = boxes.results
+            .map(box => `${box.name} (${box.gid})`)
+            .join(', ');
+        throw new BoxSelectionError(`This MSP account has ${boxes.results.length} boxes: ${listed}. Pass gid, or set FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID`);
+    }
+    /**
+     * Create a new firewall rule
+     *
+     * @param ruleData - Rule definition matching the MSP v2 rule data model
+     * @param gid - Box the rule applies to. The API applies a rule with no gid
+     *   (and no group) to every box in the MSP account, so callers must pass one.
+     * @returns The created rule as returned by the API
+     */
+    async createRule(ruleData, gid) {
+        if (!gid) {
+            throw new Error('createRule requires a box gid');
+        }
+        const body = {
+            action: ruleData.action,
+            target: ruleData.target,
+            gid,
+        };
+        if (ruleData.scope) {
+            body.scope = ruleData.scope;
+        }
+        if (ruleData.direction) {
+            body.direction = ruleData.direction;
+        }
+        if (ruleData.protocol) {
+            body.protocol = ruleData.protocol;
+        }
+        if (ruleData.notes) {
+            body.notes = ruleData.notes;
+        }
+        if (ruleData.schedule) {
+            body.schedule = ruleData.schedule;
+        }
+        return this.request('POST', `/v2/rules`, {}, body, false);
+    }
+    /**
+     * Delete a firewall rule permanently (MSP 2.11.0+)
+     *
+     * @param ruleId - ID of the rule to delete
+     */
+    async deleteRule(ruleId) {
+        // Checked as given, not cleaned first: a cleaned ID can name another rule
+        const segment = pathSegment(ruleId, 'rule_id');
+        return this.request('DELETE', `/v2/rules/${segment}`, {}, undefined, false);
+    }
+    /**
+     * Rename a device. The MSP API only allows updating the `name` field
+     * (32 characters max); all other fields are ignored by the API.
+     *
+     * @param deviceId - Device ID (MAC address)
+     * @param name - New device name
+     * @param gid - Box the device belongs to
+     */
+    async renameDevice(deviceId, name, gid) {
+        if (!gid) {
+            throw new Error('renameDevice requires a box gid');
+        }
+        // Both are checked as given, not cleaned first: a cleaned ID can name
+        // another device. The colons stay percent-encoded, as they always were
+        // here.
+        const gidSegment = pathSegment(gid, 'gid', { encodeColons: true });
+        const deviceSegment = pathSegment(deviceId, 'device_id', {
+            encodeColons: true,
+        });
+        return this.request('PATCH', `/v2/boxes/${gidSegment}/devices/${deviceSegment}`, {}, { name }, false);
+    }
+    /**
+     * Firewall status from /v2/boxes plus the 100 most recent flows. Covers the
+     * FIREWALLA_BOX_ID box, or every box on the account. The MSP API reports no
+     * CPU, memory or uptime figures, so the summary has none.
+     */
+    async getFirewallSummary() {
+        const [boxes, flows] = await Promise.all([
+            this.getBoxes(),
+            this.getFlowData(undefined, undefined, 'ts:desc', 100),
+        ]);
+        const inScope = this.config.boxId
+            ? boxes.results.filter(box => box.gid === this.config.boxId)
+            : boxes.results;
+        const summaries = inScope.map(box => ({
+            gid: box.gid,
+            name: box.name,
+            model: box.model,
+            online: box.online,
+            last_seen: box.lastSeen,
+            device_count: box.deviceCount,
+            alarm_count: box.alarmCount,
+            rule_count: box.ruleCount,
+        }));
+        const online = summaries.filter(box => box.online).length;
+        let status = 'partial';
+        if (summaries.length === 0) {
+            status = 'unknown';
+        }
+        else if (online === summaries.length) {
+            status = 'online';
+        }
+        else if (online === 0) {
+            status = 'offline';
+        }
+        return {
+            status,
+            boxes: summaries,
+            boxes_online: online,
+            boxes_total: summaries.length,
+            recent_flows_sampled: flows.results.length,
+            blocked_in_sample: flows.results.filter(flow => flow.block).length,
+            last_updated: new Date().toISOString(),
+        };
+    }
+    /**
+     * Count the alarms or flows matching `query`, split by `groupBy`. Given
+     * `groupBy`, /v2/alarms and /v2/flows answer with one row per group
+     * carrying the group's `count` and no `ts` (measured 2026-09-25), so the
+     * totals are exact however many items match; more groups than one page
+     * holds are paged, up to 20 pages. If the rows are items rather than
+     * groups, the counts are those of the first page, and `exact` is false when
+     * more pages exist. Scoped to `box`, else FIREWALLA_BOX_ID.
+     */
+    async countMatching(endpoint, query, groupBy, box) {
+        const params = {
+            groupBy,
+            limit: MAX_API_PAGE_SIZE,
+        };
+        const scoped = this.addBoxFilter(query, box);
+        if (scoped) {
+            params.query = scoped;
+        }
+        const keyOf = (row) => String(groupBy === 'box' ? (row.gid ?? row.box) : row[groupBy]);
+        const groups = new Map();
+        let total = 0;
+        let cursor;
+        let grouped = true;
+        for (let pages = 0; pages < 20 && grouped; pages++) {
+            const page = await this.request('GET', endpoint, cursor ? { ...params, cursor } : params);
+            const rows = Array.isArray(page?.results) ? page.results : [];
+            grouped = rows.every(row => typeof row?.count === 'number' && row.ts === undefined);
+            for (const row of rows) {
+                const n = grouped ? row.count : 1;
+                groups.set(keyOf(row), (groups.get(keyOf(row)) || 0) + n);
+                total += n;
+            }
+            cursor = rows.length > 0 ? page?.next_cursor : undefined;
+            if (!cursor) {
+                break;
+            }
+        }
+        return { total, groups, exact: !cursor };
+    }
+    /**
+     * Security counts for the prompts and firewalla://metrics/security. Every
+     * count is an exact total from the API's grouped counts, over the window
+     * in `windows`: the API's default windows are 30 days for alarms and 24
+     * hours for flows. The threat level comes from Security Activity (type 1)
+     * alarms, the type /v2/stats/topBoxesBySecurityAlarms counts; the other
+     * types (video, gaming, new device and so on) are routine on most
+     * networks. Scoped to FIREWALLA_BOX_ID when it is set.
+     */
+    async getSecurityMetrics() {
+        const now = Math.floor(Date.now() / 1000);
+        const dayAgo = now - 24 * 60 * 60;
+        const [byStatus, lastDayByType, blocked, newestSecurityAlarm] = await Promise.all([
+            this.countMatching('/v2/alarms', undefined, 'status'),
+            this.countMatching('/v2/alarms', `ts:${dayAgo}-${now}`, 'type'),
+            // The API has no `block` qualifier and answers `block:true` with no
+            // results; `status:blocked` selects blocked flows
+            this.countMatching('/v2/flows', 'status:blocked', 'box'),
+            this.request('GET', '/v2/alarms', {
+                query: this.addBoxFilter('type:1'),
+                sortBy: 'ts:desc',
+                limit: 1,
+            }),
+        ]);
+        const securityAlarms = lastDayByType.groups.get('1') || 0;
+        let threat_level = 'low';
+        if (securityAlarms > 10) {
+            threat_level = 'critical';
+        }
+        else if (securityAlarms > 5) {
+            threat_level = 'high';
+        }
+        else if (securityAlarms > 1) {
+            threat_level = 'medium';
+        }
+        const newestTs = Number(newestSecurityAlarm?.results?.[0]?.ts);
+        const lower_bounds = [];
+        if (!byStatus.exact) {
+            lower_bounds.push('total_alarms', 'active_alarms');
+        }
+        if (!blocked.exact) {
+            lower_bounds.push('blocked_connections');
+        }
+        if (!lastDayByType.exact) {
+            lower_bounds.push('suspicious_activities', 'security_alarms');
+        }
+        return {
+            total_alarms: byStatus.total,
+            active_alarms: byStatus.groups.get('1') || 0,
+            blocked_connections: blocked.total,
+            suspicious_activities: lastDayByType.total,
+            security_alarms: securityAlarms,
+            threat_level,
+            last_threat_detected: Number.isFinite(newestTs) && newestTs > 0
+                ? new Date(newestTs * 1000).toISOString()
+                : null,
+            windows: {
+                total_alarms: 'last 30 days',
+                active_alarms: 'last 30 days',
+                blocked_connections: 'last 24 hours',
+                suspicious_activities: 'last 24 hours',
+                security_alarms: 'last 24 hours',
+            },
+            lower_bounds,
+        };
+    }
+    async getNetworkTopology() {
+        // Build topology from device and flow data since /topology doesn't exist
+        const [devices, flows] = await Promise.all([
+            this.getDeviceStatus(undefined, true, 1000),
+            this.getFlowData(undefined, undefined, 'ts:desc', 1000),
+        ]);
+        // Group devices by network/subnet
+        const networkMap = new Map();
+        devices.results.forEach(device => {
+            const networkId = device.network?.id || 'default';
+            if (!networkMap.has(networkId)) {
+                networkMap.set(networkId, []);
+            }
+            networkMap.get(networkId).push(device);
+        });
+        // Create subnet information
+        const subnets = Array.from(networkMap.entries()).map(([networkId, devices]) => ({
+            id: networkId,
+            name: devices[0]?.network?.name || 'Default Network',
+            cidr: '192.168.1.0/24', // Mock CIDR - not available in API
+            device_count: devices.length,
+        }));
+        // Create connection information from flows
+        const connections = flows.results.slice(0, 50).map(flow => ({
+            source: flow.device?.ip || flow.source?.ip || 'unknown',
+            destination: flow.destination?.ip || 'unknown',
+            type: flow.protocol,
+            bandwidth: flow.bytes || 0,
+        }));
+        return { subnets, connections };
+    }
+    async getRecentThreats(hours = 24) {
+        // Optimized: Use server-side timestamp filtering instead of client-side filtering
+        const timeThreshold = Math.floor(Date.now() / 1000 - hours * 60 * 60);
+        const [alarms, blockedFlows] = await Promise.all([
+            // Active alarms only: archived ones are dismissed, not threats
+            this.getActiveAlarms(`status:1 ts:>=${timeThreshold}`, undefined, 'ts:desc', 1000),
+            this.getFlowData(`status:blocked ts:>=${timeThreshold}`, undefined, 'ts:desc', 50),
+        ]);
+        // Convert recent alarms to threat format
+        const threats = alarms.results.map(alarm => {
+            // Handle both string and number timestamp formats
+            const timestamp = typeof alarm.ts === 'string'
+                ? alarm.ts
+                : new Date(alarm.ts * 1000).toISOString();
+            return {
+                timestamp,
+                // type held the message, so by_type counted each message once
+                type: ALARM_TYPE_NAMES[Number(alarm.type)] ??
+                    `Alarm type ${String(alarm.type)}`,
+                message: typeof alarm.message === 'string' ? alarm.message : null,
+                source_ip: alarm.device?.ip || 'unknown',
+                destination_ip: alarm.remote?.ip || 'unknown',
+                // status 1 is an active alarm, not a blocked connection: every
+                // alarm read here was reported as blocked. The alarm does not say
+                // whether the box blocked anything.
+                action_taken: 'alarm raised',
+                // The API's alarm model has no severity. One it sends is kept, and
+                // none is made up: it was derived from the type number (5 and up
+                // high, 3 and 4 medium, else low), so a Security Activity alarm
+                // (type 1) was low and Device Offline (type 7) high
+                severity: typeof alarm.severity === 'string' && alarm.severity.trim()
+                    ? alarm.severity.trim()
+                    : null,
+            };
+        });
+        // Add blocked flows as threats
+        const blockedThreats = blockedFlows.results.map(flow => {
+            // Handle both string and number timestamp formats
+            const timestamp = typeof flow.ts === 'string'
+                ? flow.ts
+                : new Date(flow.ts * 1000).toISOString();
+            return {
+                timestamp,
+                type: 'Blocked Connection',
+                message: null,
+                source_ip: flow.device.ip,
+                destination_ip: flow.destination?.ip || 'unknown',
+                action_taken: 'blocked',
+                // A flow carries no severity; every blocked flow was "medium"
+                severity: null,
+            };
+        });
+        // Newest first across both: with the alarms first, 100 alarms in the
+        // window left no room for a blocked flow however recent
+        const time = (timestamp) => {
+            const ms = Date.parse(timestamp);
+            return Number.isNaN(ms) ? -Infinity : ms;
+        };
+        return [...threats, ...blockedThreats]
+            .sort((a, b) => time(b.timestamp) - time(a.timestamp))
+            .slice(0, 100);
+    }
+    async getBoxes(groupId) {
+        try {
+            // Input validation and sanitization
+            const params = {};
+            if (groupId?.trim()) {
+                params.group = groupId.trim();
+            }
+            // API returns direct array of boxes
+            const response = await this.request('GET', `/v2/boxes`, params, true);
+            // Enhanced null safety and data validation
+            const rawResults = Array.isArray(response) ? response : [];
+            const results = rawResults
+                .filter(item => item && typeof item === 'object')
+                .map((item) => {
+                // Enhanced data transformation with null safety
+                const box = {
+                    gid: (item.gid || item.id || 'unknown').toString(),
+                    name: (item.name || 'Unknown Box').toString(),
+                    model: (item.model || 'unknown').toString(),
+                    mode: (item.mode || 'router').toString(),
+                    version: (item.version || 'unknown').toString(),
+                    online: Boolean(item.online || item.status === 'online'),
+                    lastSeen: item.lastSeen || item.last_seen || undefined,
+                    license: (item.license || 'unknown').toString(),
+                    publicIP: (item.publicIP || item.public_ip || 'unknown').toString(),
+                    group: item.group || undefined,
+                    location: (item.location || 'unknown').toString(),
+                    deviceCount: Math.max(0, Number(item.deviceCount || item.device_count || 0)),
+                    ruleCount: Math.max(0, Number(item.ruleCount || item.rule_count || 0)),
+                    alarmCount: Math.max(0, Number(item.alarmCount || item.alarm_count || 0)),
+                };
+                return box;
+            })
+                .filter(box => box.gid && box.gid !== 'unknown');
+            return {
+                count: results.length,
+                results,
+                next_cursor: undefined,
+            };
+        }
+        catch (error) {
+            logger.error('Error in getBoxes:', error instanceof Error ? error : new Error(String(error)));
+            // As it came, with its class and status: the tool adds its one prefix
+            throw error;
+        }
+    }
+    async getSpecificAlarm(alarmId, gid) {
+        try {
+            // The alarm ID goes into the request path. It is checked as given and
+            // refused, not cleaned (a cleaned ID can name another alarm), before
+            // the boxes are listed, so a refused ID sends nothing.
+            pathSegment(alarmId, 'alarm_id');
+            const validatedAlarmId = validateAlarmId(alarmId);
+            // An explicit gid or FIREWALLA_BOX_ID names the one box to ask. Without
+            // either, ask each box on the account (FIREWALLA_DEFAULT_BOX_ID first)
+            // until one has the alarm: alarm IDs are per box.
+            // A gid is used as given: trimming it could name another box
+            const namedGid = gid === undefined || gid === '' ? this.config.boxId : gid;
+            let candidateGids;
+            if (namedGid) {
+                candidateGids = [namedGid];
+            }
+            else {
+                const boxes = await this.getBoxes();
+                candidateGids = boxes.results.map(box => box.gid);
+                const preferred = this.config.defaultBoxId;
+                if (preferred && candidateGids.includes(preferred)) {
+                    candidateGids = [
+                        preferred,
+                        ...candidateGids.filter(candidate => candidate !== preferred),
+                    ];
+                }
+                if (candidateGids.length === 0) {
+                    throw new BoxSelectionError('No boxes are visible to this MSP token');
+                }
+            }
+            // The gids go into the request path too and are checked the same way:
+            // a gid from the caller or FIREWALLA_BOX_ID before any request, the
+            // listed ones after GET /v2/boxes
+            const validatedGids = candidateGids.map(candidate => {
+                pathSegment(candidate, 'gid');
+                if (!/^[a-zA-Z0-9_-]+$/.test(candidate)) {
+                    throw new Error('GID contains invalid characters');
+                }
+                return candidate;
+            });
+            // Get all possible alarm ID variations to try
+            const idVariations = [validatedAlarmId]; // Just use the validated ID
+            const debugInfo = { originalId: alarmId };
+            logger.debug('Attempting alarm ID resolution', {
+                originalId: alarmId,
+                variations: idVariations,
+                debugInfo,
+            });
+            let response = null;
+            let foundGid;
+            let attempts = 0;
+            // The first failure that was not a 404: a 401, a 403, an API it could
+            // not reach. The alarm is "not found" only when every box said 404.
+            let firstFailure;
+            // Try each box, and each ID variation on it, until one succeeds
+            for (const validatedGid of validatedGids) {
+                for (const validatedAlarmId of idVariations) {
+                    // Additional validation for alarm ID format (relaxed for ID variations)
+                    if (!/^[a-zA-Z0-9_-]+$/.test(validatedAlarmId)) {
+                        continue; // Skip invalid format variations
+                    }
+                    try {
+                        logger.debug(`Trying alarm ID variation: ${validatedAlarmId}`);
+                        response = await this.request('GET', `/v2/alarms/${pathSegment(validatedGid, 'gid')}/${pathSegment(validatedAlarmId, 'alarm_id')}`);
+                        // If we get here, the request succeeded
+                        foundGid = validatedGid;
+                        logger.debug(`Successfully found alarm with ID: ${validatedAlarmId}`);
+                        break;
+                    }
+                    catch (error) {
+                        attempts++;
+                        if (!isNotFoundError(error)) {
+                            firstFailure ?? (firstFailure = error);
+                        }
+                        logger.debug(`Failed to find alarm with ID ${validatedAlarmId}:`, {
+                            error: error instanceof Error ? error.message : String(error),
+                        });
+                    }
+                }
+                if (response) {
+                    break;
+                }
+            }
+            if (!response) {
+                // A failure other than a 404 comes through as it was, with its
+                // class and status: a bad token is not a missing alarm
+                if (firstFailure !== undefined) {
+                    throw firstFailure;
+                }
+                logger.warn('Alarm not found on any box asked', {
+                    originalId: alarmId,
+                    boxes: validatedGids.length,
+                });
+                throw new AlarmNotFoundError(validatedGids.length === 1
+                    ? `Alarm ${alarmId} not found on box ${validatedGids[0]}`
+                    : `Alarm ${alarmId} not found on any of the ${validatedGids.length} boxes`, attempts);
+            }
+            // Enhanced null/undefined checks for response
+            if (!response || typeof response !== 'object') {
+                throw new Error('Invalid response format from API');
+            }
+            // Enhanced timestamp parsing with better validation
+            const parseTimestamp = (ts) => {
+                if (!ts && ts !== 0) {
+                    return Math.floor(Date.now() / 1000);
+                }
+                if (typeof ts === 'number') {
+                    // Handle milliseconds vs seconds timestamp
+                    const timestamp = ts > 1000000000000 ? Math.floor(ts / 1000) : ts;
+                    // Validate timestamp is reasonable (not in the far future or past)
+                    const now = Math.floor(Date.now() / 1000);
+                    const yearAgo = now - 365 * 24 * 60 * 60;
+                    const hourFromNow = now + 60 * 60;
+                    if (timestamp >= yearAgo && timestamp <= hourFromNow) {
+                        return timestamp;
+                    }
+                }
+                if (typeof ts === 'string') {
+                    const parsed = parseInt(ts, 10);
+                    if (!isNaN(parsed)) {
+                        const timestamp = parsed > 1000000000000 ? Math.floor(parsed / 1000) : parsed;
+                        return timestamp;
+                    }
+                }
+                return Math.floor(Date.now() / 1000);
+            };
+            // Enhanced alarm object construction with comprehensive validation
+            const alarm = {
+                ts: parseTimestamp(response.ts),
+                gid: response.gid &&
+                    typeof response.gid === 'string' &&
+                    response.gid.trim()
+                    ? response.gid.trim()
+                    : foundGid,
+                aid: response.aid && typeof response.aid === 'number' && response.aid >= 0
+                    ? response.aid
+                    : response.id && typeof response.id === 'number' && response.id >= 0
+                        ? response.id
+                        : 0,
+                type: response.type &&
+                    typeof response.type === 'number' &&
+                    response.type > 0
+                    ? response.type
+                    : 1,
+                status: response.status &&
+                    typeof response.status === 'number' &&
+                    response.status >= 0
+                    ? response.status
+                    : 1,
+                message: this.extractValidString(response.message ||
+                    response.description ||
+                    response.msg ||
+                    response.title, `Alarm ${response._type || response.alarmType || 'security event'} detected`),
+                direction: this.extractValidString(response.direction, 'inbound', [
+                    'inbound',
+                    'outbound',
+                    'bidirection',
+                ]),
+                protocol: this.extractValidString(response.protocol, 'tcp', [
+                    'tcp',
+                    'udp',
+                    'icmp',
+                    'http',
+                    'https',
+                ]),
+            };
+            // Add optional fields with validation
+            if (response.device && typeof response.device === 'object') {
+                alarm.device = response.device;
+            }
+            if (response.remote && typeof response.remote === 'object') {
+                alarm.remote = response.remote;
+            }
+            if (response.transfer && typeof response.transfer === 'object') {
+                alarm.transfer = response.transfer;
+            }
+            if (response.severity &&
+                typeof response.severity === 'string' &&
+                response.severity.trim()) {
+                alarm.severity = response.severity.trim();
+            }
+            return {
+                count: 1,
+                results: [alarm],
+                next_cursor: undefined,
+            };
+        }
+        catch (error) {
+            // Thrown as it came, with its class and status: the handler says
+            // "Alarm not found" for an AlarmNotFoundError (404) and adds its one
+            // prefix to anything else
+            if (!(error instanceof BoxSelectionError) &&
+                !(error instanceof AlarmNotFoundError)) {
+                logger.error('Error in getSpecificAlarm:', error instanceof Error ? error : new Error(String(error)));
+            }
+            throw error;
+        }
+    }
+    /**
+     * Delete an alarm permanently; it cannot be restored. The box is found as
+     * locateAlarmForWrite describes, and the alarm is read first, so an alarm
+     * that is not there sends no DELETE. Measured 2026-09-26 on an archived
+     * alarm: DELETE /v2/alarms/{gid}/{aid} answered 200
+     * {"message":"success","success":true}, a GET of the alarm then answered
+     * 404 (still 404 65 s later), and the account's archived alarms counted one
+     * fewer. In July 2025 the same request answered success without deleting.
+     *
+     * @param alarmId - The numeric aid, as a number or a string
+     * @param gid - Box the alarm belongs to (the alarm's gid field)
+     */
+    async deleteAlarm(alarmId, gid) {
+        const located = await this.locateAlarmForWrite(alarmId, gid);
+        const response = await this.sendAlarmAction(located, 'delete');
+        return { ...located, response };
+    }
+    /**
+     * Archive an alarm (MSP 2.11.0 or later). It leaves the active alarms, and
+     * unlike muteAlarm it creates no silence exception: future matching traffic
+     * can still raise new alarms. The box is found as locateAlarmForWrite
+     * describes, and the alarm is read first so a wrong ID fails before any
+     * write.
+     *
+     * @param alarmId - The numeric aid, as a number or a string
+     * @param gid - Box the alarm belongs to (the alarm's gid field)
+     */
+    async archiveAlarm(alarmId, gid) {
+        const located = await this.locateAlarmForWrite(alarmId, gid);
+        const response = await this.sendAlarmAction(located, 'archive');
+        return { ...located, response };
+    }
+    /**
+     * Mute an alarm (MSP 2.11.0 or later): the API archives it and has the box
+     * create a lasting silence exception, so future alarms matching `target`
+     * within `scope` are no longer raised. The body is checked against the
+     * documented model before anything is sent, then the box is found as
+     * locateAlarmForWrite describes.
+     *
+     * @param alarmId - The numeric aid, as a number or a string
+     * @param mute - What to silence (target) and for which devices (scope)
+     * @param gid - Box the alarm belongs to (the alarm's gid field)
+     * @throws {Error} When the body is not one the docs allow; nothing is sent
+     */
+    async muteAlarm(alarmId, mute, gid) {
+        const checked = checkMuteRequest(mute);
+        if (!checked.ok) {
+            throw new Error(`Invalid mute request: ${checked.problems.join('; ')}`);
+        }
+        const located = await this.locateAlarmForWrite(alarmId, gid);
+        const response = await this.sendAlarmAction(located, 'mute', {
+            target: checked.request.target,
+            scope: checked.request.scope,
+        });
+        return { ...located, request: checked.request, response };
+    }
+    /**
+     * The box and alarm an alarm write acts on. An explicit gid, else
+     * FIREWALLA_BOX_ID, names the one box to look on. Without either, each box
+     * is checked, as getSpecificAlarm does. Alarm IDs are per box, so the same
+     * aid can name different alarms on different boxes: the
+     * FIREWALLA_DEFAULT_BOX_ID box is used if it has the alarm (the one
+     * getSpecificAlarm returns), and otherwise exactly one box must have it.
+     *
+     * @throws {AlarmNotFoundError} The alarm is not on the box, or on any box
+     * @throws {BoxSelectionError} Several boxes have the aid, a box could not be
+     *   checked, or the token sees no boxes
+     */
+    async locateAlarmForWrite(alarmId, gid) {
+        // The aid and gid go into the request path: checked as given and
+        // refused, not trimmed, since a trimmed ID can name another alarm or box
+        pathSegment(alarmId, 'alarm_id');
+        if (gid !== undefined && gid !== '') {
+            pathSegment(gid, 'gid');
+        }
+        const aid = validateAlarmId(alarmId);
+        if (!/^\d+$/.test(aid)) {
+            throw new Error(`Invalid alarm ID: "${aid}" is not a numeric aid (the aid field of get_active_alarms or search_alarms)`);
+        }
+        const named = gid === undefined || gid === '' ? this.config.boxId : gid;
+        if (named) {
+            const alarm = await this.findAlarmOnBox(named, aid);
+            if (!alarm) {
+                throw new AlarmNotFoundError(`Alarm ${aid} not found on box ${named}`);
+            }
+            return { gid: named, aid, alarm };
+        }
+        const boxes = (await this.getBoxes()).results;
+        if (boxes.length === 0) {
+            throw new BoxSelectionError('No boxes are visible to this MSP token');
+        }
+        const preferred = this.config.defaultBoxId;
+        const ordered = [
+            ...boxes.filter(box => box.gid === preferred),
+            ...boxes.filter(box => box.gid !== preferred),
+        ];
+        const found = [];
+        const unchecked = [];
+        for (const box of ordered) {
+            let alarm;
+            try {
+                alarm = await this.findAlarmOnBox(box.gid, aid);
+            }
+            catch (error) {
+                unchecked.push(`${box.name} (${box.gid}): ${error instanceof Error ? error.message : String(error)}`);
+                continue;
+            }
+            if (alarm && box.gid === preferred) {
+                return { gid: box.gid, aid, alarm };
+            }
+            if (alarm) {
+                found.push({ box, alarm });
+            }
+        }
+        // A box that could not be checked may hold the same aid
+        if (unchecked.length > 0) {
+            throw new BoxSelectionError(`Could not check every box for alarm ${aid}: ${unchecked.join('; ')}. Pass gid to act on one box`);
+        }
+        if (found.length === 1) {
+            return { gid: found[0].box.gid, aid, alarm: found[0].alarm };
+        }
+        if (found.length === 0) {
+            throw new AlarmNotFoundError(boxes.length === 1
+                ? `Alarm ${aid} not found on the account's only box (${boxes[0].gid})`
+                : `Alarm ${aid} not found on any of the ${boxes.length} boxes on this account`);
+        }
+        const listed = found
+            .map(({ box, alarm }) => `${box.name} (${box.gid}): ${describeAlarm(alarm)}`)
+            .join('; ');
+        throw new BoxSelectionError(`Alarm ID ${aid} exists on ${found.length} boxes, and alarm IDs are per box: ${listed}. Pass gid to pick one, or set FIREWALLA_DEFAULT_BOX_ID`);
+    }
+    /** GET one alarm without the cache; null when the API answers 404 */
+    async findAlarmOnBox(gid, aid) {
+        if (!/^[a-zA-Z0-9_-]+$/.test(gid)) {
+            throw new Error(`Invalid box gid: "${gid}"`);
+        }
+        try {
+            const alarm = await this.request('GET', `/v2/alarms/${pathSegment(gid, 'gid')}/${pathSegment(aid, 'alarm_id')}`, undefined, undefined, false);
+            return alarm && typeof alarm === 'object' ? alarm : null;
+        }
+        catch (error) {
+            if (isNotFoundError(error)) {
+                return null;
+            }
+            throw error;
+        }
+    }
+    /**
+     * Send an alarm write for an alarm locateAlarmForWrite found: POST
+     * .../archive or .../mute, or DELETE the alarm. Not retried: a request that
+     * got no HTTP answer may still have been applied.
+     */
+    async sendAlarmAction(located, action, body) {
+        const alarmPath = `/v2/alarms/${pathSegment(located.gid, 'gid')}/${pathSegment(located.aid, 'alarm_id')}`;
+        const method = action === 'delete' ? 'DELETE' : 'POST';
+        const endpoint = action === 'delete' ? alarmPath : `${alarmPath}/${action}`;
+        let response;
+        try {
+            response = await this.request(method, endpoint, undefined, body, false);
+        }
+        catch (error) {
+            if (isNotFoundError(error)) {
+                throw new Error(action === 'delete'
+                    ? `DELETE ${endpoint} returned 404 although GET returned the alarm just before; it may have been deleted in between. get_specific_alarm answers not found once it is gone`
+                    : `POST ${endpoint} returned 404 although the alarm exists (GET returned it). ${action} needs MSP 2.11.0 or later, and the API's 404 does not say whether the endpoint or the alarm was missing`);
+            }
+            // Sent and not answered (request() tells): it may have been applied.
+            // Any other failure, a status or "Request failed:" included, means
+            // the API answered or the request never reached it.
+            if (error instanceof WriteOutcomeUnknownError) {
+                const check = action === 'delete'
+                    ? 'check with get_specific_alarm, which answers not found once it is gone,'
+                    : 'check its status with get_specific_alarm (2 is archived)';
+                throw new WriteOutcomeUnknownError(`${method} ${endpoint} got ${error.status === GATEWAY_TIMEOUT ? '504 Gateway Timeout' : 'no HTTP status'} (${error.failure}). The alarm may or may not have been ${ALARM_ACTION_DONE[action]}: ${check} before retrying`, error.code, error.attempts, error.failure, 'get_specific_alarm', error.status);
+            }
+            throw error;
+        }
+        this.dropCachedAlarms();
+        return response;
+    }
+    /**
+     * Forget cached alarm reads, so an alarm just archived or muted does not
+     * show as active for the rest of the cache TTL
+     */
+    dropCachedAlarms() {
+        for (const key of this.cache.keys()) {
+            if (key.includes(':GET:_v2_alarms')) {
+                this.cache.delete(key);
+            }
+        }
+    }
+    // Statistics API Implementation
+    async getSimpleStatistics(group) {
+        const params = {};
+        if (group?.trim()) {
+            params.group = group.trim();
+        }
+        const response = await this.request('GET', '/v2/stats/simple', params);
+        return {
+            count: 1,
+            results: [response],
+        };
+    }
+    /**
+     * Top regions by blocked flows, from GET /v2/stats/topRegionsByBlockedFlows.
+     * Measured 2026-09-25: `limit` below 5 is honoured, and a larger `limit`
+     * still returned 5 regions.
+     */
+    async getStatisticsByRegion(group, limit) {
+        try {
+            const params = {};
+            if (group?.trim()) {
+                params.group = group.trim();
+            }
+            if (limit !== undefined) {
+                params.limit = limit;
+            }
+            const response = await this.request('GET', '/v2/stats/topRegionsByBlockedFlows', params);
+            if (!Array.isArray(response)) {
+                throw new Error('Unexpected response from /v2/stats/topRegionsByBlockedFlows: expected an array');
+            }
+            const results = response
+                .filter((item) => item &&
+                typeof item.value === 'number' &&
+                typeof item.meta?.code === 'string')
+                .map((item) => ({
+                meta: { code: item.meta.code },
+                value: item.value,
+            }));
+            return {
+                count: results.length,
+                results,
+            };
+        }
+        catch (error) {
+            logger.error('Error in getStatisticsByRegion:', error instanceof Error ? error : new Error(String(error)));
+            // As it came, with its class and status: the tool adds its one prefix
+            throw error;
+        }
+    }
+    /**
+     * GET /v2/trends/{kind}: the number of blocked flows captured, alarms
+     * generated or rules created each day. Measured 2026-09-25: 30 points in
+     * ascending ts order, one per day, each ts the start of a day in the
+     * account's time zone, the last point the current day so far. `group` (a
+     * box group ID) scopes it; the endpoint takes no box, so a box-scoped
+     * series is counted per day by boxDailyTrend.
+     */
+    async fetchTrend(kind, group) {
+        const params = {};
+        if (group?.trim()) {
+            params.group = group.trim();
+        }
+        const response = await this.request('GET', `/v2/trends/${kind}`, params);
+        if (!Array.isArray(response)) {
+            throw new Error(`Unexpected response from /v2/trends/${kind}: expected an array of {ts, value}`);
+        }
+        return response
+            .filter((point) => point &&
+            Number.isFinite(point.ts) &&
+            point.ts > 0 &&
+            Number.isFinite(point.value) &&
+            point.value >= 0)
+            .map((point) => ({ ts: point.ts, value: point.value }))
+            .sort((a, b) => a.ts - b.ts);
+    }
+    /**
+     * The box a trend is scoped to: `box`, else FIREWALLA_BOX_ID unless a
+     * `group` is given (an explicit group takes precedence over the default
+     * box), else none. A box and a group together are refused: a box is in one
+     * group, so the pair is either redundant or matches nothing.
+     * @throws {BoxSelectionError} Both box and group are given, or the box is
+     * not a box gid
+     */
+    trendBox(group, box) {
+        const named = box?.trim();
+        const groupId = group?.trim();
+        if (named && groupId) {
+            throw new BoxSelectionError('box and group cannot be combined: pass box for one box or group for a box group');
+        }
+        const gid = named || (groupId ? undefined : this.config.boxId?.trim() || undefined);
+        if (gid !== undefined && !isValidBoxGid(gid)) {
+            throw new BoxSelectionError(INVALID_BOX_GID);
+        }
+        return gid;
+    }
+    /**
+     * A documented daily trend cut to `period`. The trends API has one point
+     * per day, so a period shorter than a day returns the current day so far.
+     * With a box in scope (trendBox) each day is counted for that box.
+     */
+    async dailyTrend(kind, period, group, box) {
+        // Checked before any request
+        const gid = this.trendBox(group, box);
+        const validated = validTrendPeriod(period);
+        const now = Math.floor(Date.now() / 1000);
+        if (gid) {
+            return this.boxDailyTrend(kind, validated, now, gid);
+        }
+        const groupId = group?.trim() || undefined;
+        const points = await this.fetchTrend(kind, groupId);
+        return selectTrendDays(points, validated, now, {
+            source: `GET /v2/trends/${kind}`,
+            scope: groupId ? `box group ${groupId}` : 'all boxes',
+            note: groupId && this.config.boxId?.trim()
+                ? 'FIREWALLA_BOX_ID is not applied: an explicit group takes precedence over it.'
+                : undefined,
+        });
+    }
+    /**
+     * One box's daily series. GET /v2/trends/{kind} takes no box, so it gives
+     * only the days: the account-wide series' points, so the days match the
+     * unscoped series. Each day that overlaps `period` is then counted with one
+     * grouped GET /v2/alarms (or /v2/flows with status:blocked) over
+     * ts:<day start>-<next day start - 1>, to `now` for the current day,
+     * scoped with box.id; its row for the box is the day's count, 0 when the
+     * box has no row. Measured 2026-09-25, a trend point equals that query's
+     * rows summed over the boxes. 1 + days requests, at most
+     * BOX_TREND_CONCURRENCY at a time.
+     */
+    async boxDailyTrend(kind, period, now, gid) {
+        const days = await this.fetchTrend(kind);
+        const endpoint = kind === 'alarms' ? '/v2/alarms' : '/v2/flows';
+        // The API has no `block` qualifier; status:blocked selects blocked flows
+        const filter = kind === 'flows' ? 'status:blocked ' : '';
+        const series = selectTrendDays(days, period, now, {
+            source: `GET ${endpoint} groupBy=box per day`,
+            scope: `box ${gid}`,
+        });
+        const nextStart = new Map(days.map((day, i) => [day.ts, days[i + 1]?.ts]));
+        const counts = await mapWithConcurrency(series.results, BOX_TREND_CONCURRENCY, async (day) => {
+            const next = nextStart.get(day.ts);
+            // The current day ends when its count is requested, not when the
+            // series started, so alarms raised meanwhile are counted, but never
+            // after the day itself ends (the account's day can roll over while
+            // the counts run). max: a clock behind the API's would end the current
+            // day before it starts
+            const end = Math.max(day.ts, next !== undefined
+                ? next - 1
+                : Math.min(Math.floor(Date.now() / 1000), day.ts + DAY_SECONDS - 1));
+            const { groups, exact } = await this.countMatching(endpoint, `${filter}ts:${day.ts}-${end}`, 'box', gid);
+            return { ts: day.ts, value: groups.get(gid) ?? 0, exact };
+        });
+        const inexact = counts.filter(day => !day.exact).length;
+        const notes = [
+            `GET /v2/trends/${kind} takes no box, so it gave the days and each day is counted for box ${gid} with one GET ${endpoint}?query=${filter}ts:<day start>-<next day start - 1> box.id:${gid}&groupBy=box (the current day up to now): 1 + ${counts.length} requests.`,
+        ];
+        if (inexact > 0) {
+            notes.push(`On ${inexact} of the ${counts.length} days the API sent items rather than grouped counts, so those days count only the first page and are lower bounds.`);
+        }
+        return {
+            ...series,
+            results: counts.map(({ ts, value }) => ({ ts, value })),
+            note: notes.join(' '),
+        };
+    }
+    /**
+     * Blocked flows per day from GET /v2/trends/flows, or for one box (`box`,
+     * else FIREWALLA_BOX_ID unless `group` is given) counted per day from GET
+     * /v2/flows. get_flow_trends calls this.
+     * @throws {BoxSelectionError} Both box and group are given, or the box is
+     * not a box gid; nothing is requested
+     */
+    async getFlowTrends(period = '30d', group, box) {
+        try {
+            return await this.dailyTrend('flows', period, group, box);
+        }
+        catch (error) {
+            if (error instanceof BoxSelectionError) {
+                throw error;
+            }
+            logger.error('Error in getFlowTrends:', error instanceof Error ? error : new Error(String(error)));
+            // As it came, with its class and status: the tool adds its one prefix
+            throw error;
+        }
+    }
+    /**
+     * Alarms generated per day from GET /v2/trends/alarms, or for one box
+     * (`box`, else FIREWALLA_BOX_ID unless `group` is given) counted per day
+     * from GET /v2/alarms
+     * @throws {BoxSelectionError} Both box and group are given, or the box is
+     * not a box gid; nothing is requested
+     */
+    async getAlarmTrends(period = '30d', group, box) {
+        try {
+            return await this.dailyTrend('alarms', period, group, box);
+        }
+        catch (error) {
+            if (error instanceof BoxSelectionError) {
+                throw error;
+            }
+            logger.error('Error in getAlarmTrends:', error instanceof Error ? error : new Error(String(error)));
+            // As it came, with its class and status: the tool adds its one prefix
+            throw error;
+        }
+    }
+    /**
+     * Rules created per day. Without a box in scope, from GET /v2/trends/rules
+     * for every box or the box group. Measured 2026-09-25, that endpoint
+     * answered 400 with an empty body, with and without `group`, while the
+     * alarm and flow trends answered 200; on a 400 each day counts the rules
+     * GET /v2/rules returns whose creation time (`ts`) falls in it
+     * (ruleCreationTrend), and the series says so. The endpoint takes no box,
+     * so with a box in scope (`box`, else FIREWALLA_BOX_ID unless `group` is
+     * given, as in getAlarmTrends) the box's rules are counted that way
+     * without asking it.
+     * @throws {BoxSelectionError} Both box and group are given, or the box is
+     * not a box gid; nothing is requested
+     */
+    async getRuleTrends(period = '30d', group, box) {
+        // Checked before any request
+        const gid = this.trendBox(group, box);
+        const validated = validTrendPeriod(period);
+        const now = Math.floor(Date.now() / 1000);
+        const groupId = group?.trim() || undefined;
+        const precedence = groupId && this.config.boxId?.trim()
+            ? ' FIREWALLA_BOX_ID is not applied: an explicit group takes precedence over it.'
+            : '';
+        try {
+            if (gid) {
+                const counted = await this.ruleCreationTrend(now, { box: gid });
+                return selectTrendDays(counted.points, validated, now, {
+                    source: 'GET /v2/rules',
+                    scope: `box ${gid}`,
+                    note: `GET /v2/trends/rules takes no box, so each day counts the rules in GET /v2/rules?query=box.id:${gid} whose creation time (ts) falls in it, ${counted.days} Rules deleted since are not counted.`,
+                });
+            }
+            const scope = groupId ? `box group ${groupId}` : 'all boxes';
+            try {
+                const points = await this.fetchTrend('rules', groupId);
+                return selectTrendDays(points, validated, now, {
+                    source: 'GET /v2/trends/rules',
+                    scope,
+                    note: precedence.trim() || undefined,
+                });
+            }
+            catch (error) {
+                if (!hasStatus(error, 400)) {
+                    throw error;
+                }
+            }
+            const counted = await this.ruleCreationTrend(now, { group: groupId });
+            return selectTrendDays(counted.points, validated, now, {
+                source: 'GET /v2/rules',
+                scope,
+                note: `GET /v2/trends/rules answered 400, so each day counts the rules in GET /v2/rules whose creation time (ts) falls in it, ${counted.days} Rules deleted since are not counted.${precedence}`,
+            });
+        }
+        catch (error) {
+            if (error instanceof BoxSelectionError) {
+                throw error;
+            }
+            logger.error('Error in getRuleTrends:', error instanceof Error ? error : new Error(String(error)));
+            // As it came, with its class and status: the tool adds its one prefix
+            throw error;
+        }
+    }
+    /**
+     * Rules created on each day of the account's 30-day series, from the
+     * creation times of the rules GET /v2/rules returns. The days are those of
+     * GET /v2/trends/alarms (read unscoped, as boxDailyTrend reads them), so
+     * they start at the account's local midnight like the alarm and flow
+     * trends' days; only if that read fails are they the last 30 UTC days.
+     * With `box`, the read is scoped with box.id. With `group`, only rules for
+     * that box group or for a box in it are counted; FIREWALLA_BOX_ID is not
+     * applied (getRuleTrends resolves the box, and an explicit group takes
+     * precedence over it). `days` says, as a sentence tail, which days these
+     * are.
+     */
+    async ruleCreationTrend(now, scope) {
+        const query = scope.box
+            ? this.addBoxFilter(undefined, scope.box)
+            : undefined;
+        const [rules, boxes, accountDays] = await Promise.all([
+            this.request('GET', '/v2/rules', query ? { query } : {}),
+            scope.group ? this.getBoxes(scope.group) : Promise.resolve(undefined),
+            // The account's day starts, or why they could not be read: a failed
+            // read falls back to UTC days rather than failing the series
+            this.fetchTrend('alarms').then((points) => points.length > 0
+                ? points.map(point => point.ts)
+                : 'it returned no points', (error) => error instanceof Error ? error.message : String(error)),
+        ]);
+        const groupGids = boxes
+            ? new Set(boxes.results.map(box => box.gid))
+            : undefined;
+        const times = [];
+        for (const rule of Array.isArray(rules?.results) ? rules.results : []) {
+            if (groupGids &&
+                rule.group !== scope.group &&
+                !groupGids.has(String(rule.gid))) {
+                continue;
+            }
+            const ts = Number(rule.ts);
+            if (Number.isFinite(ts)) {
+                times.push(ts);
+            }
+        }
+        if (typeof accountDays !== 'string') {
+            return {
+                points: countPerDay(times, accountDays, now),
+                days: "on the account's days as GET /v2/trends/alarms gives them (1 more request).",
+            };
+        }
+        const utcToday = Math.floor(now / DAY_SECONDS) * DAY_SECONDS;
+        const starts = Array.from({ length: TREND_DAYS }, (_, i) => utcToday - (TREND_DAYS - 1 - i) * DAY_SECONDS);
+        return {
+            points: countPerDay(times, starts, now),
+            days: `by UTC day: GET /v2/trends/alarms, read for the account's days, failed (${accountDays}).`,
+        };
+    }
+    /**
+     * Top boxes by blocked flows or by security alarms, from GET
+     * /v2/stats/{type}, with each box's details from GET /v2/boxes. Measured
+     * 2026-09-25: topBoxesBySecurityAlarms counted Security Activity (type 1)
+     * alarms of the last 30 days, and topBoxesByBlockedFlows summed to within
+     * 0.1% of the 30 daily points of /v2/trends/flows.
+     */
+    async getStatisticsByBox(type = 'topBoxesByBlockedFlows', group, limit) {
+        try {
+            const params = {};
+            if (group?.trim()) {
+                params.group = group.trim();
+            }
+            if (limit !== undefined) {
+                params.limit = limit;
+            }
+            const [response, boxes] = await Promise.all([
+                this.request('GET', `/v2/stats/${encodeURIComponent(type)}`, params),
+                this.getBoxes(group?.trim() || undefined),
+            ]);
+            if (!Array.isArray(response)) {
+                throw new Error(`Unexpected response from /v2/stats/${type}: expected an array`);
+            }
+            const byGid = new Map(boxes.results.map(box => [box.gid, box]));
+            const results = response
+                .filter((item) => item &&
+                typeof item.value === 'number' &&
+                typeof item.meta?.gid === 'string')
+                .map((item) => {
+                const box = byGid.get(item.meta.gid);
+                return {
+                    meta: {
+                        mode: box?.mode ?? 'router',
+                        version: box?.version ?? 'unknown',
+                        online: box?.online ?? false,
+                        lastSeen: box?.lastSeen,
+                        license: box?.license ?? 'unknown',
+                        publicIP: box?.publicIP ?? 'unknown',
+                        group: box?.group,
+                        location: box?.location ?? 'unknown',
+                        deviceCount: box?.deviceCount ?? 0,
+                        ruleCount: box?.ruleCount ?? 0,
+                        alarmCount: box?.alarmCount ?? 0,
+                        gid: item.meta.gid,
+                        name: String(item.meta.name ?? box?.name ?? 'Unknown Box'),
+                        model: String(item.meta.model ?? box?.model ?? 'unknown'),
+                    },
+                    value: item.value,
+                };
+            });
+            return {
+                count: results.length,
+                results,
+                next_cursor: undefined,
+            };
+        }
+        catch (error) {
+            logger.error('Error in getStatisticsByBox:', error instanceof Error ? error : new Error(String(error)));
+            // As it came, with its class and status: the tool adds its one prefix
+            throw error;
+        }
+    }
+    clearCache() {
+        this.cache.clear();
+        this.earliestCacheExpiry = Number.POSITIVE_INFINITY;
+    }
+    /**
+     * Get geographic data for an IP address with caching
+     * @param ip - IP address to geolocate
+     * @returns GeographicData object or null if lookup fails or IP is private
+     */
+    getGeographicData(ip) {
+        const normalizedIP = normalizeIP(ip);
+        if (!normalizedIP) {
+            return null;
+        }
+        // Check cache first
+        const cached = this.geoCache.get(normalizedIP);
+        if (cached !== undefined) {
+            return cached;
+        }
+        // Get fresh data and cache it
+        const geoData = getGeographicDataForIP(normalizedIP);
+        this.geoCache.set(normalizedIP, geoData);
+        return geoData;
+    }
+    /**
+     * Set field value in object using dot notation
+     * @param obj - Object to modify
+     * @param fieldPath - Dot notation path (e.g., 'destination.geo')
+     * @param value - Value to set
+     */
+    setFieldValue(obj, fieldPath, value) {
+        const keys = fieldPath.split('.');
+        const lastKey = keys.pop();
+        if (!lastKey) {
+            return;
+        }
+        let current = obj;
+        for (const key of keys) {
+            if (!current[key] || typeof current[key] !== 'object') {
+                current[key] = {};
+            }
+            current = current[key];
+        }
+        current[lastKey] = value;
+    }
+    /**
+     * Generic method to enrich object with geographic data based on IP paths
+     * @param obj - Object to enrich
+     * @param ipPaths - Array of dot notation paths to IP fields (optional, defaults to common flow/alarm paths)
+     * @returns Enriched object with geographic data
+     */
+    enrichWithGeographicData(obj, ipPaths) {
+        const enriched = { ...obj };
+        const processedIPs = new Set();
+        // Ensure ipPaths is always an array, with default paths for common flow/alarm fields
+        const defaultPaths = [
+            'source.ip',
+            'destination.ip',
+            'src.ip',
+            'dst.ip',
+            'remote.ip',
+            'device.ip',
+            'local.ip',
+            'peer.ip',
+        ];
+        const pathsArray = ipPaths
+            ? Array.isArray(ipPaths)
+                ? ipPaths
+                : [ipPaths]
+            : defaultPaths;
+        for (const path of pathsArray) {
+            const ip = this.extractFieldValue(obj, path);
+            if (ip && typeof ip === 'string' && !processedIPs.has(ip)) {
+                processedIPs.add(ip);
+                const geoData = this.getGeographicData(ip);
+                if (geoData) {
+                    const pathParts = path.split('.');
+                    const geoPath = [...pathParts.slice(0, -1), 'geo'].join('.');
+                    this.setFieldValue(enriched, geoPath, geoData);
+                }
+            }
+        }
+        return enriched;
+    }
+    // Advanced Search Methods
+    /**
+     * Advanced search for network flows with complex query syntax
+     * Supports: severity:high AND source_ip:192.168.* NOT resolved:true
+     */
+    async searchFlows(searchQuery, options = {}) {
+        const startTime = Date.now();
+        // Simplified: just use the query as provided, add box filter only if needed
+        const params = {
+            limit: searchQuery.limit || 200, // Use API default
+            // The API's sortBy; timestamp: and bytes: are sent as ts: and total:
+            sortBy: translateSortBy(searchQuery.sort_by || 'ts:desc', 'flows'),
+        };
+        // group_by is not sent as groupBy: a grouped response has one item of
+        // totals per group, with no ts or gid, and groupBy=device,category names
+        // the device only by id (measured 2026-09-25). Callers such as
+        // getFlowInsights group these per-flow results themselves.
+        if (searchQuery.cursor) {
+            params.cursor = searchQuery.cursor;
+        }
+        // The query, time range and blocked filter, ANDed in the API's grammar
+        // (a space: the API has no AND). blocked: and bytes: are rejected by
+        // /v2/flows (see getFlowData) and are translated first.
+        let timeQuery;
+        if (options.time_range) {
+            const startTs = typeof options.time_range.start === 'string'
+                ? Math.floor(new Date(options.time_range.start).getTime() / 1000)
+                : options.time_range.start;
+            const endTs = typeof options.time_range.end === 'string'
+                ? Math.floor(new Date(options.time_range.end).getTime() / 1000)
+                : options.time_range.end;
+            timeQuery = `ts:${startTs}-${endTs}`;
+        }
+        // The API has no `block` qualifier and answers `block:false` with no
+        // results; `-status:blocked` excludes blocked flows
+        const unblocked = options.include_resolved === false ? '-status:blocked' : undefined;
+        params.query = this.addBoxFilter(mspAnd(translateToMspQualifiers(searchQuery.query?.trim() ?? '', 'flows'), timeQuery, unblocked) || undefined);
+        const response = await this.requestPages('/v2/flows', params, Number(params.limit), true, readTrace(searchQuery.query));
+        // Defensive programming: ensure results is an array before mapping
+        const resultsList = Array.isArray(response.results) ? response.results : [];
+        const flows = resultsList.map((item) => {
+            const parseTimestamp = (ts) => {
+                if (!ts) {
+                    return Math.floor(Date.now() / 1000);
+                }
+                if (typeof ts === 'number') {
+                    return ts > 1000000000000 ? Math.floor(ts / 1000) : ts;
+                }
+                if (typeof ts === 'string') {
+                    const parsed = Date.parse(ts);
+                    return Math.floor(parsed / 1000);
+                }
+                return Math.floor(Date.now() / 1000);
+            };
+            const flow = {
+                ts: parseTimestamp(item.ts || item.timestamp),
+                gid: item.gid || this.config.boxId,
+                protocol: item.protocol || 'tcp',
+                direction: item.direction || 'outbound',
+                block: Boolean(item.block || item.blocked),
+                ...flowBytes(item),
+                duration: item.duration || 0,
+                count: item.count || item.packets || 1,
+                device: {
+                    id: item.device?.id !== null && item.device?.id !== undefined
+                        ? String(item.device.id)
+                        : 'unknown',
+                    ip: item.device?.ip || item.srcIP || 'unknown',
+                    name: item.device?.name || 'Unknown Device',
+                },
+            };
+            if (item.blockType) {
+                flow.blockType = item.blockType;
+            }
+            if (item.device?.network) {
+                flow.device.network = item.device.network;
+            }
+            if (item.source) {
+                flow.source = item.source;
+            }
+            if (item.destination) {
+                flow.destination = item.destination;
+            }
+            if (item.region) {
+                flow.region = item.region;
+            }
+            if (item.country) {
+                flow.country = item.country;
+            }
+            if (item.category) {
+                flow.category = item.category;
+            }
+            // getFlowInsights groups by it; empty for flows to a bare IP
+            if (item.domain) {
+                flow.domain = item.domain;
+            }
+            if (item.network) {
+                flow.network = { id: item.network.id, name: item.network.name };
+            }
+            return flow;
+        });
+        // Enrich flows with geographic data
+        const enrichedFlows = flows.map(flow => this.enrichWithGeographicData(flow, ['destination.ip', 'source.ip']));
+        return {
+            count: response.count || enrichedFlows.length,
+            results: enrichedFlows,
+            next_cursor: response.next_cursor,
+            aggregations: response.aggregations,
+            metadata: {
+                execution_time: Date.now() - startTime,
+                cached: false,
+                filters_applied: [], // Simplified without query parsing
+            },
+        };
+    }
+    /**
+     * Advanced search for network devices with network, status, and usage filters
+     */
+    async searchDevices(searchQuery, options = {}) {
+        try {
+            // Enhanced input validation
+            if (!searchQuery || typeof searchQuery !== 'object') {
+                throw new Error('SearchQuery is required and must be an object');
+            }
+            if (!searchQuery.query || typeof searchQuery.query !== 'string') {
+                throw new Error('SearchQuery.query is required and must be a non-empty string');
+            }
+            const trimmedQuery = searchQuery.query.trim();
+            if (!trimmedQuery) {
+                throw new Error('SearchQuery.query cannot be empty or only whitespace');
+            }
+            if (options && typeof options !== 'object') {
+                throw new Error('SearchOptions must be an object');
+            }
+            const startTime = Date.now();
+            // Enhanced query parsing with error handling (the search tools have
+            // checked the query's structure and complexity before this)
+            let parsed;
+            try {
+                parsed = parseSearchQuery(trimmedQuery);
+                formatQueryForAPI(trimmedQuery);
+            }
+            catch (parseError) {
+                throw new Error(`Invalid search query syntax: ${parseError instanceof Error ? parseError.message : 'Parse error'}`);
+            }
+            // GET /v2/devices takes only `box` and `group`, and answers query,
+            // limit and sortBy with every device (measured 2026-09-25), so the
+            // query is matched and the limit applied on the client below
+            const params = this.deviceBoxParams(options.box);
+            // Enhanced filter application with validation
+            const clientQuery = options.include_resolved === false
+                ? `(${trimmedQuery}) AND online:true`
+                : trimmedQuery;
+            // Enhanced API request with better error handling
+            // Use correct device endpoint (devices don't have search endpoint)
+            const endpoint = `/v2/devices`;
+            // Device endpoint returns direct array, not search result object
+            const deviceArray = await this.request('GET', endpoint, params);
+            // Apply client-side filtering since devices don't support search queries
+            let filteredDevices = deviceArray || [];
+            if (searchQuery.query?.trim()) {
+                filteredDevices = filteredDevices.filter(device => {
+                    if (!device) {
+                        return false;
+                    }
+                    // Device field extraction
+                    const name = device.name?.toLowerCase() || '';
+                    const ip = device.ip?.toLowerCase() || '';
+                    const macVendor = device.macVendor?.toLowerCase() || '';
+                    const id = String(device.id ?? '').toLowerCase();
+                    // A device id is its MAC address (the API reference's device.id
+                    // is a plain MAC), or `mac:<address>` on some devices
+                    const macId = id.startsWith('mac:') ? id.slice(4) : id;
+                    const mac = device.mac?.toLowerCase() ||
+                        (/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(macId) ? macId : '');
+                    const gid = device.gid?.toLowerCase() || '';
+                    const networkName = device.network?.name?.toLowerCase() || '';
+                    const groupName = device.group?.name?.toLowerCase() || '';
+                    const isOnline = Boolean(device.online || device.isOnline || device.connected);
+                    // `id:`, `ip:`, `mac:` and `gid:` take an exact value or a `*`
+                    // wildcard (172.16.2.*, AA:BB:*); `ip:` also takes a CIDR block
+                    const matchesPattern = (value, pattern) => {
+                        if (!pattern.includes('*')) {
+                            return value === pattern;
+                        }
+                        return matchesWildcard(value, pattern);
+                    };
+                    // Free text: a word or quoted phrase with no field, found in
+                    // the name, IP, MAC or id, vendor, or network or group name; an
+                    // unquoted * in it is a wildcard (containsText)
+                    const matchesText = (text, quoted) => [name, ip, mac, id, macVendor, networkName, groupName].some(value => containsText(value, text, quoted));
+                    // Match one `field:value` term; matchesQuery evaluates AND, OR,
+                    // NOT and parentheses between terms
+                    const matchesTerm = (term) => {
+                        const fieldTerm = /^([\w.]+):(.*)$/.exec(term);
+                        if (!fieldTerm) {
+                            const text = unquoteQueryValue(term);
+                            return matchesText(text, text !== term);
+                        }
+                        const [, field, rawValue] = fieldTerm;
+                        // A comma list matches any of its values, as in the MSP API
+                        // grammar (name:nas,laptop); it was compared as one value
+                        const values = commaListValues(rawValue);
+                        const anyValue = (test) => values.some(test);
+                        switch (field) {
+                            case 'id':
+                                return anyValue(entry => matchesPattern(id, entry));
+                            case 'ip':
+                                // An IPv4 CIDR block (192.168.1.0/24), else a pattern
+                                return anyValue(entry => entry.includes('/')
+                                    ? ipv4InCidr(ip, entry) === true
+                                    : matchesPattern(ip, entry));
+                            case 'mac':
+                                return anyValue(entry => matchesPattern(mac, entry));
+                            case 'gid':
+                                return anyValue(entry => matchesPattern(gid, entry));
+                            case 'mac_vendor':
+                                return anyValue(entry => macVendor.includes(entry));
+                            case 'name':
+                                return anyValue(entry => name.includes(entry.replace(/\*/g, '')));
+                            case 'network.name':
+                            case 'network_name':
+                                return anyValue(entry => networkName.includes(entry.replace(/\*/g, '')));
+                            case 'group.name':
+                            case 'group_name':
+                                return anyValue(entry => groupName.includes(entry.replace(/\*/g, '')));
+                            case 'online': {
+                                // true or false, or 1/0 and yes/no as the query validator
+                                // accepts; a comma list is any of its values. A value
+                                // that is none of these matches no device: it matched
+                                // every one (online:yes and online:true,true did)
+                                const wanted = values.map(entry => ONLINE_VALUES.get(entry));
+                                return (wanted.every(entry => entry !== undefined) &&
+                                    wanted.includes(isOnline));
+                            }
+                            default:
+                                // Fallback: search the whole term in all text fields
+                                // The whole term, as literal text
+                                return matchesText(term, true);
+                        }
+                    };
+                    // Each term is matched in lowercase; the query is not, so AND,
+                    // OR and NOT stay operators and and, or and not stay words
+                    return matchesQuery(clientQuery, term => matchesTerm(term.toLowerCase()));
+                });
+            }
+            // Apply limit if specified
+            if (searchQuery.limit && searchQuery.limit > 0) {
+                filteredDevices = filteredDevices.slice(0, searchQuery.limit);
+            }
+            // Transform to search result format for compatibility
+            const response = {
+                count: filteredDevices.length,
+                results: filteredDevices,
+                next_cursor: undefined,
+                aggregations: undefined,
+            };
+            // Enhanced response validation
+            if (!response || typeof response !== 'object') {
+                throw new Error('Invalid response format from search devices API');
+            }
+            const rawResults = response.results || [];
+            if (!Array.isArray(rawResults)) {
+                logger.debugNamespace('validation', 'Invalid results format in search response');
+                return {
+                    count: 0,
+                    results: [],
+                    next_cursor: undefined,
+                    aggregations: undefined,
+                    metadata: {
+                        execution_time: Date.now() - startTime,
+                        cached: false,
+                        filters_applied: parsed?.filters?.map(f => `${f.field}:${f.operator}`) || [],
+                    },
+                };
+            }
+            // Enhanced device transformation with comprehensive validation
+            const devices = rawResults
+                .filter(item => item && typeof item === 'object')
+                .map((item) => {
+                try {
+                    return this.transformDevice(item);
+                }
+                catch (transformError) {
+                    logger.debugNamespace('api', 'Failed to transform device', {
+                        error: transformError,
+                        item,
+                    });
+                    return null;
+                }
+            })
+                .filter((device) => device !== null &&
+                Boolean(device.id) &&
+                device.id !== 'unknown' &&
+                Boolean(device.name) &&
+                device.name !== 'Unknown Device'); // Filter out invalid devices
+            return {
+                count: response.count || devices.length,
+                results: devices,
+                next_cursor: response.next_cursor,
+                aggregations: response.aggregations,
+                metadata: {
+                    execution_time: Date.now() - startTime,
+                    cached: false,
+                    filters_applied: parsed?.filters?.map(f => `${f.field}:${f.operator}`) || [],
+                },
+            };
+        }
+        catch (error) {
+            logger.error('Error in searchDevices:', error instanceof Error ? error : new Error(String(error)));
+            // As it came, with its class and status: the tool adds its one prefix
+            throw error;
+        }
+    }
+    /**
+     * Pause a firewall rule until it is resumed.
+     *
+     * Sends `POST /v2/rules/{id}/pause` with no body, as the MSP API documents.
+     * The endpoint takes no duration: on 2026-09-25 a `duration` in the body or
+     * the query string was accepted and ignored, the rule showed no `resumeTs`,
+     * and it stayed paused until `resumeRule`.
+     *
+     * @param ruleId - The rule ID, e.g. `<box gid>:<n>` as `get_network_rules` returns it
+     * @returns Promise resolving to operation result with success status and message
+     * @throws {Error} If rule ID is invalid or API request fails
+     * @example
+     * ```typescript
+     * const result = await client.pauseRule('rule-123');
+     * console.log(result.message); // "Rule rule-123 paused until resumed"
+     * ```
+     */
+    async pauseRule(ruleId) {
+        try {
+            // Checked as given, not cleaned first: a cleaned ID can name another
+            // rule
+            const segment = pathSegment(ruleId, 'rule_id');
+            // The API answers 200 with the JSON string "ok"
+            const response = await this.request('POST', `/v2/rules/${segment}/pause`, {}, undefined, false);
+            this.invalidateRuleCache();
+            return {
+                success: response?.success ?? true, // Default to true if API doesn't return success field
+                message: response?.message || `Rule ${ruleId} paused until resumed`,
+            };
+        }
+        catch (error) {
+            logger.error('Error in pauseRule:', error instanceof Error ? error : new Error(String(error)));
+            // As it came, with its class and status: the tool adds its one prefix
+            throw error;
+        }
+    }
+    /**
+     * Resume a paused firewall rule, restoring it to active state.
+     *
+     * Sends `POST /v2/rules/{id}/resume` with no body, as the MSP API documents.
+     *
+     * @param ruleId - The unique identifier of the rule to resume
+     * @returns Promise resolving to operation result with success status and message
+     * @throws {Error} If rule ID is invalid or API request fails
+     * @example
+     * ```typescript
+     * const result = await client.resumeRule('rule-123');
+     * console.log(result.message); // "Rule rule-123 resumed successfully"
+     * ```
+     */
+    async resumeRule(ruleId) {
+        try {
+            // Checked as given, not cleaned first: a cleaned ID can name another
+            // rule
+            const segment = pathSegment(ruleId, 'rule_id');
+            // The API answers 200 with the JSON string "ok"
+            const response = await this.request('POST', `/v2/rules/${segment}/resume`, {}, undefined, false);
+            this.invalidateRuleCache();
+            return {
+                success: response?.success ?? true, // Default to true if API doesn't return success field
+                message: response?.message || `Rule ${ruleId} resumed successfully`,
+            };
+        }
+        catch (error) {
+            logger.error('Error in resumeRule:', error instanceof Error ? error : new Error(String(error)));
+            // As it came, with its class and status: the tool adds its one prefix
+            throw error;
+        }
+    }
+    /**
+     * Helper method to add box.id qualifier to search queries
+     *
+     * @param query - Existing query string (optional)
+     * @param box - Box gid to scope to instead of FIREWALLA_BOX_ID (optional)
+     * @returns Query string with box.id filter added, or just box.id filter if no query
+     * @throws {MspQueryError} When the query has no form the MSP API can run,
+     *   or names a box other than the one it is scoped to
+     * @private
+     */
+    addBoxFilter(query, box) {
+        const gid = box?.trim() || this.config.boxId;
+        if (!gid) {
+            return query;
+        }
+        if (!isValidBoxGid(gid)) {
+            throw new BoxSelectionError(INVALID_BOX_GID);
+        }
+        // Translated before the box is added: appended to `type:1 OR type:10`,
+        // box.id would bind to type:10 alone. A query naming another box is
+        // refused: the API would read the two box.id terms as either box.
+        return mspBoxScope(query, gid);
+    }
+    /**
+     * Parameters that scope GET /v2/devices to one box: the `box` a caller
+     * names, else FIREWALLA_BOX_ID. The endpoint documents only `box` and
+     * `group` and ignores `query`: measured 2026-09-25, `query=box.id:<gid>`
+     * returned both boxes' 224 devices and `box=<gid>` returned that box's 190.
+     * A `group` (box group ID) is sent as well when given.
+     */
+    deviceBoxParams(box, group) {
+        const gid = box?.trim() || this.config.boxId;
+        const params = gid ? { box: gid } : {};
+        // The endpoint's other documented parameter: a box group ID
+        if (group?.trim()) {
+            params.group = group.trim();
+        }
+        return params;
+    }
+    /**
+     * Extract field value from object using dot notation
+     */
+    extractFieldValue(obj, fieldPath) {
+        if (!fieldPath || typeof fieldPath !== 'string') {
+            logger.warn('extractFieldValue called with invalid fieldPath:', {
+                fieldPath,
+            });
+            return undefined;
+        }
+        return fieldPath.split('.').reduce((current, key) => current?.[key], obj);
+    }
+    /**
+     * Extract and validate string values with optional allowed values
+     */
+    extractValidString(value, defaultValue, allowedValues) {
+        if (!value || typeof value !== 'string' || !value.trim()) {
+            return defaultValue;
+        }
+        const trimmedValue = value.trim();
+        if (allowedValues && allowedValues.length > 0) {
+            return allowedValues.includes(trimmedValue) ? trimmedValue : defaultValue;
+        }
+        return trimmedValue;
+    }
+    /**
+     * Get flow insights with category-based analysis
+     * This provides category breakdowns and bandwidth analysis for networks with high flow volumes
+     */
+    async getFlowInsights(period = '24h', options) {
+        try {
+            // Calculate time range
+            const end = Math.floor(Date.now() / 1000);
+            let begin;
+            switch (period) {
+                case '1h':
+                    begin = end - 3600;
+                    break;
+                case '24h':
+                    begin = end - 24 * 3600;
+                    break;
+                case '7d':
+                    begin = end - 7 * 24 * 3600;
+                    break;
+                case '30d':
+                    begin = end - 30 * 24 * 3600;
+                    break;
+            }
+            // Get category breakdown with error handling. The categories are one
+            // comma list (the API has no OR or parentheses); an empty list means
+            // all categories
+            const categoryQuery = mspAnd(`ts:${begin}-${end}`, options?.categories?.length
+                ? `category:${options.categories.map(mspValue).join(',')}`
+                : undefined);
+            // A failure is the tool's failure: an empty breakdown in its place
+            // read as a network with no traffic (a bad token answered success)
+            const categoryData = await this.searchFlows({
+                query: categoryQuery,
+                group_by: 'category,domain',
+                sort_by: 'bytes:desc',
+                limit: 500,
+            });
+            // Process category breakdown
+            const categoryMap = new Map();
+            categoryData.results.forEach((item) => {
+                const category = flowCategory(item);
+                const domain = item.domain || 'unknown';
+                if (!categoryMap.has(category)) {
+                    categoryMap.set(category, {
+                        count: 0,
+                        bytes: 0,
+                        domains: new Map(),
+                    });
+                }
+                const cat = categoryMap.get(category);
+                cat.count += item.count || 1;
+                cat.bytes += item.bytes || 0;
+                if (!cat.domains.has(domain)) {
+                    cat.domains.set(domain, { count: 0, bytes: 0 });
+                }
+                const dom = cat.domains.get(domain);
+                dom.count += item.count || 1;
+                dom.bytes += item.bytes || 0;
+            });
+            // Get top devices by bandwidth with error handling
+            const deviceData = await this.searchFlows({
+                query: `ts:${begin}-${end}`,
+                group_by: 'device,category',
+                sort_by: 'bytes:desc',
+                limit: 200,
+            });
+            // Process device data
+            const deviceMap = new Map();
+            deviceData.results.forEach((item) => {
+                const deviceName = item.device?.name || item.device?.ip || 'unknown';
+                const category = flowCategory(item);
+                if (!deviceMap.has(deviceName)) {
+                    deviceMap.set(deviceName, {
+                        totalBytes: 0,
+                        categories: new Map(),
+                    });
+                }
+                const dev = deviceMap.get(deviceName);
+                dev.totalBytes += item.bytes || 0;
+                if (!dev.categories.has(category)) {
+                    dev.categories.set(category, 0);
+                }
+                dev.categories.set(category, (dev.categories.get(category) || 0) + (item.bytes || 0));
+            });
+            // Get blocked flows summary if requested with error handling
+            let blockedSummary;
+            if (options?.includeBlocked) {
+                const blockedData = await this.searchFlows({
+                    query: `ts:${begin}-${end} status:blocked`,
+                    group_by: 'category',
+                    sort_by: 'count:desc',
+                    limit: 50,
+                });
+                blockedSummary = {
+                    totalBlocked: blockedData.count,
+                    byCategory: blockedData.results.map((item) => ({
+                        category: flowCategory(item),
+                        count: item.count || 0,
+                    })),
+                };
+            }
+            // Format results
+            const categoryBreakdown = Array.from(categoryMap.entries())
+                .map(([category, data]) => ({
+                category,
+                count: data.count,
+                bytes: data.bytes,
+                topDomains: Array.from(data.domains.entries())
+                    .map(([domain, stats]) => ({ domain, ...stats }))
+                    .sort((a, b) => b.bytes - a.bytes)
+                    .slice(0, 5),
+            }))
+                .sort((a, b) => b.bytes - a.bytes);
+            const topDevices = Array.from(deviceMap.entries())
+                .map(([device, data]) => ({
+                device,
+                totalBytes: data.totalBytes,
+                categories: Array.from(data.categories.entries())
+                    .map(([category, bytes]) => ({ category, bytes }))
+                    .sort((a, b) => b.bytes - a.bytes),
+            }))
+                .sort((a, b) => b.totalBytes - a.totalBytes)
+                .slice(0, 10);
+            return {
+                period,
+                categoryBreakdown,
+                topDevices,
+                blockedSummary,
+            };
+        }
+        catch (error) {
+            logger.error('Error in getFlowInsights:', error);
+            throw error instanceof Error
+                ? error
+                : new Error('Failed to get flow insights');
+        }
+    }
+    /**
+     * Get list of adopted Firewalla Access Points
+     *
+     * @param boxId - Optional Firewalla box GID. Falls back to FIREWALLA_BOX_ID or default box.
+     * @returns List of AccessPoint objects
+     */
+    async getAccessPoints(boxId) {
+        try {
+            const gid = await this.resolveBoxGid(boxId);
+            const gidSegment = pathSegment(gid, 'gid', { encodeColons: true });
+            const endpoint = `/v2/boxes/${gidSegment}/wifi/access-points`;
+            const result = await this.request('GET', endpoint);
+            return Array.isArray(result) ? result : [];
+        }
+        catch (error) {
+            logger.error('Error in getAccessPoints:', error instanceof Error ? error : new Error(String(error)));
+            throw error;
+        }
+    }
+    /**
+     * Get Wi-Fi channels and DFS radar status for a specific Access Point
+     *
+     * @param apId - Access Point ID / MAC address
+     * @param boxId - Optional Firewalla box GID. Falls back to FIREWALLA_BOX_ID or default box.
+     * @returns Channel information mapped by band (2g, 5g, 6g)
+     */
+    async getAccessPointChannels(apId, boxId) {
+        try {
+            const gid = await this.resolveBoxGid(boxId);
+            const gidSegment = pathSegment(gid, 'gid', { encodeColons: true });
+            const apSegment = pathSegment(apId, 'ap_id', { encodeColons: true });
+            const endpoint = `/v2/boxes/${gidSegment}/wifi/access-points/${apSegment}/channels`;
+            const result = await this.request('GET', endpoint);
+            return result || {};
+        }
+        catch (error) {
+            logger.error('Error in getAccessPointChannels:', error instanceof Error ? error : new Error(String(error)));
+            throw error;
+        }
+    }
+    /**
+     * Get configured Wi-Fi Networks
+     *
+     * @param boxId - Optional Firewalla box GID. Falls back to FIREWALLA_BOX_ID or default box.
+     * @returns List of configured WifiNetwork objects
+     */
+    async getWifiNetworks(boxId) {
+        try {
+            const gid = await this.resolveBoxGid(boxId);
+            const gidSegment = pathSegment(gid, 'gid', { encodeColons: true });
+            const endpoint = `/v2/boxes/${gidSegment}/wifi/networks`;
+            const result = await this.request('GET', endpoint);
+            return Array.isArray(result) ? result : [];
+        }
+        catch (error) {
+            logger.error('Error in getWifiNetworks:', error instanceof Error ? error : new Error(String(error)));
+            throw error;
+        }
+    }
+    /**
+     * Get Firewalla Wi-Fi Controller settings
+     *
+     * @param boxId - Optional Firewalla box GID. Falls back to FIREWALLA_BOX_ID or default box.
+     * @returns WifiSettings object
+     */
+    async getWifiSettings(boxId) {
+        try {
+            const gid = await this.resolveBoxGid(boxId);
+            const gidSegment = pathSegment(gid, 'gid', { encodeColons: true });
+            const endpoint = `/v2/boxes/${gidSegment}/wifi/settings`;
+            const result = await this.request('GET', endpoint);
+            return result || {};
+        }
+        catch (error) {
+            logger.error('Error in getWifiSettings:', error instanceof Error ? error : new Error(String(error)));
+            throw error;
+        }
+    }
+}
+//# sourceMappingURL=client.js.map

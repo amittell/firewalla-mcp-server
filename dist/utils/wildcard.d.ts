@@ -1,0 +1,65 @@
+/**
+ * @fileoverview Wildcard matching for the searches the client runs itself
+ *
+ * The search tools matched a `*` wildcard by building a regular expression
+ * (`name:a*b*c` as /^a.*b.*c$/). Those backtrack: measured 2026-09-27 on
+ * Node 24, /^.*a.*a.*a.*a.*a.*a.*a.*a.*b$/ (9 wildcards) took 1,969 ms
+ * against 40 a's and 11 wildcards took 17,799 ms, and the server has one
+ * thread, so one such search stalled every client. matchesWildcard gives
+ * the same answers without a regular expression, in time proportional to
+ * the text times the pattern at worst.
+ */
+export interface WildcardOptions {
+    /**
+     * Compare as a regular expression with the i flag does: each character
+     * folded with toUpperCase, except where that gives more than one
+     * character or turns a non-ASCII character into an ASCII one
+     */
+    ignoreCase?: boolean;
+    /** Read `?` as any one character, as well as `*` as any run */
+    anyChar?: boolean;
+    /**
+     * Counts the match's steps, one per loop pass, for tests that bound its
+     * work: fewer than (text length + 1) times (pattern length + 1)
+     */
+    steps?: {
+        count: number;
+    };
+}
+/**
+ * Whether all of `text` matches `pattern`, where `*` matches any run of
+ * characters, none included, and every other character matches itself
+ * (`?` too, unless `anyChar`). Characters are UTF-16 code units, as in a
+ * regular expression without the u flag.
+ *
+ * The two-pointer match with one backtrack point: on a mismatch it goes
+ * back to the latest `*` and lets it take one more character. An earlier
+ * `*` never needs to take more, since the latest one can take anything it
+ * could, so the work is at most the text's length times the pattern's.
+ * For a text of n characters and a pattern of m: each go-back moves the
+ * latest `*`'s end one character on, so there are at most n of them, and
+ * between two the pattern index only rises, so at most m other steps.
+ * That is fewer than (n + 1)(m + 1) steps in all, the bound
+ * `options.steps` lets tests check.
+ * Unlike /^a.*b$/, a `*` also matches line breaks: `.` did not.
+ *
+ * @param text - The value to test
+ * @param pattern - The wildcard pattern
+ * @param options - Case folding, and `?` as a wildcard
+ */
+export declare function matchesWildcard(text: string, pattern: string, options?: WildcardOptions): boolean;
+/**
+ * Whether free text is found in `value`, as the client-side searches read a
+ * word with no field: anywhere in it, and, when the word holds a `*` and was
+ * not quoted, with each `*` matching any run (*MacBook*, Mac*Air). A `*` in
+ * free text was compared as a character, so search_devices,
+ * search_target_lists and search_rules found nothing for *MacBook* and
+ * *Nora’s* while MacBook and Nora’s found the device.
+ *
+ * @param value - The text searched, lowercased as the word is
+ * @param text - The word or phrase, without its quotes
+ * @param quoted - Whether it was quoted: a quoted `*` is a character, as the
+ *   API grammar reads one
+ */
+export declare function containsText(value: string, text: string, quoted?: boolean): boolean;
+//# sourceMappingURL=wildcard.d.ts.map

@@ -50,6 +50,7 @@
     "LICENSE"
   ],
   "scripts": {
+    "prepare": "tsc",
     "build": "tsc",
     "build:clean": "rimraf dist && npm run build",
     "dev": "npm run build && node dist/server.js",

@@ -1,0 +1,317 @@
+/**
+ * @fileoverview Base types and interfaces for MCP tool handlers
+ *
+ * Provides foundational classes and interfaces for implementing MCP tools that
+ * interact with Firewalla firewall data. Includes standardized error handling,
+ * response formatting, and validation patterns for consistent tool behavior.
+ *
+ * The base infrastructure ensures all tools follow MCP protocol standards while
+ * providing consistent error reporting and response structure across the entire
+ * tool ecosystem.
+ *
+ * @version 1.0.0
+ * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
+ * @since 2025-06-21
+ */
+import { type FirewallaClient } from '../../firewalla/client.js';
+import type { FlowGeographicFilters } from '../../utils/geographic-filters.js';
+import { ErrorType } from '../../validation/error-handler.js';
+import { type SanitizationConfig } from '../../validation/parameter-sanitizer.js';
+/**
+ * The validation-error response for a query the MSP API cannot run, when
+ * `error` is, or wraps, the MspQueryError toMspQuery threw; undefined for
+ * any other error. The request was not sent.
+ *
+ * @param toolName - The tool reporting the error
+ * @param error - The error a tool caught
+ */
+export declare function mspQueryErrorResponse(toolName: string, error: unknown): ToolResponse | undefined;
+/**
+ * Base arguments interface for MCP tool execution
+ *
+ * Provides type-safe foundation for all tool arguments while maintaining flexibility
+ * for tool-specific parameter extensions. Tools should extend this interface with
+ * their specific argument requirements to ensure proper type checking.
+ */
+export interface BaseToolArgs {
+    /** @description Optional limit for paginated results (recommended: 1-1000) */
+    limit?: number;
+    /** @description Optional offset for paginated results */
+    offset?: number;
+    /** @description Optional cursor for cursor-based pagination */
+    cursor?: string;
+    /** @description Optional sorting field specification */
+    sort_by?: string;
+    /** @description Optional sort order (ascending or descending) */
+    sort_order?: 'asc' | 'desc';
+    /** @description Optional grouping field for result aggregation */
+    group_by?: string;
+    /** @description Optional flag to enable result aggregation */
+    aggregate?: boolean;
+    /** @description Optional flag to force refresh and bypass cache */
+    force_refresh?: boolean;
+    [key: string]: unknown;
+}
+/**
+ * Common query parameters for search and filtering operations
+ */
+export interface QueryArgs {
+    /** @description Query string for filtering results */
+    query?: string;
+    /** @description Alternative query field name for compatibility */
+    queryBy?: string;
+    /** @description Alternative sort field name for compatibility */
+    sortBy?: string;
+    /** @description Alternative group field name for compatibility */
+    groupBy?: string;
+}
+/**
+ * Time range parameters for temporal filtering
+ */
+export interface TimeRangeArgs {
+    /** @description Start time for filtering (ISO string or Unix timestamp) */
+    start_time?: string | number;
+    /** @description End time for filtering (ISO string or Unix timestamp) */
+    end_time?: string | number;
+    /** @description Time range object with start and end */
+    time_range?: {
+        start?: string | number;
+        end?: string | number;
+    };
+}
+/**
+ * Device-specific parameters
+ */
+export interface DeviceArgs {
+    /** @description Specific device ID to filter by */
+    device_id?: string;
+    /** @description Whether to include offline devices */
+    include_offline?: boolean;
+}
+/**
+ * Geographic filtering parameters
+ */
+export interface GeographicArgs {
+    /** @description search_flows' geographic filters, as its schema lists them */
+    geographic_filters?: FlowGeographicFilters;
+}
+/**
+ * Cross-reference and correlation parameters
+ */
+export interface CorrelationArgs {
+    /** @description Primary query for correlation */
+    primary_query?: string;
+    /** @description Secondary queries for correlation */
+    secondary_queries?: string[];
+    /** @description Field to correlate on */
+    correlation_field?: string;
+    /** @description Correlation parameters object */
+    correlation_params?: {
+        correlationFields?: string[];
+        correlationType?: 'AND' | 'OR';
+        temporalWindow?: {
+            windowSize?: number;
+            windowUnit?: string;
+        };
+        networkScope?: {
+            includeSubnets?: boolean;
+            includePorts?: boolean;
+        };
+        enableScoring?: boolean;
+        enableFuzzyMatching?: boolean;
+        minimumScore?: number;
+        customWeights?: Record<string, number>;
+        fuzzyConfig?: {
+            enabled?: boolean;
+            stringThreshold?: number;
+            ipSubnetMatching?: boolean;
+            numericTolerance?: number;
+            geographicRadius?: number;
+        };
+    };
+}
+/**
+ * Box/Group management parameters
+ */
+export interface BoxArgs {
+    /** @description Group ID for filtering boxes */
+    group_id?: string;
+}
+/**
+ * Comprehensive tool arguments interface that includes all common parameter patterns
+ * used across the Firewalla MCP server tool handlers.
+ *
+ * This replaces the generic `any` type with specific, type-safe interfaces that
+ * cover all the parameter patterns observed in the codebase while maintaining
+ * backward compatibility.
+ */
+export interface ToolArgs extends BaseToolArgs, QueryArgs, TimeRangeArgs, DeviceArgs, GeographicArgs, CorrelationArgs, BoxArgs {
+}
+/**
+ * Standardized response structure for MCP tool execution
+ *
+ * All tools must return responses in this format for consistent MCP protocol compliance.
+ * The content array supports multiple response blocks with different types and formatting.
+ */
+export interface ToolResponse {
+    /** @description Array of content blocks containing tool output */
+    content: Array<{
+        /** @description Content type (typically 'text' for JSON responses) */
+        type: string;
+        /** @description The actual content text (usually JSON.stringify result) */
+        text: string;
+    }>;
+    /** @description Optional flag indicating if the response represents an error condition */
+    isError?: boolean;
+    /** @description Additional metadata or context for the response */
+    [key: string]: unknown;
+}
+/**
+ * Interface defining the contract for all MCP tool handlers
+ *
+ * Provides the foundation for implementing interactive tools that can be invoked
+ * by Claude through the MCP protocol to access and manipulate Firewalla data.
+ */
+export interface ToolHandler {
+    /**
+     * Execute the tool with given arguments and return formatted response
+     *
+     * @param args - Tool-specific arguments provided by the MCP client
+     * @param firewalla - Authenticated Firewalla client for API access
+     * @returns Promise resolving to formatted tool response
+     */
+    execute: (args: ToolArgs, firewalla: FirewallaClient) => Promise<ToolResponse>;
+    /** @description Unique tool identifier used in MCP tool registration */
+    name: string;
+    /**
+     * @description Human-readable description of tool functionality. Clients
+     * get the description from the ListTools handler in src/server.ts; this
+     * copy must match it (tests/server/tool-annotations.test.ts).
+     */
+    description: string;
+    /** @description Tool category for organizational and filtering purposes */
+    category: 'security' | 'network' | 'device' | 'rule' | 'analytics' | 'search';
+}
+/**
+ * Configuration options for BaseToolHandler
+ */
+export interface BaseToolOptions {
+    /** Whether to enable geographic enrichment for IP addresses */
+    enableGeoEnrichment?: boolean;
+    /** Whether to enable field normalization to snake_case */
+    enableFieldNormalization?: boolean;
+    /** Additional metadata to include in responses */
+    additionalMeta?: Record<string, any>;
+}
+export declare abstract class BaseToolHandler implements ToolHandler {
+    /** @description Tool identifier - must be implemented by concrete classes */
+    abstract name: string;
+    /**
+     * @description Tool description - must be implemented by concrete classes,
+     * and must match the tool's description in src/server.ts
+     */
+    abstract description: string;
+    /** @description Tool category - must be implemented by concrete classes */
+    abstract category: 'security' | 'network' | 'device' | 'rule' | 'analytics' | 'search';
+    /** @description Configuration options for this handler */
+    protected options: BaseToolOptions;
+    /**
+     * Constructor with default configuration
+     */
+    constructor(options?: BaseToolOptions);
+    /**
+     * Execute the tool logic - must be implemented by concrete classes
+     *
+     * @param args - Tool arguments from MCP client
+     * @param firewalla - Firewalla API client instance
+     * @returns Promise resolving to tool response
+     */
+    abstract execute(args: ToolArgs, firewalla: FirewallaClient): Promise<ToolResponse>;
+    /**
+     * Create a legacy success response (DEPRECATED - Use createUnifiedResponse)
+     *
+     * @param data - The data to include in the response
+     * @returns Formatted success response compliant with MCP protocol
+     * @protected
+     * @deprecated Use createUnifiedResponse for new handlers
+     */
+    protected createSuccessResponse(data: any): ToolResponse;
+    /**
+     * The field normalization createUnifiedResponse applies, when the handler
+     * enables it: snake_case keys, with the FIELD_ALIAS_MAP renames (timestamp
+     * becomes ts). For data a handler returns without createUnifiedResponse.
+     *
+     * @param data - The data to normalize
+     * @returns The data with normalized field names
+     * @protected
+     */
+    protected normalizeFields<T>(data: T): T;
+    /**
+     * Create a unified success response with consistent formatting and enrichment
+     *
+     * @param data - The data to include in the response
+     * @param options - Additional options for response generation
+     * @returns Formatted success response with unified structure
+     * @protected
+     */
+    protected createUnifiedResponse(data: any, options?: {
+        executionTimeMs?: number;
+        requestId?: string;
+        additionalMeta?: Record<string, any>;
+    }): Promise<ToolResponse>;
+    /**
+     * Helper method for geographic enrichment that can be called by handlers
+     *
+     * @param payload - Data to enrich with geographic information
+     * @param ipFields - Array of IP field names to enrich (defaults to common fields)
+     * @returns Promise resolving to enriched data
+     * @protected
+     */
+    protected enrichGeoIfNeeded<T>(payload: T, ipFields?: string[]): Promise<T>;
+    /**
+     * Create a standardized error response with diagnostic information
+     *
+     * @param message - Human-readable error message
+     * @param errorType - Specific type of error (defaults to UNKNOWN_ERROR)
+     * @param details - Optional additional error context or debugging information
+     * @param validationErrors - Optional array of validation error messages
+     * @returns Formatted error response with isError flag set
+     * @protected
+     */
+    protected createErrorResponse(message: string, errorType?: ErrorType, details?: any, validationErrors?: string[]): ToolResponse;
+    /**
+     * The answer for a write that was sent and got no HTTP status
+     * (WriteOutcomeUnknownError): its outcome is unknown, and the message
+     * names the read to check before trying again. Undefined for any other
+     * error, which the tool reports as a failure.
+     */
+    protected unknownWriteResponse(error: unknown): ToolResponse | undefined;
+    /**
+     * Sanitize and validate parameters early in the execution pipeline
+     *
+     * @param rawArgs - Raw arguments from MCP client
+     * @param config - Optional sanitization configuration
+     * @returns Sanitized arguments or error response
+     * @protected
+     */
+    protected sanitizeParameters(rawArgs: unknown, config?: Partial<SanitizationConfig>): {
+        sanitizedArgs: ToolArgs;
+    } | {
+        errorResponse: ToolResponse;
+    };
+    /**
+     * Execute tool with automatic parameter sanitization
+     *
+     * This is a convenience method that automatically sanitizes parameters
+     * before calling the tool's main execution logic. Tools can override
+     * this to customize sanitization behavior.
+     *
+     * @param rawArgs - Raw arguments from MCP client
+     * @param firewalla - Firewalla API client instance
+     * @param config - Optional sanitization configuration
+     * @returns Promise resolving to tool response
+     * @protected
+     */
+    protected executeWithSanitization(rawArgs: unknown, firewalla: FirewallaClient, config?: Partial<SanitizationConfig>): Promise<ToolResponse>;
+}
+//# sourceMappingURL=base.d.ts.map

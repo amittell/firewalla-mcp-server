@@ -1,0 +1,1047 @@
+/**
+ * Translates the query language the tools accept into the grammar of the
+ * MSP API's `query` parameter on /v2/alarms, /v2/flows and /v2/rules.
+ *
+ * The API grammar, measured 2026-09-26 (docs/firewalla-api-reference.md,
+ * "Measured Query Behavior"): terms are separated by spaces; terms on
+ * different fields must all match; the same field repeated, or a comma list
+ * `field:a,b`, matches either value; `-field:value` excludes; a word without
+ * a qualifier is free text. `AND`, `OR` and `NOT` are not operators: the API
+ * searches them as words (`status:blocked AND region:US` matched 0 flows and
+ * `status:blocked region:US` 6,318). Parentheses match nothing. The API has
+ * no OR between different fields.
+ *
+ * The tools accept uppercase `AND`, `OR` and `NOT` (NOT binds tightest, then
+ * AND, then OR; terms with no operator between them are ANDed), parentheses,
+ * and the API's own forms. toMspQuery rewrites a query into one conjunction
+ * the API can run:
+ * - AND, or no operator, between terms: a space
+ * - OR between values of one field: a comma list (`region:US OR region:CN`
+ *   is sent as `region:US,CN`), also where AND distributes over it
+ * - NOT of a term: the `-` prefix; NOT of a comparison: the opposite
+ *   comparison (`NOT total:>1MB` is sent as `total:<=1MB`; measured
+ *   2026-09-26, both that and `-total:>1MB` matched the same 735,778
+ *   flows); NOT of an OR: each term excluded
+ * - a lower and an upper bound on one field: one range (`ts:>=a ts:<=b` is
+ *   sent as `ts:a-b`; a range includes its ends, so a strict bound is refused)
+ * - a relative time (`ts:>1h`, `ts:<=7d`): Unix seconds
+ * A query that needs an OR between different fields, NOT over an AND, the
+ * exclusion of free text, a wildcard or a range, two other conditions on one
+ * field (the API would read them as OR), or `[low TO high]` range syntax has
+ * no API form: MspQueryError names the part and says what to send instead,
+ * where there is something: for an OR, one query per disjunct of the
+ * query's disjunctive normal form, whose results together are the query's.
+ * Lowercase `and`, `or` and `not` are words, as the API reads them. A query
+ * already in API form comes back unchanged.
+ */
+import { translateRelativeTimestamps } from './timestamp.js';
+import { followsWordCharacter } from './word-characters.js';
+/** A query, or part of one, that the MSP API cannot run */
+export class MspQueryError extends Error {
+    constructor(message, query, part, suggestions = []) {
+        super(message);
+        this.name = 'MspQueryError';
+        this.query = query;
+        this.part = part;
+        this.suggestions = suggestions;
+    }
+}
+/**
+ * The MspQueryError behind an error: the error itself, or one found by
+ * following, up to five levels down, the error that each wrapper kept as
+ * `cause`, else as `retryContext.originalError`. withToolTimeout throws a
+ * failure as it came, so the error itself is the usual case, and nothing
+ * sets `retryContext` since RetryManager was removed.
+ */
+export function findMspQueryError(error) {
+    let current = error;
+    for (let depth = 0; current && depth < 5; depth++) {
+        if (current instanceof MspQueryError) {
+            return current;
+        }
+        const wrapper = current;
+        current = wrapper.cause ?? wrapper.retryContext?.originalError;
+    }
+    return undefined;
+}
+/** OR terms a query may expand to before it is refused as too complex */
+const MAX_CLAUSES = 64;
+// A number with an optional data unit, as the API grammar gives them
+const NUMBER = /^\d+(?:\.\d+)?(?:[KMGT]?B)?$/i;
+const RANGE = /^\d+(?:\.\d+)?(?:[KMGT]?B)?-\d+(?:\.\d+)?(?:[KMGT]?B)?$/i;
+const COMPARISON = /^(>=|<=|>|<)(.*)$/s;
+const FIELD_TERM = /^([A-Za-z_][\w.]*):(.*)$/s;
+// field:[low TO high], or with braces for excluded ends (Lucene syntax).
+// TO in any case: field:[1 to 2] was not found, so flows and alarms sent it
+// as it was, and the search parser refused it as "Expected TO"
+const BRACKET_RANGE = /(^|[\s(])(-?)([A-Za-z_][\w.]*):([[{])\s*([^\s\]}]+)\s+[Tt][Oo]\s+([^\s\]}]+)\s*([\]}])/;
+const OPPOSITE = {
+    '>': '<=',
+    '>=': '<',
+    '<': '>=',
+    '<=': '>',
+};
+function cannotSend(query, reason) {
+    return `Query "${query}" cannot be sent to the MSP API: ${reason}`;
+}
+function malformed(query, detail) {
+    return new MspQueryError(`Query "${query}" is malformed: ${detail}.`, query);
+}
+function tooComplex(query) {
+    return new MspQueryError(`Query "${query}" expands to more than ${MAX_CLAUSES} combinations of its OR terms; simplify it or split it into several searches.`, query);
+}
+/** What to run instead of a query, when there is something */
+function runInstead(suggestions, otherwise) {
+    return suggestions.length > 0
+        ? `Run one search for each of these and combine the results: ${suggestions.map(q => `"${q}"`).join(', ')}.`
+        : otherwise;
+}
+/**
+ * A quoted value: in double quotes, or in single quotes that open where a
+ * word could start (a single quote after a letter, digit or underscore is
+ * an apostrophe, as in Nora's), backslash escapes included. Split on it,
+ * a query's unquoted text is at the even indexes and its quoted values at
+ * the odd ones.
+ */
+export const QUOTED_TEXT = /("(?:[^"\\]|\\.)*"|(?<![\p{L}\p{N}\p{M}_])'(?:[^'\\]|\\.)*')/u;
+/**
+ * `rewrite` applied to the text of `query` outside its quoted values
+ * (QUOTED_TEXT), which are left as they are: "blocked:true" is a phrase,
+ * not a term to translate
+ */
+export function outsideQuotes(query, rewrite) {
+    return query
+        .split(QUOTED_TEXT)
+        .map((part, index) => (index % 2 === 1 ? part : rewrite(part)))
+        .join('');
+}
+/** The text of `query` outside its quoted values, a space for each one */
+export function unquotedText(query) {
+    return query
+        .split(QUOTED_TEXT)
+        .filter((_part, index) => index % 2 === 0)
+        .join(' ');
+}
+/**
+ * The first Lucene-style range in a query (`field:[low TO high]`, or with
+ * braces), outside quotes. The API's grammar has none: its ranges are
+ * `field:low-high`, which include both ends. Single-quoted text is quoted
+ * too: toMspQuery sends 'show ts:[1 TO 2]' as one phrase, and it was
+ * refused here as a range.
+ *
+ * @param query - A query as the caller wrote it
+ * @returns The range and its API form, or undefined when there is none
+ */
+export function findBracketRange(query) {
+    if (!query || typeof query !== 'string') {
+        return undefined;
+    }
+    const pieces = query.split(QUOTED_TEXT);
+    for (let i = 0; i < pieces.length; i += 2) {
+        const match = BRACKET_RANGE.exec(pieces[i]);
+        if (!match) {
+            continue;
+        }
+        const [whole, lead, minus, field, open, low, high, close] = match;
+        const term = (condition) => `${minus}${field}:${condition}`;
+        let replacement;
+        let widened = false;
+        if (low === '*' && high === '*') {
+            replacement = '';
+        }
+        else if (low === '*') {
+            replacement = term(`${close === ']' ? '<=' : '<'}${high}`);
+        }
+        else if (high === '*') {
+            replacement = term(`${open === '[' ? '>=' : '>'}${low}`);
+        }
+        else {
+            replacement = term(`${low}-${high}`);
+            widened = open === '{' || close === '}';
+        }
+        pieces[i] =
+            pieces[i].slice(0, match.index + lead.length) +
+                replacement +
+                pieces[i].slice(match.index + whole.length);
+        return {
+            part: whole.slice(lead.length),
+            replacement,
+            widened,
+            query: pieces.join(''),
+        };
+    }
+    return undefined;
+}
+/**
+ * The refusal of a `[low TO high]` range
+ *
+ * @param query - The query as the caller wrote it
+ * @param range - The range findBracketRange found in it
+ * @param suggestion - The query to send instead; the query with the range
+ *   in API form unless given (a caller may rename qualifiers in it)
+ */
+export function bracketRangeError(query, range, suggestion = range.query) {
+    const trimmed = query.trim();
+    const ends = range.widened
+        ? ' Braces exclude an end, and no API range does: the query below includes the ends.'
+        : '';
+    const send = range.replacement
+        ? ` Send "${suggestion.trim()}".`
+        : ' It matches any value: leave it out.';
+    return new MspQueryError(cannotSend(trimmed, `"${range.part}" is [low TO high] range syntax, which the API does not have: its ranges are field:low-high and include both ends.${ends}${send}`), trimmed, range.part, range.replacement ? [suggestion.trim()] : []);
+}
+/**
+ * A single-quoted value (`'rock AND roll'`, quotes included) in the double
+ * quotes the API grammar documents: `\'` becomes `'`, a `"` is escaped, and
+ * other escapes are kept
+ */
+function doubleQuoted(singleQuoted) {
+    const inside = singleQuoted
+        .slice(1, -1)
+        .replace(/\\([\s\S])|"/g, (match, escaped) => escaped === undefined ? '\\"' : escaped === "'" ? "'" : match);
+    return `"${inside}"`;
+}
+/**
+ * Splits a query into parentheses and words. A word runs to the next space
+ * or parenthesis outside quotes, so `name:"family room"` and the colons of
+ * `mac:AA:BB:CC:DD:EE:FF` stay in one word. The search parser reads single
+ * quotes as quotes too, so a single-quoted value is one word, sent in
+ * double quotes: `'rock AND roll'` was split at its spaces and sent as
+ * `'rock roll'`, its AND read as an operator. A single quote right after a
+ * letter, digit or underscore, in any script, is an apostrophe
+ * (`name:Nora's`), as the parser reads it.
+ */
+function tokenize(query) {
+    const tokens = [];
+    let i = 0;
+    while (i < query.length) {
+        const c = query[i];
+        if (/\s/.test(c)) {
+            i++;
+            continue;
+        }
+        if (c === '(' || c === ')') {
+            tokens.push({ kind: c === '(' ? 'open' : 'close', text: c });
+            i++;
+            continue;
+        }
+        const start = i;
+        let text = '';
+        while (i < query.length && !/[\s()]/.test(query[i])) {
+            const c = query[i];
+            if (c === '"' || (c === "'" && !followsWordCharacter(query, i))) {
+                let close = i + 1;
+                while (close < query.length && query[close] !== c) {
+                    close += query[close] === '\\' ? 2 : 1;
+                }
+                if (close >= query.length) {
+                    throw malformed(query, `${query.slice(start)} opens a quote that is never closed`);
+                }
+                const quoted = query.slice(i, close + 1);
+                text += c === '"' ? quoted : doubleQuoted(quoted);
+                i = close + 1;
+            }
+            else {
+                text += c;
+                i++;
+            }
+        }
+        tokens.push({ kind: 'word', text });
+    }
+    return tokens;
+}
+/** The values of a comma list, split outside double quotes */
+function splitList(value) {
+    const parts = [];
+    let current = '';
+    let quoted = false;
+    for (let i = 0; i < value.length; i++) {
+        const c = value[i];
+        if (quoted && c === '\\' && i + 1 < value.length) {
+            current += c + value[++i];
+            continue;
+        }
+        if (c === '"') {
+            quoted = !quoted;
+        }
+        else if (c === ',' && !quoted) {
+            parts.push(current);
+            current = '';
+            continue;
+        }
+        current += c;
+    }
+    parts.push(current);
+    return parts;
+}
+/** Whether a value has a `*` that is not escaped */
+function hasWildcard(value) {
+    return /(^|[^\\])\*/.test(value);
+}
+// Reads only what a Literal and an MspTerm share, so mspTermText passes an
+// MspTerm without a cast
+function renderLiteral(literal) {
+    if (literal.kind === 'text') {
+        return literal.values[0];
+    }
+    return `${literal.negated ? '-' : ''}${literal.field}:${literal.values.join(',')}`;
+}
+function render(node) {
+    switch (node.type) {
+        case 'term':
+            return renderLiteral(node.literal);
+        case 'not':
+            return `NOT ${node.item.type === 'term' || node.item.type === 'not' ? render(node.item) : `(${render(node.item)})`}`;
+        case 'and':
+            return node.items
+                .map(item => (item.type === 'or' ? `(${render(item)})` : render(item)))
+                .join(' AND ');
+        case 'or':
+            return node.items.map(render).join(' OR ');
+    }
+}
+/**
+ * The literal that excludes what `literal` matches. The official grammar
+ * defines the `-` prefix for field values only, with no exclusion of free
+ * text, wildcards or numeric terms, so those are refused. A comparison is
+ * sent as the opposite comparison instead: the API does exclude one
+ * (measured 2026-09-26, `-total:>1MB` and `total:<=1MB` matched the same
+ * 735,778 flows), and the flipped form is the one the grammar documents.
+ */
+function negateLiteral(literal, part, query) {
+    switch (literal.kind) {
+        case 'text':
+            throw new MspQueryError(cannotSend(query, `"${part}" excludes free text, and the API's - prefix excludes field values only (for example -status:blocked). Search without the exclusion, or exclude a field value.`), query, part);
+        case 'wildcard':
+            throw new MspQueryError(cannotSend(query, `"${part}" excludes a wildcard match, and the API's grammar has no exclusion of a wildcard: it excludes exact values (for example -domain:example.com). Exclude exact values, or search without the exclusion.`), query, part);
+        case 'range': {
+            const [low, high] = literal.values[0].split('-');
+            throw new MspQueryError(cannotSend(query, `"${part}" excludes a range, and the API's grammar has no exclusion of a range. Run two searches instead, one with ${literal.field}:<${low} and one with ${literal.field}:>${high}.`), query, part, [`${literal.field}:<${low}`, `${literal.field}:>${high}`]);
+        }
+        case 'comparison': {
+            const [, operator, value] = COMPARISON.exec(literal.values[0]);
+            return { ...literal, values: [`${OPPOSITE[operator]}${value}`] };
+        }
+        case 'exact':
+            return { ...literal, negated: !literal.negated };
+    }
+}
+/** One word of a query as a literal: `[-]field:value`, or free text */
+function parseTerm(text, query) {
+    const negated = text.startsWith('-');
+    const body = negated ? text.slice(1) : text;
+    const match = FIELD_TERM.exec(body);
+    if (!match) {
+        // The search parser refuses one as well: on the client an empty phrase
+        // is found in any text, so it matched every device and target list
+        if (/^"\s*"$/.test(body)) {
+            throw malformed(query, `${text} is an empty phrase, with no text to find; put a word in it or leave it out`);
+        }
+        const literal = {
+            negated: false,
+            field: '',
+            values: [text],
+            kind: 'text',
+        };
+        return negated ? negateLiteral(literal, text, query) : literal;
+    }
+    const [, field, value] = match;
+    if (value === '') {
+        throw malformed(query, `"${text}" has no value after the colon`);
+    }
+    let literal;
+    const comparison = COMPARISON.exec(value);
+    if (comparison) {
+        if (comparison[2] === '') {
+            throw malformed(query, `"${text}" has no value after ${comparison[1]}`);
+        }
+        // A relative time (ts:>1h) in the Unix seconds the API takes
+        const compared = field.toLowerCase() === 'ts'
+            ? translateRelativeTimestamps(`ts:${value}`).slice('ts:'.length)
+            : value;
+        literal = { negated: false, field, values: [compared], kind: 'comparison' };
+    }
+    else if (RANGE.test(value)) {
+        literal = { negated: false, field, values: [value], kind: 'range' };
+    }
+    else {
+        const values = splitList(value);
+        if (values.some(v => v === '')) {
+            throw malformed(query, `"${text}" has an empty value in its list`);
+        }
+        literal = {
+            negated: false,
+            field,
+            values,
+            kind: values.some(hasWildcard) ? 'wildcard' : 'exact',
+        };
+    }
+    return negated ? negateLiteral(literal, text, query) : literal;
+}
+/** Recursive descent over the tokens: OR, then AND, then NOT, then terms */
+class Parser {
+    constructor(tokens, query) {
+        this.tokens = tokens;
+        this.query = query;
+        this.position = 0;
+    }
+    parse() {
+        if (this.tokens.length === 0) {
+            return undefined;
+        }
+        const node = this.parseOr();
+        if (this.position < this.tokens.length) {
+            throw malformed(this.query, 'it has a ")" with no "(" before it');
+        }
+        return node;
+    }
+    peek(offset = 0) {
+        return this.tokens[this.position + offset];
+    }
+    isOperator(token, name) {
+        return token?.kind === 'word' && token.text === name;
+    }
+    parseOr() {
+        const items = [this.parseAnd()];
+        while (this.isOperator(this.peek(), 'OR')) {
+            this.position++;
+            items.push(this.parseAnd());
+        }
+        return items.length === 1 ? items[0] : { type: 'or', items };
+    }
+    parseAnd() {
+        const items = [this.parseUnary()];
+        for (;;) {
+            const token = this.peek();
+            if (!token || token.kind === 'close' || this.isOperator(token, 'OR')) {
+                break;
+            }
+            if (this.isOperator(token, 'AND')) {
+                this.position++;
+            }
+            items.push(this.parseUnary());
+        }
+        return items.length === 1 ? items[0] : { type: 'and', items };
+    }
+    parseUnary() {
+        const token = this.peek();
+        // `-(...)` excludes a group, like NOT
+        const minusGroup = token?.kind === 'word' &&
+            token.text === '-' &&
+            this.peek(1)?.kind === 'open';
+        if (this.isOperator(token, 'NOT') || minusGroup) {
+            this.position++;
+            return { type: 'not', item: this.parseUnary() };
+        }
+        return this.parsePrimary();
+    }
+    parsePrimary() {
+        const token = this.peek();
+        if (!token) {
+            throw malformed(this.query, 'it ends with an operator and no term');
+        }
+        if (token.kind === 'close') {
+            throw malformed(this.query, 'a term is missing before ")"');
+        }
+        if (token.kind === 'open') {
+            this.position++;
+            if (this.peek()?.kind === 'close') {
+                throw malformed(this.query, 'it has empty parentheses');
+            }
+            const node = this.parseOr();
+            if (this.peek()?.kind !== 'close') {
+                throw malformed(this.query, 'it has a "(" with no ")" after it');
+            }
+            this.position++;
+            return node;
+        }
+        if (this.isOperator(token, 'AND') || this.isOperator(token, 'OR')) {
+            throw malformed(this.query, `${token.text} has no term before it`);
+        }
+        this.position++;
+        return { type: 'term', literal: parseTerm(token.text, this.query) };
+    }
+}
+/**
+ * Pushes NOT down to the terms (negation normal form). NOT over an AND has
+ * no API form and is refused, unless `deMorgan` (for suggestions): then it
+ * becomes an OR of the excluded terms.
+ */
+function toNnf(node, negate, query, root, deMorgan = false) {
+    switch (node.type) {
+        case 'term':
+            return negate
+                ? {
+                    type: 'term',
+                    literal: negateLiteral(node.literal, `NOT ${render(node)}`, query),
+                }
+                : node;
+        case 'not':
+            return toNnf(node.item, !negate, query, root, deMorgan);
+        case 'and':
+            if (negate && !deMorgan) {
+                const part = `NOT (${render(node)})`;
+                const suggestions = suggestionsFor(root, query);
+                throw new MspQueryError(cannotSend(query, `"${part}" excludes a combination of conditions, and the API can exclude single field values only (-field:value, each of which must hold). ${runInstead(suggestions, 'Exclude single values instead, or search without the exclusion.')}`), query, part, suggestions);
+            }
+            return {
+                type: negate ? 'or' : 'and',
+                items: node.items.map(i => toNnf(i, negate, query, root, deMorgan)),
+            };
+        case 'or':
+            return {
+                type: negate ? 'and' : 'or',
+                items: node.items.map(i => toNnf(i, negate, query, root, deMorgan)),
+            };
+    }
+}
+function literalKey(literal) {
+    return [
+        literal.negated ? '-' : '',
+        literal.field.toLowerCase(),
+        literal.kind,
+        literal.values.join(','),
+    ].join('\u0000');
+}
+/**
+ * Drops repeated literals within a clause, and clauses another clause
+ * implies: (a OR b) AND a is a.
+ */
+function simplify(clauses) {
+    const unique = clauses.map(clause => {
+        const seen = new Set();
+        return clause.filter(literal => {
+            const key = literalKey(literal);
+            if (seen.has(key)) {
+                return false;
+            }
+            seen.add(key);
+            return true;
+        });
+    });
+    const keys = unique.map(clause => new Set(clause.map(literalKey)));
+    return unique.filter((_clause, i) => keys.every((other, j) => {
+        if (j === i || other.size > keys[i].size) {
+            return true;
+        }
+        const subset = [...other].every(key => keys[i].has(key));
+        // Of two equal clauses, the first is kept
+        return !subset || (other.size === keys[i].size && j > i);
+    }));
+}
+/** The query as a conjunction of clauses (conjunctive normal form) */
+function toCnf(node, query) {
+    switch (node.type) {
+        case 'term': {
+            const { literal } = node;
+            // A comma list is an OR of its values
+            if (!literal.negated &&
+                (literal.kind === 'exact' || literal.kind === 'wildcard') &&
+                literal.values.length > 1) {
+                return [
+                    literal.values.map(value => ({
+                        ...literal,
+                        values: [value],
+                        kind: hasWildcard(value) ? 'wildcard' : 'exact',
+                    })),
+                ];
+            }
+            return [[literal]];
+        }
+        case 'and':
+            return simplify(node.items.flatMap(item => toCnf(item, query)));
+        case 'or': {
+            let result = toCnf(node.items[0], query);
+            for (const item of node.items.slice(1)) {
+                const right = toCnf(item, query);
+                const product = [];
+                for (const left of result) {
+                    for (const other of right) {
+                        product.push([...left, ...other]);
+                    }
+                }
+                result = simplify(product);
+                if (result.length > MAX_CLAUSES) {
+                    throw tooComplex(query);
+                }
+            }
+            return result;
+        }
+        case 'not':
+            // toNnf leaves no NOT above a term
+            throw new Error('toCnf: NOT left in the query tree');
+    }
+}
+/**
+ * The query as a disjunction of conjunctions (disjunctive normal form).
+ * simplify() also applies here: a OR (a AND b) is a.
+ */
+function toDnf(node, query) {
+    switch (node.type) {
+        case 'term': {
+            const { literal } = node;
+            // A comma list is an OR of its values
+            if (!literal.negated &&
+                (literal.kind === 'exact' || literal.kind === 'wildcard') &&
+                literal.values.length > 1) {
+                return literal.values.map(value => [
+                    {
+                        ...literal,
+                        values: [value],
+                        kind: hasWildcard(value) ? 'wildcard' : 'exact',
+                    },
+                ]);
+            }
+            return [[literal]];
+        }
+        case 'or': {
+            const result = simplify(node.items.flatMap(item => toDnf(item, query)));
+            if (result.length > MAX_CLAUSES) {
+                throw tooComplex(query);
+            }
+            return result;
+        }
+        case 'and': {
+            let result = toDnf(node.items[0], query);
+            for (const item of node.items.slice(1)) {
+                const right = toDnf(item, query);
+                const product = [];
+                for (const left of result) {
+                    for (const other of right) {
+                        product.push([...left, ...other]);
+                    }
+                }
+                result = simplify(product);
+                if (result.length > MAX_CLAUSES) {
+                    throw tooComplex(query);
+                }
+            }
+            return result;
+        }
+        case 'not':
+            // toNnf leaves no NOT above a term
+            throw new Error('toDnf: NOT left in the query tree');
+    }
+}
+/**
+ * The two literals by which two conjunctions differ, when that is one
+ * value each of the same field, so that they merge into one comma list
+ */
+function mergeablePair(a, b) {
+    if (a.length !== b.length) {
+        return undefined;
+    }
+    const keysA = new Set(a.map(literalKey));
+    const keysB = new Set(b.map(literalKey));
+    const onlyA = a.filter(literal => !keysB.has(literalKey(literal)));
+    const onlyB = b.filter(literal => !keysA.has(literalKey(literal)));
+    if (onlyA.length !== 1 || onlyB.length !== 1) {
+        return undefined;
+    }
+    const [x] = onlyA;
+    const [y] = onlyB;
+    const listable = (literal) => !literal.negated &&
+        (literal.kind === 'exact' || literal.kind === 'wildcard');
+    return listable(x) &&
+        listable(y) &&
+        x.field.toLowerCase() === y.field.toLowerCase()
+        ? [x, y]
+        : undefined;
+}
+/**
+ * Conjunctions that differ only in one field's value, merged into one with
+ * a comma list: (a AND region:US) OR (a AND region:CN) is a region:US,CN
+ */
+function mergeDisjuncts(conjunctions) {
+    const result = [...conjunctions];
+    const findPair = () => {
+        for (let i = 0; i < result.length; i++) {
+            for (let j = i + 1; j < result.length; j++) {
+                const pair = mergeablePair(result[i], result[j]);
+                if (pair) {
+                    return [i, j, ...pair];
+                }
+            }
+        }
+        return undefined;
+    };
+    for (let found = findPair(); found; found = findPair()) {
+        const [i, j, x, y] = found;
+        result[i] = result[i].map(literal => literal === x ? mergeClause([x, y]) : literal);
+        result.splice(j, 1);
+    }
+    return result;
+}
+/**
+ * Queries the API can run whose results together are the query's: one per
+ * disjunct of its disjunctive normal form, in API form, with disjuncts that
+ * differ only in one field's value merged into a comma list. Empty when the
+ * query has one disjunct, when a disjunct has no API form either, and past
+ * MAX_CLAUSES disjuncts.
+ */
+function suggestionsFor(tree, query) {
+    try {
+        const disjuncts = mergeDisjuncts(toDnf(toNnf(tree, false, query, tree, true), query));
+        if (disjuncts.length < 2) {
+            return [];
+        }
+        return disjuncts.map(conjunction => mergeRepeatedFields(conjunction, query).map(renderLiteral).join(' '));
+    }
+    catch (error) {
+        // A disjunct with no API form of its own, or too many disjuncts: the
+        // refusal is still reported, without suggestions
+        if (error instanceof MspQueryError) {
+            return [];
+        }
+        throw error;
+    }
+}
+function sameField(literals) {
+    const field = literals[0].field.toLowerCase();
+    return literals.every(literal => literal.field.toLowerCase() === field);
+}
+/** One comma-list literal for an OR of exact or wildcard values of a field */
+function mergeClause(clause) {
+    const values = [...new Set(clause.flatMap(literal => literal.values))];
+    return {
+        negated: false,
+        field: clause[0].field,
+        values,
+        kind: values.some(hasWildcard) ? 'wildcard' : 'exact',
+    };
+}
+/** Why an OR clause has no API form, or undefined when it has one */
+function clauseProblem(clause) {
+    if (clause.length === 1) {
+        return undefined;
+    }
+    if (clause.some(literal => literal.negated)) {
+        return 'exclusion';
+    }
+    if (clause.some(literal => literal.kind === 'text')) {
+        return 'text';
+    }
+    if (!sameField(clause)) {
+        return 'fields';
+    }
+    if (clause.some(literal => literal.kind === 'comparison' || literal.kind === 'range')) {
+        return 'numeric';
+    }
+    return undefined;
+}
+function clauseError(clause, problem, query, suggestions) {
+    const part = clause.map(renderLiteral).join(' OR ');
+    const instead = runInstead(suggestions, 'Split it into separate searches.');
+    let reason;
+    switch (problem) {
+        case 'fields': {
+            const fields = [
+                ...new Map(clause.map(literal => [literal.field.toLowerCase(), literal.field])).values(),
+            ];
+            reason = `"${part}" is an OR between different fields (${fields.join(', ')}), and the API has no OR between fields: terms on different fields must all match, and OR works only between values of one field (region:US OR region:CN is sent as region:US,CN). ${instead}`;
+            break;
+        }
+        case 'exclusion':
+            reason = `"${part}" is an OR that includes an excluded term, and the API cannot express it: OR works only between values of one field, and every exclusion (-field:value) must hold. ${instead}`;
+            break;
+        case 'text':
+            reason = `"${part}" is an OR with free text, and the API cannot express it: every free-text word and every field term must match. ${instead}`;
+            break;
+        case 'numeric':
+            reason = `"${part}" is an OR between comparisons or ranges, and the API's comma list takes exact or wildcard values only. ${instead}`;
+            break;
+    }
+    return new MspQueryError(cannotSend(query, reason), query, part, suggestions);
+}
+/**
+ * A lower and an upper bound on one field, as the range `low-high` they
+ * describe and whether both are inclusive (>= and <=), since a range
+ * includes both of its ends
+ */
+function boundsOf(a, b) {
+    if (a.kind !== 'comparison' || b.kind !== 'comparison') {
+        return undefined;
+    }
+    const [, opA, valueA] = COMPARISON.exec(a.values[0]);
+    const [, opB, valueB] = COMPARISON.exec(b.values[0]);
+    if (!NUMBER.test(valueA) || !NUMBER.test(valueB)) {
+        return undefined;
+    }
+    const lowerA = opA.startsWith('>');
+    if (lowerA === opB.startsWith('>')) {
+        return undefined;
+    }
+    const [low, high] = lowerA ? [valueA, valueB] : [valueB, valueA];
+    return {
+        range: {
+            negated: false,
+            field: a.field,
+            values: [`${low}-${high}`],
+            kind: 'range',
+        },
+        inclusive: opA.endsWith('=') && opB.endsWith('='),
+    };
+}
+/**
+ * The API reads a field that appears twice as OR, so two conditions on one
+ * field become one range, or are refused
+ */
+function mergeRepeatedFields(conjuncts, query) {
+    const result = [...conjuncts];
+    const byField = new Map();
+    result.forEach((literal, i) => {
+        if (!literal.negated && literal.kind !== 'text') {
+            const key = literal.field.toLowerCase();
+            byField.set(key, [...(byField.get(key) ?? []), i]);
+        }
+    });
+    const dropped = new Set();
+    for (const indexes of byField.values()) {
+        if (indexes.length < 2) {
+            continue;
+        }
+        const [first, second] = indexes;
+        const bounds = indexes.length === 2
+            ? boundsOf(result[first], result[second])
+            : undefined;
+        if (bounds?.inclusive) {
+            result[first] = bounds.range;
+            dropped.add(second);
+            continue;
+        }
+        const a = result[first];
+        const b = result[second];
+        const part = `${renderLiteral(a)} AND ${renderLiteral(b)}`;
+        if (bounds) {
+            // A strict bound cannot be kept: a range includes both ends, and the
+            // two terms side by side would be read as OR
+            const range = renderLiteral(bounds.range);
+            // The whole query with the inclusive range in place of the pair
+            const suggestion = result
+                .map((literal, i) => (i === first ? bounds.range : literal))
+                .filter((_, i) => i !== second && !dropped.has(i))
+                .map(renderLiteral)
+                .join(' ');
+            throw new MspQueryError(cannotSend(query, `"${part}" has a strict bound, and the API has no strict range: a range includes both of its ends, and two conditions on ${a.field} side by side are read as OR. Send the inclusive range ${range} if its ends may match, or use >= and <= bounds.`), query, part, [suggestion]);
+        }
+        const exact = [a, b].every(literal => literal.kind === 'exact' || literal.kind === 'wildcard');
+        const hint = exact
+            ? `For either value, send ${renderLiteral(mergeClause([a, b]))}.`
+            : `For a span, send one range, ${a.field}:low-high.`;
+        throw new MspQueryError(cannotSend(query, `"${part}" puts two conditions on ${a.field}, and the API reads a field that appears twice as OR (type:1 type:10 matches either type), so it cannot require both. ${hint}`), query, part, exact ? [renderLiteral(mergeClause([a, b]))] : []);
+    }
+    return result.filter((_literal, i) => !dropped.has(i));
+}
+/** The terms of the conjunction a query translates to */
+function translate(query) {
+    const trimmed = query.trim();
+    const range = findBracketRange(trimmed);
+    if (range) {
+        throw bracketRangeError(trimmed, range);
+    }
+    const tree = new Parser(tokenize(trimmed), trimmed).parse();
+    if (!tree) {
+        return [];
+    }
+    const clauses = toCnf(toNnf(tree, false, trimmed, tree), trimmed);
+    const conjuncts = clauses.map(clause => {
+        const problem = clauseProblem(clause);
+        if (problem) {
+            throw clauseError(clause, problem, trimmed, suggestionsFor(tree, trimmed));
+        }
+        return clause.length === 1 ? clause[0] : mergeClause(clause);
+    });
+    return mergeRepeatedFields(conjuncts, trimmed);
+}
+/**
+ * Translates a query into the MSP API's grammar (see the file comment)
+ *
+ * @param query - Query in the tools' language or already in API form
+ * @returns The query as one space-separated conjunction the API can run;
+ *   empty for an empty query
+ * @throws {MspQueryError} When the query is malformed or has no API form
+ */
+export function toMspQuery(query) {
+    if (typeof query !== 'string') {
+        return query;
+    }
+    return translate(query).map(renderLiteral).join(' ');
+}
+/**
+ * Refuses a query for /v2/flows or /v2/alarms with a quoted free-text
+ * phrase that holds a colon. The API answers one with HTTP 400, while it
+ * takes a quoted colon in a field value (measured 2026-09-27, GET with
+ * limit 1: "a:b", 'a:b' and "show ts:[1 TO 2]" on flows and "a:b" on
+ * alarms answered 400; domain:"a:b" on flows and device.name:"x:y" on
+ * flows and alarms 200; "show ts 1 TO 2" and "a[b]" on flows 200). The
+ * search tools match free text themselves for rules, devices and target
+ * lists, so a colon there is fine and this is not called for them.
+ *
+ * @param query - The query, in the tools' language or the API's
+ * @throws {MspQueryError} Naming the phrase, with the query without its
+ *   colons as the suggestion
+ */
+export function refuseColonInQuotedText(query) {
+    if (typeof query !== 'string' || !query.trim()) {
+        return;
+    }
+    const terms = translate(query);
+    const phrases = terms.filter(term => term.kind === 'text' &&
+        term.values[0].startsWith('"') &&
+        term.values[0].includes(':'));
+    if (phrases.length === 0) {
+        return;
+    }
+    const part = phrases.map(term => term.values[0]).join(' ');
+    const suggestion = terms
+        .map(term => phrases.includes(term)
+        ? term.values[0].replace(/\s*:\s*/g, ' ')
+        : renderLiteral(term))
+        .join(' ');
+    const trimmed = query.trim();
+    throw new MspQueryError(cannotSend(trimmed, `${part} is a quoted phrase with a colon and no field, which the MSP API answers with HTTP 400 (measured 2026-09-27), though it takes a quoted colon in a field value. Put the phrase in a field, as in domain:"a:b", or search without the colon: send ${suggestion}.`), trimmed, part, [suggestion]);
+}
+/**
+ * The terms of the query toMspQuery sends, every one of which must hold:
+ * for checking a result against the whole query on the client
+ *
+ * @param query - Query in the tools' language or already in API form
+ * @returns One term per space-separated part of toMspQuery(query)
+ * @throws {MspQueryError} When the query is malformed or has no API form
+ */
+export function mspTerms(query) {
+    return typeof query === 'string' ? translate(query) : [];
+}
+/**
+ * One term as toMspQuery sends it: `-region:US,CN`, `total:>1MB`, a word
+ */
+export function mspTermText(term) {
+    return renderLiteral(term);
+}
+/**
+ * A query split into its free-text words and its other terms, for an
+ * endpoint whose free-text search the client does itself: GET /v2/rules
+ * matched no free text (measured 2026-09-26: a word in one of 98 rules'
+ * target value returned no rules)
+ *
+ * @param query - Query in the tools' language or already in API form
+ * @returns fields: the other terms in API form, as toMspQuery sends them
+ *   (empty when there are none); text: the free-text words as written,
+ *   every one of which must match
+ * @throws {MspQueryError} When the query has no API form, such as an OR
+ *   with free text or the exclusion of free text
+ */
+export function mspSplitText(query) {
+    const terms = typeof query === 'string' ? translate(query) : [];
+    return {
+        fields: terms
+            .filter(term => term.kind !== 'text')
+            .map(renderLiteral)
+            .join(' '),
+        text: terms
+            .filter(term => term.kind === 'text')
+            .map(term => term.values[0]),
+    };
+}
+/**
+ * The conjunction of several queries in API form: each part is translated,
+ * so an OR in one part cannot bind to a term of another
+ *
+ * @param parts - Queries to AND together; empty and undefined parts are
+ *   skipped
+ * @returns The combined query in API form; empty when every part is empty
+ * @throws {MspQueryError} When a part, or the combination, has no API form
+ */
+export function mspAnd(...parts) {
+    return toMspQuery(parts
+        .map(part => (typeof part === 'string' ? toMspQuery(part) : ''))
+        .filter(Boolean)
+        .join(' '));
+}
+/**
+ * A query scoped to one box: the query in API form with `box.id:<gid>`.
+ * The API reads two box.id terms as either box, so a query that names
+ * another box (or a box.id wildcard) would widen the scope instead of
+ * narrowing it, and is refused; naming the same box is allowed.
+ *
+ * @param query - Query in the tools' language or already in API form
+ * @param gid - The box to scope to, already checked to be a gid
+ * @returns The scoped query in API form
+ * @throws {MspQueryError} When the query has no API form or names another box
+ */
+export function mspBoxScope(query, gid) {
+    const terms = translate(query ?? '');
+    const scope = {
+        negated: false,
+        field: 'box.id',
+        values: [gid],
+        kind: 'exact',
+    };
+    // translate leaves at most one positive term per field
+    const named = terms.find(term => !term.negated && term.field.toLowerCase() === 'box.id');
+    if (!named) {
+        return [...terms, scope].map(renderLiteral).join(' ');
+    }
+    const names = named.values.map(value => value.replace(/^"(.*)"$/s, '$1'));
+    // Only the scoped box itself may be named: a list with another box would
+    // silently drop that box from what the query asked for
+    if (named.kind === 'exact' &&
+        names.length > 0 &&
+        names.every(name => name.toLowerCase() === gid.toLowerCase())) {
+        return [...terms.filter(term => term !== named), scope]
+            .map(renderLiteral)
+            .join(' ');
+    }
+    const trimmed = (query ?? '').trim();
+    throw new MspQueryError(cannotSend(trimmed, `it names ${renderLiteral(named)}, but this request is scoped to box.id:${gid} (the box argument, else FIREWALLA_BOX_ID), and the API reads two box.id terms as either box. Leave box.id out of the query to search box ${gid}; searching another box needs a server without FIREWALLA_BOX_ID.`), trimmed, renderLiteral(named), [
+        terms
+            .filter(term => term !== named)
+            .map(renderLiteral)
+            .join(' '),
+    ].filter(Boolean));
+}
+/**
+ * A literal value for a `field:value` term, quoted when the API grammar
+ * needs it: for whitespace, a comma, an asterisk or a colon (and here also
+ * parentheses, quotes, backslashes and a leading comparison sign), with
+ * quotes, backslashes and asterisks escaped inside the quotes
+ *
+ * @param value - The value to match literally
+ * @returns The value as it goes after `field:`
+ */
+export function mspValue(value) {
+    const text = String(value);
+    if (/^[^\s",*:()\\<>]+$/.test(text)) {
+        return text;
+    }
+    return `"${text.replace(/["\\*]/g, '\\$&')}"`;
+}
+/** A `-` that starts a term: before a field, a word, a wildcard or `(` */
+const MINUS_BEFORE_TERM = /(^|[\s(])-(?=[\p{L}\p{N}\p{M}_*?(])/gu;
+/**
+ * The API's `-field:value` and `-(...)` exclusions, and a `-` before free
+ * text (`-laptop`, `-"a b"`, `-*phone*`), written as NOT, for the validators
+ * and parsers that know only the boolean operators, outside quoted values.
+ * The query sent to the API is not rewritten this way. A `-` before free
+ * text was left as it was, and the search parser refused it as an
+ * "Unexpected character '-'" while it took NOT before the same text.
+ */
+export function withNotForMinus(query) {
+    if (!query || typeof query !== 'string') {
+        return query;
+    }
+    const parts = query.split(QUOTED_TEXT);
+    return parts
+        .map((part, index) => {
+        if (index % 2 === 1) {
+            return part;
+        }
+        const rewritten = part.replace(MINUS_BEFORE_TERM, '$1NOT ');
+        // A - right before a quoted phrase ends the text before it
+        return index < parts.length - 1
+            ? rewritten.replace(/(^|[\s(])-$/, '$1NOT ')
+            : rewritten;
+    })
+        .join('');
+}
+//# sourceMappingURL=msp-query.js.map
