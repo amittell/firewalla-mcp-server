@@ -1373,6 +1373,95 @@ export class FirewallaMCPServer {
               required: [],
             },
           },
+          {
+            name: 'get_access_points',
+            description:
+              'Retrieve adopted Firewalla Access Points (AP7 / FWAP7CS / FWAP7DS) with hardware details, uplink port mapping, PoE status, Ethernet link speeds, and BSSIDs across 2.4G, 5G, and 6G radios (GET /v2/boxes/{gid}/wifi/access-points). Scoped to box when provided, else FIREWALLA_BOX_ID.',
+            annotations: {
+              title: 'Get Access Points',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
+            inputSchema: {
+              type: 'object',
+              properties: {
+                box: {
+                  type: 'string',
+                  description:
+                    'Firewalla box GID. Defaults to FIREWALLA_BOX_ID.',
+                },
+              },
+              required: [],
+            },
+          },
+          {
+            name: 'get_access_point_channels',
+            description:
+              'Get active frequency channels and DFS radar states for an Access Point across 2.4G, 5G, and 6G bands (GET /v2/boxes/{gid}/wifi/access-points/{ap_id}/channels).',
+            annotations: {
+              title: 'Get Access Point Channels',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
+            inputSchema: {
+              type: 'object',
+              properties: {
+                ap_id: {
+                  type: 'string',
+                  description:
+                    'Access Point MAC address (e.g. 20:6D:31:71:50:A0)',
+                },
+                box: {
+                  type: 'string',
+                  description:
+                    'Firewalla box GID. Defaults to FIREWALLA_BOX_ID.',
+                },
+              },
+              required: ['ap_id'],
+            },
+          },
+          {
+            name: 'get_wifi_networks',
+            description:
+              'List configured Wi-Fi SSIDs, encryption standards (WPA2/WPA3), and broadcast frequency bands (GET /v2/boxes/{gid}/wifi/networks). Scoped to box when provided, else FIREWALLA_BOX_ID.',
+            annotations: {
+              title: 'Get Wi-Fi Networks',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
+            inputSchema: {
+              type: 'object',
+              properties: {
+                box: {
+                  type: 'string',
+                  description:
+                    'Firewalla box GID. Defaults to FIREWALLA_BOX_ID.',
+                },
+              },
+              required: [],
+            },
+          },
+          {
+            name: 'get_wifi_settings',
+            description:
+              'Get Firewalla Wi-Fi Controller settings including client auto-steering and controller version (GET /v2/boxes/{gid}/wifi/settings). Scoped to box when provided, else FIREWALLA_BOX_ID.',
+            annotations: {
+              title: 'Get Wi-Fi Settings',
+              readOnlyHint: true,
+              openWorldHint: true,
+            },
+            inputSchema: {
+              type: 'object',
+              properties: {
+                box: {
+                  type: 'string',
+                  description:
+                    'Firewalla box GID. Defaults to FIREWALLA_BOX_ID.',
+                },
+              },
+              required: [],
+            },
+          },
         ].filter(tool => writeToolsEnabled() || !isWriteTool(tool.name)),
       };
     };

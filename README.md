@@ -5,14 +5,14 @@
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@amittell/firewalla-mcp-server/badge" alt="Glama MCP Server" />
 </a>
 
-A Model Context Protocol (MCP) server that provides real-time access to Firewalla firewall data through 24 read-only tools, plus 11 opt-in write tools, compatible with any MCP client.
+A Model Context Protocol (MCP) server that provides real-time access to Firewalla firewall data through 28 read-only tools, plus 11 opt-in write tools, compatible with any MCP client.
 
 This is a community project, not affiliated with Firewalla. It reads your data through the Firewalla MSP API, so it needs an MSP account with API access.
 
 ## Why Firewalla MCP Server?
 
 ### Simple Network Security Integration
-- **24 read-only tools** for network monitoring and analysis: **19 Direct API Endpoints** + **5 Convenience Wrappers**
+- **28 read-only tools** for network monitoring and analysis: **23 Direct API Endpoints** + **5 Convenience Wrappers**
 - **11 write tools**, off unless `FIREWALLA_ENABLE_WRITE_TOOLS=true`, so by default nothing can change your box
 - **Advanced Search** with query syntax and filters
 - **Clean, Verified Architecture** with corrected API schemas
@@ -448,11 +448,12 @@ If responses are slow:
 2. Use more specific time ranges
 3. Check your network connection to the MSP API
 
-## Available Tools (24 read-only, 11 opt-in write tools)
+## Available Tools (28 read-only, 11 opt-in write tools)
 
 ### Core Tools
 - **Security**: Get alarms, analyze threats
 - **Network**: Monitor traffic flows, track bandwidth usage
+- **Wi-Fi & Access Points**: Discover AP7 access points, query channels/DFS state, Wi-Fi networks, and controller settings
 - **Devices**: Check device status, find offline devices
 - **Rules**: View firewall rules and their summary
 - **Search**: Advanced search across all data types
@@ -463,6 +464,7 @@ If responses are slow:
 ```
 Security: get_active_alarms, get_specific_alarm
 Network: get_flow_data, get_recent_flow_activity, get_bandwidth_usage
+Wi-Fi: get_access_points, get_access_point_channels, get_wifi_networks, get_wifi_settings
 Devices: get_device_status, get_offline_devices, get_boxes
 Rules: get_network_rules, get_network_rules_summary
 Target lists: get_target_lists, get_specific_target_list
