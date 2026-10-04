@@ -1698,7 +1698,7 @@ export class FirewallaClient {
                     .map(item => this.transformDevice(item))
                     .filter(device => device && device.id && device.id !== 'unknown');
                 // Filter by device ID if provided
-                if (deviceId?.trim()) {
+                if (typeof deviceId === 'string' && deviceId.trim()) {
                     const targetId = deviceId.trim().toLowerCase();
                     results = results.filter(device => device.id.toLowerCase() === targetId ||
                         (device.mac &&

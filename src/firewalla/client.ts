@@ -2243,7 +2243,7 @@ export class FirewallaClient {
           .filter(device => device && device.id && device.id !== 'unknown');
 
         // Filter by device ID if provided
-        if (deviceId?.trim()) {
+        if (typeof deviceId === 'string' && deviceId.trim()) {
           const targetId = deviceId.trim().toLowerCase();
           results = results.filter(
             device =>
