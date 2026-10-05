@@ -12,6 +12,7 @@ lerna-debug.log*
 # Build outputs
 # dist/ (tracked for direct git npm installation)
 build/
+dist/
 *.tsbuildinfo
 lib/
 out/
