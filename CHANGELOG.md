@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- The MCP SDK is 1.32.1 and proxy-addr is 2.0.8. The lockfile held 1.29.0
+  and 2.0.7, inside the ranges of GHSA-6qxp-vccf-f47h (high: the SDK's OAuth
+  client could send credentials to an authorization server chosen by the MCP
+  server) and GHSA-jqcg-44mw-7w3h (critical: IP spoofing through an
+  IPv4-mapped IPv6 trust subnet). Neither reaches this server's own code:
+  `src` imports no SDK client or auth code and sets no Express `trust proxy`.
+  The update clears the production audit that CI runs.
+
 ### Fixed
 
 - The npm publish waits up to 30 minutes for the registry to serve the new
