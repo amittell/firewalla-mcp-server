@@ -190,7 +190,7 @@ describe('write tool descriptions', () => {
       ]);
     }
     const reads = tools.filter(tool => !WRITE_TOOL_NAMES.includes(tool.name));
-    expect(reads).toHaveLength(24);
+    expect(reads).toHaveLength(28);
     for (const tool of reads) {
       expect([tool.name, tool.description?.includes(SENTENCE)]).toEqual([
         tool.name,

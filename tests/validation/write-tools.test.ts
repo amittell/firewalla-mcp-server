@@ -312,7 +312,7 @@ describe('FIREWALLA_ENABLE_WRITE_TOOLS', () => {
       [...WRITE_TOOLS].sort()
     );
     expect(on.length - off.length).toBe(11);
-    expect(off).toHaveLength(24);
-    expect(on).toHaveLength(35);
+    expect(off).toHaveLength(28);
+    expect(on).toHaveLength(39);
   });
 });

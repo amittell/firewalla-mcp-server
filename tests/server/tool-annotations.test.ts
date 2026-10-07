@@ -90,6 +90,15 @@ function answer(method: string, url: string, body?: unknown): unknown {
   if (url.startsWith('/v2/trends/')) {
     return [{ ts: now - 60, value: 3 }];
   }
+  if (url.includes('/wifi/access-points') && url.endsWith('/channels')) {
+    return { '2g': [], '5g': [], '6g': [] };
+  }
+  if (url.includes('/wifi/settings')) {
+    return { autoSteer: true };
+  }
+  if (url.includes('/wifi/')) {
+    return [];
+  }
   return [];
 }
 
@@ -164,6 +173,12 @@ const CALLS: Record<
   search_devices: { args: { query: 'online:false' } },
   search_target_lists: { args: { query: 'category:social' } },
   get_network_rules_summary: { args: {} },
+  get_access_points: { args: { box: BOX } },
+  get_access_point_channels: {
+    args: { ap_id: '00:11:22:33:44:01', box: BOX },
+  },
+  get_wifi_networks: { args: { box: BOX } },
+  get_wifi_settings: { args: { box: BOX } },
 };
 
 /** A client connected to a new server instance, with a fresh API client */
@@ -227,7 +242,7 @@ describe('tools/list', () => {
           .getToolNames()
           .sort();
         expect(listed).toEqual(registered);
-        expect(listed).toHaveLength(enableWriteTools ? 35 : 24);
+        expect(listed).toHaveLength(enableWriteTools ? 39 : 28);
       } finally {
         process.env.FIREWALLA_ENABLE_WRITE_TOOLS = 'true';
       }
@@ -236,7 +251,7 @@ describe('tools/list', () => {
 
   it('lists only read-only tools by default: nothing that changes state', async () => {
     const listed = await withoutWriteFlag(listTools);
-    expect(listed).toHaveLength(24);
+    expect(listed).toHaveLength(28);
     const writes = listed
       .filter(tool => tool.annotations?.readOnlyHint !== true)
       .map(tool => tool.name);

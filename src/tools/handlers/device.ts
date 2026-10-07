@@ -264,6 +264,22 @@ export class GetDeviceStatusHandler extends BaseToolHandler {
             totalUpload: sanitizeByteCount(
               SafeAccess.getNestedValue(finalDevice, 'totalUpload', 0)
             ),
+            deviceType:
+              finalDevice.deviceType !== undefined
+                ? finalDevice.deviceType
+                : device.deviceType,
+            isFirewalla:
+              finalDevice.isFirewalla !== undefined
+                ? finalDevice.isFirewalla
+                : device.isFirewalla,
+            isRouter:
+              finalDevice.isRouter !== undefined
+                ? finalDevice.isRouter
+                : device.isRouter,
+            monitoring:
+              finalDevice.monitoring !== undefined
+                ? finalDevice.monitoring
+                : device.monitoring,
           };
         }
       );

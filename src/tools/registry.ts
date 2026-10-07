@@ -88,6 +88,12 @@ import {
   SearchDevicesHandler,
   SearchTargetListsHandler,
 } from './handlers/search.js';
+import {
+  GetAccessPointsHandler,
+  GetAccessPointChannelsHandler,
+  GetWifiNetworksHandler,
+  GetWifiSettingsHandler,
+} from './handlers/wifi.js';
 
 /**
  * Central registry for managing the MCP tool handlers
@@ -185,6 +191,12 @@ export class ToolRegistry {
       new SearchDevicesHandler(), // wrapper with client-side filtering
       new SearchTargetListsHandler(), // wrapper with client-side filtering
       new GetNetworkRulesSummaryHandler(), // wrapper around get_network_rules
+
+      // Wi-Fi and Access Points (4 handlers)
+      new GetAccessPointsHandler(),
+      new GetAccessPointChannelsHandler(),
+      new GetWifiNetworksHandler(),
+      new GetWifiSettingsHandler(),
 
       // Write tools (11 handlers): they change rules, target lists, device
       // names and alarms, so they are opt-in

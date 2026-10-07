@@ -414,6 +414,104 @@ export interface Device {
   totalDownload: number;
   /** Total uploads in bytes (last 24 hours) */
   totalUpload: number;
+  /** Device type identifier (e.g. fwap-D, fwap-F, desktop, gse, tablet) */
+  deviceType?: string;
+  /** Whether the device is a Firewalla device */
+  isFirewalla?: boolean;
+  /** Whether the device functions as a router */
+  isRouter?: boolean;
+  /** Whether monitoring is enabled on this device */
+  monitoring?: boolean;
+}
+
+/**
+ * Access Point uplink connection details
+ */
+export interface AccessPointUplink {
+  mac: string;
+  type: string;
+  port?: string;
+  localPort?: string;
+  connectionType?: string;
+}
+
+/**
+ * Access Point BSSID and SSID radio interface
+ */
+export interface AccessPointBss {
+  ssid: string;
+  bssid: string;
+  intf: string;
+}
+
+/**
+ * Access Point physical Ethernet port status
+ */
+export interface AccessPointEth {
+  intf: string;
+  connected: boolean;
+  linkSpeed?: number;
+}
+
+/**
+ * Firewalla Access Point (e.g. AP7 / FWAP7CS / FWAP7DS)
+ */
+export interface AccessPoint {
+  id: string;
+  name: string;
+  ip: string;
+  online: boolean;
+  model: string;
+  powerType?: string;
+  backhaulState?: string;
+  version?: string;
+  allocation?: string;
+  reservedIP?: string;
+  stpPort?: string;
+  intf?: string;
+  uplink?: AccessPointUplink;
+  bss?: AccessPointBss[];
+  eths?: AccessPointEth[];
+}
+
+/**
+ * Wi-Fi frequency channel status and DFS radar state
+ */
+export interface ChannelInfo {
+  channel: number;
+  dfsState: string;
+}
+
+/**
+ * Access Point channels across 2.4G, 5G, and 6G bands
+ */
+export interface AccessPointChannels {
+  '2g'?: ChannelInfo[];
+  '5g'?: ChannelInfo[];
+  '6g'?: ChannelInfo[];
+}
+
+/**
+ * Configured Wi-Fi Network
+ */
+export interface WifiNetwork {
+  id: string;
+  ssid: string;
+  encryption?: string;
+  wpa3?: boolean;
+  bands?: string[];
+  intf?: string;
+}
+
+/**
+ * Firewalla Wi-Fi Controller Settings
+ */
+export interface WifiSettings {
+  autoSteer?: boolean;
+  maxComp?: boolean;
+  stormControl?: boolean;
+  useDfsChannels?: boolean;
+  apcVersion?: string;
 }
 
 /**

@@ -55,6 +55,10 @@ import {
   type Statistics,
   type GeographicData,
   type AlarmType,
+  type AccessPoint,
+  type AccessPointChannels,
+  type WifiNetwork,
+  type WifiSettings,
 } from '../types.js';
 import { parseSearchQuery, formatQueryForAPI } from '../search/index.js';
 import { containsText, matchesWildcard } from '../utils/wildcard.js';
@@ -2239,7 +2243,7 @@ export class FirewallaClient {
           .filter(device => device && device.id && device.id !== 'unknown');
 
         // Filter by device ID if provided
-        if (deviceId?.trim()) {
+        if (typeof deviceId === 'string' && deviceId.trim()) {
           const targetId = deviceId.trim().toLowerCase();
           results = results.filter(
             device =>
@@ -2327,6 +2331,22 @@ export class FirewallaClient {
         id: item.group.id || 'unknown',
         name: item.group.name || 'Unknown Group',
       };
+    }
+
+    if (item.deviceType || item.device_type) {
+      device.deviceType = item.deviceType || item.device_type;
+    }
+
+    if (item.isFirewalla !== undefined) {
+      device.isFirewalla = Boolean(item.isFirewalla);
+    }
+
+    if (item.isRouter !== undefined) {
+      device.isRouter = Boolean(item.isRouter);
+    }
+
+    if (item.monitoring !== undefined) {
+      device.monitoring = Boolean(item.monitoring);
     }
 
     return device;
@@ -5191,6 +5211,99 @@ export class FirewallaClient {
       throw error instanceof Error
         ? error
         : new Error('Failed to get flow insights');
+    }
+  }
+
+  /**
+   * Get list of adopted Firewalla Access Points
+   *
+   * @param boxId - Optional Firewalla box GID. Falls back to FIREWALLA_BOX_ID or default box.
+   * @returns List of AccessPoint objects
+   */
+  async getAccessPoints(boxId?: string): Promise<AccessPoint[]> {
+    try {
+      const gid = await this.resolveBoxGid(boxId);
+      const gidSegment = pathSegment(gid, 'gid', { encodeColons: true });
+      const endpoint = `/v2/boxes/${gidSegment}/wifi/access-points`;
+      const result = await this.request<AccessPoint[]>('GET', endpoint);
+      return Array.isArray(result) ? result : [];
+    } catch (error) {
+      logger.error(
+        'Error in getAccessPoints:',
+        error instanceof Error ? error : new Error(String(error))
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get Wi-Fi channels and DFS radar status for a specific Access Point
+   *
+   * @param apId - Access Point ID / MAC address
+   * @param boxId - Optional Firewalla box GID. Falls back to FIREWALLA_BOX_ID or default box.
+   * @returns Channel information mapped by band (2g, 5g, 6g)
+   */
+  async getAccessPointChannels(
+    apId: string,
+    boxId?: string
+  ): Promise<AccessPointChannels> {
+    try {
+      const gid = await this.resolveBoxGid(boxId);
+      const gidSegment = pathSegment(gid, 'gid', { encodeColons: true });
+      const apSegment = pathSegment(apId, 'ap_id', { encodeColons: true });
+      const endpoint = `/v2/boxes/${gidSegment}/wifi/access-points/${apSegment}/channels`;
+      const result = await this.request<AccessPointChannels>('GET', endpoint);
+      return result || {};
+    } catch (error) {
+      logger.error(
+        'Error in getAccessPointChannels:',
+        error instanceof Error ? error : new Error(String(error))
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get configured Wi-Fi Networks
+   *
+   * @param boxId - Optional Firewalla box GID. Falls back to FIREWALLA_BOX_ID or default box.
+   * @returns List of configured WifiNetwork objects
+   */
+  async getWifiNetworks(boxId?: string): Promise<WifiNetwork[]> {
+    try {
+      const gid = await this.resolveBoxGid(boxId);
+      const gidSegment = pathSegment(gid, 'gid', { encodeColons: true });
+      const endpoint = `/v2/boxes/${gidSegment}/wifi/networks`;
+      const result = await this.request<WifiNetwork[]>('GET', endpoint);
+      return Array.isArray(result) ? result : [];
+    } catch (error) {
+      logger.error(
+        'Error in getWifiNetworks:',
+        error instanceof Error ? error : new Error(String(error))
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get Firewalla Wi-Fi Controller settings
+   *
+   * @param boxId - Optional Firewalla box GID. Falls back to FIREWALLA_BOX_ID or default box.
+   * @returns WifiSettings object
+   */
+  async getWifiSettings(boxId?: string): Promise<WifiSettings> {
+    try {
+      const gid = await this.resolveBoxGid(boxId);
+      const gidSegment = pathSegment(gid, 'gid', { encodeColons: true });
+      const endpoint = `/v2/boxes/${gidSegment}/wifi/settings`;
+      const result = await this.request<WifiSettings>('GET', endpoint);
+      return result || {};
+    } catch (error) {
+      logger.error(
+        'Error in getWifiSettings:',
+        error instanceof Error ? error : new Error(String(error))
+      );
+      throw error;
     }
   }
 }

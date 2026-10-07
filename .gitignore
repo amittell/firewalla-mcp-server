@@ -10,8 +10,8 @@ lerna-debug.log*
 .npm/
 
 # Build outputs
-dist/
 build/
+dist/
 *.tsbuildinfo
 lib/
 out/
