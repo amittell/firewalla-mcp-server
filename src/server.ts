@@ -18,7 +18,7 @@
  * - CRUD operations for all resources
  * - Dual transport support (stdio and HTTP)
  *
- * @version 2.0.2
+ * @version 2.1.0
  * @author Alex Mittell <mittell@me.com> (https://github.com/amittell)
  * @since 2025-06-21
  */
