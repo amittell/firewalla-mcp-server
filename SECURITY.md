@@ -54,7 +54,7 @@ Out of scope:
   `create_target_list`, `update_target_list` and `delete_target_list`
   (target lists), `rename_device` (devices), and `archive_alarm`,
   `mute_alarm` and `delete_alarm` (alarms). Without it the server lists its
-  24 read-only tools, and a call to a write tool answers "Unknown tool" and
+  28 read-only tools, and a call to a write tool answers "Unknown tool" and
   sends nothing. Every tool carries MCP annotations (`readOnlyHint`,
   `destructiveHint`) so clients can ask before calling one that is not
   read-only.

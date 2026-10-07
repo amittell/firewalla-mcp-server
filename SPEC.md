@@ -51,8 +51,8 @@ section has the details and the error texts.
 
 ## Tools
 
-24 read-only tools are always registered. `FIREWALLA_ENABLE_WRITE_TOOLS=true`
-(any case) registers 11 more, for 35: `create_rule`, `delete_rule`,
+28 read-only tools are always registered. `FIREWALLA_ENABLE_WRITE_TOOLS=true`
+(any case) registers 11 more, for 39: `create_rule`, `delete_rule`,
 `pause_rule`, `resume_rule`, `create_target_list`, `update_target_list`,
 `delete_target_list`, `rename_device`, `archive_alarm`, `mute_alarm` and
 `delete_alarm`. Only those 11 have `readOnlyHint: false`. Without the flag
@@ -63,6 +63,7 @@ they are not listed, and a call to one answers `Unknown tool`.
 | Alarms | `get_active_alarms`, `get_specific_alarm` |
 | Flows | `get_flow_data`, `get_recent_flow_activity`, `get_bandwidth_usage` |
 | Devices and boxes | `get_device_status`, `get_offline_devices`, `get_boxes` |
+| Wi-Fi and access points | `get_access_points`, `get_access_point_channels`, `get_wifi_networks`, `get_wifi_settings` |
 | Rules | `get_network_rules`, `get_network_rules_summary` |
 | Target lists | `get_target_lists`, `get_specific_target_list` |
 | Search | `search_flows`, `search_alarms`, `search_rules`, `search_devices`, `search_target_lists` |

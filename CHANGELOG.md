@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Four read-only tools for the Wi-Fi controller, from FrankXLT (#98):
+  `get_access_points` (adopted access points with uplink, PoE, Ethernet
+  link speeds and per-radio BSSIDs), `get_access_point_channels` (channels
+  and DFS state per band), `get_wifi_networks` (SSIDs, encryption and
+  bands) and `get_wifi_settings` (auto-steering and controller version).
+  They use endpoints that Firewalla's MSP API reference does not document;
+  docs/firewalla-api-reference.md lists them. The default server now lists
+  28 read-only tools, 39 with the write tools.
+- `get_device_status` returns `deviceType`, `isFirewalla`, `isRouter` and
+  `monitoring` when the API sends them (#98).
+
 ### Security
 
 - The MCP SDK is 1.32.1 and proxy-addr is 2.0.8. The lockfile held 1.29.0

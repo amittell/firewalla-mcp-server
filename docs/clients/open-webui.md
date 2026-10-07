@@ -9,7 +9,7 @@ Open WebUI can reach this server two ways:
 
 Every command and file on this page was run on 2026-09-26, with the later changes that [What was tested](#what-was-tested) lists.
 
-**Versions.** Routes 2 and 3 use the HTTP transport and need **2.0.0 or later**, the first release whose HTTP transport checks the `Host` header and a bearer token. Up to 1.5.0 the HTTP transport listens on every interface and ignores `MCP_HTTP_BEARER_TOKEN`, `MCP_HTTP_ALLOWED_HOSTS` and the other `MCP_HTTP_*` settings, so the token in these recipes protects nothing, and the server registers 5 tools that change your box. With 1.5.0 or earlier, do not expose the HTTP port: use route 1. Route 1 uses stdio and works from 1.4.0; with 1.5.0 it lists 28 tools, 5 of them write tools, and with later releases 24 read-only tools.
+**Versions.** Routes 2 and 3 use the HTTP transport and need **2.0.0 or later**, the first release whose HTTP transport checks the `Host` header and a bearer token. Up to 1.5.0 the HTTP transport listens on every interface and ignores `MCP_HTTP_BEARER_TOKEN`, `MCP_HTTP_ALLOWED_HOSTS` and the other `MCP_HTTP_*` settings, so the token in these recipes protects nothing, and the server registers 5 tools that change your box. With 1.5.0 or earlier, do not expose the HTTP port: use route 1. Route 1 uses stdio and works from 1.4.0; with 1.5.0 it lists 28 tools, 5 of them write tools; with 2.0.0 to 2.0.2, 24 read-only tools; and from 2.1.0, 28 read-only tools.
 
 ## Prerequisites
 
@@ -322,7 +322,7 @@ Routes 2 and 3 use the HTTP transport. Its checks, and what Open WebUI and mcpo 
 
 ## Verify
 
-1. Through mcpo: open `http://<mcpo-host>:8000/docs`, which links to `firewalla`, then `http://<mcpo-host>:8000/firewalla/docs`. The page is titled **firewalla-mcp-server** with the server's version, and lists one `POST` endpoint per tool, such as `/get_boxes`: 24 by default, 35 with the write tools. A title of just `firewalla` with no endpoints means mcpo did not connect; see [Troubleshooting](#firewalladocs-lists-no-endpoints). Call a tool:
+1. Through mcpo: open `http://<mcpo-host>:8000/docs`, which links to `firewalla`, then `http://<mcpo-host>:8000/firewalla/docs`. The page is titled **firewalla-mcp-server** with the server's version, and lists one `POST` endpoint per tool, such as `/get_boxes`: 28 by default, 39 with the write tools. A title of just `firewalla` with no endpoints means mcpo did not connect; see [Troubleshooting](#firewalladocs-lists-no-endpoints). Call a tool:
 
    ```bash
    curl -s -X POST http://localhost:8000/firewalla/get_boxes \

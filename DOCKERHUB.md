@@ -1,6 +1,6 @@
 # Firewalla MCP Server
 
-A Model Context Protocol (MCP) server for Firewalla. It gives an MCP client, such as Claude Desktop, Claude Code or Open WebUI, 24 read-only tools over the Firewalla MSP API: alarms, flows, devices, rules, target lists, statistics and trends. There are 11 more tools that change your box, and they are off unless you turn them on.
+A Model Context Protocol (MCP) server for Firewalla. It gives an MCP client, such as Claude Desktop, Claude Code or Open WebUI, 28 read-only tools over the Firewalla MSP API: alarms, flows, devices, Wi-Fi access points, rules, target lists, statistics and trends. There are 11 more tools that change your box, and they are off unless you turn them on.
 
 This is a community project, not affiliated with Firewalla. It needs an MSP account with API access: your MSP domain (`yourdomain.firewalla.net`) and a personal access token from its API settings.
 

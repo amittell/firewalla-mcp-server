@@ -29,6 +29,7 @@ Authorization: Token {your_personal_access_token}
    - [Statistics](#statistics)
    - [Target Lists](#target-lists)
    - [Trends](#trends)
+   - [Wi-Fi Controller (undocumented)](#wi-fi-controller-undocumented)
 3. [Data Models](#data-models)
 4. [Search Functionality](#search-functionality)
 5. [Code Examples](#code-examples)
@@ -781,6 +782,30 @@ The official example lists the points newest first.
 **Rule trends**: `get_rule_trends` reads `/v2/trends/rules` (with `group` when given). When it answers 400, as measured, the tool reads `/v2/rules` (for a `group`, also `/v2/boxes?group=` to keep the rules of the group and of its boxes) and `/v2/trends/alarms` unscoped, and counts each rule on the day of the alarm series its creation time `ts` falls in: a day runs to the next point's `ts`, and the current day to the time of the request but for at most a day. So its days are the account's local days, the same as `get_alarm_trends` and `get_flow_trends`. Rules deleted since are not counted. Only if the `/v2/trends/alarms` read fails or returns no points are the days the last 30 UTC days, and the `note` says so and why. That is 3 requests, 4 with `group`. `/v2/trends/rules` takes no box, so with a box in scope (as above) the tool does not read it: it reads `/v2/rules?query=box.id:<gid>` and `/v2/trends/alarms` and counts the same way, 2 requests; `scope` is `box <gid>`. `box` with `group` is refused before any request.
 
 ---
+
+### Wi-Fi Controller (undocumented)
+
+These four endpoints are not in Firewalla's published MSP API reference. They were contributed in #98 for Firewalla Access Points (AP7, FWAP7CS, FWAP7DS) and back the tools `get_access_points`, `get_access_point_channels`, `get_wifi_networks` and `get_wifi_settings`. The response shapes below come from that contribution and its tests; they have not been measured against a live box in this repository, and Firewalla can change an undocumented endpoint without notice. All four are `GET` and take no query parameters. `{gid}` is the box GID; the tools default it to `FIREWALLA_BOX_ID`.
+
+#### Get Access Points
+**Endpoint**: `GET https://{msp_domain}/v2/boxes/{gid}/wifi/access-points`
+
+An array of adopted access points: `id` (MAC), `name`, `ip`, `online`, `model`, and optionally `powerType`, `backhaulState`, `version`, `uplink` (`mac`, `type`, `port`, `localPort`, `connectionType`), `bss` (one `ssid`/`bssid`/`intf` per radio) and `eths` (`intf`, `connected`, `linkSpeed`).
+
+#### Get Access Point Channels
+**Endpoint**: `GET https://{msp_domain}/v2/boxes/{gid}/wifi/access-points/{ap_id}/channels`
+
+`{ap_id}` is the access point's MAC, URL-encoded. The response maps each band (`2g`, `5g`, `6g`) to a list of `{channel, dfsState}`, for example `{"channel": 100, "dfsState": "DFS_CAC_COMPLETED"}`.
+
+#### Get Wi-Fi Networks
+**Endpoint**: `GET https://{msp_domain}/v2/boxes/{gid}/wifi/networks`
+
+An array of configured networks: `id`, `ssid`, and optionally `encryption`, `wpa3`, `bands` and `intf`.
+
+#### Get Wi-Fi Settings
+**Endpoint**: `GET https://{msp_domain}/v2/boxes/{gid}/wifi/settings`
+
+The controller settings: `autoSteer`, `maxComp`, `stormControl`, `useDfsChannels` and `apcVersion`.
 
 ## Data Models
 
