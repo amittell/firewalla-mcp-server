@@ -12,6 +12,13 @@ import {
   FirewallaClient,
 } from '../../src/firewalla/client.js';
 import { GetSpecificAlarmHandler } from '../../src/tools/handlers/security.js';
+import {
+  GetAccessPointChannelsHandler,
+  GetAccessPointsHandler,
+  GetWifiNetworksHandler,
+  GetWifiSettingsHandler,
+} from '../../src/tools/handlers/wifi.js';
+import type { ToolHandler } from '../../src/tools/handlers/base.js';
 import { setupPrompts } from '../../src/prompts/index.js';
 
 jest.mock('axios', () => {
@@ -179,6 +186,75 @@ describe('getSpecificAlarm', () => {
   it('reports not found after checking every box', async () => {
     const { client } = makeClient();
     await expect(client.getSpecificAlarm('42')).rejects.toThrow(/not found/);
+  });
+});
+
+describe('Wi-Fi tools', () => {
+  const MAC = 'AA:BB:CC:DD:EE:FF';
+  const tools: Array<[string, ToolHandler, Record<string, unknown>, string]> = [
+    ['get_access_points', new GetAccessPointsHandler(), {}, 'access-points'],
+    [
+      'get_access_point_channels',
+      new GetAccessPointChannelsHandler(),
+      { ap_id: MAC },
+      `access-points/${encodeURIComponent(MAC)}/channels`,
+    ],
+    ['get_wifi_networks', new GetWifiNetworksHandler(), {}, 'networks'],
+    ['get_wifi_settings', new GetWifiSettingsHandler(), {}, 'settings'],
+  ];
+
+  it.each(tools)(
+    '%s without a box on a multi-box account is a validation error naming the boxes',
+    async (_name, handler, args) => {
+      const { client, request } = makeClient();
+      const res = await handler.execute(args, client);
+      expect(res.isError).toBe(true);
+      const body = JSON.parse(res.content[0].text as string);
+      expect(body.errorType).toBe('validation_error');
+      expect(body.validation_errors[0]).toContain(`Office (${BOX_A})`);
+      expect(body.validation_errors[0]).toContain(`Cabin (${BOX_B})`);
+      expect(calls(request)).toEqual(['GET /v2/boxes']);
+    }
+  );
+
+  it.each(tools)(
+    '%s reads the box it is given, else FIREWALLA_BOX_ID, without listing the boxes',
+    async (_name, handler, args, endpoint) => {
+      const given = makeClient({ boxId: BOX_A });
+      await handler.execute({ ...args, box: BOX_B }, given.client);
+      expect(calls(given.request)).toEqual([
+        `GET /v2/boxes/${BOX_B}/wifi/${endpoint}`,
+      ]);
+
+      const configured = makeClient({ boxId: BOX_A });
+      const res = await handler.execute(args, configured.client);
+      expect(res.isError).toBeFalsy();
+      expect(calls(configured.request)).toEqual([
+        `GET /v2/boxes/${BOX_A}/wifi/${endpoint}`,
+      ]);
+    }
+  );
+
+  it("uses the account's only box", async () => {
+    const { client, request } = makeClient({ boxes: [TWO_BOXES[0]] });
+    const res = await new GetWifiSettingsHandler().execute({}, client);
+    expect(res.isError).toBeFalsy();
+    expect(calls(request)).toEqual([
+      'GET /v2/boxes',
+      `GET /v2/boxes/${BOX_A}/wifi/settings`,
+    ]);
+  });
+
+  it('refuses an ap_id before listing the boxes', async () => {
+    const { client, request } = makeClient();
+    const res = await new GetAccessPointChannelsHandler().execute(
+      { ap_id: '..' },
+      client
+    );
+    const body = JSON.parse(res.content[0].text as string);
+    expect(body.errorType).toBe('validation_error');
+    expect(body.validation_errors[0]).toMatch(/^ap_id /);
+    expect(request).not.toHaveBeenCalled();
   });
 });
 

@@ -433,6 +433,10 @@ export interface AccessPointUplink {
   port?: string;
   localPort?: string;
   connectionType?: string;
+  /** A wireless uplink's band, SSID and signal strength */
+  band?: string;
+  ssid?: string;
+  rssi?: number;
 }
 
 /**
@@ -469,6 +473,9 @@ export interface AccessPoint {
   reservedIP?: string;
   stpPort?: string;
   intf?: string;
+  /** The access point this one connects through, and its signal strength */
+  upstreamAP?: string;
+  upstreamRSSI?: number;
   uplink?: AccessPointUplink;
   bss?: AccessPointBss[];
   eths?: AccessPointEth[];

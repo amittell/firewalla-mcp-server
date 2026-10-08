@@ -6,7 +6,7 @@
  * with parameter validation.
  *
  * Registry Features:
- * - **Automatic Registration**: The 24 read-only handlers are registered during
+ * - **Automatic Registration**: The 28 read-only handlers are registered during
  *   construction, and the 11 write tools too with FIREWALLA_ENABLE_WRITE_TOOLS=true
  * - **API Mapping**: Direct mapping to verified Firewalla API endpoints
  * - **Type Safety**: Full TypeScript support with proper handler interfaces
@@ -14,10 +14,11 @@
  * - **Proper Schemas**: All limits set to API maximum (500), required parameters added
  * - **CRUD Operations**: Create, Read, Update, Delete operations for all resources
  *
- * 24 read-only tools, always registered:
- * - Direct API Endpoints (19 tools):
+ * 28 read-only tools, always registered:
+ * - Direct API Endpoints (23 tools):
  *   * Security: 2 handlers (get_active_alarms, get_specific_alarm)
- *   * Network: 1 handler (get_flow_data)
+ *   * Network: 5 handlers (get_flow_data, get_access_points,
+ *     get_access_point_channels, get_wifi_networks, get_wifi_settings)
  *   * Device: 1 handler (get_device_status)
  *   * Rules: 3 handlers (get_network_rules, get_target_lists, get_specific_target_list)
  *   * Search: 3 handlers (search_flows, search_alarms, search_rules)
@@ -103,7 +104,7 @@ import {
  * schemas and proper parameter validation for API coverage.
  *
  * The registry pattern enables:
- * - 24 read-only tools (19 direct API + 5 convenience wrappers), plus 11
+ * - 28 read-only tools (23 direct API + 5 convenience wrappers), plus 11
  *   opt-in write tools
  * - Comprehensive Firewalla API coverage including CRUD operations
  * - Clean separation between tool implementation and registration
@@ -120,7 +121,7 @@ import {
  * // Get tools by category
  * const searchTools = registry.getToolsByCategory('search');
  *
- * // List all available tools (24, or 35 with write tools enabled)
+ * // List all available tools (28, or 39 with write tools enabled)
  * const allTools = registry.getToolNames();
  * ```
  *
@@ -143,7 +144,7 @@ export class ToolRegistry {
   }
 
   /**
-   * Registers the tool handlers: the 24 read-only tools (19 direct API
+   * Registers the tool handlers: the 28 read-only tools (23 direct API
    * endpoints and 5 convenience wrappers), and with `enableWriteTools` the 11
    * write tools. A tool counts as a write tool when WRITE_TOOL_NAMES in
    * src/config/write-tools.ts names it, the same list that decides whether

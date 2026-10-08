@@ -5215,15 +5215,28 @@ export class FirewallaClient {
   }
 
   /**
+   * The request-path segment for a Wi-Fi read's box: `boxId` checked as
+   * given, never trimmed, else resolveBoxGid() (FIREWALLA_BOX_ID, then
+   * FIREWALLA_DEFAULT_BOX_ID, then the account's only box).
+   *
+   * @throws {InvalidPathSegmentError} When `boxId` cannot be one path segment
+   * @throws {BoxSelectionError} When no box is named and the account has
+   *   several
+   */
+  private async wifiBoxSegment(boxId?: string): Promise<string> {
+    const gid = boxId ?? (await this.resolveBoxGid());
+    return pathSegment(gid, 'gid', { encodeColons: true });
+  }
+
+  /**
    * Get list of adopted Firewalla Access Points
    *
-   * @param boxId - Optional Firewalla box GID. Falls back to FIREWALLA_BOX_ID or default box.
+   * @param boxId - Optional Firewalla box GID; see wifiBoxSegment
    * @returns List of AccessPoint objects
    */
   async getAccessPoints(boxId?: string): Promise<AccessPoint[]> {
     try {
-      const gid = await this.resolveBoxGid(boxId);
-      const gidSegment = pathSegment(gid, 'gid', { encodeColons: true });
+      const gidSegment = await this.wifiBoxSegment(boxId);
       const endpoint = `/v2/boxes/${gidSegment}/wifi/access-points`;
       const result = await this.request<AccessPoint[]>('GET', endpoint);
       return Array.isArray(result) ? result : [];
@@ -5240,7 +5253,7 @@ export class FirewallaClient {
    * Get Wi-Fi channels and DFS radar status for a specific Access Point
    *
    * @param apId - Access Point ID / MAC address
-   * @param boxId - Optional Firewalla box GID. Falls back to FIREWALLA_BOX_ID or default box.
+   * @param boxId - Optional Firewalla box GID; see wifiBoxSegment
    * @returns Channel information mapped by band (2g, 5g, 6g)
    */
   async getAccessPointChannels(
@@ -5248,9 +5261,9 @@ export class FirewallaClient {
     boxId?: string
   ): Promise<AccessPointChannels> {
     try {
-      const gid = await this.resolveBoxGid(boxId);
-      const gidSegment = pathSegment(gid, 'gid', { encodeColons: true });
+      // Checked before the box, which may list the boxes first
       const apSegment = pathSegment(apId, 'ap_id', { encodeColons: true });
+      const gidSegment = await this.wifiBoxSegment(boxId);
       const endpoint = `/v2/boxes/${gidSegment}/wifi/access-points/${apSegment}/channels`;
       const result = await this.request<AccessPointChannels>('GET', endpoint);
       return result || {};
@@ -5266,13 +5279,12 @@ export class FirewallaClient {
   /**
    * Get configured Wi-Fi Networks
    *
-   * @param boxId - Optional Firewalla box GID. Falls back to FIREWALLA_BOX_ID or default box.
+   * @param boxId - Optional Firewalla box GID; see wifiBoxSegment
    * @returns List of configured WifiNetwork objects
    */
   async getWifiNetworks(boxId?: string): Promise<WifiNetwork[]> {
     try {
-      const gid = await this.resolveBoxGid(boxId);
-      const gidSegment = pathSegment(gid, 'gid', { encodeColons: true });
+      const gidSegment = await this.wifiBoxSegment(boxId);
       const endpoint = `/v2/boxes/${gidSegment}/wifi/networks`;
       const result = await this.request<WifiNetwork[]>('GET', endpoint);
       return Array.isArray(result) ? result : [];
@@ -5288,13 +5300,12 @@ export class FirewallaClient {
   /**
    * Get Firewalla Wi-Fi Controller settings
    *
-   * @param boxId - Optional Firewalla box GID. Falls back to FIREWALLA_BOX_ID or default box.
+   * @param boxId - Optional Firewalla box GID; see wifiBoxSegment
    * @returns WifiSettings object
    */
   async getWifiSettings(boxId?: string): Promise<WifiSettings> {
     try {
-      const gid = await this.resolveBoxGid(boxId);
-      const gidSegment = pathSegment(gid, 'gid', { encodeColons: true });
+      const gidSegment = await this.wifiBoxSegment(boxId);
       const endpoint = `/v2/boxes/${gidSegment}/wifi/settings`;
       const result = await this.request<WifiSettings>('GET', endpoint);
       return result || {};

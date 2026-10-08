@@ -28,6 +28,12 @@ import {
   DeleteRuleHandler,
 } from '../../src/tools/handlers/rules.js';
 import { RenameDeviceHandler } from '../../src/tools/handlers/device.js';
+import {
+  GetAccessPointChannelsHandler,
+  GetAccessPointsHandler,
+  GetWifiNetworksHandler,
+  GetWifiSettingsHandler,
+} from '../../src/tools/handlers/wifi.js';
 import { GetSpecificAlarmHandler } from '../../src/tools/handlers/security.js';
 import {
   ArchiveAlarmHandler,
@@ -179,6 +185,36 @@ describe('an ID that would change the request path', () => {
       new DeleteRuleHandler(),
       { rule_id: `${RULE}/../../target-lists/${LIST}` },
       'rule_id',
+    ],
+    [
+      'get_access_point_channels (ap_id)',
+      new GetAccessPointChannelsHandler(),
+      { ap_id: `${MAC}/../../../../rules/${RULE}`, box: BOX },
+      'ap_id',
+    ],
+    [
+      'get_access_point_channels (box)',
+      new GetAccessPointChannelsHandler(),
+      { ap_id: MAC, box: '..' },
+      'box',
+    ],
+    [
+      'get_access_points (box)',
+      new GetAccessPointsHandler(),
+      { box: `${BOX}/../../rules` },
+      'box',
+    ],
+    [
+      'get_wifi_networks (box)',
+      new GetWifiNetworksHandler(),
+      { box: '..' },
+      'box',
+    ],
+    [
+      'get_wifi_settings (box)',
+      new GetWifiSettingsHandler(),
+      { box: 'a/b' },
+      'box',
     ],
   ];
 
@@ -390,6 +426,21 @@ describe('a refused character is refused, not removed or trimmed, by the client'
     ['muteAlarm (gid)', BOX, 'gid', (c, id) => c.muteAlarm('12', MUTE, id)],
     ['deleteAlarm (aid)', '12', 'alarm_id', (c, id) => c.deleteAlarm(id, BOX)],
     ['deleteAlarm (gid)', BOX, 'gid', (c, id) => c.deleteAlarm('12', id)],
+    ['getAccessPoints (gid)', BOX, 'gid', (c, id) => c.getAccessPoints(id)],
+    [
+      'getAccessPointChannels (ap_id)',
+      MAC,
+      'ap_id',
+      (c, id) => c.getAccessPointChannels(id, BOX),
+    ],
+    [
+      'getAccessPointChannels (gid)',
+      BOX,
+      'gid',
+      (c, id) => c.getAccessPointChannels(MAC, id),
+    ],
+    ['getWifiNetworks (gid)', BOX, 'gid', (c, id) => c.getWifiNetworks(id)],
+    ['getWifiSettings (gid)', BOX, 'gid', (c, id) => c.getWifiSettings(id)],
   ];
 
   it.each(calls)(
@@ -570,6 +621,41 @@ describe('a refused character is refused, not trimmed, by the tools', () => {
       BOX,
       id => ({ alarm_id: '12', gid: id }),
     ],
+    [
+      'get_access_points (box)',
+      'box',
+      new GetAccessPointsHandler(),
+      BOX,
+      id => ({ box: id }),
+    ],
+    [
+      'get_access_point_channels (ap_id)',
+      'ap_id',
+      new GetAccessPointChannelsHandler(),
+      MAC,
+      id => ({ ap_id: id, box: BOX }),
+    ],
+    [
+      'get_access_point_channels (box)',
+      'box',
+      new GetAccessPointChannelsHandler(),
+      BOX,
+      id => ({ ap_id: MAC, box: id }),
+    ],
+    [
+      'get_wifi_networks (box)',
+      'box',
+      new GetWifiNetworksHandler(),
+      BOX,
+      id => ({ box: id }),
+    ],
+    [
+      'get_wifi_settings (box)',
+      'box',
+      new GetWifiSettingsHandler(),
+      BOX,
+      id => ({ box: id }),
+    ],
   ];
 
   it.each(tools)(
@@ -607,6 +693,18 @@ describe('a refused character is refused, not trimmed, by the tools', () => {
 });
 
 describe('valid IDs are sent as before', () => {
+  it('get_access_point_channels sends the MAC with its colons encoded', async () => {
+    const { client, sent } = makeClient();
+    const res = await new GetAccessPointChannelsHandler().execute(
+      { ap_id: MAC, box: BOX },
+      client
+    );
+    expect(res.isError).toBeFalsy();
+    expect(sent).toEqual([
+      `GET /v2/boxes/${BOX}/wifi/access-points/AA%3ABB%3ACC%3ADD%3AEE%3AFF/channels`,
+    ]);
+  });
+
   it('a <box gid>:<n> rule id keeps its colon (pause_rule)', async () => {
     const { client, sent } = makeClient();
     const res = await new PauseRuleHandler().execute({ rule_id: RULE }, client);
