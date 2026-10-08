@@ -101,7 +101,6 @@
     "eslint": "^9.29.0",
     "jest": "^30.0.2",
     "nock": "^14.0.5",
-    "nodemon": "^3.1.10",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "ts-jest": "^29.4.0",
@@ -113,5 +112,10 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "overrides": {
+    "@istanbuljs/load-nyc-config": {
+      "js-yaml": "^4.1.0"
+    }
   }
 }
