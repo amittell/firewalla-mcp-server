@@ -1,6 +1,6 @@
 # Firewalla MCP Server specification
 
-What the server implements as of 2.1.0. The MCP surface below was measured
+What the server implements as of 2.1.1. The MCP surface below was measured
 on 2026-09-29 from `node dist/server.js` with `MCP_TEST_MODE=true` (dummy
 credentials); the rest is read from `src/`. Each tool's arguments are in its
 schema (`tools/list`) and in the README's
@@ -13,7 +13,7 @@ The MSP API the server calls, with measured behavior, is in
 - MCP over stdio, the default, or Streamable HTTP with `MCP_TRANSPORT=http`.
 - `initialize` answers the protocol version the client asks for: measured
   with `2025-06-18` and with `2024-11-05`. `serverInfo` is
-  `{"name": "firewalla-mcp-server", "version": "2.1.0"}`, the capabilities
+  `{"name": "firewalla-mcp-server", "version": "2.1.1"}`, the capabilities
   are `tools`, `resources` and `prompts`, and `instructions` tell the client
   to treat results as data.
 
