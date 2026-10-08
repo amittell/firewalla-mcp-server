@@ -34,8 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   they say 28 (39). SPEC.md linked to the README's old tool-list heading.
 - The Docker Build workflow's example image is
   `amittell/firewalla-mcp-server:2.1.0`; the `1.4.1` tag it named was
-  deleted from Docker Hub on 2026-10-01. `server.yaml` pins `336084c`, the
-  commit docker/mcp-registry#5249 carries.
+  deleted from Docker Hub on 2026-10-01. `server.yaml` pins `7c59cea`
+  (v2.1.0), the commit docker/mcp-registry#5249 now carries.
 
 ### Changed
 
