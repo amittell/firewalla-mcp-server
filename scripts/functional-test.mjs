@@ -149,6 +149,7 @@ async function stdioPhase() {
     const d = payload?.data?.results?.[0] ?? payload?.data?.devices?.[0];
     seeds.deviceId = d?.id ?? d?.mac;
   } catch { /* ok */ }
+  // Only the seed: get_access_points is checked below like every other tool
   try {
     const { payload } = await call('get_access_points', { box: seeds.boxId });
     seeds.apId = payload?.data?.access_points?.[0]?.id;
@@ -204,8 +205,7 @@ async function stdioPhase() {
       record('stdio', tool.name, 'OK', 'write tool: not called live');
       continue;
     }
-    if (['get_boxes', 'get_active_alarms', 'get_network_rules', 'get_device_status',
-         'get_access_points'].includes(tool.name)) {
+    if (['get_boxes', 'get_active_alarms', 'get_network_rules', 'get_device_status'].includes(tool.name)) {
       record('stdio', tool.name, 'OK', 'seeded earlier');
       continue;
     }
