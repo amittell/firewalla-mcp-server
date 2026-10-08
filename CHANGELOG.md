@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The Wi-Fi tools check `box` and `ap_id` as given, like every other ID
+  that goes into a request path: one holding `/`, `..`, whitespace or a
+  control character is a `validation_error` that names the argument, and
+  nothing is sent. `ap_id` was trimmed and sent (` AA:BB:CC:DD:EE:FF` went
+  out without its space), and a refused `box` or `ap_id` came back as an
+  `api_error`. `get_access_point_channels` now checks `ap_id` before it
+  lists the boxes.
+- On a multi-box account with no `box`, `FIREWALLA_BOX_ID` or
+  `FIREWALLA_DEFAULT_BOX_ID`, the Wi-Fi tools answer a `validation_error`
+  that lists the boxes, as `rename_device` does, instead of an `api_error`.
+  Their descriptions say how they pick the box; they named only
+  `FIREWALLA_BOX_ID`. `get_access_point_channels`' `ap_id` example is an
+  invented MAC.
+- `scripts/functional-test.mjs` expected 24 tools (35 with the write tools),
+  so it failed on 2.1.0. It expects 28 (39), passes `box` to the Wi-Fi
+  tools and takes `ap_id` from `get_access_points`. Its box seed read
+  `data.results`, which `get_boxes` does not answer, so it never had a box;
+  it reads `data.boxes`, an online box first. Run 2026-10-08 against the
+  live API without `FIREWALLA_BOX_ID`: 38 of 38 checks passed.
+- The client guides, `servers/firewalla-mcp-server/server.yaml`, the Open
+  WebUI guide's write-tools paragraph, the heading in CLAUDE.md and the
+  source comments still said 24 read-only tools (35 with the write tools);
+  they say 28 (39). SPEC.md linked to the README's old tool-list heading.
+- The Docker Build workflow's example image is
+  `amittell/firewalla-mcp-server:2.1.0`; the `1.4.1` tag it named was
+  deleted from Docker Hub on 2026-10-01. `server.yaml` pins `336084c`, the
+  commit docker/mcp-registry#5249 carries.
+
+### Changed
+
+- docs/firewalla-api-reference.md describes the Wi-Fi endpoints as measured
+  on 2026-10-08: all four answered 200, with `intf`, `allocation`,
+  `stpPort`, and for a wireless uplink `upstreamAP`, `upstreamRSSI` and the
+  uplink's `band`, `ssid` and `rssi`, besides the fields #98 listed; no
+  access point measured had `powerType`. A box with no access points
+  answers `[]`, `[]` and `{}`.
+
+### Security
+
+- Development dependencies only; the npm package and the Docker image
+  install none of them. `nodemon`, which no script ran, is removed, and
+  with it braces 3.0.3 (GHSA-vfj7-8cjw-p6xm, high). An npm override gives
+  `@istanbuljs/load-nyc-config` js-yaml 4, which drops argparse 1 and
+  sprintf-js 1.0.3 (GHSA-hp3w-g68c-fv3c, medium). Neither advisory has a
+  patched version. load-nyc-config calls only js-yaml's `load`, which 4.x
+  keeps, and only for a `.nycrc.yaml`, which this repository does not
+  have. `npm audit` reports 0 vulnerabilities in 556 packages; it reported
+  23 (20 moderate, 3 high) in 578.
+
 ## [2.1.0] - 2026-10-07
 
 ### Added

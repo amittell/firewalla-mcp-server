@@ -4,7 +4,7 @@ What the server implements as of 2.1.0. The MCP surface below was measured
 on 2026-09-29 from `node dist/server.js` with `MCP_TEST_MODE=true` (dummy
 credentials); the rest is read from `src/`. Each tool's arguments are in its
 schema (`tools/list`) and in the README's
-[tool list](README.md#available-tools-24-read-only-11-opt-in-write-tools).
+[tool list](README.md#available-tools-28-read-only-11-opt-in-write-tools).
 The MSP API the server calls, with measured behavior, is in
 [docs/firewalla-api-reference.md](docs/firewalla-api-reference.md).
 

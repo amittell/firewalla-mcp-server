@@ -349,7 +349,7 @@ Routes 2 and 3 use the HTTP transport. Its checks, and what Open WebUI and mcpo 
 
 ## Write tools
 
-By default the server registers 24 read-only tools, the `get_*` and `search_*` tools, and nothing that can change your box. The 11 write tools, `create_rule`, `delete_rule`, `pause_rule`, `resume_rule`, `create_target_list`, `update_target_list`, `delete_target_list`, `rename_device`, `archive_alarm`, `mute_alarm` and `delete_alarm`, are registered only when the server's environment has `FIREWALLA_ENABLE_WRITE_TOOLS=true`; mcpo then lists 35 endpoints. They need an MSP token with write access. See [Write tools](../../README.md#write-tools-opt-in).
+By default the server registers 28 read-only tools, the `get_*` and `search_*` tools, and nothing that can change your box. The 11 write tools, `create_rule`, `delete_rule`, `pause_rule`, `resume_rule`, `create_target_list`, `update_target_list`, `delete_target_list`, `rename_device`, `archive_alarm`, `mute_alarm` and `delete_alarm`, are registered only when the server's environment has `FIREWALLA_ENABLE_WRITE_TOOLS=true`; mcpo then lists 39 endpoints. They need an MSP token with write access. See [Write tools](../../README.md#write-tools-opt-in).
 
 Where the flag goes:
 

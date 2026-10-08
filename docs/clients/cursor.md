@@ -42,7 +42,7 @@ Save the file and restart Cursor.
 ## Check that it works
 
 - Open **Customize** in the sidebar, then **MCPs**: `firewalla` is listed, with a toggle to turn it off and on.
-- With the Cursor CLI, `agent mcp list` shows the server and its status, and `agent mcp list-tools firewalla` lists its tools: 24 by default.
+- With the Cursor CLI, `agent mcp list` shows the server and its status, and `agent mcp list-tools firewalla` lists its tools: 28 by default.
 
 Then ask Agent something the tools answer:
 
