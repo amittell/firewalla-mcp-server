@@ -4,13 +4,13 @@
  * @fileoverview Firewalla MCP Server
  *
  * This file implements the primary MCP server class that provides Claude with access to
- * Firewalla firewall data through 24 read-only tools that map to Firewalla API
+ * Firewalla firewall data through 28 read-only tools that map to Firewalla API
  * endpoints, plus 11 opt-in write tools (FIREWALLA_ENABLE_WRITE_TOOLS=true).
  * Without that setting no listed tool changes anything.
  * Tools include parameter validation and error handling.
  *
  * Architecture:
- * - 19 Direct API Endpoints (read-only)
+ * - 23 Direct API Endpoints (read-only)
  * - 5 Convenience Wrappers (read-only)
  * - 11 opt-in write tools, named in src/config/write-tools.ts
  * - Limits set to API maximum (500)
@@ -53,7 +53,7 @@ import {
 } from './utils/response-format.js';
 
 /**
- * Main MCP Server class for Firewalla integration: 24 read-only tools, plus 11
+ * Main MCP Server class for Firewalla integration: 28 read-only tools, plus 11
  * opt-in write tools
  */
 export class FirewallaMCPServer {
@@ -1376,7 +1376,7 @@ export class FirewallaMCPServer {
           {
             name: 'get_access_points',
             description:
-              'Retrieve adopted Firewalla Access Points (AP7 / FWAP7CS / FWAP7DS) with hardware details, uplink port mapping, PoE status, Ethernet link speeds, and BSSIDs across 2.4G, 5G, and 6G radios (GET /v2/boxes/{gid}/wifi/access-points). Scoped to box when provided, else FIREWALLA_BOX_ID.',
+              "Retrieve adopted Firewalla Access Points (AP7 / FWAP7CS / FWAP7DS) with hardware details, uplink port mapping, PoE status, Ethernet link speeds, and BSSIDs across 2.4G, 5G, and 6G radios (GET /v2/boxes/{gid}/wifi/access-points). Uses box, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box; refuses on a multi-box account with none of those.",
             annotations: {
               title: 'Get Access Points',
               readOnlyHint: true,
@@ -1388,7 +1388,7 @@ export class FirewallaMCPServer {
                 box: {
                   type: 'string',
                   description:
-                    'Firewalla box GID. Defaults to FIREWALLA_BOX_ID.',
+                    "Firewalla box GID. Defaults to FIREWALLA_BOX_ID, then FIREWALLA_DEFAULT_BOX_ID, then the account's only box.",
                 },
               },
               required: [],
@@ -1397,7 +1397,7 @@ export class FirewallaMCPServer {
           {
             name: 'get_access_point_channels',
             description:
-              'Get active frequency channels and DFS radar states for an Access Point across 2.4G, 5G, and 6G bands (GET /v2/boxes/{gid}/wifi/access-points/{ap_id}/channels).',
+              "Get active frequency channels and DFS radar states for an Access Point across 2.4G, 5G, and 6G bands (GET /v2/boxes/{gid}/wifi/access-points/{ap_id}/channels). Uses box, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box; refuses on a multi-box account with none of those.",
             annotations: {
               title: 'Get Access Point Channels',
               readOnlyHint: true,
@@ -1409,12 +1409,12 @@ export class FirewallaMCPServer {
                 ap_id: {
                   type: 'string',
                   description:
-                    'Access Point MAC address (e.g. 20:6D:31:71:50:A0)',
+                    'Access point MAC address, the id from get_access_points (e.g. AA:BB:CC:DD:EE:FF)',
                 },
                 box: {
                   type: 'string',
                   description:
-                    'Firewalla box GID. Defaults to FIREWALLA_BOX_ID.',
+                    "Firewalla box GID. Defaults to FIREWALLA_BOX_ID, then FIREWALLA_DEFAULT_BOX_ID, then the account's only box.",
                 },
               },
               required: ['ap_id'],
@@ -1423,7 +1423,7 @@ export class FirewallaMCPServer {
           {
             name: 'get_wifi_networks',
             description:
-              'List configured Wi-Fi SSIDs, encryption standards (WPA2/WPA3), and broadcast frequency bands (GET /v2/boxes/{gid}/wifi/networks). Scoped to box when provided, else FIREWALLA_BOX_ID.',
+              "List configured Wi-Fi SSIDs, encryption standards (WPA2/WPA3), and broadcast frequency bands (GET /v2/boxes/{gid}/wifi/networks). Uses box, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box; refuses on a multi-box account with none of those.",
             annotations: {
               title: 'Get Wi-Fi Networks',
               readOnlyHint: true,
@@ -1435,7 +1435,7 @@ export class FirewallaMCPServer {
                 box: {
                   type: 'string',
                   description:
-                    'Firewalla box GID. Defaults to FIREWALLA_BOX_ID.',
+                    "Firewalla box GID. Defaults to FIREWALLA_BOX_ID, then FIREWALLA_DEFAULT_BOX_ID, then the account's only box.",
                 },
               },
               required: [],
@@ -1444,7 +1444,7 @@ export class FirewallaMCPServer {
           {
             name: 'get_wifi_settings',
             description:
-              'Get Firewalla Wi-Fi Controller settings including client auto-steering and controller version (GET /v2/boxes/{gid}/wifi/settings). Scoped to box when provided, else FIREWALLA_BOX_ID.',
+              "Get Firewalla Wi-Fi Controller settings including client auto-steering and controller version (GET /v2/boxes/{gid}/wifi/settings). Uses box, else FIREWALLA_BOX_ID or FIREWALLA_DEFAULT_BOX_ID, else the account's only box; refuses on a multi-box account with none of those.",
             annotations: {
               title: 'Get Wi-Fi Settings',
               readOnlyHint: true,
@@ -1456,7 +1456,7 @@ export class FirewallaMCPServer {
                 box: {
                   type: 'string',
                   description:
-                    'Firewalla box GID. Defaults to FIREWALLA_BOX_ID.',
+                    "Firewalla box GID. Defaults to FIREWALLA_BOX_ID, then FIREWALLA_DEFAULT_BOX_ID, then the account's only box.",
                 },
               },
               required: [],

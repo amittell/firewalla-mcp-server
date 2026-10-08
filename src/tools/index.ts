@@ -1,17 +1,19 @@
 /**
  * @fileoverview MCP Tool Setup and Registry Management
  *
- * Implements a clean, modular registry pattern for managing the MCP tools (24
+ * Implements a clean, modular registry pattern for managing the MCP tools (28
  * read-only, plus 11 write tools with FIREWALLA_ENABLE_WRITE_TOOLS=true) that
  * provide Firewalla firewall monitoring and management capabilities. Replaces
  * the original 1000+ line switch statement with maintainable, testable handler classes.
  *
- * Tool Categories:
- * - **Security (3 tools)**: Alarm management and threat monitoring
- * - **Network (3 tools)**: Flow analysis and bandwidth monitoring
+ * Tool Categories (read-only; the write tools add 3 security, 1 device and 7
+ * rules tools):
+ * - **Security (2 tools)**: Alarm management and threat monitoring
+ * - **Network (7 tools)**: Flow analysis, bandwidth monitoring and the Wi-Fi
+ *   controller
  * - **Device (1 tool)**: Device status and inventory management
- * - **Rule (7 tools)**: Firewall rule configuration and analytics
- * - **Analytics (7 tools)**: Statistical analysis and trend reporting
+ * - **Rules (4 tools)**: Firewall rules and target lists
+ * - **Analytics (9 tools)**: Statistical analysis and trend reporting
  * - **Search (5 tools)**: Flow, alarm, rule, device and target-list search
  *
  * Architecture Benefits:
