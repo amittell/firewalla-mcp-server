@@ -5,9 +5,9 @@
  * Phase 1 (stdio): connect an MCP client over stdio, list tools/resources/
  * prompts, then exercise EVERY tool:
  *   - read tools: live happy-path calls (IDs seeded from earlier responses)
- *   - without FIREWALLA_ENABLE_WRITE_TOOLS=true: exactly 24 tools, all
+ *   - without FIREWALLA_ENABLE_WRITE_TOOLS=true: exactly 28 tools, all
  *     read-only, and no write tool listed
- *   - with it (35 tools): target-list CRUD, a full create -> get -> update ->
+ *   - with it (39 tools): target-list CRUD, a full create -> get -> update ->
  *     delete cycle on a disposable list this script creates (no production
  *     objects touched), and pause_rule / resume_rule on the error path only
  *     (invalid ID) -- we do not pause real firewall rules. The other write
@@ -32,11 +32,11 @@ for (const k of CREDS) {
   if (!process.env[k]) { console.error(`missing env ${k}`); process.exit(2); }
 }
 const HTTP_PORT = 3111;
-// The server lists 24 read-only tools, and 11 write tools as well when
+// The server lists 28 read-only tools, and 11 write tools as well when
 // FIREWALLA_ENABLE_WRITE_TOOLS=true
 const WRITE_TOOLS_ON =
   (process.env.FIREWALLA_ENABLE_WRITE_TOOLS ?? '').trim().toLowerCase() === 'true';
-const EXPECTED_TOOLS = WRITE_TOOLS_ON ? 35 : 24;
+const EXPECTED_TOOLS = WRITE_TOOLS_ON ? 39 : 28;
 const results = [];   // {phase, name, status: 'OK'|'ERR'|'THREW', note}
 const record = (phase, name, status, note = '') => {
   results.push({ phase, name, status, note });
@@ -60,12 +60,17 @@ function argsFor(name, schema, seeds) {
     rule_id: seeds.ruleId, id: seeds.ruleId,
     device_id: seeds.deviceId, box_id: seeds.boxId, gid: seeds.boxId,
     target_list_id: seeds.targetListId, list_id: seeds.targetListId,
+    ap_id: seeds.apId,
   };
   // Target-list tools take their list's id as `id`, not a rule id
   if (name.includes('target_list')) seedMap.id = seeds.targetListId;
   for (const [key, prop] of Object.entries(props)) {
     const type = prop.type;
     if (key === 'limit') { args.limit = 5; continue; }
+    // The Wi-Fi tools refuse a multi-box account without a box
+    if (key === 'box' && /^get_(wifi|access_point)/.test(name) && seeds.boxId) {
+      args.box = seeds.boxId; continue;
+    }
     if (!required.has(key)) continue;              // only fill what's required
     if (seedMap[key] !== undefined) { args[key] = seedMap[key]; continue; }
     if (type === 'number' || type === 'integer') args[key] = 5;
@@ -125,7 +130,9 @@ async function stdioPhase() {
   const seeds = {};
   try {
     const { payload } = await call('get_boxes', {});
-    seeds.boxId = payload?.data?.results?.[0]?.gid ?? payload?.data?.[0]?.gid ?? process.env.FIREWALLA_BOX_ID;
+    // get_boxes answers data.boxes; an online box, whose Wi-Fi reads have data
+    const boxes = payload?.data?.boxes ?? [];
+    seeds.boxId = (boxes.find(b => b.online) ?? boxes[0])?.gid ?? process.env.FIREWALLA_BOX_ID;
   } catch { seeds.boxId = process.env.FIREWALLA_BOX_ID; }
   try {
     const { payload } = await call('get_active_alarms', { limit: 2 });
@@ -143,11 +150,16 @@ async function stdioPhase() {
     seeds.deviceId = d?.id ?? d?.mac;
   } catch { /* ok */ }
   try {
+    const { payload } = await call('get_access_points', { box: seeds.boxId });
+    seeds.apId = payload?.data?.access_points?.[0]?.id;
+  } catch { /* ok */ }
+  try {
     const { payload } = await call('get_target_lists', { limit: 2 });
     const t = payload?.data?.results?.[0] ?? payload?.data?.target_lists?.[0] ?? payload?.data?.[0];
     seeds.targetListId = t?.id;
   } catch { /* ok */ }
-  console.log('  seeds:', JSON.stringify({ ...seeds, boxId: String(seeds.boxId).slice(0, 8) + '..' }));
+  console.log('  seeds:', JSON.stringify({ ...seeds, boxId: String(seeds.boxId).slice(0, 8) + '..',
+                                         apId: seeds.apId ? 'set' : undefined }));
 
   // ---- target-list CRUD on a disposable object ----
   const MUTATING = new Set(['create_target_list', 'update_target_list', 'delete_target_list',
@@ -192,7 +204,8 @@ async function stdioPhase() {
       record('stdio', tool.name, 'OK', 'write tool: not called live');
       continue;
     }
-    if (['get_boxes', 'get_active_alarms', 'get_network_rules', 'get_device_status'].includes(tool.name)) {
+    if (['get_boxes', 'get_active_alarms', 'get_network_rules', 'get_device_status',
+         'get_access_points'].includes(tool.name)) {
       record('stdio', tool.name, 'OK', 'seeded earlier');
       continue;
     }
@@ -200,7 +213,7 @@ async function stdioPhase() {
     try {
       const { res, payload } = await call(tool.name, args);
       if (res.isError) {
-        const msg = payload?.error ?? JSON.stringify(payload).slice(0, 80);
+        const msg = payload?.message ?? JSON.stringify(payload).slice(0, 80);
         // missing seed (no alarms today etc.) is a data condition, not a code failure
         // Only a placeholder-ID probe may be excused as a graceful error --
         // limit=5 must NOT qualify, or genuine schema drift gets masked.
