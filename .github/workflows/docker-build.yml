@@ -12,7 +12,7 @@ name: Docker Build
 # version (scripts/launch-smoke.mjs --docker).
 #
 # A manual run with the `image` input set (for example
-# amittell/firewalla-mcp-server:1.4.1) builds nothing: it pulls that
+# amittell/firewalla-mcp-server:2.1.0) builds nothing: it pulls that
 # published image and runs the same check on it. Pull requests have no
 # inputs, so they always build. Neither path logs in to Docker Hub.
 
@@ -29,7 +29,7 @@ on:
   workflow_dispatch:
     inputs:
       image:
-        description: Published image to pull and check instead of building, for example amittell/firewalla-mcp-server:1.4.1. Empty builds this ref.
+        description: Published image to pull and check instead of building, for example amittell/firewalla-mcp-server:2.1.0. Empty builds this ref.
         required: false
         default: ''
         type: string

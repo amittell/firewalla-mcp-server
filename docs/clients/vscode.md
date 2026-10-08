@@ -54,7 +54,7 @@ MCP servers used to live in `settings.json`; since 1.102, VS Code moves any it f
 ## Check that it works
 
 - Run **MCP: List Servers**, select `firewalla`, and start it, or choose **Show Output** to see it start. Servers in `.vscode/mcp.json` follow the workspace's trust; a server from elsewhere, such as your user profile, can show a trust dialog the first time it starts.
-- In the Chat view, the **Configure Tools** button in the chat input lists the server's tools: 24 by default.
+- In the Chat view, the **Configure Tools** button in the chat input lists the server's tools: 28 by default.
 
 Then ask in chat something the tools answer:
 

@@ -20,7 +20,7 @@ A Model Context Protocol (MCP) server that provides Claude with access to Firewa
 
 ## Architecture Overview
 
-### 24 Read-Only Tools, 11 Opt-In Write Tools
+### 28 Read-Only Tools, 11 Opt-In Write Tools
 - **23 Direct API Tools**: Mapping to Firewalla MSP API endpoints (read-only)
 - **5 Convenience Wrapper Tools**: Client-side enhanced functionality for common operations (read-only)
 - **11 Write Tools**: Create, update, pause and delete operations, registered only with `FIREWALLA_ENABLE_WRITE_TOOLS=true`

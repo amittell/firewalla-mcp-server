@@ -128,7 +128,7 @@ claude -p "Get today's security alarms as JSON" | jq '.alarms[] | select(.type =
 
 - **Real-time CLI monitoring** of network security
 - **Scriptable security analysis** for automation
-- **24 read-only tools** accessible via natural language, plus 11 write tools with `FIREWALLA_ENABLE_WRITE_TOOLS=true`
+- **28 read-only tools** accessible via natural language, plus 11 write tools with `FIREWALLA_ENABLE_WRITE_TOOLS=true`
 - **Advanced search capabilities** with complex query syntax
 
 ---

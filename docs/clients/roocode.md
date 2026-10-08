@@ -50,7 +50,7 @@ Add the server under `mcpServers`:
 
 ## Check that it works
 
-The MCP settings view lists `firewalla` with its tools: 24 by default. **Enable MCP Servers**, in the same view, must be checked; it is on by default.
+The MCP settings view lists `firewalla` with its tools: 28 by default. **Enable MCP Servers**, in the same view, must be checked; it is on by default.
 
 Then ask Roo Code something the tools answer:
 

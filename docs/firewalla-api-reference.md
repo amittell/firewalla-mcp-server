@@ -785,17 +785,17 @@ The official example lists the points newest first.
 
 ### Wi-Fi Controller (undocumented)
 
-These four endpoints are not in Firewalla's published MSP API reference. They were contributed in #98 for Firewalla Access Points (AP7, FWAP7CS, FWAP7DS) and back the tools `get_access_points`, `get_access_point_channels`, `get_wifi_networks` and `get_wifi_settings`. The response shapes below come from that contribution and its tests; they have not been measured against a live box in this repository, and Firewalla can change an undocumented endpoint without notice. All four are `GET` and take no query parameters. `{gid}` is the box GID; the tools default it to `FIREWALLA_BOX_ID`.
+These four endpoints are not in Firewalla's published MSP API reference. They were contributed in #98 for Firewalla Access Points (AP7, FWAP7CS, FWAP7DS) and back the tools `get_access_points`, `get_access_point_channels`, `get_wifi_networks` and `get_wifi_settings`. Measured 2026-10-08 on one MSP account with two boxes: all four answered 200 on both, a box with access points with the fields below and a box with none with `[]`, `[]` and `{}`. Firewalla can change an undocumented endpoint without notice. All four are `GET` and take no query parameters. `{gid}` is the box GID; the tools take it as `box`, else `FIREWALLA_BOX_ID` or `FIREWALLA_DEFAULT_BOX_ID`, else the account's only box, and refuse on a multi-box account with none of those. Like every tool, they return the fields in snake_case (`auto_steer`, `dfs_state`).
 
 #### Get Access Points
 **Endpoint**: `GET https://{msp_domain}/v2/boxes/{gid}/wifi/access-points`
 
-An array of adopted access points: `id` (MAC), `name`, `ip`, `online`, `model`, and optionally `powerType`, `backhaulState`, `version`, `uplink` (`mac`, `type`, `port`, `localPort`, `connectionType`), `bss` (one `ssid`/`bssid`/`intf` per radio) and `eths` (`intf`, `connected`, `linkSpeed`).
+An array of adopted access points: `id` (MAC), `name`, `ip`, `online`, `model`, `version`, `intf`, `allocation`, `stpPort`, `backhaulState` (`ethernet` or `wireless`), `uplink` (`mac`, `type` `box` or `ap`, `port`, `localPort`, `connectionType`), `bss` (one `ssid`/`bssid`/`intf` per radio) and `eths` (`intf`, `connected`, `linkSpeed`). An access point with a wireless uplink also has `upstreamAP` and `upstreamRSSI`, and `band`, `ssid` and `rssi` in `uplink`. #98's example also had `powerType`; none of the access points measured did.
 
 #### Get Access Point Channels
 **Endpoint**: `GET https://{msp_domain}/v2/boxes/{gid}/wifi/access-points/{ap_id}/channels`
 
-`{ap_id}` is the access point's MAC, URL-encoded. The response maps each band (`2g`, `5g`, `6g`) to a list of `{channel, dfsState}`, for example `{"channel": 100, "dfsState": "DFS_CAC_COMPLETED"}`.
+`{ap_id}` is the access point's MAC, the `id` from the list above. The API answered the same with the colons as `%3A`, which the tool sends, and unencoded. The response maps each band (`2g`, `5g`, `6g`) to a list of `{channel, dfsState}`, for example `{"channel": 100, "dfsState": "DFS_CAC_COMPLETED"}`; the `dfsState` values measured were `NON_DFS`, `DFS_CAC_REQUIRED` and `DFS_CAC_COMPLETED`.
 
 #### Get Wi-Fi Networks
 **Endpoint**: `GET https://{msp_domain}/v2/boxes/{gid}/wifi/networks`

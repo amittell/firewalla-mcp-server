@@ -42,7 +42,7 @@ In the CLI, `cline mcp` opens a wizard that lists, adds, edits, enables and disa
 
 ## Check that it works
 
-The **MCP Servers** view lists `firewalla` once it connects, with its tools: 24 by default. In the CLI, `cline config mcp` lists the configured servers (`--json` for JSON).
+The **MCP Servers** view lists `firewalla` once it connects, with its tools: 28 by default. In the CLI, `cline config mcp` lists the configured servers (`--json` for JSON).
 
 Then ask Cline something the tools answer:
 
