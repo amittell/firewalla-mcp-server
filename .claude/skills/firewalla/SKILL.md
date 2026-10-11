@@ -33,9 +33,6 @@ assuming a default.
   `domain|category|app|ip|targetlist|internet`, never a port. Confirm with
   `get_network_rules` (no port targets) and with live flows on that port
   (`block:false`).
-- **Relative-time flow queries may return empty.** `ts:>1h` / `ts:>24h` on
-  flows returned no rows in testing even when recent flows existed. Pull
-  newest-first (default sort) and bound on `f.ts` client-side.
 - **Allow vs block precedence is subtle — verify, don't theorize.** A
   device-scoped domain allow and a network-wide IP-level block (a
   `dnsOnly:false` category rule) can both apply to a connection to a shared CDN

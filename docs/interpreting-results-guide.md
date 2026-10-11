@@ -54,14 +54,6 @@ If the NAT-relevant traffic is flowing `block:false` (for Xbox: Teredo on
 UDP 3544, plus the game ports), the firewall is not the cause. Point the user at
 UPnP / bridge-mode, not at the rule list.
 
-## Relative-time bounds on flow queries
-
-In testing, **relative-time bounds on flow queries (e.g. `ts:>1h`, `ts:>24h`)
-returned no rows even when recent flows existed.** If you depend on a time
-window, verify it in your environment, or pull flows newest-first (the default
-sort) and bound on each flow's `ts` field client-side. Absolute Unix-second
-bounds and the non-time qualifiers are unaffected.
-
 ## Allow vs block on shared CDN IPs
 
 A device-scoped domain **allow** and a network-wide **IP-level block** (a
