@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { UntrustedTextServer } from '../../src/untrusted-text-server.js';
 
 describe('Zod collection size limits', () => {
@@ -78,7 +77,7 @@ it('validates a Zod 4 request before dispatching an MCP handler', async () => {
         { method: 'test/zod4', params: { values: ['first', 'second'] } },
         resultSchema
       )
-    ).rejects.toMatchObject({ code: ErrorCode.InvalidParams });
+    ).rejects.toThrow(/too_big/);
     expect(calls).toBe(1);
   } finally {
     await Promise.all([client.close(), server.close()]);
