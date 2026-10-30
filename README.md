@@ -49,7 +49,7 @@ The MCP server acts as a bridge between Claude and your Firewalla firewall, tran
 
 ## Prerequisites
 
-- Node.js 18+ and npm. On Node 18-22, npm prints an `EBADENGINE` warning for geoip-lite 2.x, which declares Node 24 for its database update script; the lookups the server uses run on Node 18 and later, and CI tests 18, 20, 22 and 24.
+- Node.js **20.19.0 or later** and npm. Node 18 and Node 20.0–20.18 are no longer supported. See the [Node 20 and Zod 4 migration guide](docs/node20-zod4-migration.md). On Node 20–22, npm prints an `EBADENGINE` warning for geoip-lite 2.x, which declares Node 24 for its database update script; the lookups the server uses are covered by CI on 20.19.0, current 20, 22 and 24.
 - Firewalla MSP account with API access
 - Your Firewalla device online and connected
 

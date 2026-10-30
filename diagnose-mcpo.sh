@@ -17,16 +17,16 @@ if command -v node &> /dev/null; then
     NODE_VERSION=$(node --version)
     echo -e "${GREEN}✓ Node.js found: $NODE_VERSION${NC}"
     
-    # Check if version is 18+
-    MAJOR_VERSION=$(echo $NODE_VERSION | cut -d. -f1 | sed 's/v//')
-    if [ $MAJOR_VERSION -ge 18 ]; then
-        echo -e "${GREEN}✓ Node.js version is 18 or higher${NC}"
+    # Check the supported minimum, including the Node 20 minor version.
+    IFS=. read -r MAJOR_VERSION MINOR_VERSION PATCH_VERSION <<< "${NODE_VERSION#v}"
+    if [ "$MAJOR_VERSION" -gt 20 ] || { [ "$MAJOR_VERSION" -eq 20 ] && [ "$MINOR_VERSION" -ge 19 ]; }; then
+        echo -e "${GREEN}✓ Node.js version is 20.19.0 or higher${NC}"
     else
-        echo -e "${RED}✗ Node.js version is less than 18. Please upgrade.${NC}"
+        echo -e "${RED}✗ Node.js version is less than 20.19.0. Please upgrade.${NC}"
     fi
 else
     echo -e "${RED}✗ Node.js not found in PATH${NC}"
-    echo "  Please install Node.js 18 or higher"
+    echo "  Please install Node.js 20.19.0 or higher"
 fi
 echo ""
 

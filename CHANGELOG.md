@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** Node.js 20.19.0 is the minimum supported runtime. Node 18
+  and Node 20.0–20.18 are no longer supported. The CI build, tests and
+  package launch smoke checks exercise the exact minimum. See the
+  [migration guide](docs/node20-zod4-migration.md).
+- Upgrade the direct Zod dependency to 4.6.6 and the SDK's Hono Node
+  adapter to 2.1.3. Existing MCP tool, resource and prompt contracts are
+  unchanged; new tests exercise Zod 4 request schemas through the server.
+
+### Security
+
+- Consolidate the Hono 4.13.13, follow-redirects 1.16.1 and fast-uri 3.1.9
+  updates with body-parser 2.4.0, qs 6.16.1 and ip-address 10.7.4. Zod 4.6.6
+  rejects oversized constrained collections before parsing their entries.
+
 ## [2.1.1] - 2026-10-08
 
 ### Fixed

@@ -509,7 +509,7 @@ DEBUG=firewalla:* npm run dev
 - **Version**: see `package.json`; `CHANGELOG.md` has the history
 - **Architecture**: 28 read-only tools (23 direct API + 5 convenience), plus 11 opt-in write tools
 - **API Support**: Firewalla MSP API v2 with CRUD operations
-- **Node.js**: Requires 18+
+- **Node.js**: Requires 20.19.0 or later; see `docs/node20-zod4-migration.md`
 - **TypeScript**: ES2020 target with strict mode
 
 **Remember**: The `/docs/firewalla-api-reference.md` file contains the complete, verified API specification. It is the single source of truth for all Firewalla API integration.
