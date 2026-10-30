@@ -5,7 +5,7 @@ Use your Firewalla data from chat in VS Code. MCP support is built into VS Code,
 ## Prerequisites
 
 - VS Code 1.102 or later, with chat set up through GitHub Copilot
-- Node.js 18 or later, for `npx`
+- Node.js 20.19.0 or later, for `npx`
 - A Firewalla MSP account with API access: your MSP domain (`yourdomain.firewalla.net`) and an access token
 
 ## Add the server

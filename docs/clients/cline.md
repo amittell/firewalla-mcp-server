@@ -5,7 +5,7 @@ Use your Firewalla data from Cline, in VS Code or another editor Cline supports,
 ## Prerequisites
 
 - Cline, from your editor's extension marketplace, or the CLI (`npm install -g cline`)
-- Node.js 18 or later, for `npx`
+- Node.js 20.19.0 or later, for `npx`
 - A Firewalla MSP account with API access: your MSP domain (`yourdomain.firewalla.net`) and an access token
 
 ## Add the server

@@ -7,7 +7,7 @@ Use your Firewalla data from Roo Code, the coding agent extension for VS Code.
 ## Prerequisites
 
 - Roo Code in VS Code
-- Node.js 18 or later, for `npx`
+- Node.js 20.19.0 or later, for `npx`
 - A Firewalla MSP account with API access: your MSP domain (`yourdomain.firewalla.net`) and an access token
 
 ## Add the server

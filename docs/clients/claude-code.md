@@ -5,7 +5,7 @@ Integrate Firewalla network security data into your Claude Code CLI workflow for
 ## Prerequisites
 
 - Claude Code CLI installed and authenticated
-- Node.js 18+ and npm
+- Node.js 20.19.0 or later and npm
 - Active Firewalla MSP account with API credentials
 
 ## Quick Setup
