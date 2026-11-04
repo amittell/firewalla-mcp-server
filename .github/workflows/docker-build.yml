@@ -24,6 +24,8 @@ on:
       - package.json
       - package-lock.json
       - scripts/launch-smoke.mjs
+      - scripts/assert-container-node.cjs
+      - scripts/assert-container-node.test.cjs
       - .github/workflows/docker-build.yml
       - .github/workflows/docker-publish.yml
   workflow_dispatch:
