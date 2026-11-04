@@ -1,7 +1,12 @@
 # Multi-stage build for optimal image size
-# node:22-alpine, not 24: node:24-alpine publishes no linux/arm/v7 image,
-# and docker-publish.yml builds amd64, arm64 and arm/v7
-FROM node:22-alpine AS builder
+# Node 22 retains linux/arm/v7 alongside amd64 and arm64. Pin the patched
+# multi-platform index; CVE-2026-111497 is fixed in Node 22.23.4.
+# https://nodejs.org/en/blog/vulnerability/october-2026-security-releases
+FROM node:22.23.4-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914 AS builder
+
+# Execute the security-floor check with this platform's actual Node binary.
+COPY scripts/assert-container-node.cjs /tmp/assert-container-node.cjs
+RUN node /tmp/assert-container-node.cjs && rm /tmp/assert-container-node.cjs
 
 # Install build dependencies for native modules
 RUN apk add --no-cache python3 make g++
@@ -22,7 +27,11 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM node:22-alpine AS production
+FROM node:22.23.4-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914 AS production
+
+# Execute the security-floor check with this platform's actual Node binary.
+COPY scripts/assert-container-node.cjs /tmp/assert-container-node.cjs
+RUN node /tmp/assert-container-node.cjs && rm /tmp/assert-container-node.cjs
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
